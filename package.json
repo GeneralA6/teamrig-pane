@@ -10,7 +10,9 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "node --test \"tools/**/*.test.ts\""
+    "test": "node --test \"tools/**/*.test.ts\"",
+    "scrub": "node tools/scrub/cli.ts --tree",
+    "setup": "node tools/setup/cli.ts"
   },
   "devDependencies": {
     "@types/node": "22.20.3",
