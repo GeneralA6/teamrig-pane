@@ -10,6 +10,9 @@ claude plugin marketplace add GeneralA6/teamrig-pane
 claude plugin install teamrig-pane@teamrig-pane
 ```
 
+or, from a session, `/plugin install teamrig-pane --marketplace GeneralA6/teamrig-pane`. The pane is
+tested on Claude Code 2.1.295 and later.
+
 Then run `/tasklist` in a session. The pane docks on the right in the fullscreen layout
 (`"tui": "fullscreen"`) from 110 columns, and opens by itself from 144; anywhere else it sits above the
 prompt.
