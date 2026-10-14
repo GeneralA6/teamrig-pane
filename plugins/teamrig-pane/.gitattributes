@@ -1,0 +1,3 @@
+# hooks/core is a byte copy of the register's LF modules: sync-core.ts --check compares bytes, so a
+# CRLF checkout (core.autocrlf) would read as drift.
+hooks/core/*.ts text eol=lf

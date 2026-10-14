@@ -1,0 +1,10 @@
+{
+  "name": "teamrig-pane",
+  "version": "0.1.0",
+  "description": "Docks this session's tasks from the team's task register, and its git changes, on the right of Claude Code's fullscreen UI, live",
+  "author": { "name": "GeneralA6" },
+  "repository": "https://github.com/GeneralA6/teamrig-pane",
+  "license": "Apache-2.0",
+  "keywords": ["team", "tasks", "register", "pane", "git"],
+  "types": "./types/index.d.ts"
+}
