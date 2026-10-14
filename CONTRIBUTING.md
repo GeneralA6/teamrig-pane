@@ -30,12 +30,14 @@ Every change ships tests, so the next change cannot break it unnoticed:
 - The repository tools' tests live beside the code as `<name>.test.ts` under `tools/` (`node:test`):
   `npm test`. They run on Linux, Windows and macOS: build paths with `path.join`, never with literal
   separators.
-- No skipped, focused or todo tests: a test that does not run catches nothing.
+- No skipped, focused or todo tests: a test that does not run catches nothing. The plugin test gate
+  (`npm run plugin-tests`) fails on one in a plugin test, and on a file that imports
+  `claude-code/testing` without a `*.test.ts` or `*.test.tsx` name, which the runner never runs.
 
-`npm run check` runs the tools' gates CI runs on the tree: typecheck, coverage and scrub. Its coverage
-gate (`npm run coverage`) fails when any tools test fails or is skipped, a source file under `tools/`
-is loaded by no test, or a file or the total falls below the floors in `tools/ci/coverage.json`. Never
-lower a floor to pass a change.
+`npm run check` runs the gates CI runs on the tree: typecheck, coverage, the plugin test gate and
+scrub. Its coverage gate (`npm run coverage`) fails when any tools test fails or is skipped, a source
+file under `tools/` is loaded by no test, or a file or the total falls below the floors in
+`tools/ci/coverage.json`. Never lower a floor to pass a change.
 
 `hooks/core/` is a copy of the register's own modules, made by `scripts/sync-core.ts`; never edit it
 by hand (the plugin README says how to sync it).

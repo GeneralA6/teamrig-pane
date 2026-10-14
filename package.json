@@ -14,7 +14,8 @@
     "scrub": "node tools/scrub/cli.ts --tree",
     "setup": "node tools/setup/cli.ts",
     "coverage": "node tools/ci/coverage-cli.ts",
-    "check": "npm run typecheck && npm run coverage && npm run scrub",
+    "plugin-tests": "node tools/ci/plugin-tests-cli.ts",
+    "check": "npm run typecheck && npm run coverage && npm run plugin-tests && npm run scrub",
     "pane-test": "claude plugin test plugins/teamrig-pane"
   },
   "devDependencies": {
