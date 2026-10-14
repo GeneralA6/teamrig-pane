@@ -1,0 +1,14 @@
+{
+  "name": "teamrig-pane",
+  "description": "The teamrig task pane: a session's register tasks and git changes beside Claude Code's fullscreen UI.",
+  "owner": {
+    "name": "GeneralA6"
+  },
+  "plugins": [
+    {
+      "name": "teamrig-pane",
+      "source": "./plugins/teamrig-pane",
+      "description": "Docks this session's tasks from the team's task register, and its git changes, on the right of Claude Code's fullscreen UI, live"
+    }
+  ]
+}
