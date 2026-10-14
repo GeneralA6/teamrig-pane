@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.tmp/
+coverage/
+# Written by Claude Code when it loads the plugin from a folder it hot-reloads (its API types).
+plugins/*/.claude-plugin/types/
