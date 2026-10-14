@@ -16,15 +16,12 @@ import { sameView } from './view'
 
 export const POLL_MS = 3_000
 export const TICK_MS = 60_000
-export const NO_REGISTER = 'no register folders: set TEAMRIG_PANE_TASKS_DIR, TEAMRIG_PANE_INBOX_DIR and TEAMRIG_PANE_USAGE_DIR'
 
 export type Timer = { cancel: () => void }
 
 export type LivePorts = {
-  /** null when nothing names where the register lives. */
-  source: TaskRegisterSource | null
-  /** The problem the pane shows while source is null: what to set so it finds the register. */
-  whereMissing: string
+  /** The register, or the problem the pane shows while nothing names where it is (places.ts). */
+  source: TaskRegisterSource | { missing: string }
   sessionId: () => Promise<string>
   now: () => Promise<number>
   /** Writes the snapshot atom (each write redraws the pane). */
@@ -84,10 +81,11 @@ export class LiveRegister {
     if (this.isPolling) return
     this.isPolling = true
     try {
-      if (!this.ports.source) return await this.showProblem(this.ports.whereMissing)
+      const source = this.ports.source
+      if ('missing' in source) return await this.showProblem(source.missing)
       const session = await this.currentSession()
       const now = await this.ports.now()
-      const next = await this.ports.source.poll({
+      const next = await source.poll({
         claudeSession: session.id,
         pinned: session.pinned,
         now,

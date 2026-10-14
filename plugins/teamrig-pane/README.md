@@ -96,11 +96,31 @@ What the host draws and the mod can't change:
 
 ## Where the register is
 
-The pane reads the register's folders from the environment Claude Code runs in (the `env` block of
-its settings works too): `TEAMRIG_PANE_TASKS_DIR` (events, renames, pauses, inbox read marks),
-`TEAMRIG_PANE_INBOX_DIR` (one `<area>.md` per area) and `TEAMRIG_PANE_USAGE_DIR` (token-usage runs),
-plus the optional `TEAMRIG_PANE_GOALS_DOC`. With any of the three folders unset the pane draws one
-`⚠` line naming them.
+By default the pane reads the register where teamrig keeps it for the session's team:
+`<kit home>/teams/<team>/state` (the kit home is `$TEAMRIG_HOME`, else `~/.teamrig`; the team is
+`$TEAMRIG_TEAM`, else the nearest `.teamrig.json` up from the session's folder), with its inbox in
+`state/inbox` and token-usage runs in `state/token-usage`. A team config's `paths.state` and
+`paths.inbox` move them, as they do for teamrig.
+
+Any folder can be named instead, each on its own; a variable wins over the settings file, which wins
+over the team default:
+
+| Variable | Setting | What it holds |
+| --- | --- | --- |
+| `TEAMRIG_PANE_TASKS_DIR` | `tasksDir` | `events.jsonl`, `aliases.jsonl`, `pauses.jsonl`, `inbox-marks.jsonl` |
+| `TEAMRIG_PANE_INBOX_DIR` | `inboxDir` | one `<area>.md` inbox per area |
+| `TEAMRIG_PANE_USAGE_DIR` | `usageDir` | `usage-YYYY-MM-DD.json` token-usage runs |
+| `TEAMRIG_PANE_GOALS_DOC` | `goalsDoc` | the goals document, a path from the workspace root (unset: no goal items are quoted) |
+
+The settings file is `<kit home>/pane.json`, or the file `TEAMRIG_PANE_SETTINGS` names, a JSON object
+of those settings; a folder in it is absolute or starts with `~/`:
+
+    { "tasksDir": "~/notes/tasks", "inboxDir": "~/notes/board/inbox", "usageDir": "~/notes/token-usage" }
+
+The variables are read from the environment Claude Code runs in (its settings' `env` block works
+too), all of it once when the session starts. When nothing names the register, or the settings file,
+the pointer file or the team config cannot be used, the pane draws one `⚠` line saying what to set
+or what is wrong.
 
 ## Tasks and Changes
 
