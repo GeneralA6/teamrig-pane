@@ -1,4 +1,4 @@
-// teamrig-pane: docks this session's list from the task register (its folders: TEAMRIG_PANE_*) on the right
+// teamrig-pane: docks this session's list from the task register (where it is: places.ts) on the right
 // of the fullscreen UI. `mine` shows the session's area: its active tasks in plan order, what it
 // asked of others, what it finished in the last day, and its unread inbox lines; `all` shows
 // every owner's active tasks. A press on a task row expands it: the ask and its goals' roadmap items
@@ -13,7 +13,8 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 import type { ExpandedTasks, PaneView, Snapshot, TaskDetail, ViewMode } from '../types'
 import { inlineReason, parseTaskListArgs, USAGE } from './command'
-import { LiveRegister, NO_REGISTER, pinKey } from './live'
+import { LiveRegister, pinKey } from './live'
+import { findPlaces, type PlacesEnv } from './places'
 import { TaskDetails } from './details'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
 import { dockLayout, failedDrawing, inlineLayout, type Drawn } from './layout'
@@ -78,11 +79,6 @@ export const register: Register = on => {
     live?.stop()
     tracked?.stop()
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
-    const tasksDir = await $.env.get('TEAMRIG_PANE_TASKS_DIR')
-    const inboxDir = await $.env.get('TEAMRIG_PANE_INBOX_DIR')
-    const usageDir = await $.env.get('TEAMRIG_PANE_USAGE_DIR')
-    const goalsDoc = (await $.env.get('TEAMRIG_PANE_GOALS_DOC')) ?? null
-    const paths = tasksDir && inboxDir && usageDir ? registerPaths({ tasksDir, inboxDir, usageDir }) : null
     // A path that is not there stamps null and a folder that is not there lists empty; a locked or
     // denied one, or any other failure, throws to the poll (source.ts unlessMissing).
     const files: Files = {
@@ -106,10 +102,20 @@ export const register: Register = on => {
           [],
         ),
     }
-    details = new TaskDetails(files, { inboxDir: paths?.inboxDir ?? null, home: home ?? null, cwd: e.cwd, goalsDoc })
+    const env: PlacesEnv = {
+      TEAMRIG_PANE_TASKS_DIR: await $.env.get('TEAMRIG_PANE_TASKS_DIR'),
+      TEAMRIG_PANE_INBOX_DIR: await $.env.get('TEAMRIG_PANE_INBOX_DIR'),
+      TEAMRIG_PANE_USAGE_DIR: await $.env.get('TEAMRIG_PANE_USAGE_DIR'),
+      TEAMRIG_PANE_GOALS_DOC: await $.env.get('TEAMRIG_PANE_GOALS_DOC'),
+      TEAMRIG_PANE_SETTINGS: await $.env.get('TEAMRIG_PANE_SETTINGS'),
+      TEAMRIG_HOME: await $.env.get('TEAMRIG_HOME'),
+      TEAMRIG_TEAM: await $.env.get('TEAMRIG_TEAM'),
+    }
+    const places = await findPlaces({ env, files, home: home ?? null, cwd: e.cwd })
+    const paths = places.found ? registerPaths(places.dirs) : { missing: places.problem }
+    details = new TaskDetails(files, { inboxDir: 'missing' in paths ? null : paths.inboxDir, home: home ?? null, cwd: e.cwd, goalsDoc: places.goalsDoc })
     const started = new LiveRegister({
-      source: paths ? new TaskRegisterSource(files, paths) : null,
-      whereMissing: NO_REGISTER,
+      source: 'missing' in paths ? paths : new TaskRegisterSource(files, paths),
       sessionId: () => $.session.id(),
       now: () => $.clock.now(),
       publish: async change => {

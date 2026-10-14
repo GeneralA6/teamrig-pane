@@ -349,16 +349,44 @@ test('a title and note of CJK and emoji sequences wrap by display cells, no line
   expect(task?.text).toContain('👩🏽‍💻')
 })
 
-test('names the variables to set while any of the register folders is unset, and reads nothing', async ($, on) => {
+test('with no folder named, no settings file and no teamrig project, it says what to set and reads nothing', async ($, on) => {
   const withoutUsage = Object.fromEntries(Object.entries(REGISTER_ENV).filter(([key]) => key !== 'TEAMRIG_PANE_USAGE_DIR'))
   const { disk } = await start(on, {}, { roots: {}, statuses: {} }, withoutUsage)
   await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  const problem = await pane.find({ text: /^⚠ no register folders/ })
-  expect(problem?.text.split(/\s+/).join(' ')).toBe('⚠ no register folders: set TEAMRIG_PANE_TASKS_DIR, TEAMRIG_PANE_INBOX_DIR and TEAMRIG_PANE_USAGE_DIR')
+  const problem = await pane.find({ text: /^⚠ no register found/ })
+  expect(problem?.text.split(/\s+/).join(' ')).toBe(
+    "⚠ no register found: set TEAMRIG_PANE_TASKS_DIR, TEAMRIG_PANE_INBOX_DIR and TEAMRIG_PANE_USAGE_DIR, write them in C:/Homes/tester/.teamrig/pane.json, or start the session in a teamrig team's project (.teamrig.json)",
+  )
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
   expect(disk.reads).toEqual([])
+})
+
+test('with no folder named, it reads the register teamrig keeps for the team its pointer file names', async ($, on) => {
+  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  disk.write('C:/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write('C:/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
+    createLine('T7', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the team register' }),
+  ])
+  await $.session.start({ cwd: 'C:/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  await pane.press({ key: 'all' })
+  expect(await pane.find({ text: /Ship the team register/ })).toBeDefined()
+  expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
+})
+
+test('the settings file in the kit home names the folders, ~/ under the home folder', async ($, on) => {
+  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  disk.write('C:/Homes/tester/.teamrig/pane.json', [
+    JSON.stringify({ tasksDir: '~/team-notes/tasks', inboxDir: '~/team-notes/board/inbox', usageDir: '~/team-notes/token-usage' }),
+  ])
+  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
+  expect(await pane.find({ text: /⚠/ })).toBeUndefined()
 })
 
 test('draws each collapsed task as one Text: no Box beyond the root, the controls and their two button rows', async ($, on) => {

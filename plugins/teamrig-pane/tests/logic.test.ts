@@ -849,7 +849,6 @@ function livePorts(files: MemoryFiles, ids: string[]) {
   const pins = new Map<string, string>()
   const ports: LivePorts = {
     source: new TaskRegisterSource(files, PATHS),
-    whereMissing: 'the source is set, so this is never shown',
     sessionId: async () => ids[0] ?? 'none',
     now: async () => clock.now,
     publish: async change => {
@@ -908,7 +907,7 @@ describe('live', () => {
 
   test('says what to set when nothing names where the register is', async () => {
     const { ports, snapshot } = livePorts(new MemoryFiles(), ['s1'])
-    await new LiveRegister({ ...ports, source: null, whereMissing: 'no register: set its folders' }).refresh()
+    await new LiveRegister({ ...ports, source: { missing: 'no register: set its folders' } }).refresh()
     expect(snapshot().problem).toBe('no register: set its folders')
   })
 
