@@ -37,7 +37,9 @@ Every change ships tests, so the next change cannot break it unnoticed:
 `npm run check` runs the gates CI runs on the tree: typecheck, coverage, the plugin test gate and
 scrub. Its coverage gate (`npm run coverage`) fails when any tools test fails or is skipped, a source
 file under `tools/` is loaded by no test, or a file or the total falls below the floors in
-`tools/ci/coverage.json`. Never lower a floor to pass a change.
+`tools/ci/coverage.json`. Never lower a floor to pass a change. CI also runs `npm test` and the plugin
+tests on Linux, Windows and macOS under node 22 and 24, with a pinned Claude Code release
+(`.github/workflows/ci.yml`).
 
 `hooks/core/` is a copy of the register's own modules, made by `scripts/sync-core.ts`; never edit it
 by hand (the plugin README says how to sync it).
