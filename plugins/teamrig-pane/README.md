@@ -1,5 +1,9 @@
 # teamrig-pane
 
+Install it from a session (it is tested on Claude Code 2.1.295 and later):
+
+    /plugin install teamrig-pane --marketplace GeneralA6/teamrig-pane
+
 Docks the session's tasks from the task register (its tasks folder: `events.jsonl`, with its
 `aliases.jsonl` renames and `pauses.jsonl` pauses; see Where the register is, below) on the right of Claude Code's fullscreen UI. It reads files only: a stat poll
 every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick moves the due/age
