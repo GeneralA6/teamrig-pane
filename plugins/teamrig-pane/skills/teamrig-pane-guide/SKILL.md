@@ -97,9 +97,9 @@ Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pa
 | `m` | Tasks: this session's area (`mine`) |
 | `a` | Tasks: every owner (`all`) |
 | `o` | mine: only the tasks done today (the status bar's `done today`); again shows every task |
-| `v` | mine: only the tasks waiting for proof (`verifying`); again shows every task |
+| `v` | mine: only the verifying tasks (shipped, their proof still to come); again shows every task |
 | `w` | mine: only the tasks in progress (`working`); again shows every task |
-| `b` | mine: only the blocked tasks; again shows every task |
+| `i` | mine: only the waiting tasks; again shows every task |
 | `n` | mine: only the open tasks (`not started`); again shows every task |
 | `c` | Collapses every expanded task (shown while one is expanded) |
 | Enter on a task, or a click on its `▸` | Expands it to `▾` with its details; again collapses it |
@@ -139,9 +139,9 @@ No area for this session yet: /rename the tab to its session's id or name, run `
 
 **mine** shows its status bar (below), then, under a header `web (pinned) · 3 active · inbox 2 unread`:
 
-1. the area's active tasks (open, in progress, verifying, blocked) in teamrig's plan order: priority, then due
-   (undated last), then id. The tasks waiting for proof (`verifying`: the change landed, its proof is still to
-   come) lead under `waiting for proof (n)`, because closing them comes first; the rest follow under
+1. the area's active tasks (open, in progress, verifying, waiting) in teamrig's plan order: priority, then due
+   (undated last), then id. The verifying tasks (the change landed, its proof is still to
+   come) lead under `verifying (n)`, because closing them comes first; the rest follow under
    `other active (n)`. With none waiting, neither heading shows;
 2. `asked of others (n)`: active tasks the area asked of other sessions, the newest 8;
 3. `finished today`: its tasks done or dropped in the last 24 hours, the newest 6.
@@ -150,7 +150,7 @@ No area for this session yet: /rename the tab to its session's id or name, run `
 `teamrig inbox read`; it is missing when the area never ran one.
 
 **all** shows every owner's active tasks, grouped by owner, each heading with its counts
-(`api · 4 active · 1 blocked · 1 waiting for proof`, a count with none left out), the tasks waiting for proof first
+(`api · 4 active · 1 waiting · 1 verifying`, a count with none left out), the verifying tasks first
 in each group; your own area is highlighted.
 
 A task line reads `▸ ◐ T12 p2 10-17 NEW Build the signup endpoint`:
@@ -158,13 +158,13 @@ A task line reads `▸ ◐ T12 p2 10-17 NEW Build the signup endpoint`:
 | Part | Meaning |
 | --- | --- |
 | `▸` / `▾` | Collapsed / expanded |
-| `○` `◐` `◑` `■` `✓` `✗` | open, in-progress, verifying, blocked, done, dropped (as `teamrig list` names them) |
+| `○` `◐` `◑` `■` `✓` `✗` | open, in-progress, verifying, waiting, done, dropped (as `teamrig list` names them) |
 | `→api` | In `asked of others`: the task's owner |
 | `p2 10-17` | Priority and due date; an overdue date is red |
 | `NEW` | The owner has not touched it yet |
 | `NOT PICKED UP` | The owner has still not touched it 24 hours after it was assigned |
 
-Under a blocked task, its blocked note follows `↳`; under a verifying task, `↳ proof:` and its note, what will
+Under a waiting task, what it waits for (a decision, an approval, a task or a time, as `teamrig list` words it), then its note, follow `↳` (`↳ decision owner · on T5; the copy first`); an old `blocked` line reads as waiting, with only its note; under a verifying task, `↳ proof:` and its note, what will
 prove it. Other messages: `Reading the register…` (the first moments,
 at most 3 seconds), `Nothing active.` (mine) and `No active tasks.` (all).
 
@@ -175,22 +175,22 @@ Over **mine**, one row as wide as the pane shares its cells among the area's tas
 | Cells | Count | Tasks |
 | --- | --- | --- |
 | green `█` | `done today` | done today |
-| green `▓` | `verifying` | waiting for proof |
+| green `▓` | `verifying` | shipped, its proof still to come |
 | amber `█` | `working` | in progress |
-| red `█` | `blocked` | blocked |
+| red `█` | `waiting` | waiting on a decision, an approval, a task or a time |
 | dim `░` | `not started` | open |
 
-Under it, a dim line counts them (`1 done today · 1 verifying · 2 working · 1 blocked`), leaving out a status with
+Under it, a dim line counts them (`1 done today · 1 verifying · 2 working · 1 waiting`), leaving out a status with
 none. Today is the UTC day; tasks done on an earlier day, and dropped ones, are left out. The cells are shared by
 largest remainder, and a status with any task gets at least one. With none of these tasks there is no bar, and
 **all** has none.
 
-A click on a status's cells or its count, or its key (`o`, `v`, `w`, `b`, `n`), shows that status's tasks alone
+A click on a status's cells or its count, or its key (`o`, `v`, `w`, `i`, `n`), shows that status's tasks alone
 under the header: today's done ones newest first, the others in plan order; the other sections hide. Its cells and
 count turn bold, and a dim line under the counts reads `showing verifying only, click again for all`. The same
 click or key again shows every task; another status switches to it. A shown status that empties keeps its count,
-`0 blocked`, so it can still be cleared, and the list says `Nothing blocked.` (`Nothing done today.`, `Nothing
-waiting for proof.`, `Nothing in progress.`, `Nothing waiting to start.` for the others).
+`0 waiting`, so it can still be cleared, and the list says `Nothing waiting.` (`Nothing done today.`, `Nothing
+to verify.`, `Nothing in progress.`, `Nothing left to start.` for the others).
 
 The filter belongs to the pane: it holds while you switch to **all** (which it does not filter) or to Changes, and
 is never kept across a reload: a new session, `/reload-plugins` or a restart shows every task again.

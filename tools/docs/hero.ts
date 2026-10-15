@@ -6,7 +6,7 @@
  * tasks. The window is dark in either theme, as a terminal is; the caption under it follows the reader's theme.
  *
  * The rows follow the pane's own formats (hooks/rows.ts, hooks/changes-rows.ts). Its status glyphs, the row marker
- * and the blocked note's arrow are drawn as shapes, so no font has to carry them.
+ * and the waiting note's arrow are drawn as shapes, so no font has to carry them.
  */
 import { escapeXml, MONO_FONTS, renderSvg } from './svg.ts';
 import { themeStyle } from './theme.ts';
@@ -39,10 +39,10 @@ export const PALETTE = {
 } as const;
 const C = PALETTE;
 
-export type Status = 'open' | 'in-progress' | 'blocked' | 'done';
+export type Status = 'open' | 'in-progress' | 'waiting' | 'done';
 
 /** The status colours the pane gives a task's glyph and id (an open task keeps the text colour). */
-export const STATUS_COLOR: Readonly<Record<Status, string>> = { open: C.fg, 'in-progress': C.amber, blocked: C.red, done: C.green };
+export const STATUS_COLOR: Readonly<Record<Status, string>> = { open: C.fg, 'in-progress': C.amber, waiting: C.red, done: C.green };
 
 export interface PaneTask {
   readonly id: string;
@@ -54,7 +54,7 @@ export interface PaneTask {
   readonly isNew?: boolean;
   /** For a task asked of others: who owns it. */
   readonly owner?: string;
-  /** A blocked task's note, drawn under it. */
+  /** A waiting task's note, drawn under it. */
   readonly note?: string;
 }
 
@@ -64,7 +64,7 @@ export const UNREAD = 1;
 export const ACTIVE: readonly PaneTask[] = [
   { id: 'T12', status: 'in-progress', priority: 'p1', due: '10-16', title: 'Signup form' },
   { id: 'T14', status: 'open', priority: 'p2', isNew: true, title: 'Form tests' },
-  { id: 'T15', status: 'blocked', priority: 'p2', title: 'Email check', note: 'waits on the mail key' },
+  { id: 'T15', status: 'waiting', priority: 'p2', title: 'Email check', note: 'waits on the mail key' },
 ];
 export const ASKED: readonly PaneTask[] = [{ id: 'T13', status: 'open', priority: 'p2', owner: 'api', title: 'Mail key' }];
 export const FINISHED: readonly PaneTask[] = [{ id: 'T11', status: 'done', priority: 'p1', title: 'Signup API' }];
@@ -77,7 +77,7 @@ export const CHANGED: readonly { readonly code: string; readonly path: string; r
   { code: '??', path: 'docs/signup.md', added: 12, removed: 0 },
 ];
 
-export const CAPTIONS = { tasks: "Your tasks: what's next, what's blocked, what's done", changes: 'One press on Changes: the files changed in your repo' } as const;
+export const CAPTIONS = { tasks: "Your tasks: what's next, what's waiting, what's done", changes: 'One press on Changes: the files changed in your repo' } as const;
 
 const STORY =
   `Claude Code in its fullscreen layout. Beside the conversation, teamrig-pane docks the session's tasks: ` +
@@ -133,7 +133,7 @@ function glyph(status: Status, x: number, y: number, color: string): string {
   const shape = {
     open: `<circle cx="${x}" cy="${y}" r="4.5" fill="none" stroke="${color}" stroke-width="1.5"/>`,
     'in-progress': `<circle cx="${x}" cy="${y}" r="4.5" fill="none" stroke="${color}" stroke-width="1.5"/><path d="M${x} ${y - 4.5}a4.5 4.5 0 0 0 0 9z" fill="${color}"/>`,
-    blocked: `<rect x="${x - 4.5}" y="${y - 4.5}" width="9" height="9" fill="${color}"/>`,
+    waiting: `<rect x="${x - 4.5}" y="${y - 4.5}" width="9" height="9" fill="${color}"/>`,
     done: `<path d="M${x - 4.5} ${y}l3 3.2l6-6.7" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
   }[status];
   return `<g data-glyph="${status}">${shape}</g>`;
@@ -158,7 +158,7 @@ function taskRow(task: PaneTask, y: number, finished: boolean): string[] {
   ];
 }
 
-/** `↳ note`, under a blocked task's id, in the blocked colour. */
+/** `↳ note`, under a waiting task's id, in the waiting colour. */
 function noteRow(note: string, y: number): string[] {
   return [
     `<path d="M${TEXT_X + 1} ${y - 11}v6h8m-3-3l3 3l-3 3" fill="none" stroke="${C.red}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>`,

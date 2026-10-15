@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="416" viewBox="0 0 960 416" role="img" aria-label="What teamrig-pane does for you: Your tasks, always in view. Docked beside the conversation, in plan order, updated as they change. The whole team at a glance. Every owner's tasks in one view, with how many are active or blocked. What needs you stands out. Blocked, overdue, new and not picked up are marked; blocked ones say why. Details on a click. The ask in its own words, who asked and when, and the latest status note. Changes, one press away. Each changed file and its lines, in every repo the session works in. Fast, and costs no tokens. It reads files, never the model, and only when they change.">
-<title>What teamrig-pane does for you: Your tasks, always in view. Docked beside the conversation, in plan order, updated as they change. The whole team at a glance. Every owner's tasks in one view, with how many are active or blocked. What needs you stands out. Blocked, overdue, new and not picked up are marked; blocked ones say why. Details on a click. The ask in its own words, who asked and when, and the latest status note. Changes, one press away. Each changed file and its lines, in every repo the session works in. Fast, and costs no tokens. It reads files, never the model, and only when they change.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="416" viewBox="0 0 960 416" role="img" aria-label="What teamrig-pane does for you: Your tasks, always in view. Docked beside the conversation, in plan order, updated as they change. The whole team at a glance. Every owner's tasks in one view, with how many are active or waiting. What needs you stands out. Waiting, overdue, new and not picked up are marked; waiting ones say why. Details on a click. The ask in its own words, who asked and when, and the latest status note. Changes, one press away. Each changed file and its lines, in every repo the session works in. Fast, and costs no tokens. It reads files, never the model, and only when they change.">
+<title>What teamrig-pane does for you: Your tasks, always in view. Docked beside the conversation, in plan order, updated as they change. The whole team at a glance. Every owner's tasks in one view, with how many are active or waiting. What needs you stands out. Waiting, overdue, new and not picked up are marked; waiting ones say why. Details on a click. The ask in its own words, who asked and when, and the latest status note. Changes, one press away. Each changed file and its lines, in every repo the session works in. Fast, and costs no tokens. It reads files, never the model, and only when they change.</title>
 <style>
 :root{--fg:#1f2328;--muted:#59636e;--line:#d1d9e0;--tile:#f6f8fa;--bg:#ffffff;--purple:#8250df;--tint:#f0eafb;--amber:#9a6700;--green:#1a7f37}
 @media (prefers-color-scheme:dark){:root{--fg:#e6edf3;--muted:#9198a1;--line:#3d444d;--tile:#151b23;--bg:#0d1117;--purple:#a371f7;--tint:#221e36;--amber:#d29922;--green:#3fb950}}
@@ -19,13 +19,13 @@ text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helveti
 <g transform="translate(362 34) scale(1.1666666666666667)" class="icon"><circle cx="12" cy="5" r="2.6"/><circle cx="4.5" cy="19" r="2.2"/><circle cx="12" cy="19" r="2.2"/><circle cx="19.5" cy="19" r="2.2"/><path d="M12 7.6V16.8M10.6 7.2 5.6 17M13.4 7.2l5 9.8"/></g>
 <text x="352" y="114" class="cardtitle">The whole team at a glance</text>
 <text x="352" y="143" class="sub">Every owner's tasks in one view, with</text>
-<text x="352" y="164" class="sub">how many are active or blocked.</text>
+<text x="352" y="164" class="sub">how many are active or waiting.</text>
 <rect x="656.5" y="0.5" width="303" height="195" rx="14" class="card"/>
 <rect x="680" y="24" width="48" height="48" rx="12" class="chip"/>
 <g transform="translate(690 34) scale(1.1666666666666667)" class="icon"><path d="M5 21.5V3.5"/><path d="M5 4.5h12.5l-2.5 4.25 2.5 4.25H5"/></g>
 <text x="680" y="114" class="cardtitle">What needs you stands out</text>
-<text x="680" y="143" class="sub">Blocked, overdue, new and not picked</text>
-<text x="680" y="164" class="sub">up are marked; blocked ones say why.</text>
+<text x="680" y="143" class="sub">Waiting, overdue, new and not picked</text>
+<text x="680" y="164" class="sub">up are marked; waiting ones say why.</text>
 <rect x="0.5" y="220.5" width="303" height="195" rx="14" class="card"/>
 <rect x="24" y="244" width="48" height="48" rx="12" class="chip"/>
 <g transform="translate(34 254) scale(1.1666666666666667)" class="icon"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></g>

@@ -60,7 +60,7 @@ describe('renderHero', () => {
     const label = root.attributes.get('aria-label') ?? '';
     assert.equal(root.attributes.get('role'), 'img');
     assert.match(label, /^Claude Code in its fullscreen layout\. Beside the conversation, teamrig-pane docks the session's tasks: /);
-    assert.match(label, /T12 Signup form, in progress; T14 Form tests, open; T15 Email check, blocked\./);
+    assert.match(label, /T12 Signup form, in progress; T14 Form tests, open; T15 Email check, waiting\./);
     assert.match(label, /flips the pane to the 3 files changed in the session's repo, and back\.$/);
     assert.equal(textOf(places.find((place) => place.element.name === 'title')?.element ?? ''), label);
   });

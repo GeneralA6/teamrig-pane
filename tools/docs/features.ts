@@ -15,8 +15,8 @@ const PER_ROW = 3;
 
 export const FEATURES: readonly Card[] = [
   { icon: 'dock', title: 'Your tasks, always in view', lines: ['Docked beside the conversation, in', 'plan order, updated as they change.'] },
-  { icon: 'team', title: 'The whole team at a glance', lines: ["Every owner's tasks in one view, with", 'how many are active or blocked.'] },
-  { icon: 'flag', title: 'What needs you stands out', lines: ['Blocked, overdue, new and not picked', 'up are marked; blocked ones say why.'] },
+  { icon: 'team', title: 'The whole team at a glance', lines: ["Every owner's tasks in one view, with", 'how many are active or waiting.'] },
+  { icon: 'flag', title: 'What needs you stands out', lines: ['Waiting, overdue, new and not picked', 'up are marked; waiting ones say why.'] },
   { icon: 'details', title: 'Details on a click', lines: ['The ask in its own words, who asked', 'and when, and the latest status note.'] },
   { icon: 'changes', title: 'Changes, one press away', lines: ['Each changed file and its lines, in', 'every repo the session works in.'] },
   { icon: 'gauge', title: 'Fast, and costs no tokens', lines: ['It reads files, never the model, and', 'only when they change.'] },
