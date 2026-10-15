@@ -7,7 +7,9 @@ import {
   parseLcov,
   parsePolicy,
   parseTapSummary,
+  PANE_KIT_IMPORT,
   percent,
+  pluginTests,
   POLICY_FILE,
   sourceFiles,
   strayTests,
@@ -43,6 +45,13 @@ function problemOf(value: unknown): string {
 
 const POLICY = policyOf(POLICY_JSON);
 
+const PLUGIN_POLICY = policyOf({
+  ...POLICY_JSON,
+  testSupport: [...POLICY_JSON.testSupport, 'plugins/teamrig-pane/tests/'],
+  vendored: { 'plugins/teamrig-pane/hooks/core/': 'copied from teamrig, which measures it' },
+  engineTests: { 'plugins/teamrig-pane/tests/pane.test.ts': 'mounts the pane' },
+});
+
 function file(path: string, lines: number, branches = 100, functions = 100): FileCoverage {
   return { path, lines: { found: 100, hit: lines }, branches: { found: 100, hit: branches }, functions: { found: 100, hit: functions } };
 }
@@ -55,17 +64,23 @@ function run(report: readonly FileCoverage[], listing: readonly string[], outcom
 }
 
 describe('parsePolicy', () => {
-  it('reads floors, test support, type-only files and exceptions', () => {
+  it('reads floors, test support, type-only, unmeasured and vendored files, engine tests and exceptions', () => {
     const policy = policyOf({
       ...POLICY_JSON,
       $comment: 'notes',
       typeOnly: { 'tools/types.ts': 'interfaces only' },
+      unmeasured: { 'plugins/teamrig-pane/hooks/register.tsx': 'the engine’s entry' },
+      vendored: { 'plugins/teamrig-pane/hooks/core/': 'measured upstream' },
+      engineTests: { 'plugins/teamrig-pane/tests/pane.test.ts': 'mounts the pane' },
       exceptions: { 'tools/io.ts': { lines: 60, reason: 'the OS error paths need a real disk failure' } },
     });
     assert.deepEqual(policy.total, POLICY_JSON.total);
     assert.deepEqual(policy.perFile, POLICY_JSON.perFile);
     assert.deepEqual(policy.testSupport, POLICY_JSON.testSupport);
     assert.equal(policy.typeOnly.get('tools/types.ts'), 'interfaces only');
+    assert.equal(policy.unmeasured.get('plugins/teamrig-pane/hooks/register.tsx'), 'the engine’s entry');
+    assert.equal(policy.vendored.get('plugins/teamrig-pane/hooks/core/'), 'measured upstream');
+    assert.equal(policy.engineTests.get('plugins/teamrig-pane/tests/pane.test.ts'), 'mounts the pane');
     assert.deepEqual(policy.exceptions.get('tools/io.ts'), { floors: { lines: 60 }, reason: 'the OS error paths need a real disk failure' });
   });
 
@@ -73,6 +88,9 @@ describe('parsePolicy', () => {
     const policy = policyOf({ total: POLICY_JSON.total, perFile: POLICY_JSON.perFile });
     assert.deepEqual(policy.testSupport, []);
     assert.equal(policy.typeOnly.size, 0);
+    assert.equal(policy.unmeasured.size, 0);
+    assert.equal(policy.vendored.size, 0);
+    assert.equal(policy.engineTests.size, 0);
     assert.equal(policy.exceptions.size, 0);
   });
 
@@ -94,9 +112,11 @@ describe('parsePolicy', () => {
     assert.match(problemOf({ ...POLICY_JSON, testSupport: [''] }), /testSupport must be a list/);
   });
 
-  it('refuses a type-only entry with no reason', () => {
-    assert.match(problemOf({ ...POLICY_JSON, typeOnly: ['tools/types.ts'] }), /typeOnly must be an object keyed by file path/);
-    assert.match(problemOf({ ...POLICY_JSON, typeOnly: { 'tools/types.ts': ' ' } }), /typeOnly\["tools\/types\.ts"\] needs a reason/);
+  it('refuses a type-only, unmeasured, vendored or engine-test entry with no reason', () => {
+    for (const name of ['typeOnly', 'unmeasured', 'vendored', 'engineTests']) {
+      assert.match(problemOf({ ...POLICY_JSON, [name]: ['tools/types.ts'] }), new RegExp(`${name} must be an object keyed by file path`));
+      assert.match(problemOf({ ...POLICY_JSON, [name]: { 'tools/types.ts': ' ' } }), new RegExp(`${name}\\["tools/types\\.ts"\\] needs a reason`));
+    }
   });
 
   it('refuses an exception with no reason, no floor or a floor that does not lower anything', () => {
@@ -127,30 +147,72 @@ describe('sourceFiles and strayTests', () => {
   });
 
   it('reports test files that `npm test` would never run', () => {
-    const stray = strayTests(['tools/a.test.ts', 'tools/b.spec.ts', 'test/c.test.ts', 'tools/d.test.js', 'tools/e.ts']);
+    const stray = strayTests(['tools/a.test.ts', 'tools/b.spec.ts', 'test/c.test.ts', 'tools/d.test.js', 'tools/e.ts'], POLICY);
     assert.deepEqual(
       stray.map((line) => line.split(':')[0]),
       ['tools/b.spec.ts', 'test/c.test.ts', 'tools/d.test.js'],
     );
-    assert.match(stray[0] ?? '', /name a test <name>\.test\.ts under tools\//);
+    assert.match(stray[0] ?? '', /name a test <name>\.test\.ts under tools\/ or plugins\/teamrig-pane\//);
+  });
+
+  it('keeps the plugin’s .ts and .tsx sources, minus type declarations, its tests and vendored code', () => {
+    const plugin = [
+      'plugins/teamrig-pane/hooks/a.ts',
+      'plugins/teamrig-pane/hooks/register.tsx',
+      'plugins/teamrig-pane/hooks/core/read.ts',
+      'plugins/teamrig-pane/typecheck/engine.d.ts',
+      'plugins/teamrig-pane/tests/a.test.ts',
+      'plugins/teamrig-pane/tests/fixtures.ts',
+      'plugins/teamrig-pane/README.md',
+      'tools/b.tsx',
+    ];
+    assert.deepEqual(sourceFiles(plugin, PLUGIN_POLICY), ['plugins/teamrig-pane/hooks/a.ts', 'plugins/teamrig-pane/hooks/register.tsx']);
+  });
+
+  it('reports a plugin test no run runs: a spec name, or JSX node cannot run that is not left to the engine', () => {
+    const tests = ['plugins/teamrig-pane/tests/a.test.ts', 'plugins/teamrig-pane/tests/b.test.tsx', 'plugins/teamrig-pane/tests/c.spec.ts', 'plugins/teamrig-pane/tests/pane.test.ts'];
+    assert.deepEqual(strayTests(tests, PLUGIN_POLICY), [
+      'plugins/teamrig-pane/tests/b.test.tsx: node cannot run JSX, so the coverage run never runs it; write it as <name>.test.ts, or list it under engineTests with the reason',
+      'plugins/teamrig-pane/tests/c.spec.ts: the plugin test runner never runs it; name it <name>.test.ts',
+    ]);
+    const engineJsx = policyOf({ ...POLICY_JSON, engineTests: { 'plugins/teamrig-pane/tests/b.test.tsx': 'mounts the pane' } });
+    assert.deepEqual(strayTests(['plugins/teamrig-pane/tests/b.test.tsx'], engineJsx), []);
+  });
+});
+
+describe('pluginTests', () => {
+  it('runs every plugin test under node but those only the engine can run', () => {
+    const listing = [
+      'tools/a.test.ts',
+      'plugins/teamrig-pane/tests/a.test.ts',
+      'plugins/teamrig-pane/tests/pane.test.ts',
+      'plugins/teamrig-pane/tests/b.test.tsx',
+      'plugins/teamrig-pane/tests/fixtures.ts',
+    ];
+    assert.deepEqual(pluginTests(listing, PLUGIN_POLICY), ['plugins/teamrig-pane/tests/a.test.ts']);
   });
 });
 
 describe('suiteArgs', () => {
-  it('measures tools, excludes tests and test support, and writes lcov and TAP', () => {
-    const args = suiteArgs(POLICY, 'out.lcov', 'out.tap');
-    assert.deepEqual(args.slice(0, 2), ['--test', '--experimental-test-coverage']);
+  it('loads the pane kit, measures tools and the plugin, excludes tests, test support and vendored code, and writes lcov and TAP', () => {
+    const listing = ['tools/a.test.ts', 'plugins/teamrig-pane/tests/a.test.ts', 'plugins/teamrig-pane/tests/pane.test.ts'];
+    const args = suiteArgs(PLUGIN_POLICY, listing, 'out.lcov', 'out.tap');
+    assert.deepEqual(args.slice(0, 3), [`--import=${PANE_KIT_IMPORT}`, '--test', '--experimental-test-coverage']);
+    assert.match(PANE_KIT_IMPORT, /^file:\/\/.*\/tools\/pane-kit\/register\.ts$/);
     for (const arg of [
       '--test-coverage-include=tools/**',
+      '--test-coverage-include=plugins/teamrig-pane/**',
       '--test-coverage-exclude=**/*.test.ts',
       '--test-coverage-exclude=tools/testing/**',
       '--test-coverage-exclude=tools/lib/fake-git.ts',
+      '--test-coverage-exclude=plugins/teamrig-pane/tests/**',
+      '--test-coverage-exclude=plugins/teamrig-pane/hooks/core/**',
       '--test-reporter-destination=out.lcov',
       '--test-reporter-destination=out.tap',
     ]) {
       assert.ok(args.includes(arg), arg);
     }
-    assert.deepEqual(args.slice(-1), ['tools/**/*.test.ts']);
+    assert.deepEqual(args.slice(-2), ['tools/**/*.test.ts', 'plugins/teamrig-pane/tests/a.test.ts']);
   });
 });
 
@@ -240,7 +302,38 @@ describe('coverageFindings', () => {
   it('passes a clean run and prints its totals', () => {
     const passing = run([file('tools/a.ts', 100), file('tools/b.ts', 90)], ['tools/a.ts', 'tools/b.ts']);
     assert.deepEqual(coverageFindings(passing, POLICY), []);
-    assert.equal(coverageTotals(passing, POLICY), '3 tests; 2 files: lines 95%, branches 100%, functions 100%');
+    assert.equal(coverageTotals(passing, POLICY), '3 tests; tools/ 2 files: lines 95%, branches 100%, functions 100%');
+  });
+
+  it('holds each source folder to the total floors on its own, and prints each folder’s totals', () => {
+    const report = [file('tools/a.ts', 100), file('tools/b.ts', 100), file('plugins/teamrig-pane/hooks/a.ts', 85, 100, 100)];
+    const both = run(report, report.map((entry) => entry.path));
+    assert.deepEqual(coverageFindings(both, POLICY), ['total plugins/teamrig-pane/: lines 85% < 90%']);
+    assert.equal(
+      coverageTotals(both, POLICY),
+      '3 tests; tools/ 2 files: lines 100%, branches 100%, functions 100%; plugins/teamrig-pane/ 1 files: lines 85%, branches 100%, functions 100%',
+    );
+  });
+
+  it('accepts an unmeasured file no test loads, and reports the entry once a test loads it or the file is gone', () => {
+    const policy = policyOf({ ...POLICY_JSON, unmeasured: { 'plugins/teamrig-pane/hooks/register.tsx': 'the engine’s entry' } });
+    const listing = ['tools/a.ts', 'plugins/teamrig-pane/hooks/register.tsx'];
+    assert.deepEqual(coverageFindings(run([file('tools/a.ts', 100)], listing), policy), []);
+    assert.deepEqual(coverageFindings(run([file('tools/a.ts', 100), file('plugins/teamrig-pane/hooks/register.tsx', 100)], listing), policy), [
+      `plugins/teamrig-pane/hooks/register.tsx: a test loads it now, so it can be measured; remove it from unmeasured in ${POLICY_FILE}`,
+    ]);
+    assert.deepEqual(coverageFindings(run([file('tools/a.ts', 100)], ['tools/a.ts']), policy), [
+      `plugins/teamrig-pane/hooks/register.tsx: is listed in ${POLICY_FILE} but is not a source file; remove it`,
+    ]);
+  });
+
+  it('reports a vendored folder that holds no file and an engine test that is not a test file', () => {
+    const listing = ['tools/a.ts', 'plugins/teamrig-pane/hooks/core/read.ts', 'plugins/teamrig-pane/tests/pane.test.ts'];
+    assert.deepEqual(coverageFindings(run([file('tools/a.ts', 100)], listing), PLUGIN_POLICY), []);
+    assert.deepEqual(coverageFindings(run([file('tools/a.ts', 100)], ['tools/a.ts']), PLUGIN_POLICY), [
+      `plugins/teamrig-pane/hooks/core/: is listed as vendored in ${POLICY_FILE} but holds no file; remove it`,
+      `plugins/teamrig-pane/tests/pane.test.ts: is listed under engineTests in ${POLICY_FILE} but is not a test file; remove it`,
+    ]);
   });
 
   it('fails a source file that no test loads', () => {
@@ -257,7 +350,7 @@ describe('coverageFindings', () => {
   it('fails a total under its floor even when every file passes', () => {
     const report = [file('tools/a.ts', 85, 75, 85), file('tools/b.ts', 85, 75, 85)];
     const findings = coverageFindings(run(report, ['tools/a.ts', 'tools/b.ts']), POLICY);
-    assert.deepEqual(findings, ['total: lines 85% < 90%, branches 75% < 80%, functions 85% < 90%']);
+    assert.deepEqual(findings, ['total tools/: lines 85% < 90%, branches 75% < 80%, functions 85% < 90%']);
   });
 
   it('applies an exception, and reports it once the file no longer needs it', () => {
@@ -314,6 +407,7 @@ describe('coverageFindings', () => {
   });
 
   it('prints totals without a test count when the run wrote no summary', () => {
-    assert.equal(coverageTotals(run([], [], { summary: undefined }), POLICY), '0 files: lines 100%, branches 100%, functions 100%');
+    assert.equal(coverageTotals(run([file('tools/a.ts', 100)], ['tools/a.ts'], { summary: undefined }), POLICY), 'tools/ 1 files: lines 100%, branches 100%, functions 100%');
+    assert.equal(coverageTotals(run([], [], { summary: undefined }), POLICY), 'no files measured');
   });
 });

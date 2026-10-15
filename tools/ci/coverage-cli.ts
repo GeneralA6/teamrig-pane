@@ -27,7 +27,7 @@ async function main(): Promise<number> {
   try {
     const lcovPath = join(out, 'lcov.info');
     const tapPath = join(out, 'tap.txt');
-    const result = spawnSync(process.execPath, suiteArgs(policy, lcovPath, tapPath), { cwd: root, env: suiteEnv(process.env), stdio: 'inherit' });
+    const result = spawnSync(process.execPath, suiteArgs(policy, listing, lcovPath, tapPath), { cwd: root, env: suiteEnv(process.env), stdio: 'inherit' });
     const run = coverageRun(
       { lcov: readTextIfPresent(lcovPath), tap: readTextIfPresent(tapPath), status: result.status },
       listing,
