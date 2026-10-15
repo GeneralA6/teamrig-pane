@@ -5,7 +5,7 @@
 A Claude Code plugin that docks your session's tasks on the right of the conversation, and flips to
 the files you changed with one press. Part of [teamrig](https://github.com/GeneralA6/teamrig).
 
-![Claude Code with teamrig-pane docked beside the conversation: the session's active tasks in plan order, a blocked task's note, what it asked of others and what it finished today, then one press on Changes lists the files changed in its repo.](docs/images/hero.svg)
+![Claude Code with teamrig-pane docked beside the conversation: the session's active tasks in plan order, what a waiting task waits for, what it asked of others and what it finished today, then one press on Changes lists the files changed in its repo.](docs/images/hero.svg)
 
 > **Pre-release.** The pane is built on Claude Code's function hooks, an early-access plugin surface
 > that may change between releases. Nothing is stable yet and there is no release.
@@ -41,15 +41,15 @@ updates by itself unless you turn on its auto-update in `/plugin`, under Marketp
 
 ## Why it's different
 
-![Six cards. Your tasks, always in view: docked beside the conversation, in plan order. The whole team at a glance: every owner's tasks with how many are active or blocked. What needs you stands out: blocked, overdue, new and not picked up are marked. Details on a click. Changes, one press away. Fast, and costs no tokens: it reads files, never the model.](docs/images/features.svg)
+![Six cards. Your tasks, always in view: docked beside the conversation, in plan order. The whole team at a glance: every owner's tasks with how many are active or waiting. What needs you stands out: waiting, overdue, new and not picked up are marked. Details on a click. Changes, one press away. Fast, and costs no tokens: it reads files, never the model.](docs/images/features.svg)
 
 It is part of Claude Code's own screen, not another window: nothing to switch to, nothing else to keep running.
 
 ## What it shows
 
-- **Tasks:** a bar of how your work stands (done today, waiting for proof, working, blocked, not
-  started; a click shows one status alone), then your active tasks in plan order, those waiting for
-  proof first, what blocks them, what you asked of others, what you finished today and your unread
+- **Tasks:** a bar of how your work stands (done today, verifying, working, waiting, not
+  started; a click shows one status alone), then your active tasks in plan order, the verifying ones
+  first, what each waiting one waits for, what you asked of others, what you finished today and your unread
   inbox lines. `/teamrig-pane all` shows every owner's tasks, and
   `/teamrig-pane <session>` shows another session's, named by its id or its name.
 - **Details:** click a task, or press Enter on it, to read its ask, quoted from the file its ref
