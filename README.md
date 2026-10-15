@@ -51,7 +51,7 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
   finished today and your unread inbox lines. `/teamrig-pane all` shows every owner's tasks.
 - **Details:** click a task, or press Enter on it, to read its ask, quoted from the file its ref
   points at, then who asked and when, its goals and its status note.
-- **Changes:** the files changed in each git repo the session works in, from `git status`.
+- **Changes:** the files changed in each git repo the session works in, each with its lines added and removed.
   Press the switch, or `t` and `d` while the pane holds the keyboard.
 
 ## How it reads teamrig
