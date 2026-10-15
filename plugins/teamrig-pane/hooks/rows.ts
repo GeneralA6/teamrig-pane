@@ -1,5 +1,5 @@
 // The pane's body as blocks of rows of styled spans: pure data from a snapshot. A block is what
-// draws as one element (layout.ts): a task with its blocked note or details under it, a header, a
+// draws as one element (layout.ts): a task with its blocked or proof note or details under it, a header, a
 // heading. The terminal lays out and paints a pane's whole tree, its scroll only a window over it,
 // and an inline pane's frame grows to fit the tree in the live area redrawn on every keystroke: the
 // tree's size is what the pane costs, so a block is one Text (its unstyled spans plain strings, a
@@ -33,6 +33,8 @@ const DETAIL_LEAD: Span = { text: `${UNDER_ID}│ `, dim: true }
 /** By the task's status: `◑` is shipped work waiting for its proof, the other half of `◐` working. */
 export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', blocked: '■', done: '✓', dropped: '✗' }
 export const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', verifying: 'success', blocked: 'error', done: 'success' }
+/** A status note's color: why a blocked task is held, what proves a verifying one; others draw in the text color. */
+const NOTE_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { blocked: 'error', verifying: 'success' }
 
 const NO_AREA = `No area for this session yet: /rename the tab to its session's id or name, run \`inbox read --session <id>\`, or /${COMMAND} <session> to pin one.`
 
@@ -73,8 +75,7 @@ function detailRows(section: string, task: TaskRow, detail: TaskDetail): Row[] {
   rows.push(line('asked', [{ text: asked.join(' · '), dim: true }]))
   const outcome = [task.note, task.evidence === null ? null : `evidence ${task.evidence}`].filter(part => part !== null)
   if (outcome.length > 0) {
-    const color = task.status === 'blocked' ? 'error' : undefined
-    rows.push(line('note', [{ text: `${task.status}: ${outcome.join(' · ')}`, color, dim: true }]))
+    rows.push(line('note', [{ text: `${task.status}: ${outcome.join(' · ')}`, color: NOTE_COLOR[task.status], dim: true }]))
   }
   // The files nothing was quoted from, named without line numbers.
   const quoted = new Set(quotes.map(quote => refLabel(quote.ref)))
@@ -83,19 +84,22 @@ function detailRows(section: string, task: TaskRow, detail: TaskDetail): Row[] {
   return rows
 }
 
-/** Why a blocked task is held, as its blocked note says; null when it is not blocked or says nothing. */
-function heldText(task: TaskRow): string | null {
-  return task.status === 'blocked' ? task.note : null
+/** What its status note says under a task: why a blocked one is held, `proof: …` what a verifying one waits for; null for other statuses or no note. */
+function noteText(task: TaskRow): string | null {
+  if (task.note === null) return null
+  if (task.status === 'blocked') return task.note
+  if (task.status === 'verifying') return `proof: ${task.note}`
+  return null
 }
 
-/** Its details when expanded, else what holds it under it. */
+/** Its details when expanded, else what holds it or what proves it under it. */
 function belowTask(section: string, task: TaskRow, expanded: ExpandedTasks): Row[] {
   const detail = expanded[task.id]
   if (detail !== undefined) return detailRows(section, task, detail)
-  const held = heldText(task)
-  if (held !== null)
-    return [{ key: `${section}-note:${task.id}`, spans: [{ text: `${UNDER_ID}↳ ${held}`, color: 'error', dim: true }], hang: { text: `${UNDER_ID}  ` } }]
-  return []
+  const note = noteText(task)
+  if (note === null) return []
+  const spans = [{ text: `${UNDER_ID}↳ ${note}`, color: NOTE_COLOR[task.status], dim: true }]
+  return [{ key: `${section}-note:${task.id}`, spans, hang: { text: `${UNDER_ID}  ` } }]
 }
 
 /** `▸ ◐ T12 →po p2 10-14 NEW title`, its title wrapping under its id, then its details or what holds it. */
@@ -133,11 +137,18 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
   const view = areaView(snap.tasks, snap.area, snap.now)
   const header: Span[] = [{ text: view.area, bold: true }]
   if (snap.areaSource === 'pinned') header.push({ text: ' (pinned)', dim: true })
-  header.push({ text: ` · ${view.active.length} active`, dim: true })
+  const activeTotal = view.verifying.length + view.active.length
+  header.push({ text: ` · ${activeTotal} active`, dim: true })
   if (snap.unreadInbox !== null)
     header.push({ text: ` · inbox ${snap.unreadInbox} unread`, color: snap.unreadInbox > 0 ? 'warning' : 'subtle' })
   const blocks: Block[] = [{ key: 'header', rows: [{ key: 'header', spans: header, rule: true }] }]
-  if (view.active.length === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
+  if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
+  // Work waiting for its proof leads, the tasks to close first; the rest of the active work then has its own heading.
+  if (view.verifying.length > 0) {
+    blocks.push(heading('proof', [{ text: `waiting for proof (${view.verifying.length})`, color: 'success' }]))
+    blocks.push(...view.verifying.map(line => taskBlock('proof', line, expanded)))
+    if (view.active.length > 0) blocks.push(heading('active', [{ text: `other active (${view.active.length})`, dim: true }]))
+  }
   blocks.push(...view.active.map(line => taskBlock('active', line, expanded)))
   if (view.askedTotal > 0) blocks.push(heading('asked', [{ text: `asked of others (${view.askedTotal})`, dim: true }]))
   blocks.push(...view.asked.map(line => taskBlock('asked', line, expanded, line.task.owner)))
@@ -150,7 +161,9 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
   const groups = ownerGroups(snap.tasks, snap.now)
   if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
   return groups.flatMap((group, i) => {
-    const counts = ` · ${group.active.length} active${group.blocked > 0 ? ` · ${group.blocked} blocked` : ''}`
+    const blocked = group.blocked > 0 ? ` · ${group.blocked} blocked` : ''
+    const verifying = group.verifying > 0 ? ` · ${group.verifying} waiting for proof` : ''
+    const counts = ` · ${group.active.length} active${blocked}${verifying}`
     const owner: Span[] = [
       { text: group.owner, bold: true, color: group.owner === snap.area ? 'claude' : undefined },
       { text: counts, dim: true },

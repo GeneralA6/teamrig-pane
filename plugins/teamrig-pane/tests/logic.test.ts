@@ -242,6 +242,22 @@ describe('view', () => {
       ['security', 1, 1],
     ])
   })
+
+  test('keeps the tasks waiting for proof apart, in plan order, and leads each owner group with them', async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, priority: 1 }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, priority: 3 }),
+      statusLine('T2', 'po', NOW, 'verifying', 'health check passes'),
+      createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, priority: 2 }),
+      statusLine('T3', 'po', NOW, 'verifying', 'one clean roll'),
+    )
+    const view = areaView(tasks, 'po', NOW)
+    expect(view.verifying.map(l => l.task.id)).toEqual(['T3', 'T2'])
+    expect(view.active.map(l => l.task.id)).toEqual(['T1'])
+    const [group] = ownerGroups(tasks, NOW)
+    expect(group?.active.map(l => l.task.id)).toEqual(['T3', 'T2', 'T1'])
+    expect([group?.blocked, group?.verifying]).toEqual([0, 2])
+  })
 })
 
 describe('rows', () => {
@@ -410,6 +426,59 @@ describe('rows', () => {
     expect(rowAt(blocks, 'owner:security')?.rule).toBe(true)
     expect(rowAt(blocks, 'owner:etl')?.spans[1]?.color).toBe('claude')
     expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => b.opensSection)).toEqual([false, true])
+  })
+
+  test('work waiting for proof leads under its own heading, each with its due and what proves it; the rest follows under its own', async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Working' }),
+      statusLine('T1', 'po', NOW, 'in-progress'),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, due: '2026-10-16', title: 'Shipped' }),
+      statusLine('T2', 'po', NOW, 'verifying', 'health check passes'),
+      createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'No proof named' }),
+      statusLine('T3', 'po', NOW, 'verifying'),
+    )
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
+    expect(blocks.map(b => b.key)).toEqual(['header', 'proof', 'proof:T2', 'proof:T3', 'active', 'active:T1'])
+    expect(textAt(blocks, 'header')).toBe('po · 3 active · inbox 2 unread')
+    expect(textAt(blocks, 'proof')).toBe('── waiting for proof (2)')
+    expect(rowAt(blocks, 'proof')?.spans[1]).toEqual({ text: 'waiting for proof (2)', color: 'success' })
+    expect(blockAt(blocks, 'proof')?.opensSection).toBe(true)
+    expect(textAt(blocks, 'proof:T2')).toBe('▸ ◑ T2 p3 10-16 Shipped')
+    expect(rowAt(blocks, 'proof:T2')?.spans[1]).toEqual({ text: '◑ T2', color: 'success', bold: true })
+    expect(blockAt(blocks, 'proof:T2')?.toggle).toBe('T2')
+    expect(rowAt(blocks, 'proof-note:T2')).toEqual({
+      key: 'proof-note:T2',
+      spans: [{ text: '    ↳ proof: health check passes', color: 'success', dim: true }],
+      hang: { text: '      ' },
+    })
+    expect(blockAt(blocks, 'proof:T3')?.rows.map(r => r.key)).toEqual(['proof:T3'])
+    expect(textAt(blocks, 'active')).toBe('── other active (1)')
+  })
+
+  test('with only work waiting for proof there is no second heading; expanded, its proof note is green', async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Shipped' }),
+      statusLine('T1', 'po', NOW, 'verifying', 'health check passes', 'abc123'),
+    )
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [] } })
+    expect(blocks.map(b => b.key)).toEqual(['header', 'proof', 'proof:T1'])
+    expect(rowAt(blocks, 'proof-detail:T1:note')?.spans[1]).toEqual({
+      text: 'verifying: health check passes · evidence abc123',
+      color: 'success',
+      dim: true,
+    })
+  })
+
+  test('the all view counts each owner\'s work waiting for proof and lists it first, with what proves it', async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'etl', by: 'etl', at: NOW, priority: 1 }),
+      createLine('T2', { owner: 'etl', by: 'etl', at: NOW, priority: 4 }),
+      statusLine('T2', 'etl', NOW, 'verifying', 'one clean night'),
+    )
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'all')
+    expect(blocks.map(b => b.key)).toEqual(['owner:etl', 'etl:T2', 'etl:T1'])
+    expect(rowAt(blocks, 'owner:etl')?.spans.map(s => s.text)).toEqual(['── ', 'etl', ' · 2 active · 1 waiting for proof'])
+    expect(textAt(blocks, 'etl-note:T2')).toBe('    ↳ proof: one clean night')
   })
 })
 
