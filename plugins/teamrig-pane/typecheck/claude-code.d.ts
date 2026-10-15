@@ -89,6 +89,11 @@ declare module 'claude-code' {
     readonly isStdoutTruncated: boolean
     readonly isStderrTruncated: boolean
   }
+  /**
+   * The engine's version: `version` as `claude --version` prints it (`2.1.280`, or `2.1.280-dev.<date>.<sha>` for a
+   * development build), `base` its release (`2.1.280`, `2.1.280-dev`) and `builtAt` an ISO time, each absent when unknown.
+   */
+  export type SessionVersion = { readonly version: string; readonly base?: string; readonly builtAt?: string }
   /** A timer `$.clock.every` started. */
   export type Timer = { cancel(): void }
   export type CommandSpec = { readonly name: string; readonly description: string; readonly argumentHint?: string }
@@ -99,7 +104,7 @@ declare module 'claude-code' {
     readonly command: { register(spec: CommandSpec): Promise<{ command: string }> }
     readonly env: { get(name: string): Promise<string | undefined> }
     readonly fs: { stat(path: string): Promise<FsStat>; exists(path: string): Promise<boolean>; read(path: string): Promise<string> }
-    readonly session: { id(): Promise<string> }
+    readonly session: { id(): Promise<string>; version(): Promise<SessionVersion> }
     readonly clock: { now(): Promise<number>; every(ms: number, fn: () => void): Timer }
     readonly store: { get(key: string): Promise<unknown>; set(key: string, value: unknown): Promise<void>; delete(key: string): Promise<void> }
     readonly process: { run(argv: readonly string[], init?: ProcessInit): Promise<ProcessResult> }
@@ -148,6 +153,7 @@ declare module 'claude-code' {
   export interface Events {
     'session.start': { filter: never; e: SessionStart; result: { readonly cwd?: string } }
     'session.id': { filter: never; e: Readonly<Record<string, never>>; result: Answer<string> }
+    'session.version': { filter: never; e: Readonly<Record<string, never>>; result: Answer<SessionVersion> }
     'command.register': { filter: never; e: CommandSpec; result: Answer<{ command: string }> }
     'command.run': { filter: { readonly command: string }; e: CommandRun; result: { readonly text?: string } }
     'ui.open': { filter: { readonly id: string }; e: PaneOpen; result: Answer<{ isPlaced: boolean }> }
