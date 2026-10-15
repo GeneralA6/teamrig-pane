@@ -1,74 +1,72 @@
 // What the pane shows, as plain data: pure functions over the folded tasks, so the drawing in
 // register.tsx only lays them out. The order and the due are teamrig's own (hooks/core/read).
-import type { BarStatus, Snapshot, TaskRow } from '../types'
+import type { BarStatus, Snapshot, TaskRow, TaskStatus } from '../types'
 import { ACTIVE_STATUSES, byPlanOrder } from './core/read/index'
-import { flagsOf, type Flag } from './meta'
+import { metaText } from './meta'
 import { barStatusOf, isFinishedOn, utcDay } from './status-bar'
 
-/** The finished tasks listed under the area's own, newest first; the rest are counted (AreaView). */
+/** At most this many tasks done today are listed, and this many asked of others; the heading counts them all. */
 export const MAX_FINISHED = 6
 export const MAX_ASKED = 8
 
-export type TaskLine = { task: TaskRow; flags: Flag[] }
-
+/** The area's own tasks and those it asked of others, each section in teamrig's plan order (priority, due, id). */
 export type AreaView = {
   area: string
-  /** Its tasks waiting for their proof (verifying), in plan order: drawn first, as the ones to close. */
-  verifying: TaskLine[]
-  /** Its other active tasks in teamrig's plan order: by priority, then due (undated last), then id. */
-  active: TaskLine[]
-  /** Active tasks it asked of other sessions, newest first, capped at MAX_ASKED. */
-  asked: TaskLine[]
-  askedTotal: number
-  /** Its tasks done or dropped today, the UTC day of `now` (status-bar.ts isFinishedOn), newest first, capped at MAX_FINISHED. */
-  finished: TaskRow[]
-  /** How many it finished today, those past the cap too. */
-  finishedTotal: number
+  /** Verifying (shipped, the proof still to come): the ones to close first. */
+  verifying: TaskRow[]
+  /** In progress. */
+  working: TaskRow[]
+  /** Open, not yet started. */
+  upNext: TaskRow[]
+  /** Its waiting tasks, then up to MAX_ASKED active tasks it asked of other sessions. */
+  waiting: TaskRow[]
+  /** How many tasks wait: its own waiting ones and every one it asked of others. */
+  waitingTotal: number
+  /** Its tasks done or dropped today, the UTC day of `now` (status-bar.ts isFinishedOn), newest first, at most MAX_FINISHED. */
+  doneToday: TaskRow[]
+  doneTotal: number
   /** How many past the cap were dropped: the status bar's done-today filter lists the done ones alone. */
-  finishedMoreDropped: number
+  doneMoreDropped: number
 }
 
-/** An owner's active tasks, the verifying ones first, and how many of them are waiting or verifying. */
-export type OwnerGroup = { owner: string; active: TaskLine[]; waiting: number; verifying: number }
+/** An owner's active tasks, those verifying first, and how many of them are waiting or verifying. */
+export type OwnerGroup = { owner: string; active: TaskRow[]; waiting: number; verifying: number }
 
 export function isActive(task: TaskRow): boolean {
   return ACTIVE_STATUSES.includes(task.status)
 }
 
-/** Shipped and waiting for its proof: active until the proof is in. */
+/** Verifying: shipped, and active until what proves it is in. */
 export function isVerifying(task: TaskRow): boolean {
   return task.status === 'verifying'
 }
 
-/** Waiting for proof first, the ones to close, then teamrig's plan order. */
-function proofFirst(a: TaskRow, b: TaskRow): number {
+/** Verifying first, the ones to close, then teamrig's plan order. */
+function verifyingFirst(a: TaskRow, b: TaskRow): number {
   return Number(isVerifying(b)) - Number(isVerifying(a)) || byPlanOrder(a, b)
 }
 
-
-function lineOf(now: number) {
-  return (task: TaskRow): TaskLine => ({ task, flags: flagsOf(task, now) })
-}
-
 function newestFirst(a: TaskRow, b: TaskRow): number {
-  return Date.parse(b.updatedAt) - Date.parse(a.updatedAt)
+  return Date.parse(b.statusAt) - Date.parse(a.statusAt)
 }
 
 export function areaView(tasks: readonly TaskRow[], area: string, now: number): AreaView {
   const own = tasks.filter(t => t.owner === area && isActive(t)).sort(byPlanOrder)
-  const asked = tasks.filter(t => t.createdBy === area && t.owner !== area && isActive(t)).sort(newestFirst)
+  const at = (status: TaskStatus) => own.filter(t => t.status === status)
+  const waiting = at('waiting')
+  const asked = tasks.filter(t => t.createdBy === area && t.owner !== area && isActive(t)).sort(byPlanOrder)
   const today = utcDay(now)
-  const finished = tasks.filter(t => t.owner === area && isFinishedOn(t, today)).sort(newestFirst)
-  const finishedMore = finished.slice(MAX_FINISHED)
+  const done = tasks.filter(t => t.owner === area && isFinishedOn(t, today)).sort(newestFirst)
   return {
     area,
-    verifying: own.filter(isVerifying).map(lineOf(now)),
-    active: own.filter(t => !isVerifying(t)).map(lineOf(now)),
-    asked: asked.slice(0, MAX_ASKED).map(lineOf(now)),
-    askedTotal: asked.length,
-    finished: finished.slice(0, MAX_FINISHED),
-    finishedTotal: finished.length,
-    finishedMoreDropped: finishedMore.filter(t => t.status === 'dropped').length,
+    verifying: at('verifying'),
+    working: at('in-progress'),
+    upNext: at('open'),
+    waiting: [...waiting, ...asked.slice(0, MAX_ASKED)],
+    waitingTotal: waiting.length + asked.length,
+    doneToday: done.slice(0, MAX_FINISHED),
+    doneTotal: done.length,
+    doneMoreDropped: done.slice(MAX_FINISHED).filter(t => t.status === 'dropped').length,
   }
 }
 
@@ -76,14 +74,14 @@ export function areaView(tasks: readonly TaskRow[], area: string, now: number): 
  * The area's own tasks at one status of the status bar (status-bar.ts), as its filter lists them, today
  * the UTC day of `now`: those done today newest first, the others in plan order.
  */
-export function statusLines(tasks: readonly TaskRow[], area: string, now: number, status: BarStatus): TaskLine[] {
+export function statusLines(tasks: readonly TaskRow[], area: string, now: number, status: BarStatus): TaskRow[] {
   const today = utcDay(now)
   const order = status === 'done-today' ? newestFirst : byPlanOrder
-  return tasks.filter(t => t.owner === area && barStatusOf(t, today) === status).sort(order).map(lineOf(now))
+  return tasks.filter(t => t.owner === area && barStatusOf(t, today) === status).sort(order)
 }
 
-/** Every owner with active tasks, by name, each list waiting for proof first, then in plan order. */
-export function ownerGroups(tasks: readonly TaskRow[], now: number): OwnerGroup[] {
+/** Every owner with active tasks, by name, each list verifying first, then in plan order. */
+export function ownerGroups(tasks: readonly TaskRow[]): OwnerGroup[] {
   const byOwner = new Map<string, TaskRow[]>()
   for (const task of tasks) {
     if (!isActive(task)) continue
@@ -93,7 +91,7 @@ export function ownerGroups(tasks: readonly TaskRow[], now: number): OwnerGroup[
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([owner, list]) => ({
       owner,
-      active: [...list].sort(proofFirst).map(lineOf(now)),
+      active: [...list].sort(verifyingFirst),
       waiting: list.filter(t => t.status === 'waiting').length,
       verifying: list.filter(isVerifying).length,
     }))
@@ -146,9 +144,9 @@ function sameValue(a: FieldValue, b: FieldValue): boolean {
   return a === b
 }
 
-/** What `now` changes in a drawing of the task: its flags and whether it still lists as finished today (and counts as done today). */
+/** What `now` changes in a drawing of the task: an active one's meta line, whether a finished one is done today. */
 function timeLabel(task: TaskRow, now: number): string {
-  return `${flagsOf(task, now).join(',')}|${isFinishedOn(task, utcDay(now))}`
+  return isActive(task) ? metaText(task, now) : String(isFinishedOn(task, utcDay(now)))
 }
 
 /**

@@ -78,12 +78,12 @@ describe('meta line', () => {
     expect(metaParts(task, NOW, 'po').map(part => part.color)).toEqual([undefined, undefined, undefined, 'error'])
   })
 
-  test('blocked: since when and why, in red; one blocked since an earlier day names the day', async () => {
-    const task = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - 2 * DAY }), statusLine('T1', 'po', NOW - DAY, 'blocked', 'waits on T58'))
-    expect(textOf(task, 'po')).toEqual(['p3', 'blocked since Mon 10-12: waits on T58'])
+  test('waiting: since when and why, in red; one waiting since an earlier day names the day', async () => {
+    const task = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - 2 * DAY }), statusLine('T1', 'po', NOW - DAY, 'waiting', 'waits on T58'))
+    expect(textOf(task, 'po')).toEqual(['p3', 'waiting since Mon 10-12: waits on T58'])
     expect(metaParts(task, NOW, 'po')[1]?.color).toBe('error')
-    const bare = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY }), statusLine('T1', 'po', NOW, 'blocked'))
-    expect(textOf(bare, 'po')).toEqual(['p3', 'blocked since 14:00'])
+    const bare = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY }), statusLine('T1', 'po', NOW, 'waiting'))
+    expect(textOf(bare, 'po')).toEqual(['p3', 'waiting since 14:00'])
   })
 
   test('verifying: verify by its due, since when and what proves it', async () => {

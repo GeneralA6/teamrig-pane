@@ -208,10 +208,10 @@ describe('status bar lines', () => {
     expect(statusBar(snapshotOf(tasks, 'etl'), null, 40)).toBe(null)
   })
 
-  test('inline, the bar takes the rows past the three the list keeps, first lines first', async () => {
+  test('inline, the bar takes the rows past the four the list keeps, first lines first', async () => {
     const bar = statusBar(snapshotOf(tasks, 'po'), null, 48)
     expect(bar?.lines.length).toBe(3)
-    expect([7, 6, 5, 4, 3, 1].map(rows => inlineBarRows(bar, rows))).toEqual([3, 3, 2, 1, 0, 0])
+    expect([7, 6, 5, 4, 3, 1].map(rows => inlineBarRows(bar, rows))).toEqual([3, 2, 1, 0, 0, 0])
     expect(inlineBarRows(null, 6)).toBe(0)
   })
 })
@@ -266,13 +266,13 @@ describe('status bar filter', () => {
   })
 
   test('filtered, the mine view lists the header and that status alone: done today newest first, the rest in plan order', async () => {
-    expect(keysOf(paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'done-today'))).toEqual(['header', 'finished:T5', 'finished:T4'])
-    expect(keysOf(paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'verifying'))).toEqual(['header', 'proof:T3', 'proof:T2'])
-    expect(keysOf(paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'not-started'))).toEqual(['header', 'active:T1'])
+    expect(keysOf(paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'done-today'))).toEqual(['header', 'done:T5', 'done:T4'])
+    expect(keysOf(paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'verifying'))).toEqual(['header', 'verifying:T3', 'verifying:T2'])
+    expect(keysOf(paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'not-started'))).toEqual(['header', 'next:T1'])
     const none = paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'working')
     expect(keysOf(none)).toEqual(['header', 'none-filtered'])
     expect(none[1]?.rows[0]?.spans).toEqual([{ text: 'Nothing in progress.', dim: true }])
-    expect(statusLines(tasks, 'po', NOW, 'done-today').map(line => line.task.id)).toEqual(['T5', 'T4'])
+    expect(statusLines(tasks, 'po', NOW, 'done-today').map(task => task.id)).toEqual(['T5', 'T4'])
   })
 
   test('the all view takes no filter', async () => {

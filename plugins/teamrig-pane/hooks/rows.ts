@@ -1,16 +1,18 @@
 // The pane's body as blocks of rows of styled spans: pure data from a snapshot. A block is what
-// draws as one element (layout.ts): a task with what it waits for, its proof note or its details under it, a header, a
-// heading. The terminal lays out and paints a pane's whole tree, its scroll only a window over it,
+// draws as one element (layout.ts): a task with its meta line and details under it, a header, a
+// section heading. The terminal lays out and paints a pane's whole tree, its scroll only a window over it,
 // and an inline pane's frame grows to fit the tree in the live area redrawn on every keystroke: the
 // tree's size is what the pane costs, so a block is one Text (its unstyled spans plain strings, a
 // task's inside the Button that expands it), never a box per row, and inline the rows are capped.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, ExpandedTasks, Snapshot, TaskDetail, TaskRow, TaskStatus, ViewMode } from '../types'
-import { priorityText, waitsText } from './core/read/index'
+import { priorityText } from './core/read/index'
 import { COMMAND } from './command'
 import { refLabel, refParts } from './details'
+import { metaParts, whenWords } from './meta'
 import { BAR_LOOK } from './status-bar'
-import { areaView, ownerGroups, shortDue, shortTime, statusLines, type TaskLine } from './view'
+import { areaView, ownerGroups, shortDue, shortTime, statusLines } from './view'
+import { cells } from './width'
 
 /** A run of text in one style. No `color` (absent or undefined, as a span picks it by a condition) draws in the theme's text color. */
 export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean }
@@ -35,15 +37,20 @@ export type Row = {
 export type Block = { key: string; rows: Row[]; toggle?: string; opensSection?: boolean }
 
 export const NOTHING_EXPANDED: ExpandedTasks = {}
-/** Where a task's wrapped title and the lines under it start: under its id, past the marker and status glyph. */
-const UNDER_ID = '    '
 /** Starts each detail line, a wrapped one too: the guide that ties the details to their task. */
-const DETAIL_LEAD: Span = { text: `${UNDER_ID}│ `, dim: true }
+const DETAIL_LEAD: Span = { text: '    │ ', dim: true }
+/** Between a task's id and its title. */
+const TITLE_GAP = '  '
+/** A collapsed task's title and meta line are cut at this many lines each; expanded, they show whole. */
+const TITLE_LINES = 2
+const META_LINES = 2
+/** Between the parts of a meta line. */
+const SEPARATOR: Span = { text: ' · ', dim: true }
 
-/** By the task's status: `◑` is shipped work waiting for its proof, the other half of `◐` working. */
+/** By the task's status: `◑` is shipped work being verified, the other half of `◐` working. */
 export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', waiting: '■', done: '✓', dropped: '✗' }
 export const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', verifying: 'success', waiting: 'error', done: 'success' }
-/** A status note's color: what a waiting task waits for, what proves a verifying one; others draw in the text color. */
+/** A status note's color in the details: why a waiting task waits, what proves a verifying one; others draw in the text color. */
 const NOTE_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { waiting: 'error', verifying: 'success' }
 
 const NO_AREA = `No area for this session yet: /rename the tab to its session's id or name, run \`inbox read --session <id>\`, or /${COMMAND} <session> to pin one.`
@@ -51,11 +58,6 @@ const NO_AREA = `No area for this session yet: /rename the tab to its session's 
 /** A block of one row, its key the block's. */
 export function single(key: string, spans: Span[], hang?: Span): Block {
   return { key, rows: [{ key, spans, hang }] }
-}
-
-/** `▸` collapsed, `▾` expanded: the row is pressed to switch. */
-function marker(task: TaskRow, expanded: ExpandedTasks): string {
-  return expanded[task.id] === undefined ? '▸ ' : '▾ '
 }
 
 /** `p2`, and `p2 correctness` when the team config names it. */
@@ -94,85 +96,118 @@ function detailRows(section: string, task: TaskRow, detail: TaskDetail): Row[] {
   return rows
 }
 
+/** The meta line's parts (meta.ts) between dim dots, each dim unless a color says it needs a look. */
+function metaSpans(task: TaskRow, now: number, viewer: string | null): Span[] {
+  return metaParts(task, now, viewer).flatMap((part, i) => {
+    const span: Span = part.color === undefined ? { text: part.text, dim: true } : part
+    return i === 0 ? [span] : [SEPARATOR, span]
+  })
+}
+
+/** Where a task's wrapped title and its meta line start: under the title, past its status mark and id. */
+function indentOf(task: TaskRow): Span {
+  return { text: ' '.repeat(cells(`${GLYPH[task.status]} ${task.id}${TITLE_GAP}`)) }
+}
+
 /**
- * What its status says under a task: what a waiting one waits for, then its note, as `teamrig list` words them
- * (`decision owner · on T5; the schema first`); `proof: …` what a verifying one waits for; null for other statuses
- * or nothing to say.
+ * `◐ T12  title`, the title cut at TITLE_LINES lines, and under it one dim meta line (meta.ts) cut at META_LINES;
+ * expanded, both show whole and the details follow. `viewer` is the area whose list it is (null in the all view):
+ * a task it does not own says whose it is.
  */
-function noteText(task: TaskRow): string | null {
-  if (task.status === 'waiting') {
-    const parts = [task.waits.length > 0 ? waitsText(task.waits) : null, task.note].filter((part): part is string => part !== null)
-    return parts.length === 0 ? null : parts.join('; ')
-  }
-  if (task.note === null) return null
-  if (task.status === 'verifying') return `proof: ${task.note}`
-  return null
-}
-
-/** Its details when expanded, else what holds it or what proves it under it. */
-function belowTask(section: string, task: TaskRow, expanded: ExpandedTasks): Row[] {
+function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, now: number, viewer: string | null): Block {
   const detail = expanded[task.id]
-  if (detail !== undefined) return detailRows(section, task, detail)
-  const note = noteText(task)
-  if (note === null) return []
-  const spans = [{ text: `${UNDER_ID}↳ ${note}`, color: NOTE_COLOR[task.status], dim: true }]
-  return [{ key: `${section}-note:${task.id}`, spans, hang: { text: `${UNDER_ID}  ` } }]
-}
-
-/** `▸ ◐ T12 →po p2 10-14 NEW title`, its title wrapping under its id, then its details or what holds it. */
-function taskBlock(section: string, { task, flags }: TaskLine, expanded: ExpandedTasks, owner?: string): Block {
-  const spans: Span[] = [
-    { text: marker(task, expanded), dim: true },
-    { text: `${GLYPH[task.status]} ${task.id}`, color: GLYPH_COLOR[task.status], bold: true },
-  ]
-  if (owner !== undefined) spans.push({ text: ` →${owner}`, color: 'suggestion' })
-  const due = task.due === null ? '' : ` ${shortDue(task.due)}`
-  const priority = ` ${priorityText(task.priority)}`
-  if (flags.includes('overdue')) spans.push({ text: priority, dim: true }, { text: due, color: 'error', bold: true })
-  else spans.push({ text: `${priority}${due}`, dim: true })
-  if (flags.includes('new')) spans.push({ text: ' NEW', color: 'suggestion' })
-  if (flags.includes('unseen')) spans.push({ text: ' NOT PICKED UP', color: 'error' })
-  spans.push({ text: ` ${task.title}` })
+  const indent = indentOf(task)
   const key = `${section}:${task.id}`
-  return { key, toggle: task.id, rows: [{ key, spans, hang: { text: UNDER_ID } }, ...belowTask(section, task, expanded)] }
+  const title: Row = {
+    key,
+    spans: [{ text: GLYPH[task.status], color: GLYPH_COLOR[task.status] }, { text: ` ${task.id}`, bold: true }, { text: `${TITLE_GAP}${task.title}` }],
+    hang: indent,
+    maxLines: detail === undefined ? TITLE_LINES : undefined,
+  }
+  const meta: Row = {
+    key: `${section}-meta:${task.id}`,
+    spans: [indent, ...metaSpans(task, now, viewer)],
+    hang: indent,
+    maxLines: detail === undefined ? META_LINES : undefined,
+  }
+  return { key, toggle: task.id, rows: [title, meta, ...(detail === undefined ? [] : detailRows(section, task, detail))] }
 }
 
-function finishedBlock(task: TaskRow, expanded: ExpandedTasks): Block {
-  const key = `finished:${task.id}`
-  const text = `${marker(task, expanded)}${GLYPH[task.status]} ${task.id} ${task.title}`
-  const rows = [{ key, spans: [{ text, dim: true }], hang: { text: UNDER_ID } }, ...belowTask('finished', task, expanded)]
-  return { key, toggle: task.id, rows }
+/** `✓ T4  title          14:02`: a task done or dropped today, dim, on one line with when it closed; expanded, whole. */
+function doneBlock(task: TaskRow, expanded: ExpandedTasks, now: number): Block {
+  const detail = expanded[task.id]
+  const key = `done:${task.id}`
+  const color = GLYPH_COLOR[task.status]
+  const row: Row = {
+    key,
+    spans: [color === undefined ? { text: GLYPH[task.status], dim: true } : { text: GLYPH[task.status], color }, { text: ` ${task.id}${TITLE_GAP}${task.title}`, dim: true }],
+    hang: indentOf(task),
+    end: { text: whenWords(task.statusAt, now), dim: true },
+    maxLines: detail === undefined ? 1 : undefined,
+  }
+  return { key, toggle: task.id, rows: [row, ...(detail === undefined ? [] : detailRows('done', task, detail))] }
 }
 
 /**
- * The dim line under the finished tasks when the cap cut `more` of them: how many, how many of those were dropped,
+ * The dim line under Done today when the cap cut `more` of its tasks: how many, how many of those were dropped,
  * and the key that lists today's done ones in full (the status bar's filter, which leaves the dropped ones out).
  */
-export function finishedMoreText(more: number, dropped: number): string {
+export function doneMoreText(more: number, dropped: number): string {
   const droppedText = dropped > 0 ? ` (${dropped} dropped)` : ''
-  const list = more > dropped ? `; press ${BAR_LOOK['done-today'].hotkey} for today's done` : ''
-  return `… ${more} more${droppedText}${list}`
+  const list = more > dropped ? `: press ${BAR_LOOK['done-today'].hotkey} to list today's done` : ''
+  return `${more} more${droppedText}${list}`
 }
 
-/** `── label ───────`, ruled to the body's edge, a blank line above it. */
+/** `── label ───────`, ruled to the body's edge, a blank line above it: a Changes view heading. */
 export function heading(key: string, label: Span[]): Block {
   return { key, opensSection: true, rows: [{ key, spans: [{ text: '── ', dim: true }, ...label], rule: true }] }
 }
 
-/** The area's tasks at the status the bar filters to, under no heading: what the filter's line names. */
-function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expanded: ExpandedTasks): Block[] {
-  const lines = statusLines(snap.tasks, area, snap.now, filter)
-  if (lines.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
-  if (filter === 'done-today') return lines.map(line => finishedBlock(line.task, expanded))
-  return lines.map(line => taskBlock(filter === 'verifying' ? 'proof' : 'active', line, expanded))
+/** `Working on (2)`: a task section's name, bold, and how many it holds, dim, a blank line above it. */
+function sectionHeading(key: string, name: Span, count: string): Block {
+  return { key, opensSection: true, rows: [{ key, spans: [{ ...name, bold: true }, { text: count, dim: true }] }] }
 }
 
+/**
+ * A section of tasks: its heading counting all `total`, its blocks, and a dim line saying how many it left out and
+ * where they show. An empty section draws nothing.
+ */
+/** A section: its heading with the total, its rows, and a dim line naming how many the cap left out (`moreText`). */
+function section(key: string, name: Span, total: number, blocks: Block[], moreText = (left: number) => `${left} more`): Block[] {
+  if (total === 0) return []
+  const left = total - blocks.length
+  const rest = left > 0 ? [single(`${key}-more`, [{ text: moreText(left), dim: true }])] : []
+  return [sectionHeading(key, name, ` (${total})`), ...blocks, ...rest]
+}
+
+/** The section a status bar filter's tasks are keyed by, as the full list keys them. */
+const FILTER_SECTION: Readonly<Record<BarStatus, string>> = {
+  'done-today': 'done',
+  verifying: 'verifying',
+  working: 'working',
+  waiting: 'waiting',
+  'not-started': 'next',
+}
+
+/** The area's tasks at the status the bar filters to, under no heading: what the filter's line names. */
+function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expanded: ExpandedTasks): Block[] {
+  const tasks = statusLines(snap.tasks, area, snap.now, filter)
+  if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
+  if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, snap.now))
+  return tasks.map(task => taskBlock(FILTER_SECTION[filter], task, expanded, snap.now, area))
+}
+
+/**
+ * The area's tasks in sections: Verifying (the ones to close first), Working on, Up next, Waiting (its waiting
+ * tasks, then those it asked of others) and Done today.
+ */
 function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null): Block[] {
   if (snap.area === null) return [single('no-area', [{ text: NO_AREA, dim: true }])]
   const view = areaView(snap.tasks, snap.area, snap.now)
   const header: Span[] = [{ text: view.area, bold: true }]
   if (snap.areaSource === 'pinned') header.push({ text: ' (pinned)', dim: true })
-  const activeTotal = view.verifying.length + view.active.length
+  const waiting = view.waiting.filter(task => task.owner === view.area).length
+  const activeTotal = view.verifying.length + view.working.length + view.upNext.length + waiting
   header.push({ text: ` · ${activeTotal} active`, dim: true })
   if (snap.unreadInbox !== null)
     header.push({ text: ` · inbox ${snap.unreadInbox} unread`, color: snap.unreadInbox > 0 ? 'warning' : 'subtle' })
@@ -180,37 +215,29 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   // Filtered from the status bar, the header leads that status's tasks alone.
   if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
-  // Work waiting for its proof leads, the tasks to close first; the rest of the active work then has its own heading.
-  if (view.verifying.length > 0) {
-    blocks.push(heading('proof', [{ text: `verifying (${view.verifying.length})`, color: 'success' }]))
-    blocks.push(...view.verifying.map(line => taskBlock('proof', line, expanded)))
-    if (view.active.length > 0) blocks.push(heading('active', [{ text: `other active (${view.active.length})`, dim: true }]))
-  }
-  blocks.push(...view.active.map(line => taskBlock('active', line, expanded)))
-  if (view.askedTotal > 0) blocks.push(heading('asked', [{ text: `asked of others (${view.askedTotal})`, dim: true }]))
-  blocks.push(...view.asked.map(line => taskBlock('asked', line, expanded, line.task.owner)))
-  if (view.finishedTotal > 0) blocks.push(heading('finished', [{ text: `finished today (${view.finishedTotal})`, dim: true }]))
-  blocks.push(...view.finished.map(task => finishedBlock(task, expanded)))
-  const finishedMore = view.finishedTotal - view.finished.length
-  if (finishedMore > 0)
-    blocks.push(single('finished-more', [{ text: finishedMoreText(finishedMore, view.finishedMoreDropped), dim: true }]))
-  return blocks
+  const tasks = (key: string, list: readonly TaskRow[]) => list.map(task => taskBlock(key, task, expanded, snap.now, view.area))
+  const done = view.doneToday.map(task => doneBlock(task, expanded, snap.now))
+  return [
+    ...blocks,
+    ...section('verifying', { text: 'Verifying', color: 'success' }, view.verifying.length, tasks('verifying', view.verifying)),
+    ...section('working', { text: 'Working on' }, view.working.length, tasks('working', view.working)),
+    ...section('next', { text: 'Up next' }, view.upNext.length, tasks('next', view.upNext)),
+    ...section('waiting', { text: 'Waiting' }, view.waitingTotal, tasks('waiting', view.waiting), left => `${left} more asked of others: the all view lists them`),
+    ...section('done', { text: 'Done today' }, view.doneTotal, done, left => doneMoreText(left, view.doneMoreDropped)),
+  ]
 }
 
+/** Every owner with active tasks under a heading with its counts, the session's own area marked. */
 function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
-  const groups = ownerGroups(snap.tasks, snap.now)
+  const groups = ownerGroups(snap.tasks)
   if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
   return groups.flatMap((group, i) => {
     const waiting = group.waiting > 0 ? ` · ${group.waiting} waiting` : ''
     const verifying = group.verifying > 0 ? ` · ${group.verifying} verifying` : ''
-    const counts = ` · ${group.active.length} active${waiting}${verifying}`
-    const owner: Span[] = [
-      { text: group.owner, bold: true, color: group.owner === snap.area ? 'claude' : undefined },
-      { text: counts, dim: true },
-    ]
+    const owner: Span = { text: group.owner, color: group.owner === snap.area ? 'claude' : undefined }
     // The first group sits under the buttons, already a gap away.
-    const head = { ...heading(`owner:${group.owner}`, owner), opensSection: i > 0 }
-    return [head, ...group.active.map(line => taskBlock(group.owner, line, expanded))]
+    const head = { ...sectionHeading(`owner:${group.owner}`, owner, ` · ${group.active.length} active${waiting}${verifying}`), opensSection: i > 0 }
+    return [head, ...group.active.map(task => taskBlock(group.owner, task, expanded, snap.now, null))]
   })
 }
 

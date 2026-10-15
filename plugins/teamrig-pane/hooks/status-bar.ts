@@ -11,7 +11,7 @@ import type { BarStatus, Snapshot, TaskRow } from '../types'
 import type { Span } from './rows'
 import { cells } from './width'
 
-/** The bar's statuses in the order they draw: what closed today, what waits for its proof, then what is left. */
+/** The bar's statuses in the order they draw: what closed today, what is verifying, then what is left. */
 export const BAR_STATUSES: readonly BarStatus[] = ['done-today', 'verifying', 'working', 'waiting', 'not-started']
 
 type BarLook = {
@@ -208,8 +208,11 @@ export function statusBar(snap: Snapshot, filter: BarStatus | null, width: numbe
   return { lines, filter }
 }
 
-/** Inline, the rows the list keeps before the bar takes any: its header, its first task and the line saying what it left out. */
-export const INLINE_LIST_ROWS = 3
+/**
+ * Inline, the rows the list keeps before the bar takes any: its header, the first section's heading and first task,
+ * and the line saying what it left out.
+ */
+export const INLINE_LIST_ROWS = 4
 
 /** Inline, how many of the body's `maxRows` rows the bar takes: its lines, first to last, past the list's INLINE_LIST_ROWS. */
 export function inlineBarRows(bar: StatusBar | null, maxRows: number): number {

@@ -26,13 +26,13 @@ export const STATUS_WORDS: Readonly<Record<TaskStatus, string>> = {
   open: 'open',
   'in-progress': 'in progress',
   verifying: 'verifying',
-  blocked: 'blocked',
+  waiting: 'waiting',
   done: 'done',
   dropped: 'dropped',
 }
 
 /** The statuses whose meta line says since when: the ones someone is acting on or waiting for. */
-const SAYS_SINCE: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['in-progress', 'verifying', 'blocked'])
+const SAYS_SINCE: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['in-progress', 'verifying', 'waiting'])
 
 /** A date-only due is due at the end of that UTC day; an unreadable one is never overdue (teamrig's dueTime). */
 export function flagsOf(task: TaskRow, now: number): Flag[] {
@@ -74,7 +74,7 @@ export function ageWords(ms: number): string {
 
 /**
  * The meta line's parts, in order: `on <owner>` when `viewer` (the area whose list it is) does not own it, the
- * priority, `due …` (`verify by …` while verifying), `<status> since …` with the status note of a blocked or
+ * priority, `due …` (`verify by …` while verifying), `<status> since …` with the status note of a waiting or
  * verifying task, then the flags: `late 1d`, `new` (to its owner), `not picked up 2d`, and `asked by <who>`
  * on a task not yet started that someone else asked for. `viewer` null (the all view) names no owner.
  */
@@ -86,9 +86,9 @@ export function metaParts(task: TaskRow, now: number, viewer: string | null): Sp
   const due = dueWords(task, now)
   if (due !== null) parts.push({ text: `${task.status === 'verifying' ? 'verify by' : 'due'} ${due}` })
   if (SAYS_SINCE.has(task.status)) {
-    // Why a blocked task is held, what proves a verifying one; an in-progress note is the card's.
+    // Why a waiting task waits, what proves a verifying one; an in-progress note is the card's.
     const note = task.status !== 'in-progress' && task.note !== null ? `: ${task.note}` : ''
-    const color: ThemeKey | undefined = task.status === 'blocked' ? 'error' : undefined
+    const color: ThemeKey | undefined = task.status === 'waiting' ? 'error' : undefined
     parts.push({ text: `${STATUS_WORDS[task.status]} since ${whenWords(task.statusAt, now)}${note}`, color })
   }
   const flags = flagsOf(task, now)
