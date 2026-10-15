@@ -189,18 +189,18 @@ test('docks the session area: its tasks, flags and unread inbox', async ($, on) 
 
   expect(await pane.find({ text: /inbox 2 unread/ })).toBeDefined()
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
-  expect(await pane.find({ text: /NEW/ })).toBeDefined()
+  expect(await pane.find({ text: /p2 · due Wed 10-14 · new · asked by owner/ })).toBeDefined()
   expect(await pane.find({ text: /Rotate the local URI/ })).toBeUndefined()
 })
 
-test('the all view lists every owner, waiting notes included', async ($, on) => {
+test('the all view lists every owner, a waiting task saying why', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /Rotate the local URI/ })).toBeDefined()
-  expect(await pane.find({ text: /needs owner paste/ })).toBeDefined()
+  expect(await pane.find({ text: /p1 · waiting since 14:00: needs owner paste/ })).toBeDefined()
 })
 
 test("the area's Tasks view leads with a bar of its tasks by status and their counts; the all and Changes views draw none", async ($, on) => {
@@ -261,7 +261,7 @@ test("a press on a status's count or segment filters the list to it, again clear
   await pane.press({ key: 'count:verifying' })
   expect(await listed()).toEqual([false, true])
   expect(await pane.find({ text: 'showing verifying only, click again for all' })).toBeDefined()
-  expect(await pane.find({ text: /verifying \(/ })).toBeUndefined()
+  expect(await pane.find({ text: /Verifying \(/ })).toBeUndefined()
   expect(await pane.find({ type: 'Text', text: '1 verifying' })).toMatchObject({ props: { bold: true } })
 
   await pane.press({ key: 'bar:not-started' })
@@ -271,7 +271,7 @@ test("a press on a status's count or segment filters the list to it, again clear
   await pane.press({ key: 'count:not-started' })
   expect(await listed()).toEqual([true, true])
   expect(await pane.find({ text: /^showing/ })).toBeUndefined()
-  expect(await pane.find({ text: /verifying \(1\)/ })).toBeDefined()
+  expect(await pane.find({ text: /Verifying \(1\)/ })).toBeDefined()
 })
 
 test('a filter whose status empties keeps its count at 0 and says nothing is left, until a press clears it', async ($, on) => {
@@ -328,8 +328,8 @@ test('picks up a new register event on the next poll', async ($, on) => {
     statusLine('T1', 'po', NOW, 'done'),
   ])
   await clock.advance(3_000)
-  expect(await pane.find({ text: /finished today/ })).toBeDefined()
-  expect(await pane.find({ text: /NEW/ })).toBeUndefined()
+  expect(await pane.find({ text: /Done today \(1\)/ })).toBeDefined()
+  expect(await pane.find({ text: /\bnew\b/ })).toBeUndefined()
 })
 
 test('a locked or denied register file keeps the last good tasks drawn under the problem, until it reads again', async ($, on) => {
@@ -468,17 +468,22 @@ function countType(node: unknown, type: string): number {
   return children.reduce((sum: number, child) => sum + countType(child, type), self)
 }
 
-test('docked, it pads the frame, spaces the tasks and wraps a long title under its id', async ($, on) => {
+test('docked, it pads the frame, spaces the tasks, wraps a long title under itself and cuts it at two lines, a meta line under it', async ($, on) => {
   const { disk } = await start(on)
   const title = 'Ship the task pane with wrapped lines that sit under the task id'
-  disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title })])
+  const long = 'A title long enough to need more than two lines in a pane this narrow, so the row cuts it at two and the card shows it whole'
+  disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title }), createLine('T2', { owner: 'po', by: 'lead', at: NOW - HOUR, title: long })])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect((await pane.find({ type: 'Box' }))?.props).toMatchObject({ paddingX: 1, gap: 1 })
   const task = await pane.find({ type: 'Text', text: /Ship the task pane/ })
-  expect(task?.text).toMatch(/^▸ ○ T1 .+\n {4}\S/)
+  expect(task?.text).toMatch(/^○ T1  .+\n {6}\S.+\n {6}p3 · new · asked by owner$/)
   expect(task?.text.split('\n').every(line => line.length <= PANE_PROPS.bodyColumns - 2)).toBe(true)
+  const cut = (await pane.find({ type: 'Text', text: /^○ T2 / }))?.text.split('\n') ?? []
+  expect(cut.length).toBe(3)
+  expect(cut[1]).toMatch(/^ {6}\S.*…$/)
+  expect(cut[2]).toBe('      p3 · new · asked by owner')
 })
 
 test('a title and note of CJK and emoji sequences wrap by display cells, no line past the frame', async ($, on) => {
@@ -490,7 +495,7 @@ test('a title and note of CJK and emoji sequences wrap by display cells, no line
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  await pane.press({ key: 'active:T1' })
+  await pane.press({ key: 'working:T1' })
 
   const task = await pane.find({ type: 'Text', text: /修复/ })
   const lines = task?.text.split('\n') ?? []
@@ -589,14 +594,13 @@ test('pressing a task shows its ask quoted from the inbox and the roadmap, press
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(await pane.find({ text: /ship the pane with details/ })).toBeUndefined()
 
-  await pane.press({ key: 'active:T1' })
+  await pane.press({ key: 'next:T1' })
   expect(await pane.find({ text: /│ 2026-10-13 12:40 lead: ship the pane/ })).toBeDefined()
   expect(await pane.find({ text: /│ G10\.1g Fix the formula with analytics$/m })).toBeDefined()
   expect(await pane.find({ text: /│ asked by owner · added by lead/ })).toBeDefined()
   expect(await pane.find({ text: /│ see / })).toBeUndefined()
-  expect(await pane.find({ text: /^▾ / })).toBeDefined()
 
-  await pane.press({ key: 'active:T1' })
+  await pane.press({ key: 'next:T1' })
   expect(await pane.find({ text: /ship the pane with details/ })).toBeUndefined()
   expect(await pane.find({ text: /│ asked by/ })).toBeUndefined()
 })
@@ -613,7 +617,7 @@ test("an expanded task names its priority as its team's config does, with its we
   // Wide enough that the facts line draws unwrapped.
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: { ...PANE_PROPS, bodyColumns: 200 } })
   await pane.press({ key: 'all' })
-  expect(await pane.find({ text: /▸ ◐ T7 p2 Ship the team register/ })).toBeDefined()
+  expect(await pane.find({ text: /^◐ T7  Ship the team register\n {6}p2 · in progress since 13:30$/ })).toBeDefined()
   expect(await pane.find({ text: /correctness/ })).toBeUndefined()
 
   await pane.press({ key: 'web:T7' })
@@ -647,18 +651,19 @@ test("with both folders named and no team to read, an expanded task's priority i
 test('an expanded waiting task shows its note in the details; collapse closes every task', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /collapse/ })).toBeUndefined()
 
   await pane.press({ key: 'security:T2' })
   await pane.press({ key: 'po:T1' })
   expect(await pane.find({ text: /│ waiting: needs owner paste$/m })).toBeDefined()
-  expect(await pane.find({ text: /↳ needs owner paste/ })).toBeUndefined()
+  expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeDefined()
 
   await pane.press({ key: 'collapse' })
   expect(await pane.find({ text: /│ asked by/ })).toBeUndefined()
-  expect(await pane.find({ text: /↳ needs owner paste/ })).toBeDefined()
+  expect(await pane.find({ text: /│ waiting/ })).toBeUndefined()
+  expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeDefined()
   expect(await pane.find({ text: /collapse/ })).toBeUndefined()
 })
 
@@ -678,7 +683,7 @@ test('inline above the prompt, it shows a few rows and points to the side dock',
   })
 
   expect((await pane.find({ type: 'Box' }))?.props).toMatchObject({ gap: 0 })
-  // The bar's two lines count in the few rows, and the list keeps its header, first task and pointer.
+  // The bar's two lines count in the few rows, and the list keeps its header, first heading and task, and pointer.
   expect(await pane.find({ type: 'Text', text: '░'.repeat(48) })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: '10 not started' })).toBeDefined()
   expect(await pane.find({ text: /Task number 1$/ })).toBeDefined()
@@ -740,7 +745,7 @@ test('resized to a narrow dock or inline, it draws every line inside the frame a
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  await pane.press({ key: 'active:T1' })
+  await pane.press({ key: 'waiting:T1' })
 
   for (const bodyColumns of [30, 20, 12]) {
     await pane.redraw({ ...PANE_PROPS, bodyColumns })
@@ -753,7 +758,7 @@ test('resized to a narrow dock or inline, it draws every line inside the frame a
     const text = (await pane.findAll({ type: 'Text' })).map(found => found.text).join('')
     expect(text.replace(/\s/g, '')).toContain('Ship')
   }
-  await pane.redraw({ ...PANE_PROPS, bodyColumns: 12, placement: 'inline', scroll: { offset: 0, bodyRows: 3 } })
+  await pane.redraw({ ...PANE_PROPS, bodyColumns: 12, placement: 'inline', scroll: { offset: 0, bodyRows: 4 } })
   const rows = await pane.findAll({ type: 'Text' })
   expect(rows.some(found => found.text.includes('Ship'))).toBe(true)
   expect(await pane.find({ text: /more lines in the side dock/ })).toBeDefined()
