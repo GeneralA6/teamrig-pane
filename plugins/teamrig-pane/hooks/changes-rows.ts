@@ -72,8 +72,13 @@ function repoBlocks(repo: RepoChanges, index: number): Block[] {
   return rows.length === 0 ? [head] : [head, { key: `files:${repo.root}`, rows }]
 }
 
-/** The body under the switch in the Changes view. */
-export function changesBlocks(changes: ChangesSnapshot): Block[] {
+/**
+ * The body under the switch in the Changes view. With no git to start (`isGitMissing`) and nothing found, it is
+ * empty: the WARN line above it says why, where `Reading git…` would never end and `No git repo yet` would blame
+ * the folder.
+ */
+export function changesBlocks(changes: ChangesSnapshot, isGitMissing = false): Block[] {
+  if (isGitMissing && changes.repos.length === 0 && changes.outside.length === 0) return []
   if (!changes.isRead) return [single('reading', [{ text: 'Reading git…', dim: true }])]
   if (changes.repos.length === 0 && changes.outside.length === 0)
     return [single('no-repo', [{ text: 'No git repo yet: the session folder is in none, and no file the session or its agents edited (Edit, Write) is in one.' }])]

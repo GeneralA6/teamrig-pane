@@ -464,6 +464,13 @@ describe('changes rows', () => {
     expect(empty.map(row => row.spans)).toEqual([[{ text: 'No git repo yet: the session folder is in none, and no file the session or its agents edited (Edit, Write) is in one.' }]])
   })
 
+  test('with no git to start, an empty view stays empty, as the WARN line above it says why; a repo found earlier is still drawn', () => {
+    expect(changesBlocks(EMPTY_CHANGES, true)).toEqual([])
+    expect(changesBlocks({ repos: [], outside: [], isRead: true }, true)).toEqual([])
+    const found: ChangesSnapshot = { repos: [repo({})], outside: ['C:/n.md'], isRead: true }
+    expect(changesBlocks(found, true)).toEqual(changesBlocks(found))
+  })
+
   test("counts on the button and the title only once something changed", () => {
     const changed: ChangesSnapshot = { repos: [repo({ files: { items: [change(' M', 'a.ts')], more: 4 } })], outside: ['C:/n.md'], isRead: true }
     expect([changesLabel(changed), paneTitle(changed)]).toEqual(['Changes Δ6', 'Tasks · Δ6'])

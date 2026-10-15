@@ -12,7 +12,7 @@
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
-import type { ExpandedTasks, PaneView, Snapshot, TaskDetail, ViewMode } from '../types'
+import type { ExpandedTasks, PaneView, RequirementProblem, Snapshot, TaskDetail, ViewMode } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
@@ -22,6 +22,7 @@ import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './
 import { dockLayout, failedDrawing, inlineLayout, type Drawn } from './layout'
 import { NOTHING_EXPANDED, paneBlocks, type Span } from './rows'
 import { PaneSizer, SIZE_KEY } from './size'
+import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
 import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from './changes'
 import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 
@@ -61,6 +62,9 @@ const changes = atom({ plugin: 'teamrig-pane', key: 'changes' } as const, EMPTY_
  */
 const KNOWN_SHAPE = 'known-v1'
 const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KNOWN, { shape: KNOWN_SHAPE })
+const NOTHING_MISSING: RequirementProblem[] = []
+/** What the pane lacks (requirements.ts); each session start checks again and writes it anew, a hot reload's too. */
+const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, NOTHING_MISSING)
 
 /** The expanded tasks less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -161,6 +165,14 @@ export const register: Register = on => {
     started.startTimers((ms, fn) => $.clock.every(ms, fn))
     changesLive.startTimers((ms, fn) => $.clock.every(ms, fn))
     void $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
+    // Once per start: git --version and the engine's version, never on a poll. The check never rejects; a
+    // failed write only leaves the lines out.
+    void requirementProblems({
+      version: () => $.session.version(),
+      gitVersion: () => $.process.run(['git', '--version'], { timeoutMs: GIT_TIMEOUT_MS }),
+    })
+      .then(found => update($, requirements, () => found))
+      .catch(() => undefined)
     void changesLive.addFolder(e.cwd).then(() => changesLive.refresh())
     return next(e)
   })
@@ -244,7 +256,9 @@ export const register: Register = on => {
         snap = await read($, snapshot)
         shown = await read($, mode)
         open = await read($, expanded)
-        const blocks = current === 'tasks' ? paneBlocks(snap, shown, open) : changesBlocks(changed)
+        const missing = await read($, requirements)
+        const viewBlocks = current === 'tasks' ? paneBlocks(snap, shown, open) : changesBlocks(changed, isGitMissing(missing))
+        const blocks = [...requirementBlocks(missing), ...viewBlocks]
         body = inline
           ? inlineLayout(blocks, Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows))
           : dockLayout(blocks, e.props.bodyColumns - 2 * PAD_COLUMNS)

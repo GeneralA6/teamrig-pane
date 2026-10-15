@@ -1,5 +1,5 @@
 // The plugin through the engine: env, clock, store, session id and fs answered beneath it.
-import type { FsEntry, FsStat, On } from 'claude-code'
+import type { Answer, FsEntry, FsStat, On, SessionVersion } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import { cells } from '../hooks/width'
 import { HOUR, NOW, S1, bigRegister, createLine, iso, markLine, statusLine, updateLine } from './fixtures'
@@ -89,16 +89,28 @@ function fakeStore(on: On, kept: Readonly<Record<string, unknown>>) {
  * The repos a fake git knows: each folder's root, each root's `status --porcelain=v1 -b -z` output, and the
  * line counts' outputs (`diff --numstat -z`, `grep -c -z`; none by default). Tests change it as they go.
  */
-type FakeRepos = { roots: Record<string, string>; statuses: Record<string, string>; numstats?: Record<string, string>; greps?: Record<string, string> }
+type FakeRepos = {
+  roots: Record<string, string>
+  statuses: Record<string, string>
+  numstats?: Record<string, string>
+  greps?: Record<string, string>
+  /** No git to start: every run rejects as a spawn of a missing program does. */
+  isMissing?: boolean
+}
 
-/** Answers $.process.run as git over `repos`, a folder it does not know being outside any repo; `runs` lists each as `<command> <cwd>`. */
+/**
+ * Answers $.process.run as git over `repos`, a folder it does not know being outside any repo; `runs` lists each as
+ * `<command> <cwd>`, `git --version` as `--version `.
+ */
 function fakeGit(on: On, repos: FakeRepos) {
   const runs: string[] = []
   const answer = (stdout: string, exitCode = 0, stderr = '') => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
   on('process.run', async ($, e) => {
     const cwd = e.init?.cwd ?? ''
-    const command = e.argv.slice(1).find(arg => !arg.startsWith('-')) ?? ''
+    const command = e.argv.slice(1).find(arg => !arg.startsWith('-')) ?? e.argv[1] ?? ''
     runs.push(`${command} ${cwd}`)
+    if (repos.isMissing === true) return { deny: 'spawn git ENOENT' }
+    if (command === '--version') return answer('git version 2.47.1')
     const root = repos.roots[cwd]
     if (command === 'rev-parse') return root === undefined ? answer('', 128, 'fatal: not a git repository') : answer(`${root}
 `)
@@ -108,6 +120,9 @@ function fakeGit(on: On, repos: FakeRepos) {
   })
   return runs
 }
+
+/** The Claude Code the tests run the pane on: new enough for it. */
+const NEW_ENOUGH: Answer<SessionVersion> = { value: { version: '2.1.300', base: '2.1.300', builtAt: '2026-10-01T10:00:00Z' } }
 
 /** The environment that names the register's folders (backslashed, as a Windows host passes them) and its goals document. */
 const REGISTER_ENV: Readonly<Record<string, string>> = {
@@ -119,7 +134,7 @@ const REGISTER_ENV: Readonly<Record<string, string>> = {
 
 /**
  * Starts the plugin over a fake disk, store and git; `kept` is what $.store holds from earlier
- * sessions, `env` the environment the plugin reads. Each repo the git knows is on the disk: its
+ * sessions, `env` the environment the plugin reads, `version` what `$.session.version()` answers. Each repo the git knows is on the disk: its
  * root's `.git`, and a file in each folder named in it (git never runs in a folder that is not there).
  */
 async function start(
@@ -127,12 +142,14 @@ async function start(
   kept: Readonly<Record<string, unknown>> = {},
   repos: FakeRepos = { roots: {}, statuses: {} },
   env: Readonly<Record<string, string>> = REGISTER_ENV,
+  version: Answer<SessionVersion> = NEW_ENOUGH,
 ) {
   mock.env(on, env)
   const store = fakeStore(on, kept)
   const runs = fakeGit(on, repos)
   const clock = mock.clock(on, { now: NOW })
   on('session.id', async () => ({ value: S1 }))
+  on('session.version', async () => version)
   on('session.start', async ($, e) => ({ cwd: e.cwd }))
   const registered: string[] = []
   on('command.register', async ($, e) => {
@@ -815,4 +832,55 @@ test('from the minimized strip, Changes opens the pane in full on the Changes vi
   expect(store.get('paneSize')).toBe('open')
   expect(await pane.find({ text: /No git repo yet/ })).toBeDefined()
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes'])
+})
+
+test('with Claude Code new enough and git there, it draws no requirement line and runs git --version once', async ($, on) => {
+  const { clock, runs } = await start(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  await clock.advance(60_000)
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  expect(await pane.find({ text: /WARN/ })).toBeUndefined()
+  expect(runs.filter(run => run.startsWith('--version'))).toEqual(['--version '])
+})
+
+test('on a Claude Code older than it needs, it says so above the tasks, with the fix', async ($, on) => {
+  const { clock } = await start(on, {}, { roots: {}, statuses: {} }, REGISTER_ENV, { value: { version: '2.1.290', base: '2.1.290' } })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  expect(await pane.find({ text: /WARN Claude Code 2\.1\.290 is older than/ })).toBeDefined()
+  expect(await pane.find({ text: /2\.1\.295 or later/ })).toBeDefined()
+  expect(await pane.find({ text: /run claude update/ })).toBeDefined()
+  expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
+})
+
+test('with no git to start, it says so in both views, and the Changes view neither waits on git nor blames the folder', async ($, on) => {
+  const { clock } = await start(on, {}, { roots: {}, statuses: {}, isMissing: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  expect(await pane.find({ text: /WARN git could not be started/ })).toBeDefined()
+  expect(await pane.find({ text: /ENOENT/ })).toBeDefined()
+  expect(await pane.find({ text: /git-scm\.com/ })).toBeDefined()
+  expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
+
+  await pane.press({ key: 'changes' })
+  expect(await pane.find({ text: /WARN git could not be started/ })).toBeDefined()
+  expect(await pane.find({ text: /Reading git|No git repo yet/ })).toBeUndefined()
+})
+
+test('when the engine gives no version, a short line says the check failed, and the pane works on', async ($, on) => {
+  const { clock } = await start(on, {}, { roots: {}, statuses: {} }, REGISTER_ENV, { deny: 'no version here' })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  expect(await pane.find({ text: /WARN The teamrig-pane check for/ })).toBeDefined()
+  expect(await pane.find({ text: /no version here/ })).toBeDefined()
+  expect(await pane.find({ text: /older than|could not be started/ })).toBeUndefined()
+  expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
 })
