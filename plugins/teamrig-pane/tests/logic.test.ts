@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow, TaskStatus } from '../types'
-import { inlineReason, parseTaskListArgs } from '../hooks/command'
+import { inlineReason, parsePaneArgs } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
 import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
@@ -556,12 +556,12 @@ describe('width', () => {
 })
 
 describe('command', () => {
-  test('parses every /tasklist form', async () => {
-    expect(parseTaskListArgs('')).toEqual({ kind: 'open' })
-    expect(parseTaskListArgs(' All ')).toEqual({ kind: 'mode', mode: 'all' })
-    expect(parseTaskListArgs('auto')).toEqual({ kind: 'auto' })
-    expect(parseTaskListArgs('po')).toEqual({ kind: 'pin', area: 'po' })
-    expect(parseTaskListArgs('no such area!')).toEqual({ kind: 'usage' })
+  test('parses every /teamrig form', async () => {
+    expect(parsePaneArgs('')).toEqual({ kind: 'open' })
+    expect(parsePaneArgs(' All ')).toEqual({ kind: 'mode', mode: 'all' })
+    expect(parsePaneArgs('auto')).toEqual({ kind: 'auto' })
+    expect(parsePaneArgs('po')).toEqual({ kind: 'pin', area: 'po' })
+    expect(parsePaneArgs('no such area!')).toEqual({ kind: 'usage' })
   })
 
   test('says why the pane sits above the prompt instead of docking', async () => {

@@ -1,7 +1,7 @@
 // Keeps the session's snapshot in step with the register's files, at no model-token cost:
 // a stat poll every POLL_MS re-reads only a file whose size or mtime moved, and a TICK_MS
 // tick moves the due/age labels on. Each write of the snapshot redraws the pane, so a poll or
-// tick whose snapshot would draw the same pane (view.ts sameView) writes nothing. A per-session pin (/tasklist <area>) is kept in $.store,
+// tick whose snapshot would draw the same pane (view.ts sameView) writes nothing. A per-session pin (/teamrig <area>) is kept in $.store,
 // so a resumed session keeps it.
 // The session id is read on every poll: after /clear the process goes on under a new id
 // and no session.start fires, so an id captured once would follow the old session.
