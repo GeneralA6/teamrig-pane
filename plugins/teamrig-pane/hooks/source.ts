@@ -1,18 +1,28 @@
 // Loads the register's files for one Claude session: each file is re-read only when its size or
 // mtime moved, so a poll that finds nothing new costs a few stats and no parsing. Each file is parsed
-// by teamrig's own read entry (hooks/core/read), so the pane shows what teamrig's commands show.
+// and the register put together by teamrig's own read entry (hooks/core/read), so the pane shows what
+// teamrig's commands show, on a register never rotated and on a rotated one alike.
 // File access goes through `Files`, which register.tsx backs with $.fs and tests with a fake.
 import type { AreaSource, Snapshot, TaskRow } from '../types'
 import {
+  assemble,
   indexMarks,
   inboxLines,
+  layoutPaths,
+  MissingSegmentError,
+  readEvents,
   readMarks,
   readRegister,
+  readSnapshotText,
   taskNumber,
   unreadOf,
+  workingSetPlan,
+  type EventLogRead,
+  type LayoutPaths,
   type MarkLogRead,
   type PriorityConfig,
   type RegisterSnapshot,
+  type SnapshotRead,
 } from './core/read/index'
 import { lineHash } from './line-hash'
 import { rowOf } from './log'
@@ -45,7 +55,10 @@ export async function unlessMissing<T, M>(call: () => Promise<T>, exists: () => 
   }
 }
 
-/** The register's files: the events the tasks are folded from, the inbox read marks, and the inbox folder. */
+/**
+ * The register's files: the events the tasks are folded from (the tail, beside which a rotated register
+ * keeps its snapshot and archive, named by teamrig's layoutPaths), the inbox read marks, and the inbox folder.
+ */
 export type RegisterPaths = { events: string; marks: string; inboxDir: string }
 
 /** The register's folders: its state folder (events, inbox read marks) and its inbox folder. */
@@ -63,8 +76,11 @@ export function registerPaths(dirs: RegisterDirs): RegisterPaths {
 }
 
 /**
- * The most one read copies: $.fs.read rejects a bigger file, and has no ranged read. The register is
- * append-only (about 320 bytes an event), so it reaches this near 13,000 events unless it is rotated.
+ * The most one read copies: $.fs.read rejects a bigger file, and has no ranged read. A register never
+ * rotated is one append-only file (about 320 bytes an event), so it reaches this near 13,000 events. A
+ * rotated one splits its history into archive segments and keeps the working set in its snapshot, so the
+ * pane reads small files: the snapshot and tail on each change, and a segment only when the snapshot
+ * cannot be used (and then once, as segments never change).
  */
 export const MAX_READ_BYTES = 4 * 1024 * 1024
 
@@ -133,11 +149,65 @@ class WatchedFile<T> {
   }
 }
 
+/**
+ * The register as teamrig's working-set read puts it together (core register/layout.ts): the snapshot,
+ * the archive segments it does not cover, then the tail. A register never rotated has neither snapshot nor
+ * segments, so it is its tail alone, as before rotation. The snapshot is refreshed before the tail, as
+ * teamrig reads them: a rotation replaces the tail before it writes the snapshot, so a snapshot read first
+ * never covers more than the tail read after it names.
+ */
+class LayoutRegister {
+  private readonly snapshot: WatchedFile<SnapshotRead>
+  private readonly tail: WatchedFile<EventLogRead>
+  /** The segments the last read plan named, by number: a segment is never rewritten, so each is read once. */
+  private segments = new Map<number, EventLogRead>()
+  private value: RegisterSnapshot = readRegister('')
+  /** True until a read put the register together: a failed one (a segment missing or locked) is retried on the next poll, though no file moved. */
+  private stale = true
+  private readonly files: Files
+  private readonly paths: LayoutPaths
+
+  constructor(files: Files, eventsPath: string) {
+    this.files = files
+    this.paths = layoutPaths(eventsPath)
+    this.snapshot = new WatchedFile(files, this.paths.snapshot, readSnapshotText, readSnapshotText(undefined))
+    this.tail = new WatchedFile(files, this.paths.tail, readEvents, readEvents(''))
+  }
+
+  get current(): RegisterSnapshot {
+    return this.value
+  }
+
+  /** True when the register changed. A throw keeps the last good register, so the pane keeps drawing it under the problem. */
+  async refresh(): Promise<boolean> {
+    const snapshotMoved = await this.snapshot.refresh()
+    const tailMoved = await this.tail.refresh()
+    if (!snapshotMoved && !tailMoved && !this.stale) return false
+    this.stale = true
+    const plan = workingSetPlan(this.snapshot.current, this.tail.current)
+    const segments = new Map<number, EventLogRead>()
+    for (const n of plan.segments) segments.set(n, this.segments.get(n) ?? (await this.readSegment(n)))
+    this.segments = segments
+    this.value = assemble(plan, [...segments.values()], this.tail.current)
+    this.stale = false
+    return true
+  }
+
+  /** Segment `n`, checked on its stamp: one that is gone or over MAX_READ_BYTES throws before any read. */
+  private async readSegment(n: number): Promise<EventLogRead> {
+    const path = this.paths.segment(n)
+    const stamp = await this.files.stamp(path)
+    if (stamp === null) throw new MissingSegmentError(path)
+    if (stamp.size > MAX_READ_BYTES) throw new Error(tooBig(path, stamp.size))
+    return readEvents(await this.files.read(path))
+  }
+}
+
 /** force: build a snapshot even when no file moved (after a failed poll or a new pin). */
 export type PollInput = { claudeSession: string; pinned: string | null; now: number; force?: boolean }
 
 export class TaskRegisterSource {
-  private readonly events: WatchedFile<RegisterSnapshot>
+  private readonly register: LayoutRegister
   private readonly marks: WatchedFile<MarkLogRead>
   /**
    * The tasks a drawing can show, as the events last folded: the active ones and those finished within a
@@ -156,15 +226,15 @@ export class TaskRegisterSource {
     this.files = files
     this.paths = paths
     this.priorities = priorities
-    this.events = new WatchedFile(files, paths.events, readRegister, readRegister(''))
+    this.register = new LayoutRegister(files, paths.events)
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
   }
 
   /** A new snapshot when anything it draws from changed since the last poll (or `force`), else null. */
   async poll({ claudeSession, pinned, now, force = false }: PollInput): Promise<Snapshot | null> {
-    const registerChanged = await this.events.refresh()
+    const registerChanged = await this.register.refresh()
     if (registerChanged) {
-      this.tasks = [...this.events.current.state.tasks.values()]
+      this.tasks = [...this.register.current.state.tasks.values()]
         .map(task => rowOf(task, this.priorities))
         .filter(task => isActive(task) || isRecentlyFinished(task, now))
         .sort((a, b) => taskNumber(a.id) - taskNumber(b.id))
@@ -187,7 +257,7 @@ export class TaskRegisterSource {
       area,
       areaSource,
       unreadInbox: area !== null && this.inbox && mark !== undefined ? unreadOf(area, this.inbox.current, mark, lineHash).lines.length : null,
-      problem: skippedText(this.paths, this.events.current, this.marks.current),
+      problem: skippedText(this.paths, this.register.current, this.marks.current),
       now,
     }
   }
