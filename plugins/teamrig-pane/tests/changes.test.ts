@@ -458,9 +458,10 @@ describe('changes rows', () => {
       .join('')
   const repo = (over: Partial<RepoChanges>): RepoChanges => ({ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, problem: null, ...over })
 
-  test('says git is being read, then that no repo is known, before any repo is', () => {
+  test('says git is being read, then, in plain text, why no repo is listed yet', () => {
     expect(changesBlocks(EMPTY_CHANGES).map(block => block.key)).toEqual(['reading'])
-    expect(textOf(changesBlocks({ repos: [], outside: [], isRead: true }), 'no-repo')).toMatch(/^No git repo yet/)
+    const empty = changesBlocks({ repos: [], outside: [], isRead: true }).flatMap(block => block.rows)
+    expect(empty.map(row => row.spans)).toEqual([[{ text: 'No git repo yet: the session folder is in none, and no file the session or its agents edited (Edit, Write) is in one.' }]])
   })
 
   test("counts on the button and the title only once something changed", () => {

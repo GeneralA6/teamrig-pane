@@ -76,7 +76,7 @@ function repoBlocks(repo: RepoChanges, index: number): Block[] {
 export function changesBlocks(changes: ChangesSnapshot): Block[] {
   if (!changes.isRead) return [single('reading', [{ text: 'Reading git…', dim: true }])]
   if (changes.repos.length === 0 && changes.outside.length === 0)
-    return [single('no-repo', [{ text: 'No git repo yet: the session folder is in none. A file the session writes adds its repo.', dim: true }])]
+    return [single('no-repo', [{ text: 'No git repo yet: the session folder is in none, and no file the session or its agents edited (Edit, Write) is in one.' }])]
   const blocks = changes.repos.flatMap(repoBlocks)
   if (changes.outside.length === 0) return blocks
   const outside = heading('outside', [{ text: `written outside git (${changes.outside.length})`, dim: true }])
