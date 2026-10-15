@@ -171,9 +171,18 @@ describe('renderHero', () => {
       ['A', 'M', '??'].map(fillOf),
       [PALETTE.green, PALETTE.amber, PALETTE.muted],
     );
-    for (const file of CHANGED) assert.ok(texts('changes').includes(file.path), file.path);
+    for (const file of CHANGED) assert.ok(texts('changes').some((text) => text.startsWith(`${file.path} +${file.added}`)), file.path);
     const cover = places.find((place) => inPart(place, 'changes') && place.element.name === 'rect');
     assert.equal(cover?.element.attributes.get('fill'), PALETTE.panel);
+  });
+
+  it("ends each file with its lines, added in green and removed in red as the pane colours them", () => {
+    const spansOf = (path: string): (readonly [string, string | undefined])[] => {
+      const text = places.find((place) => inPart(place, 'changes') && place.element.name === 'text' && textOf(place.element).startsWith(path));
+      return (text?.element.children ?? []).filter((node): node is XmlElement => typeof node !== 'string').map((node): readonly [string, string | undefined] => [textOf(node), node.attributes.get('fill')]);
+    };
+    assert.deepEqual(spansOf('src/signup.ts'), [['src/signup.ts', PALETTE.fg], [' +18', PALETTE.green], [' -3', PALETTE.red]]);
+    assert.deepEqual(spansOf('docs/signup.md'), [['docs/signup.md', PALETTE.fg], [' +12', PALETTE.green]]);
   });
 
   it('fills the button of the view it shows', () => {
