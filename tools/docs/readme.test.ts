@@ -6,6 +6,7 @@ import { IMAGES_DIR } from './images.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const readme = readFileSync(`${ROOT}README.md`, 'utf8');
+const pluginReadme = readFileSync(`${ROOT}plugins/teamrig-pane/README.md`, 'utf8');
 const TEAMRIG = 'https://github.com/GeneralA6/teamrig';
 
 /** Every Markdown link and image target in the README, without its `#anchor`. */
@@ -27,8 +28,12 @@ describe('README', () => {
   });
 
   it('names the command that opens the pane, and only that one', () => {
-    assert.match(readme, /run `\/teamrig`/);
+    assert.match(readme, /run `\/teamrig-pane`/);
     assert.doesNotMatch(readme, /\/tasklist/);
+  });
+
+  it("never gives /teamrig, the teamrig plugin's own command, as the pane's, here or in the plugin README", () => {
+    for (const text of [readme, pluginReadme]) assert.doesNotMatch(text, /`\/teamrig(?![\w-])/);
   });
 
   it('links the plugin README, CONTRIBUTING and the licence, and every local link resolves', () => {

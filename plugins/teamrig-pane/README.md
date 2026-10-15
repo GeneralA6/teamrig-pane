@@ -22,9 +22,9 @@ A task's glyph is its status as `teamrig list` names it: `○` open, `◐` in pr
 done, `✗` dropped.
 
 The area is taken from the session's newest `teamrig inbox read --session <area>` (its mark in
-`inbox-marks.jsonl` names the Claude Code session), or pinned with `/teamrig <area>`.
+`inbox-marks.jsonl` names the Claude Code session), or pinned with `/teamrig-pane <area>`.
 
-`/teamrig [mine | all | auto | <area>]` opens the pane, switches the view, follows the inbox read
+`/teamrig-pane [mine | all | auto | <area>]` opens the pane, switches the view, follows the inbox read
 again (`auto`) or pins an area. In the pane, `m` and `a` switch views.
 
 In the side dock the tasks sit a blank line apart, each wrapped title line starting under the task's
@@ -56,8 +56,8 @@ at boards shows only its `see` line.
 Press the row again to collapse it, or `c` to collapse every task.
 
 The pane docks on the right only in the fullscreen layout (`"tui": "fullscreen"`) with the terminal at
-least 110 columns wide; anywhere else it sits above the prompt, and `/teamrig` says which condition
-failed. A session opens it by itself from 144 columns; `/teamrig` opens it at any width.
+least 110 columns wide; anywhere else it sits above the prompt, and `/teamrig-pane` says which condition
+failed. A session opens it by itself from 144 columns; `/teamrig-pane` opens it at any width.
 
 Above the prompt it shows at most 6 one-line rows, the last saying how many it left out: that area
 is redrawn on every keystroke, so a full list there slows typing. The side dock shows the whole list.
@@ -69,7 +69,7 @@ stray click never loses it. The close is refused (a `ui.close` veto), so the pan
 among the panes the person opened: a later open needs 110 columns, not the 144 an unasked open needs.
 The strip is the Tasks / Changes switch (below) and a `minimized` mark. To open it in full again, click
 either button, which opens the pane on that view, press `t` or `d` while the pane holds the keyboard
-(`ctrl+x tab` or a click on it), or run `/teamrig`. The size is kept in `$.store` (`paneSize`, one
+(`ctrl+x tab` or a click on it), or run `/teamrig-pane`. The size is kept in `$.store` (`paneSize`, one
 for the plugin), so the next session, after a restart or a hot reload too, opens as the last one was
 left. The plugin's own close and an unload still close it.
 
