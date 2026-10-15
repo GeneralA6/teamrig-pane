@@ -10,9 +10,13 @@ import { priorityText } from './core/read/index'
 import { refLabel, refParts } from './details'
 import { areaView, ownerGroups, shortDue, shortTime, type TaskLine } from './view'
 
-export type Span = { text: string; color?: ThemeKey; bold?: boolean; dim?: boolean }
-/** One line of a block before layout: `hang` starts each line it wraps onto; a `rule` row ends in a rule. */
-export type Row = { key: string; spans: Span[]; hang?: Span; rule?: boolean }
+/** A run of text in one style. No `color` (absent or undefined, as a span picks it by a condition) draws in the theme's text color. */
+export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean }
+/**
+ * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
+ * undefined as `single` passes it on, starts them at the edge); a `rule` row ends in a rule.
+ */
+export type Row = { key: string; spans: Span[]; hang?: Span | undefined; rule?: boolean }
 /**
  * What draws as one element. `toggle` names the task a press on it expands or collapses;
  * `opensSection` leads it with a blank line, past the gap every block has.
