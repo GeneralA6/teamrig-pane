@@ -130,6 +130,7 @@ export const register: Register = on => {
     const changesLive = new LiveChanges(
       {
         git: (args, cwd) => $.process.run(['git', ...args], { cwd, timeoutMs: GIT_TIMEOUT_MS }),
+        exists: path => $.fs.exists(path),
         publish: async fresh => {
           await update($, changes, () => fresh)
           // Opening the open pane again retitles it in place; the title is a badge, so a failed one is let go.

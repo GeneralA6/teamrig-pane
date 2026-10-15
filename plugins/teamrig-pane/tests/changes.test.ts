@@ -14,11 +14,19 @@ function ran(stdout: string, exitCode = 0, stderr = ''): GitRun {
   return { exitCode, stdout, stderr, isStdoutTruncated: false }
 }
 
-/** A git over fixed answers: each folder's root (absent: not a repo), each root's status output, or a run that rejects. */
-function fakeGit(roots: Record<string, string>, statuses: Record<string, GitRun | Error>) {
+/**
+ * A git over fixed answers: each folder's root (absent: not a repo), each root's status output, or a run that rejects;
+ * and a disk where every path is there but those in `gone`. `calls` lists each git run, `checked` each path asked about.
+ */
+function fakeGit(roots: Record<string, string>, statuses: Record<string, GitRun | Error>, gone = new Set<string>()) {
   const calls: string[] = []
+  const checked: string[] = []
   const published: ChangesSnapshot[] = []
   const ports: ChangesPorts = {
+    exists: async path => {
+      checked.push(path)
+      return !gone.has(path)
+    },
     git: async (args, cwd) => {
       calls.push(`${args[0] === 'rev-parse' ? 'rev-parse' : 'status'} ${cwd}`)
       if (args[0] === 'rev-parse') {
@@ -33,7 +41,7 @@ function fakeGit(roots: Record<string, string>, statuses: Record<string, GitRun 
       published.push(next)
     },
   }
-  return { calls, published, ports }
+  return { calls, checked, published, ports }
 }
 
 describe('changes', () => {
@@ -112,14 +120,14 @@ describe('changes', () => {
 
   test("a repo git cannot read shows why; a git that cannot start leaves the file unlisted and is asked again", async () => {
     const { calls, published, ports } = fakeGit(
-      { 'C:/work/repo': REPO, 'C:/work/gone': 'C:/work/gone' },
-      { [REPO]: ran('', 128, '\nfatal: bad object HEAD\nmore\n'), 'C:/work/gone': new Error('spawn git ENOENT') },
+      { 'C:/work/repo': REPO, 'C:/work/slow': 'C:/work/slow' },
+      { [REPO]: ran('', 128, '\nfatal: bad object HEAD\nmore\n'), 'C:/work/slow': new Error('git timed out after 10000 ms') },
     )
     const changes = new LiveChanges(ports)
     await changes.addFolder('C:/work/repo')
-    await changes.addFolder('C:/work/gone')
+    await changes.addFolder('C:/work/slow')
     await changes.refresh()
-    expect(published[0]?.repos.map(repo => repo.problem)).toEqual(['fatal: bad object HEAD', 'spawn git ENOENT'])
+    expect(published[0]?.repos.map(repo => repo.problem)).toEqual(['fatal: bad object HEAD', 'git timed out after 10000 ms'])
 
     expect(calls.filter(call => call.startsWith('rev-parse'))).toHaveLength(2)
 
@@ -192,7 +200,8 @@ describe('changes', () => {
   test('the poll reads again only once something may have changed (a shell call marks it); the tick reads in any case', async () => {
     const { calls, ports } = fakeGit({ 'C:/work/repo': REPO }, {})
     const statuses = () => calls.filter(call => call.startsWith('status')).length
-    // A read asks git before its first await, so each timer's read shows at once.
+    // A timer's read is not awaited: let it run before counting.
+    const settled = () => new Promise<void>(resolve => setTimeout(resolve, 0))
     const started = async () => {
       const changes = new LiveChanges(ports)
       await changes.addFolder('C:/work/repo')
@@ -206,15 +215,82 @@ describe('changes', () => {
     }
     const polled = await started()
     polled.poll?.()
+    await settled()
     expect(statuses()).toBe(1)
     polled.changes.markDirty()
     polled.poll?.()
+    await settled()
     expect(statuses()).toBe(2)
 
     const ticked = await started()
     expect(statuses()).toBe(3)
     ticked.tick?.()
+    await settled()
     expect(statuses()).toBe(4)
+  })
+
+  test('a repo whose folder is removed leaves the list, git never runs there, and a write there once it is back asks its root again', async () => {
+    const gone = new Set<string>()
+    const { calls, published, ports } = fakeGit({ 'C:/work/repo/hooks': REPO, 'C:/work/repo': REPO }, { [REPO]: ran(STATUS_OUT) }, gone)
+    const changes = new LiveChanges(ports)
+    await changes.addFolder('C:/work/repo')
+    await changes.noteWrite('C:/work/repo/hooks/a.ts')
+    await changes.refresh()
+    expect(published[0]?.repos.map(repo => repo.root)).toEqual([REPO])
+
+    for (const path of [REPO, `${REPO}/.git`, 'C:/work/repo/hooks']) gone.add(path)
+    const before = calls.length
+    await changes.refresh()
+    expect(published.at(-1)).toEqual({ repos: [], outside: [], isRead: true })
+    // A write into the removed folder is not listed, and nothing runs git in it.
+    await changes.noteWrite('C:/work/repo/hooks/b.ts')
+    await changes.refresh()
+    expect(calls.slice(before)).toEqual([])
+    expect(published.at(-1)?.outside).toEqual([])
+
+    gone.clear()
+    await changes.noteWrite('C:/work/repo/hooks/c.ts')
+    await changes.refresh()
+    expect(calls.slice(before)).toEqual(['rev-parse C:/work/repo/hooks', `status ${REPO}`])
+    expect(published.at(-1)?.repos.map(repo => repo.root)).toEqual([REPO])
+  })
+
+  test('a removed worktree whose folder is left behind (no .git) leaves the list without a git run', async () => {
+    const { calls, checked, published, ports } = fakeGit({}, {}, new Set([`${REPO}/.git`]))
+    const seed: ChangesSnapshot = {
+      repos: [{ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, problem: null }],
+      outside: [],
+      isRead: true,
+    }
+    await new LiveChanges(ports, seed).refresh()
+    expect(checked).toEqual([`${REPO}/.git`])
+    expect(calls).toEqual([])
+    expect(published).toEqual([{ repos: [], outside: [], isRead: true }])
+  })
+
+  test('a repo the disk cannot be asked about shows why; a folder it cannot be asked about adds no repo and is asked again', async () => {
+    const { calls, published, ports } = fakeGit({ 'C:/work/repo': REPO }, {})
+    const refusing: ChangesPorts = {
+      ...ports,
+      exists: async path => (path === `${REPO}/.git` ? Promise.reject(new Error('EPERM: operation not permitted')) : ports.exists(path)),
+    }
+    const seed: ChangesSnapshot = {
+      repos: [{ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, problem: null }],
+      outside: [],
+      isRead: true,
+    }
+    await new LiveChanges(refusing, seed).refresh()
+    expect(published[0]?.repos.map(repo => repo.problem)).toEqual(['EPERM: operation not permitted'])
+    expect(calls).toEqual([])
+
+    let asks = 0
+    const unsure = new LiveChanges({ ...ports, exists: async () => Promise.reject(new Error(`EBUSY ${++asks}`)) })
+    await unsure.noteWrite('C:/work/repo/a.ts')
+    await unsure.noteWrite('C:/work/repo/a.ts')
+    await unsure.refresh()
+    expect(asks).toBe(2)
+    expect(calls).toEqual([])
+    expect(published.at(-1)).toEqual({ repos: [], outside: [], isRead: true })
   })
 
   test('a folder git cannot be asked about adds no repo', async () => {
