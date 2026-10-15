@@ -636,9 +636,41 @@ describe('layout', () => {
     expect(lines.join(' ').split(/[\s│]+/).filter(word => word !== '').join(' ')).toBe('one sub task of the pane')
   })
 
+  test('a row with a line limit stops there, its last line ending in a mark that fits; one that fits draws whole', async () => {
+    const lines = (row: Row, columns: number) => wrapRow(row, columns).map(line => line.map(span => span.text).join(''))
+    const row: Row = { key: 'r', spans: [{ text: 'aaa bbb ccc ddd eee' }], hang: { text: '  ' }, maxLines: 2 }
+    expect(lines(row, 9)).toEqual(['aaa bbb', '  ccc dd…'])
+    expect(lines({ ...row, maxLines: 1 }, 20)).toEqual(['aaa bbb ccc ddd eee'])
+    expect(lines({ ...row, maxLines: undefined }, 9)).toEqual(['aaa bbb', '  ccc ddd', '  eee'])
+    // The mark takes the style of the text it ends.
+    const styled: Row = { key: 's', spans: [{ text: 'one ' }, { text: 'two three', dim: true }], maxLines: 1 }
+    expect(wrapRow(styled, 8)).toEqual([[{ text: 'one ' }, { text: 'two…', dim: true }]])
+    expect(lines({ key: 'w', spans: [{ text: '⛔⛔⛔ x' }], maxLines: 1 }, 6)).toEqual(['⛔⛔…'])
+  })
+
+  test('a row with an end draws it at the first line\'s right edge, the text wrapping or cut in the room left of it', async () => {
+    const lines = (row: Row, columns: number) => wrapRow(row, columns).map(line => line.map(span => span.text).join(''))
+    const end = { text: '14:00', dim: true }
+    const done: Row = { key: 'd', spans: [{ text: '✓ T3  Old work' }], end, maxLines: 1 }
+    expect(lines(done, 30)).toEqual([`✓ T3  Old work${' '.repeat(11)}14:00`])
+    expect(wrapRow(done, 30)[0]?.slice(-1)).toEqual([end])
+    expect(lines({ ...done, spans: [{ text: '✓ T3  A long finished title' }] }, 20)).toEqual(['✓ T3  A long…  14:00'])
+    const whole = lines({ ...done, spans: [{ text: '✓ T3  A long finished title' }], hang: { text: '      ' }, maxLines: undefined }, 24)
+    expect(whole).toEqual([`✓ T3  A long${' '.repeat(7)}14:00`, '      finished', '      title'])
+    // Too narrow to keep the end apart: it follows the text.
+    const narrow = lines({ ...done, maxLines: undefined }, 12)
+    expect(narrow.join(' ')).toContain('14:00')
+    expect(narrow.every(line => cells(line) <= 12)).toBe(true)
+  })
+
   test('a wide character with no room left on a line starts the next one', async () => {
     const lines = wrapRow({ key: 'r', spans: [{ text: 'ab ⛔⛔⛔' }] }, 4).map(line => line.map(span => span.text).join(''))
     expect(lines).toEqual(['ab', '⛔⛔', '⛔'])
+  })
+
+  test('inline, a row\'s end follows its text on its one screen row', async () => {
+    const block: Block = { key: 'd', rows: [{ key: 'd', spans: [{ text: '✓ T3' }], end: { text: '14:00', dim: true } }] }
+    expect(inlineLayout([block], 5)[0]?.spans).toEqual([{ text: '✓ T3  ' }, { text: '14:00', dim: true }])
   })
 
   test('inline, each row takes one truncated screen row, capped, the last saying how many it left out', async () => {
