@@ -22,7 +22,7 @@ import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './
 import { dockLayout, failedDrawing, inlineLayout, type Drawn } from './layout'
 import { NOTHING_EXPANDED, paneBlocks, type Span } from './rows'
 import { PaneSizer, SIZE_KEY } from './size'
-import { EMPTY_CHANGES, LiveChanges } from './changes'
+import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from './changes'
 import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 
 const PANE = 'teamrig-pane'
@@ -54,6 +54,13 @@ const view = atom({ plugin: 'teamrig-pane', key: 'view' } as const, 'tasks')
 /** The changes are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when ChangesSnapshot changes shape. */
 const CHANGES_SHAPE = 'changes-v2'
 const changes = atom({ plugin: 'teamrig-pane', key: 'changes' } as const, EMPTY_CHANGES, { shape: CHANGES_SHAPE })
+/**
+ * The repo roots and outside files found, kept apart from the drawn changes: a version that bumps
+ * CHANGES_SHAPE reads the drawn ones as absent after a hot reload, and would forget every repo the
+ * session found. Bump KNOWN_SHAPE only when KnownChanges itself changes.
+ */
+const KNOWN_SHAPE = 'known-v1'
+const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KNOWN, { shape: KNOWN_SHAPE })
 
 /** The expanded tasks less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -131,6 +138,7 @@ export const register: Register = on => {
     await sizer.restore()
     // A hot reload keeps the changes drawn: their repos stay known and the count stays in the title.
     const seed = await read($, changes)
+    const kept = await read($, known)
     title = paneTitle(seed)
     const changesLive = new LiveChanges(
       {
@@ -138,6 +146,7 @@ export const register: Register = on => {
         exists: path => $.fs.exists(path),
         publish: async fresh => {
           await update($, changes, () => fresh)
+          await update($, known, () => knownOf(fresh))
           // Opening the open pane again retitles it in place; the title is a badge, so a failed one is let go.
           const retitled = paneTitle(fresh)
           if (retitled === title) return
@@ -145,7 +154,7 @@ export const register: Register = on => {
           await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS }).catch(() => undefined)
         },
       },
-      seed,
+      knownSeed(seed, kept),
     )
     tracked = changesLive
     await started.refresh()

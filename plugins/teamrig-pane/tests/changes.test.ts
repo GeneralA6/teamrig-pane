@@ -1,14 +1,17 @@
 // The Changes view: its data (hooks/changes.ts), git's status read per repo and repos found from the files the session
 // writes, and its rows (hooks/changes-rows.ts).
 import { describe, expect, test } from 'claude-code/testing'
-import type { ChangesSnapshot, FileChange, LineCount, RepoChanges } from '../types'
+import type { ChangesSnapshot, FileChange, KnownChanges, LineCount, RepoChanges } from '../types'
 import {
   branchOf,
   changeCount,
   CHANGES_KEPT,
   EMPTY_CHANGES,
   folderOf,
+  knownOf,
+  knownSeed,
   LiveChanges,
+  NOTHING_KNOWN,
   OUTSIDE_KEPT,
   parseGrepCounts,
   parseNumstat,
@@ -209,16 +212,29 @@ describe('changes', () => {
     expect(snapshot === undefined ? 0 : changeCount(snapshot)).toBe(CHANGES_KEPT + 5)
   })
 
-  test('after a hot reload the repos and files the pane drew stay known', async () => {
+  test('after a hot reload the repos and files the pane knew stay known', async () => {
     const { calls, published, ports } = fakeGit({}, {})
-    const seed: ChangesSnapshot = {
+    await new LiveChanges(ports, { roots: [REPO], outside: ['C:/notes/a.md'] }).refresh()
+    expect(calls).toEqual([`status ${REPO}`])
+    expect(published[0]?.outside).toEqual(['C:/notes/a.md'])
+  })
+
+  test('the known repos and files are those drawn, and a reloaded pane starts from both the known and the drawn ones', () => {
+    const drawn: ChangesSnapshot = {
       repos: [{ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, problem: null }],
       outside: ['C:/notes/a.md'],
       isRead: true,
     }
-    await new LiveChanges(ports, seed).refresh()
-    expect(calls).toEqual([`status ${REPO}`])
-    expect(published[0]?.outside).toEqual(['C:/notes/a.md'])
+    expect(knownOf(drawn)).toEqual({ roots: [REPO], outside: ['C:/notes/a.md'] })
+    // A pane that wrote no known list yet: the drawn snapshot alone.
+    expect(knownSeed(drawn, NOTHING_KNOWN)).toEqual({ roots: [REPO], outside: ['C:/notes/a.md'] })
+    // A snapshot under an older shape reads as empty: the known list alone.
+    expect(knownSeed(EMPTY_CHANGES, { roots: [REPO], outside: ['C:/notes/a.md'] })).toEqual({ roots: [REPO], outside: ['C:/notes/a.md'] })
+    const many = Array.from({ length: OUTSIDE_KEPT + 5 }, (_, i) => `C:/notes/${i}.md`)
+    const both = knownSeed({ ...drawn, outside: ['C:/notes/a.md', ...many] }, { roots: ['C:/other'], outside: ['C:/notes/a.md'] })
+    expect(both.roots).toEqual(['C:/other', REPO])
+    expect(both.outside).toHaveLength(OUTSIDE_KEPT)
+    expect(both.outside[0]).toBe('C:/notes/a.md')
   })
 
   test('a read asked while one runs is done on the next poll; the timers poll every 3 s and read every 60 s', async () => {
@@ -313,11 +329,7 @@ describe('changes', () => {
 
   test('a removed worktree whose folder is left behind (no .git) leaves the list without a git run', async () => {
     const { calls, checked, published, ports } = fakeGit({}, {}, new Set([`${REPO}/.git`]))
-    const seed: ChangesSnapshot = {
-      repos: [{ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, problem: null }],
-      outside: [],
-      isRead: true,
-    }
+    const seed: KnownChanges = { roots: [REPO], outside: [] }
     await new LiveChanges(ports, seed).refresh()
     expect(checked).toEqual([`${REPO}/.git`])
     expect(calls).toEqual([])
@@ -330,11 +342,7 @@ describe('changes', () => {
       ...ports,
       exists: async path => (path === `${REPO}/.git` ? Promise.reject(new Error('EPERM: operation not permitted')) : ports.exists(path)),
     }
-    const seed: ChangesSnapshot = {
-      repos: [{ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, problem: null }],
-      outside: [],
-      isRead: true,
-    }
+    const seed: KnownChanges = { roots: [REPO], outside: [] }
     await new LiveChanges(refusing, seed).refresh()
     expect(published[0]?.repos.map(repo => repo.problem)).toEqual(['EPERM: operation not permitted'])
     expect(calls).toEqual([])
@@ -356,7 +364,7 @@ describe('changes', () => {
       diff: ran(numstat),
       grep: args => (args.includes('-I') ? ran(['notes.md\u00004', 'newdir/x.ts\u000010', 'newdir/y.ts\u00002', ''].join('\n')) : ran('logo.png\u00001\n')),
     })
-    const seed: ChangesSnapshot = { repos: [{ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, problem: null }], outside: [], isRead: true }
+    const seed: KnownChanges = { roots: [REPO], outside: [] }
     await new LiveChanges(ports, seed).refresh()
 
     const lines = Object.fromEntries((published[0]?.repos[0]?.files.items ?? []).map(file => [file.path, file.lines]))

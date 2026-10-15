@@ -779,6 +779,32 @@ test('a worktree removed while the session works leaves the Changes view, with n
   expect(titles.at(-1)).toBe('Tasks')
 })
 
+test('after a hot reload that reads the drawn changes as an older shape, the repos the session found stay listed', async ($, on) => {
+  const repos: FakeRepos = { roots: { '/repo/src': '/repo' }, statuses: { '/repo': ['## main', ' M src/a.ts', ''].join(' ') } }
+  const { clock } = await start(on, {}, repos)
+  on('tool.call', { tool: 'Edit' }, async () => ({ result: 'edited' }))
+  // A version that bumps CHANGES_SHAPE reads what the older pane drew as absent.
+  let isOlderShape = false
+  on('state.get', async ($, e, next) => {
+    const answer = await next(e)
+    if (!isOlderShape || e.key !== 'changes' || answer.value === undefined) return answer
+    return { value: { ...answer.value, value: { shape: 'changes-v1', value: { repos: [], outside: [] } } } }
+  })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Edit', file_path: '/repo/src/a.ts', old_string: 'a', new_string: 'b' })
+  await clock.advance(3_000)
+
+  isOlderShape = true
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  isOlderShape = false
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'changes' })
+
+  expect(await pane.find({ text: /repo · main · 1 changed/ })).toBeDefined()
+  expect(await pane.find({ text: /No git repo yet/ })).toBeUndefined()
+})
+
 test('from the minimized strip, Changes opens the pane in full on the Changes view', async ($, on) => {
   const { clock, store } = await start(on, { paneSize: 'minimized' })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
