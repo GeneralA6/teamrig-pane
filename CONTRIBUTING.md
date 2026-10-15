@@ -42,7 +42,9 @@ tests on Linux, Windows and macOS under node 22 and 24, with a pinned Claude Cod
 (`.github/workflows/ci.yml`).
 
 `hooks/core/` is a copy of teamrig's read modules at the commit `scripts/teamrig-pin.json` names, made
-by `scripts/sync-core.ts`; never edit it by hand (the plugin README says how to sync it).
+by `scripts/sync-core.ts`; never edit it by hand. After each sync, rerun `scripts/golden.ts` so
+`tests/golden-register.ts` holds what teamrig at the new pin writes and prints (the plugin README says
+how).
 
 ## Branches and releases
 - Every change is its own branch off `main` and lands through a pull request once every CI check

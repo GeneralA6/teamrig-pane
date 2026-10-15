@@ -4,26 +4,25 @@ Install it from a session (it is tested on Claude Code 2.1.295 and later):
 
     /plugin install teamrig-pane --marketplace GeneralA6/teamrig-pane
 
-Docks the session's tasks from the task register (its tasks folder: `events.jsonl`, with its
-`aliases.jsonl` renames and `pauses.jsonl` pauses; see Where the register is, below) on the right of Claude Code's fullscreen UI. It reads files only: a stat poll
+Docks the session's tasks from teamrig's task register (its tasks folder: `events.jsonl`, with the
+`inbox-marks.jsonl` that `teamrig inbox read` writes; see Where the register is, below) on the right of
+Claude Code's fullscreen UI. It reads files only: a stat poll
 every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick moves the due/age
 labels on. No model calls, so no tokens. A switch over the list flips it to the session's git changes
 (Tasks and Changes, below).
 
-- **mine**: the session's area. Shows active tasks in plan order (tier, then due, then id), with
-  NEW / NOT PICKED UP (untouched after 24 h) / overdue flags, the register's list markers and what
-  holds a blocked task, plus what the area asked of others, what it finished in the last day and its
-  unread inbox lines.
+- **mine**: the session's area. Shows active tasks in teamrig's plan order (priority, then due with
+  undated last, then id), each with its priority (`p2`) and due, NEW / NOT PICKED UP (untouched after
+  24 h) / overdue flags and, under a blocked task, its blocked note; then what the area asked of
+  others (the newest 8), what it finished in the last day (the newest 6) and how many of its inbox
+  lines are unread.
 - **all**: every owner's active tasks, with blocked counts.
 
-A task's glyph is the status the register's `list` shows: `○` open, `◐` in progress, `■` blocked
-(stored, or held by an active `blocked-by` task or an open wait), `◇` verifying, `◌` paused, `✓` done,
-`✗` dropped. Its markers follow the due date: `⛔T194` blocker, `⏳owner` open wait, `↑T205` parent,
-`⏸P1` pause, `✓2/5` children done, `🔍10-15` proof due. Under a blocked task: its blocked note, then
-`waits on T194 · owner: <what>`.
+A task's glyph is its status as `teamrig list` names it: `○` open, `◐` in progress, `■` blocked, `✓`
+done, `✗` dropped.
 
-The area is taken from the session's newest `inbox read --session <area>`
-(`inbox-marks.jsonl` in the tasks folder), or pinned with `/tasklist <area>`.
+The area is taken from the session's newest `teamrig inbox read --session <area>` (its mark in
+`inbox-marks.jsonl` names the Claude Code session), or pinned with `/tasklist <area>`.
 
 `/tasklist [mine | all | auto | <area>]` opens the pane, switches the view, follows the inbox read
 again (`auto`) or pins an area. In the pane, `m` and `a` switch views.
@@ -39,34 +38,21 @@ The register has no description field, so a task's details are built from what i
 a task (`▸`), or focus the pane and press Enter on it, to expand it (`▾`). The details hang under
 its id on a `│` guide, a bare guide line between the quotes and the facts:
 
-- the task's `--detail` (the ask and what done looks like), when the register has one;
 - the ask and what it serves, quoted as plain text from where its ref points (`file:N`, `N-M` up to
   3 lines, or `N,M`), then the roadmap item of each of its goals (`--goals G10.1g`, `S4`);
-- who asked, who added it if someone else did, when, and its goals;
-- the register v2 facts, each only when it has a value: `kind code · labels token-saving`; the dates
-  (`start 10-15 · started 10-14 12:19 · eta 10-19 (moved 2×) · done … · due moved 1×`); its size as
-  the register's `show` writes it (`est 1.5d (initial 1d) ≈ 0.16B = 2.1% of a fleet week`);
-- its newest status note and evidence, with the status, then `evidence due 10-15 06:00` while a
-  verifying task's proof is due;
-- its parent (`part of ◐ T205 <title>`), its sub-tasks (the first 8 by number, `+N more`) and the
-  tasks it is blocked by, finished ones too, each a tree line with its status glyph and title;
-- its open waits (`waits on owner: <what>`, one line each) and the pause in force (`paused P1: …`);
-- its newest 3 progress notes, newest first (`10-14 16:04 po: …`, then `+N older`: the register's
-  `show` has them all);
+- who asked, who added it if someone else did, when, its priority as the team config names it
+  (`p2 correctness`), its week and its goals;
+- its newest status note and evidence, with the status;
 - `see folder/file` for the files nothing was quoted from.
 
-An estimate is a share of a fleet week only while the newest token-usage run
-(`usage-YYYY-MM-DD.json` in the token-usage folder, written by a usage report) is at most 7 days
-old; with none, or a stale one, it reads in its own unit (`est 1.5d`). The pane lists that folder at
-most once a minute and re-reads the run only when it changed. A task's list line never grows: the
-facts show only in its details.
+A task's list line never grows: these facts show only in its details.
 
 Boards, agendas and docs are rewritten and their line numbers drift, so a line is quoted only while
 something still ties it to the task: an inbox line by its date (inboxes are append-only; one dated
 more than a day after the task was created is dropped), and any other line when it is a roadmap item
 of one of the task's goals, sits inside one, or names the task's id. A goal's own item is found by
 its id in the goals document (`TEAMRIG_PANE_GOALS_DOC`, a path from the workspace root; unset, no goal items are quoted), so it never drifts. A task with no goals whose refs point
-at boards shows only its `see` line, under its `--detail` when it has one.
+at boards shows only its `see` line.
 Press the row again to collapse it, or `c` to collapse every task.
 
 The pane docks on the right only in the fullscreen layout (`"tui": "fullscreen"`) with the terminal at
@@ -103,27 +89,27 @@ What the host draws and the mod can't change:
 By default the pane reads the register where teamrig keeps it for the session's team:
 `<kit home>/teams/<team>/state` (the kit home is `$TEAMRIG_HOME`, else `~/.teamrig`; the team is
 `$TEAMRIG_TEAM`, else the nearest `.teamrig.json` up from the session's folder), with its inbox in
-`state/inbox` and token-usage runs in `state/token-usage`. A team config's `paths.state` and
-`paths.inbox` move them, as they do for teamrig.
+`state/inbox`. A team config's `paths.state` and `paths.inbox` move them, as they do for teamrig, and
+its `register.priorities` name the priorities (teamrig's defaults when it names none). With both
+folders named below, no team config is read, and a priority shows as its number alone.
 
 Any folder can be named instead, each on its own; a variable wins over the settings file, which wins
 over the team default:
 
 | Variable | Setting | What it holds |
 | --- | --- | --- |
-| `TEAMRIG_PANE_TASKS_DIR` | `tasksDir` | `events.jsonl`, `aliases.jsonl`, `pauses.jsonl`, `inbox-marks.jsonl` |
+| `TEAMRIG_PANE_TASKS_DIR` | `tasksDir` | `events.jsonl`, `inbox-marks.jsonl` |
 | `TEAMRIG_PANE_INBOX_DIR` | `inboxDir` | one `<area>.md` inbox per area |
-| `TEAMRIG_PANE_USAGE_DIR` | `usageDir` | `usage-YYYY-MM-DD.json` token-usage runs |
 | `TEAMRIG_PANE_GOALS_DOC` | `goalsDoc` | the goals document, a path from the workspace root (unset: no goal items are quoted) |
 
 The settings file is `<kit home>/pane.json`, or the file `TEAMRIG_PANE_SETTINGS` names, a JSON object
 of those settings; a folder in it is absolute or starts with `~/`:
 
-    { "tasksDir": "~/notes/tasks", "inboxDir": "~/notes/board/inbox", "usageDir": "~/notes/token-usage" }
+    { "tasksDir": "~/notes/tasks", "inboxDir": "~/notes/board/inbox" }
 
 The variables are read from the environment Claude Code runs in (its settings' `env` block works
 too), all of it once when the session starts. When nothing names the register, or the settings file,
-the pointer file or the team config cannot be used, the pane draws one `⚠` line saying what to set
+the pointer file or the team config cannot be used, the pane draws one `WARN` line saying what to set
 or what is wrong.
 
 ## Tasks and Changes
@@ -159,28 +145,32 @@ What the host draws and the mod can't change:
 
 ## Reading the register
 
-The pane parses, renames and folds the register with the register's own modules, so every event type,
-status and rename it writes reads here too, and a line the pane cannot read is one the register cannot
-read either. `scripts/sync-core.ts` copies teamrig's read entry (`src/read/index.ts`) and every module it
+The pane parses and folds the register, reads the inbox marks and reads the team config with teamrig's
+own modules, so every event type and status teamrig writes reads here too, and a line the pane cannot
+read is one teamrig cannot read either. The lines teamrig's reader skips (unreadable, from a newer
+teamrig, or an event naming no task) are counted on one `WARN` line worded as teamrig's own
+(`events.jsonl: 1 unreadable line(s), ...`), above the tasks. `scripts/sync-core.ts` copies teamrig's read entry (`src/read/index.ts`) and every module it
 reaches into `hooks/core/`, each at its path under teamrig's `src/` (which ones and how: `scripts/vendor.ts`),
 from the teamrig commit `scripts/teamrig-pin.json` names. It refuses a module that imports anything
 outside the copied set, and a listed module the read entry no longer reaches. Never edit `hooks/core/`
 by hand: change teamrig, then sync.
 
-A read that fails leaves the last good tasks drawn under a `⚠` line naming the problem, and the next
+A read that fails leaves the last good tasks drawn under a `WARN` line naming the problem, and the next
 poll reads again. A file refused as locked or denied (`EBUSY`, `EPERM`, `EACCES`) counts as there,
-even where Windows then answers that it does not exist; only a path that is not there reads empty. A drawing that throws shows one `⚠ the pane could not
-draw: …` line under the buttons, never a blank pane.
+even where Windows then answers that it does not exist; only a path that is not there reads empty. A
+drawing that throws shows one `WARN the pane could not draw: …` line under the buttons, never a blank
+pane.
 
 One read copies at most 4 MiB (`$.fs.read` rejects a bigger file and has no ranged read). The register
-is append-only, about 320 bytes an event, so `events.jsonl` reaches that near 13,000 events unless it
-is rotated. A file over it is named with its size (`events.jsonl is 4.12 MiB, over the 4 MiB a pane can
+is append-only, about 310 bytes an event in a working register, so `events.jsonl` reaches that near
+13,500 events unless it is rotated. A file over it is named with its size (`events.jsonl is 4.12 MiB, over the 4 MiB a pane can
 read at once`) from its stamp, never read, and the last good tasks stay drawn; a pane started then has
 none to draw. Under it, the whole register is re-read and refolded only when a file moved, and the
 snapshot every draw reads keeps only the tasks a view can show (active, or finished within a day), so
 drawing grows with the live tasks, never with the register's history. Through the engine's test
-harness, 20,000 events (3.2 MiB, 4,082 tasks, 409 kept) load and draw in 350-400 ms, a redraw takes
-75-95 ms and a switch to `all` 65 ms; a poll with nothing new reads nothing.
+harness, 20,000 of its shorter events (3.4 MiB, 4,082 tasks, 409 kept) load and draw in 185-200 ms,
+a redraw takes 43-48 ms and a switch to `all` 36-40 ms (three runs, 2026-10-15); a poll with nothing
+new reads nothing.
 
 `$.state` outlives a hot reload, so the snapshot is kept under a shape tag (`SNAPSHOT_SHAPE` in
 `hooks/register.tsx`): bump it whenever the `Snapshot` or `TaskRow` type changes, and a reloaded pane
@@ -195,8 +185,19 @@ After teamrig changes those modules, move the pin, sync and commit the copy with
 `--teamrig` is a teamrig git checkout; the modules are read from its history (`git cat-file`), never
 from its working tree, so a local edit there cannot reach the pane. `--ref` takes a sha, branch or tag
 and writes the commit it names to the pin. `--check` also fails on a file under `hooks/core/` that no
-copy names. The plugin
-contract (`types/index.d.ts`) cannot import, so it spells the status unions out; a spec fails when
-the register adds or drops a status the pane has no glyph for.
+copy names. The plugin contract (`types/index.d.ts`) cannot import, so it spells the status unions
+out; a spec fails when the register adds or drops a status the pane has no glyph for.
+
+Then capture teamrig again at the new pin, and commit the capture with the sync:
+
+    node --disable-warning=ExperimentalWarning scripts/golden.ts --teamrig <repo>   # write tests/golden-register.ts
+
+It copies teamrig's CLI from the same history at the pin into a scratch folder, makes a team and
+writes a register there with it (every event kind, a cleared ref, a rename, a priority only the team
+config names, an inbox read, trimmed and rewritten, and lines teamrig skips), and keeps the files
+with what `teamrig list` and `teamrig inbox status` printed for them, and what `list` printed for
+teamrig's own register fixtures. `tests/golden.test.ts` then holds the pane to that output: its rows
+print as teamrig's list lines, its unread counts and its `WARN` line equal teamrig's. Never edit the
+capture by hand.
 
 Checks: `claude plugin validate .` and `claude plugin test .` (neither typechecks).
