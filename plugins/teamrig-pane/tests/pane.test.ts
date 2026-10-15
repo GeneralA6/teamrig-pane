@@ -128,7 +128,11 @@ async function start(
   const clock = mock.clock(on, { now: NOW })
   on('session.id', async () => ({ value: S1 }))
   on('session.start', async ($, e) => ({ cwd: e.cwd }))
-  on('command.register', async () => ({ value: { command: 'teamrig' } }))
+  const registered: string[] = []
+  on('command.register', async ($, e) => {
+    registered.push(e.name)
+    return { value: { command: e.name } }
+  })
   const opened: string[] = []
   const titles: string[] = []
   on('ui.open', async ($, e) => {
@@ -144,7 +148,7 @@ async function start(
   ])
   disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
   disk.write(INBOX, ['line one', 'line two', 'line three'])
-  return { clock, disk, opened, store, runs, titles }
+  return { clock, disk, opened, registered, store, runs, titles }
 }
 
 test('docks the session area: its tasks, flags and unread inbox', async ($, on) => {
@@ -236,6 +240,7 @@ test('missing register, marks and inbox files draw an empty register with no pro
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(await pane.find({ text: /No area for this session yet/ })).toBeDefined()
+  expect(await pane.find({ text: /\/teamrig-pane/ })).toBeDefined()
   expect(await pane.find({ text: /WARN/ })).toBeUndefined()
 
   disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
@@ -594,12 +599,31 @@ test('a session starts minimized when the last one was left so: one row, docked 
   expect(store.get('paneSize')).toBe('open')
 })
 
-test('/teamrig opens a minimized pane in full', async ($, on) => {
+test('the session registers /teamrig-pane alone: /teamrig stays free for the teamrig plugin', async ($, on) => {
+  const { registered } = await start(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  expect(registered).toEqual(['teamrig-pane'])
+})
+
+test('/teamrig leaves a minimized pane alone: the pane answers only /teamrig-pane', async ($, on) => {
+  const { store } = await start(on, { paneSize: 'minimized' })
+  // Beneath the plugin: what answers a command no plugin takes.
+  on('command.run', async ($, e) => ({ text: `no plugin took /${e.command}` }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  const ran = await $.command.run({ command: 'teamrig', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+  expect(ran.text).toBe('no plugin took /teamrig')
+  expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
+  expect(store.get('paneSize')).toBe('minimized')
+})
+
+test('/teamrig-pane opens a minimized pane in full', async ($, on) => {
   const { store } = await start(on, { paneSize: 'minimized' })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  await $.command.run({ command: 'teamrig', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+  await $.command.run({ command: 'teamrig-pane', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
   expect(store.get('paneSize')).toBe('open')
 })

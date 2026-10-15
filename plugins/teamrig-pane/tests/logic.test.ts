@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow, TaskStatus } from '../types'
-import { inlineReason, parsePaneArgs } from '../hooks/command'
+import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
 import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
@@ -556,7 +556,13 @@ describe('width', () => {
 })
 
 describe('command', () => {
-  test('parses every /teamrig form', async () => {
+  test('is /teamrig-pane, leaving /teamrig to the teamrig plugin, and every message names it', async () => {
+    expect(COMMAND).toBe('teamrig-pane')
+    expect(USAGE).toBe('usage: /teamrig-pane [mine | all | auto | <area>]')
+    expect(inlineReason({ isFullscreen: true, columns: 96 })).toContain('then /teamrig-pane again.')
+  })
+
+  test('parses every /teamrig-pane form', async () => {
     expect(parsePaneArgs('')).toEqual({ kind: 'open' })
     expect(parsePaneArgs(' All ')).toEqual({ kind: 'mode', mode: 'all' })
     expect(parsePaneArgs('auto')).toEqual({ kind: 'auto' })
