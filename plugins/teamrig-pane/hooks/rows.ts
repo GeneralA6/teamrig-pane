@@ -18,7 +18,16 @@ export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean;
  * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
  * undefined as `single` passes it on, starts them at the edge); a `rule` row ends in a rule.
  */
-export type Row = { key: string; spans: Span[]; hang?: Span | undefined; rule?: boolean }
+export type Row = {
+  key: string
+  spans: Span[]
+  hang?: Span | undefined
+  rule?: boolean
+  /** Cut the row at this many lines, the last ending in `…`; none (or undefined) draws it whole. */
+  maxLines?: number | undefined
+  /** Drawn at the right edge of the row's first line, the text wrapping in the room left of it. */
+  end?: Span | undefined
+}
 /**
  * What draws as one element. `toggle` names the task a press on it expands or collapses;
  * `opensSection` leads it with a blank line, past the gap every block has.
