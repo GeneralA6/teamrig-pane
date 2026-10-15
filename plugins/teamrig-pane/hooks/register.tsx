@@ -1,7 +1,7 @@
 // teamrig-pane: docks this session's list from the task register (where it is: places.ts) on the right
 // of the fullscreen UI. `mine` shows the session's area: a status bar of its tasks (status-bar.ts),
 // its work waiting for proof, its other active tasks in plan order, what it asked of others, what it
-// finished in the last day, and its unread inbox lines; `all` shows
+// finished today (the UTC day, as the bar counts it), and its unread inbox lines; `all` shows
 // every owner's active tasks. A press on a task row expands it: the ask and its goals' roadmap items
 // quoted where its refs still point, who asked and when, its priority, week and goals, its status
 // note and evidence, and the files it names. The close mark (✕,

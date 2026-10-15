@@ -60,11 +60,19 @@ export function utcDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10)
 }
 
+/**
+ * Done or dropped on `today`, a UTC day, by its newest event: the one day the bar counts as done today and the
+ * list shows as finished today (view.ts), so the two agree and both turn over at UTC midnight.
+ */
+export function isFinishedOn(task: TaskRow, today: string): boolean {
+  return (task.status === 'done' || task.status === 'dropped') && utcDay(Date.parse(task.updatedAt)) === today
+}
+
 /** Where a task sits on the bar, `today` a UTC day; null for one done on an earlier day or dropped, which the bar leaves out. */
 export function barStatusOf(task: TaskRow, today: string): BarStatus | null {
   switch (task.status) {
     case 'done':
-      return utcDay(Date.parse(task.updatedAt)) === today ? 'done-today' : null
+      return isFinishedOn(task, today) ? 'done-today' : null
     case 'verifying':
       return 'verifying'
     case 'in-progress':

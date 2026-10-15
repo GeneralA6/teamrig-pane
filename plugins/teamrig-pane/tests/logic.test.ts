@@ -5,10 +5,11 @@ import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
 import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { dockLayout, failedDrawing, inlineLayout, merged, wrapRow, type Drawn } from '../hooks/layout'
-import { GLYPH, GLYPH_COLOR, paneBlocks, type Block, type Row } from '../hooks/rows'
+import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, finishedMoreText, paneBlocks, type Block, type Row } from '../hooks/rows'
+import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
-import { areaView, flagsOf, ownerGroups, sameView } from '../hooks/view'
+import { areaView, flagsOf, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
 import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine } from './fixtures'
 
 const DAY = 24 * HOUR
@@ -222,14 +223,25 @@ describe('view', () => {
     expect(view.asked.map(l => l.task.id)).toEqual(['T5'])
   })
 
-  test('keeps finished tasks for a day only', async () => {
+  test('lists the tasks finished today, the UTC day of now, the same day the bar counts done today', async () => {
+    const midnight = Date.UTC(2026, 9, 13)
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'po', at: NOW - 48 * HOUR }),
       statusLine('T1', 'po', NOW - 2 * HOUR, 'done'),
       createLine('T2', { owner: 'po', by: 'po', at: NOW - 48 * HOUR }),
       statusLine('T2', 'po', NOW - 30 * HOUR, 'dropped'),
+      createLine('T3', { owner: 'po', by: 'po', at: NOW - 48 * HOUR }),
+      statusLine('T3', 'po', midnight - 60_000, 'done'),
+      createLine('T4', { owner: 'po', by: 'po', at: NOW - 48 * HOUR }),
+      statusLine('T4', 'po', midnight + 60_000, 'dropped'),
     )
-    expect(areaView(tasks, 'po', NOW).finished.map(t => t.id)).toEqual(['T1'])
+    // T3, done a minute before midnight, is within a day of now but yesterday: a 24-hour window listed it, so the
+    // list ran past the bar's done-today count.
+    const view = areaView(tasks, 'po', NOW)
+    expect(view.finished.map(t => t.id)).toEqual(['T1', 'T4'])
+    expect([view.finishedTotal, view.finishedMoreDropped]).toEqual([2, 0])
+    expect(barCounts(tasks, 'po', NOW)['done-today']).toBe(view.finished.filter(t => t.status === 'done').length)
+    expect(areaView(tasks, 'po', midnight + 24 * HOUR).finishedTotal).toBe(0)
   })
 
   test('a date-only due is due at the end of that UTC day', async () => {
@@ -262,6 +274,11 @@ describe('view', () => {
     expect(sameView({ ...base, tasks: bare }, { ...base, tasks: named })).toBe(false)
     const started = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' }), statusLine('T1', 'po', NOW, 'open', null, null, 'none'))
     expect(sameView(base, { ...base, tasks: started })).toBe(false)
+    // A finished task leaves the list, and the bar's done today, at UTC midnight: a tick across it redraws.
+    const done = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR }), statusLine('T1', 'po', NOW, 'done'))
+    const late: Snapshot = { ...base, tasks: done, now: Date.UTC(2026, 9, 13, 23, 58) }
+    expect(sameView(late, { ...late, now: Date.UTC(2026, 9, 13, 23, 59) })).toBe(true)
+    expect(sameView(late, { ...late, now: Date.UTC(2026, 9, 14, 0, 1) })).toBe(false)
   })
 
   test('groups every owner with active tasks and counts the waiting ones', async () => {
@@ -338,10 +355,36 @@ describe('rows', () => {
     const said = paneBlocks(snapshotOf(reasons, 'po'), 'mine')
     expect(textAt(said, 'active-note:T2')).toBe('    ↳ decision owner · on T1; the copy first')
     expect(textAt(said, 'active-note:T4')).toBe('    ↳ until Fri 10-16 14:00')
-    expect(textAt(blocks, 'finished')).toBe('── finished today')
+    expect(textAt(blocks, 'finished')).toBe('── finished today (1)')
     expect(blockAt(blocks, 'finished')?.opensSection).toBe(true)
     expect(rowAt(blocks, 'finished:T3')?.spans).toEqual([{ text: '▸ ✓ T3 Old work', dim: true }])
     expect(blockAt(blocks, 'finished:T3')?.toggle).toBe('T3')
+  })
+
+  test('finished today names its total and, past the cap, how many it cut, the dropped ones, and the key listing the done ones', async () => {
+    // Seven done, then two dropped earlier: the newest six show; the seventh done and both dropped are cut.
+    const lines = Array.from({ length: 9 }, (_, i) => [
+      createLine(`T${i + 1}`, { owner: 'po', by: 'po', at: NOW - 2 * HOUR }),
+      statusLine(`T${i + 1}`, 'po', NOW - (i + 1) * 60_000, i < 7 ? 'done' : 'dropped'),
+    ]).flat()
+    const tasks = fold(...lines)
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
+    expect(MAX_FINISHED).toBe(6)
+    expect(textAt(blocks, 'finished')).toBe('── finished today (9)')
+    const shown = Array.from({ length: 6 }, (_, i) => `finished:T${i + 1}`)
+    expect(blocks.map(b => b.key).slice(-7)).toEqual([...shown, 'finished-more'])
+    expect(rowAt(blocks, 'finished-more')?.spans).toEqual([{ text: "… 3 more (2 dropped); press o for today's done", dim: true }])
+    // The status bar's done-today filter lists all seven done, uncapped.
+    const filtered = paneBlocks(snapshotOf(tasks, 'po'), 'mine', NOTHING_EXPANDED, 'done-today')
+    expect(filtered.map(b => b.key)).toEqual(['header', ...shown, 'finished:T7'])
+    // Six finished draw no more line.
+    expect(paneBlocks(snapshotOf(fold(...lines.slice(0, 12)), 'po'), 'mine').map(b => b.key)).not.toContain('finished-more')
+  })
+
+  test('the more line names the key only when a done task is among the cut ones', async () => {
+    expect(finishedMoreText(3, 0)).toBe("… 3 more; press o for today's done")
+    expect(finishedMoreText(3, 1)).toBe("… 3 more (1 dropped); press o for today's done")
+    expect(finishedMoreText(2, 2)).toBe('… 2 more (2 dropped)')
   })
 
   test('the tasks an area asked of others follow its own, newest first, each naming its owner', async () => {
@@ -773,7 +816,7 @@ describe('source', () => {
     expect(await unread()).toBe(1)
   })
 
-  test('a snapshot holds only the tasks a drawing can show: active, or finished within a day', async () => {
+  test('a snapshot holds only the tasks a drawing can show: active, or finished today (the UTC day of now)', async () => {
     const files = new MemoryFiles()
     files.write(PATHS.events, [
       createLine('T1', { owner: 'po', by: 'po', at: NOW - 3 * DAY }),
@@ -784,8 +827,11 @@ describe('source', () => {
       createLine('T4', { owner: 'etl', by: 'po', at: NOW - 3 * DAY }),
       statusLine('T4', 'etl', NOW - 2 * DAY, 'waiting', 'waits on T1'),
       createLine('T5', { owner: 'po', by: 'po', at: NOW - 3 * DAY }),
+      createLine('T6', { owner: 'po', by: 'po', at: NOW - 3 * DAY }),
+      statusLine('T6', 'po', Date.UTC(2026, 9, 13) - 60_000, 'done'),
     ].join('\n'))
     const snap = await new TaskRegisterSource(files, PATHS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
+    // T6, done a minute before midnight, is within a day of now but not today: no drawing shows it.
     expect(snap?.tasks.map(task => task.id)).toEqual(['T1', 'T3', 'T4', 'T5'])
 
     const big = new MemoryFiles()
