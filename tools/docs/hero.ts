@@ -71,10 +71,10 @@ export const FINISHED: readonly PaneTask[] = [{ id: 'T11', status: 'done', prior
 
 /** The Changes view: the session's repo, its branch, and git's two-letter code and path for each changed file. */
 export const REPO = { name: 'web', branch: 'signup' } as const;
-export const CHANGED: readonly { readonly code: string; readonly path: string }[] = [
-  { code: 'A ', path: 'src/signup.test.ts' },
-  { code: ' M', path: 'src/signup.ts' },
-  { code: '??', path: 'docs/signup.md' },
+export const CHANGED: readonly { readonly code: string; readonly path: string; readonly added: number; readonly removed: number }[] = [
+  { code: 'A ', path: 'src/signup.test.ts', added: 42, removed: 0 },
+  { code: ' M', path: 'src/signup.ts', added: 18, removed: 3 },
+  { code: '??', path: 'docs/signup.md', added: 12, removed: 0 },
 ];
 
 export const CAPTIONS = { tasks: "Your tasks: what's next, what's blocked, what's done", changes: 'One press on Changes: the files changed in your repo' } as const;
@@ -221,20 +221,21 @@ function tasksView(): string[] {
   return out;
 }
 
-/** The pane's Changes view, drawn opaque over the tasks: the repo's header and git's code for each file. */
+/** The pane's Changes view, drawn opaque over the tasks: the repo's header, then each file's git code, path and lines. */
 function changesView(): string[] {
   const out = [
     `<rect x="586" y="62" width="356" height="320" fill="${C.panel}"/>`,
     ...switchRow('changes'),
     ...ruled(PANE_X, 128, [span(REPO.name, C.fg, { bold: true }), span(` · ${REPO.branch}`, C.muted), span(` · ${CHANGED.length} changed`, C.muted)]),
   ];
-  CHANGED.forEach(({ code, path }, i) => {
+  CHANGED.forEach(({ code, path, added, removed }, i) => {
     const y = 160 + i * ROW;
     const [index = ' ', tree = ' '] = code;
     if (code === '??') out.push(line(PANE_X, y, 'pane', [span('??', C.muted)]));
     if (code !== '??' && index !== ' ') out.push(line(PANE_X, y, 'pane', [span(index, C.green)]));
     if (code !== '??' && tree !== ' ') out.push(line(PANE_X + PANE_CHAR, y, 'pane', [span(tree, C.amber)]));
-    out.push(line(PANE_X + 3 * PANE_CHAR, y, 'pane', [span(path, C.fg)]));
+    const lines = [...(added > 0 ? [span(` +${added}`, C.green)] : []), ...(removed > 0 ? [span(` -${removed}`, C.red)] : [])];
+    out.push(line(PANE_X + 3 * PANE_CHAR, y, 'pane', [span(path, C.fg), ...lines]));
   });
   return out;
 }
