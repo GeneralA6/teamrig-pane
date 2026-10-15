@@ -35,8 +35,9 @@ describe('README', () => {
     assert.ok(needs.trim().split('\n').length <= 3, `Requirements is ${needs.trim().split('\n').length} lines; keep it to the major needs`);
   });
 
-  it('points AI assistants at llms.txt', () => {
-    assert.match(readme, /Using an AI assistant\? Point it at \[[^\]]*llms\.txt\]\(https:\/\/github\.com\/GeneralA6\/teamrig\/blob\/main\/llms\.txt\)/);
+  it("points AI assistants at the pane's own llms.txt", () => {
+    assert.match(readme, /Using an AI assistant\? Point it at \[llms\.txt\]\(llms\.txt\)/);
+    assert.ok(existsSync(`${ROOT}llms.txt`));
   });
 
   it('says it is part of teamrig, and links teamrig', () => {

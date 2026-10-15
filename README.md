@@ -63,8 +63,8 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
 - **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; see
   [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
 
-Using an AI assistant? Point it at [teamrig's llms.txt](https://github.com/GeneralA6/teamrig/blob/main/llms.txt):
-teamrig and this pane explained for language models.
+Using an AI assistant? Point it at [llms.txt](llms.txt): the pane explained for language models, with a link
+to teamrig's guide.
 
 [Plugin README](plugins/teamrig-pane/README.md) (every view, key and limit) ·
 [Contributing](CONTRIBUTING.md) · [teamrig](https://github.com/GeneralA6/teamrig) ·
