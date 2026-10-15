@@ -15,8 +15,8 @@ import {
   refParts,
 } from '../hooks/details'
 import { graphemes } from '../hooks/width'
-import { parseEvent } from '../hooks/core/events'
-import { parseJsonl, readTasks } from '../hooks/log'
+import { readRegister } from '../hooks/core/read/index'
+import { rowOf } from '../hooks/log'
 import { MemoryFiles, NOW, createLine } from './fixtures'
 
 const CREATED = '2026-10-13T12:00:00.000Z'
@@ -43,10 +43,9 @@ const ROADMAP = [
 ].join('\n')
 
 function taskWith(ref: string, goals: string[] = ['G10.2']) {
-  const events = parseJsonl(createLine('T9', { owner: 'po', by: 'lead', at: NOW, ref, goals }), parseEvent).records
-  const [task] = readTasks({ events, aliases: [], pauses: [], usage: null }, NOW)
-  if (task === undefined) throw new Error('the fixture task did not fold')
-  return task
+  const task = readRegister(createLine('T9', { owner: 'po', by: 'lead', at: NOW, ref, goals })).state.tasks.get('T9')
+  if (task === undefined) throw new Error('the fixture task did not read')
+  return rowOf(task, [])
 }
 
 describe('details', () => {

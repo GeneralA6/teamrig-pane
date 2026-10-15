@@ -1,7 +1,7 @@
 // The /tasklist command's argument, parsed apart from the engine so every form is testable.
 import type { CommandPresentation } from 'claude-code'
 import type { ViewMode } from '../types'
-import { isSession } from './core/model'
+import { SESSION_NAME } from './core/read/index'
 
 export const USAGE = 'usage: /tasklist [mine | all | auto | <area>]'
 
@@ -21,7 +21,7 @@ export function parseTaskListArgs(args: string): TaskListCommand {
   if (word === '') return { kind: 'open' }
   if (word === 'mine' || word === 'all') return { kind: 'mode', mode: word }
   if (word === 'auto') return { kind: 'auto' }
-  return isSession(word) ? { kind: 'pin', area: word } : { kind: 'usage' }
+  return SESSION_NAME.test(word) ? { kind: 'pin', area: word } : { kind: 'usage' }
 }
 
 /** The fullscreen layout docks a pane beside the transcript from this width (engine: `CommandPresentation`). */

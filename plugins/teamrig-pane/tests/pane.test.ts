@@ -2,13 +2,12 @@
 import type { FsEntry, FsStat, On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import { cells } from '../hooks/width'
-import { HOUR, NOW, bigRegister, createLine, iso, linkLine, markLine, noteLine, statusLine, updateLine, usageRunJson } from './fixtures'
+import { HOUR, NOW, S1, bigRegister, createLine, iso, markLine, statusLine, updateLine } from './fixtures'
 
 const HOME = '\\Homes\\tester'
 const EVENTS = '/Homes/tester/team-notes/tasks/events.jsonl'
 const MARKS = '/Homes/tester/team-notes/tasks/inbox-marks.jsonl'
 const INBOX = '/Homes/tester/team-notes/board/inbox/po.md'
-const USAGE_RUN = '/Homes/tester/team-notes/token-usage/usage-2026-10-13.json'
 
 /**
  * The engine resolves each $.fs path the host’s way before a hook sees it: Windows puts the drive on
@@ -57,10 +56,6 @@ function fakeDisk(on: On) {
     if (lock?.op === 'read') return { deny: lock.message }
     const file = files.get(keyOf(e.path))
     return file ? { value: file.text } : { deny: `ENOENT: ${e.path}` }
-  })
-  on('fs.list', async ($, e) => {
-    const entries = inFolder(e.path)
-    return entries.length > 0 ? { value: entries } : { deny: `ENOENT: ${e.path}` }
   })
   return {
     reads,
@@ -114,7 +109,6 @@ const REGISTER_ENV: Readonly<Record<string, string>> = {
   USERPROFILE: HOME,
   TEAMRIG_PANE_TASKS_DIR: `${HOME}\\team-notes\\tasks`,
   TEAMRIG_PANE_INBOX_DIR: `${HOME}\\team-notes\\board\\inbox`,
-  TEAMRIG_PANE_USAGE_DIR: `${HOME}\\team-notes\\token-usage`,
   TEAMRIG_PANE_GOALS_DOC: 'docs/ROADMAP.md',
 }
 
@@ -132,7 +126,7 @@ async function start(
   const store = fakeStore(on, kept)
   const runs = fakeGit(on, repos)
   const clock = mock.clock(on, { now: NOW })
-  on('session.id', async () => ({ value: 'session-po' }))
+  on('session.id', async () => ({ value: S1 }))
   on('session.start', async ($, e) => ({ cwd: e.cwd }))
   on('command.register', async () => ({ value: { command: 'tasklist' } }))
   const opened: string[] = []
@@ -144,11 +138,11 @@ async function start(
   })
   const disk = fakeDisk(on)
   disk.write(EVENTS, [
-    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, tier: 2, due: '2026-10-14', title: 'Ship the task pane' }),
-    createLine('T2', { owner: 'security', by: 'lead', at: NOW - HOUR, tier: 1, title: 'Rotate the local URI' }),
+    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, due: '2026-10-14', title: 'Ship the task pane' }),
+    createLine('T2', { owner: 'security', by: 'lead', at: NOW - HOUR, priority: 1, title: 'Rotate the local URI' }),
     statusLine('T2', 'security', NOW, 'blocked', 'needs owner paste'),
   ])
-  disk.write(MARKS, [markLine('po', 1, 'session-po', NOW)])
+  disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
   disk.write(INBOX, ['line one', 'line two', 'line three'])
   return { clock, disk, opened, store, runs, titles }
 }
@@ -181,7 +175,7 @@ test('picks up a new register event on the next poll', async ($, on) => {
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   disk.write(EVENTS, [
-    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, tier: 2, title: 'Ship the task pane' }),
+    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, title: 'Ship the task pane' }),
     statusLine('T1', 'po', NOW, 'done'),
   ])
   await clock.advance(3_000)
@@ -203,32 +197,34 @@ test('a locked or denied register file keeps the last good tasks drawn under the
   for (const [i, lock] of locks.entries()) {
     disk.lock(EVENTS, lock)
     // A read happens only once the file moved.
-    disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' }), noteLine('T1', 'po', NOW, `step ${i}`)])
+    disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' }), statusLine('T1', 'po', NOW, 'in-progress', `step ${i}`)])
     await clock.advance(3_000)
     expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
-    expect(await pane.find({ text: new RegExp(`⚠ .*${lock.message.slice(0, 6)}`) })).toBeDefined()
+    expect(await pane.find({ text: new RegExp(`WARN .*${lock.message.slice(0, 6)}`) })).toBeDefined()
 
     disk.unlock(EVENTS)
     await clock.advance(3_000)
-    expect(await pane.find({ text: /⚠/ })).toBeUndefined()
+    expect(await pane.find({ text: /WARN/ })).toBeUndefined()
     expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
   }
 })
 
-test('lines of a newer register: an unknown type or a change of unknown keys alone is counted, every good task and field still drawn', async ($, on) => {
+test('lines teamrig skips are counted as teamrig counts them, and every task and field it reads is still drawn', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, [
-    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, tier: 2, title: 'Ship the task pane', lineKeys: { v: 3, trace: 'a1' }, taskKeys: { risk: 'high', budget: { tokens: 5 } } }),
+    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, title: 'Ship the task pane', lineKeys: { trace: 'a1' }, taskKeys: { risk: 'high', budget: { tokens: 5 } } }),
     JSON.stringify({ v: 3, type: 'vote', id: 'T1', at: iso(NOW - HOUR / 2), by: 'etl', choice: 'ship' }),
     updateLine('T1', 'lead', NOW - HOUR / 2, { risk: 'low' }),
     updateLine('T1', 'lead', NOW - HOUR / 3, { title: 'Ship the task pane v2', risk: 'low' }),
     createLine('T2', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Second task' }),
     '{"type":"status","id":"T2"',
+    statusLine('T9', 'po', NOW, 'done'),
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  // Wide enough that the problem line draws unwrapped.
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: { ...PANE_PROPS, bodyColumns: 200 } })
 
-  expect(await pane.find({ text: /^⚠ 3 register line\(s\) this pane cannot read$/ })).toBeDefined()
+  expect(await pane.find({ text: /^WARN events\.jsonl: 1 unreadable line\(s\), 1 line\(s\) from a newer teamrig, 1 event\(s\) naming no task$/ })).toBeDefined()
   expect(await pane.find({ text: /Ship the task pane v2/ })).toBeDefined()
   expect(await pane.find({ text: /Second task/ })).toBeDefined()
   expect(await pane.find({ text: /po · 2 active/ })).toBeDefined()
@@ -240,9 +236,9 @@ test('missing register, marks and inbox files draw an empty register with no pro
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(await pane.find({ text: /No area for this session yet/ })).toBeDefined()
-  expect(await pane.find({ text: /⚠/ })).toBeUndefined()
+  expect(await pane.find({ text: /WARN/ })).toBeUndefined()
 
-  disk.write(MARKS, [markLine('po', 1, 'session-po', NOW)])
+  disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
   await clock.advance(3_000)
   expect(await pane.find({ text: /Nothing active\./ })).toBeDefined()
   expect(await pane.find({ text: /inbox 0 unread/ })).toBeDefined()
@@ -256,7 +252,7 @@ test('missing register, marks and inbox files draw an empty register with no pro
   disk.remove(EVENTS)
   await clock.advance(3_000)
   expect(await pane.find({ text: /Nothing active\./ })).toBeDefined()
-  expect(await pane.find({ text: /⚠/ })).toBeUndefined()
+  expect(await pane.find({ text: /WARN/ })).toBeUndefined()
 })
 
 test('a register of 20,000 events loads and draws in well under a second, and a poll with nothing new reads nothing', async ($, on) => {
@@ -340,7 +336,7 @@ test('a title and note of CJK and emoji sequences wrap by display cells, no line
   const title = '修复任务面板的宽字符 👨‍👩‍👧 显示 ❤️ 标题 🇮🇱 한국어 제목 👍🏽 done'
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title }),
-    noteLine('T1', 'po', NOW - HOUR / 2, '進捗メモ 👩🏽‍💻 ✍️ 完了まであと少し'),
+    statusLine('T1', 'po', NOW - HOUR / 2, 'in-progress', '進捗メモ 👩🏽‍💻 ✍️ 完了まであと少し'),
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
@@ -354,15 +350,15 @@ test('a title and note of CJK and emoji sequences wrap by display cells, no line
   expect(task?.text).toContain('👩🏽‍💻')
 })
 
-test('with no folder named, no settings file and no teamrig project, it says what to set and reads nothing', async ($, on) => {
-  const withoutUsage = Object.fromEntries(Object.entries(REGISTER_ENV).filter(([key]) => key !== 'TEAMRIG_PANE_USAGE_DIR'))
-  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, withoutUsage)
+test('with one folder named, no settings file and no teamrig project, it says what to set and reads nothing', async ($, on) => {
+  const tasksOnly = Object.fromEntries(Object.entries(REGISTER_ENV).filter(([key]) => key !== 'TEAMRIG_PANE_INBOX_DIR'))
+  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, tasksOnly)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  const problem = await pane.find({ text: /^⚠ no register found/ })
+  const problem = await pane.find({ text: /^WARN no register found/ })
   expect(problem?.text.split(/\s+/).join(' ')).toBe(
-    "⚠ no register found: set TEAMRIG_PANE_TASKS_DIR, TEAMRIG_PANE_INBOX_DIR and TEAMRIG_PANE_USAGE_DIR, write them in /Homes/tester/.teamrig/pane.json, or start the session in a teamrig team's project (.teamrig.json)",
+    "WARN no register found: set TEAMRIG_PANE_TASKS_DIR and TEAMRIG_PANE_INBOX_DIR, write them in /Homes/tester/.teamrig/pane.json, or start the session in a teamrig team's project (.teamrig.json)",
   )
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
   expect(disk.reads).toEqual([])
@@ -385,13 +381,13 @@ test('with no folder named, it reads the register teamrig keeps for the team its
 test('the settings file in the kit home names the folders, ~/ under the home folder', async ($, on) => {
   const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   disk.write('/Homes/tester/.teamrig/pane.json', [
-    JSON.stringify({ tasksDir: '~/team-notes/tasks', inboxDir: '~/team-notes/board/inbox', usageDir: '~/team-notes/token-usage' }),
+    JSON.stringify({ tasksDir: '~/team-notes/tasks', inboxDir: '~/team-notes/board/inbox' }),
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
-  expect(await pane.find({ text: /⚠/ })).toBeUndefined()
+  expect(await pane.find({ text: /WARN/ })).toBeUndefined()
 })
 
 test('draws each collapsed task as one Text: no Box beyond the root, the controls and their two button rows', async ($, on) => {
@@ -427,28 +423,24 @@ test('pressing a task shows its ask quoted from the inbox and the roadmap, press
   expect(await pane.find({ text: /│ asked by/ })).toBeUndefined()
 })
 
-test('an expanded task shows its register v2 facts, its estimate as a share of a fleet week read from the usage folder', async ($, on) => {
-  const { disk } = await start(on)
-  disk.write(EVENTS, [
-    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' }),
-    createLine('T3', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Pane v2' }),
-    linkLine('T1', 'po', NOW - HOUR, 'parent', 'T3'),
-    updateLine('T1', 'po', NOW - HOUR, { kind: 'code', est: { value: 1, unit: 'd' }, eta: '2026-10-15' }),
-    noteLine('T1', 'po', NOW - HOUR / 2, 'details drawn'),
+test("an expanded task names its priority as its team's config does, with its week, goals and status note", async ($, on) => {
+  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write('/Homes/tester/.teamrig/teams/web/config.json', [JSON.stringify({ register: { priorities: [{ id: 2, name: 'correctness' }] } })])
+  disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
+    createLine('T7', { owner: 'web', by: 'lead', at: NOW - HOUR, priority: 2, title: 'Ship the team register', goals: ['G10.2', 'G15'] }),
+    statusLine('T7', 'web', NOW - HOUR / 2, 'in-progress', 'details drawn', 'abc1234'),
   ])
-  const day = { cr: 100_000_000, msgs: 1000 }
-  disk.write(USAGE_RUN, [usageRunJson({ '2026-10-12': day, '2026-10-13': day })])
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  expect(await pane.find({ text: /kind code/ })).toBeUndefined()
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  // Wide enough that the facts line draws unwrapped.
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: { ...PANE_PROPS, bodyColumns: 200 } })
+  await pane.press({ key: 'all' })
+  expect(await pane.find({ text: /▸ ◐ T7 p2 Ship the team register/ })).toBeDefined()
+  expect(await pane.find({ text: /correctness/ })).toBeUndefined()
 
-  await pane.press({ key: 'active:T1' })
-  expect(await pane.find({ text: /│ kind code$/m })).toBeDefined()
-  expect(await pane.find({ text: /│ eta 10-15$/m })).toBeDefined()
-  expect(await pane.find({ text: /│ est 1d ≈ 0\.10B = 14\.3% of a fleet week$/m })).toBeDefined()
-  expect(await pane.find({ text: /│ part of ○ T3 Pane v2$/m })).toBeDefined()
-  expect(await pane.find({ text: /│ {3}└ 10-13 13:30 po: details drawn$/m })).toBeDefined()
-  expect(await pane.find({ text: /labels|start |waits on|blocked by|sub-tasks/ })).toBeUndefined()
+  await pane.press({ key: 'web:T7' })
+  expect(await pane.find({ text: /│ asked by owner · added by lead · 10-13 13:00 · p2 correctness · week 10-13 · G10\.2 · G15$/m })).toBeDefined()
+  expect(await pane.find({ text: /│ in-progress: details drawn · evidence abc1234$/m })).toBeDefined()
 })
 
 test('an expanded blocked task shows its note in the details; collapse closes every task', async ($, on) => {
@@ -497,7 +489,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  expect(await pane.find({ text: /^⚠ the pane could not draw: .*state store unavailable/ })).toBeDefined()
+  expect(await pane.find({ text: /^WARN the pane could not draw: .*state store unavailable/ })).toBeDefined()
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'mine', 'all'])
 
   isStateDown = false
@@ -538,11 +530,8 @@ test('after a hot reload, a snapshot the older pane wrote reads as empty, never 
 test('resized to a narrow dock or inline, it draws every line inside the frame and never blanks', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, [
-    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, tier: 1, due: '2026-10-14', title: 'Ship the task pane with a title long enough to wrap' }),
-    createLine('T3', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Pane v2 parent' }),
-    linkLine('T1', 'po', NOW - HOUR, 'parent', 'T3'),
-    linkLine('T1', 'po', NOW - HOUR, 'blocked-by', 'T3'),
-    noteLine('T1', 'po', NOW - HOUR / 2, 'a progress note that also needs to wrap'),
+    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 1, due: '2026-10-14', title: 'Ship the task pane with a title long enough to wrap' }),
+    statusLine('T1', 'po', NOW - HOUR / 2, 'blocked', 'a status note that also needs to wrap', 'evidence long enough to wrap too'),
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })

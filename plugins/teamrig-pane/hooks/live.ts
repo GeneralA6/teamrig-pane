@@ -10,7 +10,7 @@
 // Neither timer ever rejects: a failed poll or tick shows as the pane's problem over the last good
 // tasks, and when even that write fails the pane stays as last drawn and the next poll tries again.
 import type { Snapshot } from '../types'
-import { isSession } from './core/model'
+import { SESSION_NAME } from './core/read/index'
 import type { TaskRegisterSource } from './source'
 import { sameView } from './view'
 
@@ -38,7 +38,7 @@ export function pinKey(claudeSession: string): string {
 
 /** A stored pin, if it is still a valid area name. */
 export function storedPin(value: unknown): string | null {
-  return typeof value === 'string' && isSession(value) ? value : null
+  return typeof value === 'string' && SESSION_NAME.test(value) ? value : null
 }
 
 type BoundSession = { id: string; pinned: string | null }

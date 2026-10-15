@@ -1,60 +1,67 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { ShownStatus, Snapshot, TaskRow } from '../types'
+import type { Snapshot, TaskRow, TaskStatus } from '../types'
 import { inlineReason, parseTaskListArgs } from '../hooks/command'
 import { LiveRegister, type LivePorts, type Timer } from '../hooks/live'
-import { parseEvent } from '../hooks/core/events'
-import { STATUSES } from '../hooks/core/model'
-import { parseAlias } from '../hooks/core/names'
-import { parsePauseRecord } from '../hooks/core/pauses'
-import { parseUsageRun, type UsageRun } from '../hooks/core/rates'
-import { areaOfSession, CHILDREN_SHOWN, NOTES_SHOWN, parseJsonl, parseMark, readTasks, readTo, unreadLines } from '../hooks/log'
+import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
+import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { dockLayout, failedDrawing, inlineLayout, merged, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, paneBlocks, type Block, type Row } from '../hooks/rows'
 import { cells, graphemes } from '../hooks/width'
-import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, unlessMissing, type RegisterPaths } from '../hooks/source'
-import { USAGE_LIST_MS, UsageRuns } from '../hooks/usage'
-import { areaView, dueInstant, flagsOf, ownerGroups, sameView } from '../hooks/view'
-import {
-  HOUR,
-  MemoryFiles,
-  bigRegister,
-  NOW,
-  aliasLine,
-  createLine,
-  linkLine,
-  markLine,
-  noteLine,
-  pauseLine,
-  statusLine,
-  updateLine,
-  usageRunJson,
-  waitLine,
-} from './fixtures'
+import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
+import { areaView, flagsOf, ownerGroups, sameView } from '../hooks/view'
+import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
-/** The register as the pane reads it, from event lines and optional rename and pause lines. */
-function readLines(events: string[], aliases: string[] = [], pauses: string[] = [], usage: UsageRun | null = null) {
-  return readTasks({
-    events: parseJsonl(events.join('\n'), parseEvent).records,
-    aliases: parseJsonl(aliases.join('\n'), parseAlias).records,
-    pauses: parseJsonl(pauses.join('\n'), parsePauseRecord).records,
-    usage,
-  }, NOW)
+const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', inboxDir: 'R/inbox' }
+
+/** A team config's priority names, as `register.priorities` lists them: it names some levels, not all. */
+const PRIORITIES: readonly PriorityConfig[] = [
+  { id: 2, name: 'correctness' },
+  { id: 7, name: 'polish' },
+]
+
+/** The rows the pane draws from event lines, read by teamrig's reader, in the order the tasks were created. */
+function rowsOf(lines: readonly string[], priorities: readonly PriorityConfig[] = []): TaskRow[] {
+  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task, priorities))
 }
 
-function fold(...lines: string[]) {
-  return readLines(lines)
+function fold(...lines: string[]): TaskRow[] {
+  return rowsOf(lines)
 }
 
 describe('log', () => {
-  test('skips torn and unknown lines, counting them, and ignores blank ones', async () => {
-    const parsed = parseJsonl(
-      [createLine('T1', { owner: 'po', by: 'lead', at: NOW }), '{"type":"create","id":"T2"', '', '{"type":"rename","id":"T1","at":"x","by":"y"}'].join('\n'),
-      parseEvent,
+  test('reads what teamrig reads and counts what it skips: torn lines, unknown types, newer lines, events naming no task', async () => {
+    const lines = [
+      createLine('T1', { owner: 'po', by: 'lead', at: NOW }),
+      '{"v":2,"type":"create","id":"T2"',
+      '',
+      JSON.stringify({ v: 2, type: 'rename', id: 'T1', at: iso(NOW), by: 'po' }),
+      createLine('T3', { owner: 'po', by: 'lead', at: NOW, lineKeys: { v: 3, trace: 'a1' } }),
+      statusLine('T9', 'po', NOW, 'done'),
+    ]
+    const register = readRegister(lines.join('\n'))
+    expect([...register.state.tasks.keys()]).toEqual(['T1'])
+    expect([register.read.unreadable, register.read.newer, register.state.orphans]).toEqual([2, 1, 1])
+    expect(skippedText(PATHS, register, readMarks(''))).toBe(
+      'events.jsonl: 2 unreadable line(s), 1 line(s) from a newer teamrig, 1 event(s) naming no task',
     )
-    expect(parsed.records.length).toBe(1)
-    expect(parsed.skipped).toBe(2)
+    expect(skippedText(PATHS, readRegister(lines[0] ?? ''), readMarks(''))).toBe(null)
+  })
+
+  test('counts the inbox marks teamrig skips apart from the events: one naming no Claude session, one from a newer teamrig', async () => {
+    const marks = readMarks(
+      [
+        markLine('po', 1, S1, NOW, 'a'),
+        markLine('po', 1, 'not-a-session', NOW),
+        JSON.stringify({ v: 2, area: 'po', line: 1, at: iso(NOW), claudeSession: S1, lastLineHash: null }),
+      ].join('\n'),
+    )
+    expect(marks.marks.length).toBe(1)
+    expect(skippedText(PATHS, readRegister(''), marks)).toBe('inbox-marks.jsonl: 1 unreadable line(s), 1 line(s) from a newer teamrig')
+    expect(skippedText(PATHS, readRegister('{'), marks)).toBe(
+      'events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task; inbox-marks.jsonl: 1 unreadable line(s), 1 line(s) from a newer teamrig',
+    )
   })
 
   test('a task created for another session is unseen until its owner writes an event', async () => {
@@ -90,123 +97,82 @@ describe('log', () => {
     expect(task?.goals).toEqual(['G10.2a', 'G11'])
   })
 
-  test('a create whose goals are not all strings is skipped', async () => {
+  test('a create whose goals are not all text is skipped and counted unreadable', async () => {
     const line = JSON.stringify({
+      v: 2,
       type: 'create',
       id: 'T1',
-      at: new Date(NOW).toISOString(),
+      at: iso(NOW),
       by: 'po',
-      task: { title: 't', owner: 'po', source: 'po', ref: 'r', tier: 2, due: null, goals: [1] },
+      task: { title: 't', owner: 'po', source: 'po', ref: 'r', priority: 2, due: null, goals: [1], week: null },
     })
-    expect(parseJsonl(line, parseEvent)).toEqual({ records: [], skipped: 1 })
+    const register = readRegister(line)
+    expect(register.state.tasks.size).toBe(0)
+    expect(register.read.unreadable).toBe(1)
   })
 
-  test('a repeated create and events for unknown ids change nothing', async () => {
-    const tasks = fold(
+  test('a repeated create and events for unknown ids change nothing, and both count as naming no task', async () => {
+    const lines = [
       createLine('T1', { owner: 'po', by: 'po', at: NOW, title: 'first' }),
       createLine('T1', { owner: 'etl', by: 'etl', at: NOW, title: 'second' }),
       statusLine('T9', 'po', NOW, 'done'),
-    )
+    ]
+    const tasks = fold(...lines)
     expect(tasks.length).toBe(1)
     expect(tasks[0]?.title).toBe('first')
+    expect(readRegister(lines.join('\n')).state.orphans).toBe(2)
   })
 
-  test('reads the register\'s v2 lines: a blocked-by link shows blocked with its marker and holder, its notes read newest first', async () => {
+  test('names each priority as the team config does; a level it does not name, or no config, leaves the number bare', async () => {
     const lines = [
-      createLine('T1', { owner: 'po', by: 'lead', at: NOW }),
-      createLine('T2', { owner: 'po', by: 'lead', at: NOW }),
-      linkLine('T2', 'po', NOW + HOUR, 'blocked-by', 'T1'),
-      noteLine('T2', 'po', NOW + HOUR, 'first'),
-      noteLine('T2', 'po', NOW + 2 * HOUR, 'second'),
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 2 }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW, priority: 7 }),
+      createLine('T3', { owner: 'po', by: 'po', at: NOW, priority: 4 }),
     ]
-    expect(parseJsonl(lines.join('\n'), parseEvent).skipped).toBe(0)
-    const [blocker, held] = fold(...lines)
-    expect(blocker?.shown).toBe('open')
-    expect(blocker?.markers).toEqual([])
-    expect(held?.status).toBe('open')
-    expect(held?.shown).toBe('blocked')
-    expect(held?.markers).toEqual(['⛔T1'])
-    expect(held?.holds).toEqual(['T1'])
-    expect(held?.notes).toEqual({ items: [{ at: new Date(NOW + 2 * HOUR).toISOString(), by: 'po', text: 'second' }, { at: new Date(NOW + HOUR).toISOString(), by: 'po', text: 'first' }], more: 0 })
+    expect(rowsOf(lines, PRIORITIES).map(task => [task.priority, task.priorityName])).toEqual([
+      [2, 'correctness'],
+      [7, 'polish'],
+      [4, null],
+    ])
+    expect(rowsOf(lines).map(task => task.priorityName)).toEqual([null, null, null])
   })
 
-  test('an update carrying only an eta or an estimate reads, and keeps the task (register v2 fields)', async () => {
-    const lines = [
-      createLine('T1', { owner: 'po', by: 'lead', at: NOW }),
-      updateLine('T1', 'po', NOW + HOUR, { eta: '2026-10-19' }),
-      updateLine('T1', 'po', NOW + 2 * HOUR, { est: { value: 1.5, unit: 'd' } }),
-    ]
-    expect(parseJsonl(lines.join('\n'), parseEvent).skipped).toBe(0)
-    const [task] = fold(...lines)
-    expect(task?.id).toBe('T1')
-    expect(task?.updatedAt).toBe(new Date(NOW + 2 * HOUR).toISOString())
-  })
-
-  test('a blocker that is done no longer holds, and a wait holds as its kind', async () => {
-    const [, released] = fold(
-      createLine('T1', { owner: 'po', by: 'lead', at: NOW }),
-      createLine('T2', { owner: 'po', by: 'lead', at: NOW }),
-      linkLine('T2', 'po', NOW, 'blocked-by', 'T1'),
-      statusLine('T1', 'po', NOW + HOUR, 'done'),
+  test('a task with no ref and no week, a priority-only update and a blocked status read as teamrig writes them', async () => {
+    const [task] = fold(
+      createLine('T1', { owner: 'po', by: 'lead', at: NOW, ref: null, week: null }),
+      updateLine('T1', 'lead', NOW + HOUR, { priority: 1 }),
+      statusLine('T1', 'po', NOW + 2 * HOUR, 'blocked', 'waits on the owner'),
     )
-    expect(released?.shown).toBe('open')
-    expect(released?.holds).toEqual([])
-    const [waiting] = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW }), waitLine('T1', 'po', NOW, 'owner', 'pick the formula'))
-    expect(waiting?.shown).toBe('blocked')
-    expect(waiting?.markers).toEqual(['⏳owner'])
-    expect(waiting?.holds).toEqual(['owner: pick the formula'])
+    expect(task?.ref).toBe(null)
+    expect(task?.week).toBe(null)
+    expect(task?.priority).toBe(1)
+    expect(task?.status).toBe('blocked')
+    expect(task?.note).toBe('waits on the owner')
   })
 
-  test('a stored verifying status reads as verifying, never hidden by a pause', async () => {
-    const [task] = readLines(
-      [createLine('T1', { owner: 'po', by: 'po', at: NOW, tier: 4 }), statusLine('T1', 'po', NOW, 'verifying', 'proof tonight')],
-      [],
-      [pauseLine('P1', NOW, [4], 'budget')],
+  test('the statuses the plugin contract spells out are teamrig\'s, and each draws a glyph', async () => {
+    expect(STATUS_CONTRACT_MATCHES).toBe(true)
+    const statuses: readonly TaskStatus[] = TASK_STATUSES
+    expect(Object.keys(GLYPH).sort()).toEqual([...statuses].sort())
+  })
+
+  test('binds a session to the area of its newest inbox read, whose mark is the area\'s read position', async () => {
+    const { byArea, areaBySession } = indexMarks(
+      readMarks([markLine('po', 10, S1, NOW), markLine('lead', 4, S2, NOW), markLine('po', 24, S1, NOW + 1)].join('\n')).marks,
     )
-    expect(task?.status).toBe('verifying')
-    expect(task?.shown).toBe('verifying')
-    expect(task?.pause).toBe(null)
-  })
-
-  test('a pause over its tier shows the task paused, with its marker and why', async () => {
-    const [paused, kept] = readLines(
-      [createLine('T1', { owner: 'po', by: 'po', at: NOW, tier: 4 }), createLine('T2', { owner: 'po', by: 'po', at: NOW, tier: 1 })],
-      [],
-      [pauseLine('P1', NOW, [4], 'budget cut')],
-    )
-    expect(paused?.shown).toBe('paused')
-    expect(paused?.markers).toEqual(['⏸P1'])
-    expect(paused?.pause).toBe('P1: budget cut')
-    expect(kept?.shown).toBe('open')
-    expect(kept?.pause).toBe(null)
-  })
-
-  test('a renamed session owns its tasks under its new name', async () => {
-    const [task] = readLines([createLine('T1', { owner: 'toolchain', by: 'lead', at: NOW })], [aliasLine('toolchain', 'teamrig', NOW + HOUR)])
-    expect(task?.owner).toBe('teamrig')
-  })
-
-  test('binds a session to the area of its newest inbox read and counts unread lines past the mark', async () => {
-    const marks = parseJsonl(
-      [markLine('po', 10, 's1', NOW), markLine('lead', 4, 's2', NOW), markLine('po', 24, 's1', NOW + 1)].join('\n'),
-      parseMark,
-    ).records
-    expect(areaOfSession(marks, 's1')).toBe('po')
-    expect(areaOfSession(marks, 's3')).toBe(null)
-    expect(readTo(marks, 'po')).toBe(24)
-    expect(unreadLines(30, 24)).toBe(6)
-    expect(unreadLines(5, 24)).toBe(5)
-    expect(unreadLines(30, undefined)).toBe(null)
+    expect(areaBySession.get(S1)).toBe('po')
+    expect(areaBySession.get(S3)).toBe(undefined)
+    expect(byArea.get('po')?.line).toBe(24)
   })
 })
 
 describe('view', () => {
-  test('lists the area in plan order: tier, then due (undated last), then id', async () => {
+  test('lists the area in plan order: priority, then due (undated last), then id', async () => {
     const tasks = fold(
-      createLine('T1', { owner: 'po', by: 'po', at: NOW, tier: 3 }),
-      createLine('T2', { owner: 'po', by: 'po', at: NOW, tier: 1 }),
-      createLine('T3', { owner: 'po', by: 'po', at: NOW, tier: 3, due: '2026-10-14' }),
-      createLine('T4', { owner: 'po', by: 'po', at: NOW, tier: 3, due: '2026-10-14 09:00' }),
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 3 }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW, priority: 1 }),
+      createLine('T3', { owner: 'po', by: 'po', at: NOW, priority: 3, due: '2026-10-14' }),
+      createLine('T4', { owner: 'po', by: 'po', at: NOW, priority: 3, due: '2026-10-14 09:00' }),
       createLine('T5', { owner: 'etl', by: 'po', at: NOW }),
     )
     const view = areaView(tasks, 'po', NOW)
@@ -227,8 +193,8 @@ describe('view', () => {
   test('a date-only due is due at the end of that UTC day', async () => {
     const [task] = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW, due: '2026-10-13' }))
     if (!task) throw new Error('no task')
-    expect(dueInstant('2026-10-13')).toBe(Date.UTC(2026, 9, 14) - 1)
     expect(flagsOf(task, NOW)).toEqual([])
+    expect(flagsOf(task, Date.UTC(2026, 9, 13, 23, 59))).toEqual([])
     expect(flagsOf(task, Date.UTC(2026, 9, 14, 0, 1))).toEqual(['overdue'])
   })
 
@@ -249,8 +215,9 @@ describe('view', () => {
     const regoaled = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', goals: ['G11'] }))
     expect(sameView(base, { ...base, tasks: regoaled })).toBe(false)
     expect(sameView(base, { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, title: 'Renamed' })) })).toBe(false)
-    const detailed = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', detail: 'the steps' }))
-    expect(sameView(base, { ...base, tasks: detailed })).toBe(false)
+    const named = rowsOf([createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', priority: 7 })], PRIORITIES)
+    const bare = rowsOf([createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', priority: 7 })])
+    expect(sameView({ ...base, tasks: bare }, { ...base, tasks: named })).toBe(false)
   })
 
   test('groups every owner with active tasks and counts the blocked ones', async () => {
@@ -287,7 +254,7 @@ describe('rows', () => {
 
   test('a task is one block to press, its title wrapping under its id, a blocked one with its note, finished ones dim', async () => {
     const tasks = fold(
-      createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, tier: 2, due: '2026-10-14', title: 'Ship it' }),
+      createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, due: '2026-10-14', title: 'Ship it' }),
       createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR }),
       statusLine('T2', 'po', NOW, 'blocked', 'needs owner'),
       createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Old work' }),
@@ -297,7 +264,7 @@ describe('rows', () => {
     expect(blocks.map(b => b.key)).toEqual(['header', 'active:T1', 'active:T2', 'finished', 'finished:T3'])
     expect(textAt(blocks, 'header')).toBe('po · 2 active · inbox 2 unread')
     expect(rowAt(blocks, 'header')?.rule).toBe(true)
-    expect(textAt(blocks, 'active:T1')).toBe('▸ ○ T1 t2 10-14 NEW Ship it')
+    expect(textAt(blocks, 'active:T1')).toBe('▸ ○ T1 p2 10-14 NEW Ship it')
     expect(rowAt(blocks, 'active:T1')?.hang).toEqual({ text: '    ' })
     expect(blockAt(blocks, 'active:T1')?.toggle).toBe('T1')
     expect(blockAt(blocks, 'active:T2')?.rows.map(r => r.key)).toEqual(['active:T2', 'active-note:T2'])
@@ -315,25 +282,24 @@ describe('rows', () => {
     expect(paneBlocks({ ...unread, problem: 'EACCES' }, 'mine')[0]?.key).toBe('problem')
   })
 
-  test('draws a glyph for every status the register has, and for no other (the contract the types spell out)', async () => {
-    const shownStatuses: readonly ShownStatus[] = [...STATUSES, 'paused']
-    expect(Object.keys(GLYPH).sort()).toEqual([...shownStatuses].sort())
+  test('the register\'s problem leads the body as a WARN line', async () => {
+    const blocks = paneBlocks({ ...snapshotOf([], 'po'), problem: 'events.jsonl: 1 unreadable line(s)' }, 'mine')
+    expect(blocks.map(b => b.key)).toEqual(['problem', 'header', 'none-active'])
+    expect(rowAt(blocks, 'problem')?.spans).toEqual([{ text: 'WARN events.jsonl: 1 unreadable line(s)', color: 'warning' }])
   })
 
-  test('a task held by a link or wait draws blocked with its markers and what holds it; a verifying one draws ◇', async () => {
+  test('an in-progress task draws ◐ and a blocked one ■, a blocked one with nothing to say drawing no note; both count active', async () => {
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'First' }),
+      statusLine('T1', 'po', NOW, 'in-progress'),
       createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Second' }),
-      linkLine('T2', 'po', NOW - HOUR, 'blocked-by', 'T1'),
-      waitLine('T2', 'po', NOW - HOUR, 'owner', 'pick one'),
-      createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Third' }),
-      statusLine('T3', 'po', NOW, 'verifying'),
+      statusLine('T2', 'po', NOW, 'blocked'),
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
-    expect(textAt(blocks, 'active:T2')).toBe('▸ ■ T2 t3 ⛔T1 ⏳owner Second')
-    expect(textAt(blocks, 'active-note:T2')).toBe('    ↳ waits on T1 · owner: pick one')
-    expect(textAt(blocks, 'active:T3')).toBe('▸ ◇ T3 t3 Third')
-    expect(textAt(blocks, 'header')).toBe('po · 3 active · inbox 2 unread')
+    expect(textAt(blocks, 'active:T1')).toBe('▸ ◐ T1 p3 First')
+    expect(textAt(blocks, 'active:T2')).toBe('▸ ■ T2 p3 Second')
+    expect(blockAt(blocks, 'active:T2')?.rows.map(r => r.key)).toEqual(['active:T2'])
+    expect(textAt(blocks, 'header')).toBe('po · 2 active · inbox 2 unread')
   })
 
   test('an expanded task shows its quoted ask, who asked, its status note and the files nothing was quoted from, on a guide', async () => {
@@ -364,130 +330,40 @@ describe('rows', () => {
     expect(textAt(blocks, 'active:T1')).toMatch(/^▾ ■ T1 /)
     expect(textAt(blocks, 'active-detail:T1:gap:0')).toBe('    │ ')
     expect(textAt(blocks, 'active-detail:T1:quote:0:0')).toBe('    │ 2026-10-13 lead: ship the pane')
-    expect(textAt(blocks, 'active-detail:T1:asked')).toBe('    │ asked by owner · added by lead · 10-13 13:00 · G10.2 · G15')
+    expect(textAt(blocks, 'active-detail:T1:asked')).toBe('    │ asked by owner · added by lead · 10-13 13:00 · p3 · week 10-13 · G10.2 · G15')
     expect(textAt(blocks, 'active-detail:T1:note')).toBe('    │ blocked: needs owner · evidence abc123')
     expect(textAt(blocks, 'active-detail:T1:see')).toBe('    │ see docs/x.md')
     expect(textAt(blocks, 'active-detail:T2:see')).toBe('    │ see quote')
-    expect(textAt(blocks, 'active-detail:T2:asked')).toBe('    │ asked by po · 10-13 13:00 · G10.2')
+    expect(textAt(blocks, 'active-detail:T2:asked')).toBe('    │ asked by po · 10-13 13:00 · p3 · week 10-13 · G10.2')
     const details = blocks.flatMap(b => b.rows).filter(r => r.key.includes('-detail:'))
     expect(details.every(r => r.hang?.text === '    │ ' && r.spans[0]?.text === '    │ ')).toBe(true)
   })
 
-  test('an expanded task shows its register v2 facts, each only when set, while a collapsed one stays one line', async () => {
-    const tasks = fold(
-      createLine('T1', { owner: 'po', by: 'lead', at: NOW - 3 * HOUR, title: 'Pane v2' }),
-      createLine('T2', { owner: 'po', by: 'lead', at: NOW - 3 * HOUR, title: 'Show the fields', due: '2026-10-14' }),
-      createLine('T3', { owner: 'po', by: 'lead', at: NOW - 3 * HOUR, title: 'Harden it' }),
-      createLine('T4', { owner: 'po', by: 'lead', at: NOW - 3 * HOUR, title: 'Vendor the core' }),
-      linkLine('T2', 'po', NOW - 2 * HOUR, 'parent', 'T1'),
-      linkLine('T3', 'po', NOW - 2 * HOUR, 'parent', 'T1'),
-      linkLine('T2', 'po', NOW - 2 * HOUR, 'blocked-by', 'T4'),
-      statusLine('T4', 'po', NOW - 2 * HOUR, 'done'),
-      updateLine('T2', 'po', NOW - 2 * HOUR, { kind: 'code', labels: ['token-saving', 'ui'], start: '2026-10-13', eta: '2026-10-15', est: { value: 1.5, unit: 'd' } }),
-      updateLine('T2', 'po', NOW - HOUR, { eta: '2026-10-16', due: '2026-10-15' }),
-      statusLine('T2', 'po', NOW - HOUR, 'in-progress'),
-      statusLine('T2', 'po', NOW - HOUR / 2, 'verifying', 'shipped', 'abc123', { evidenceDue: '2026-10-15 06:00' }),
-      waitLine('T2', 'po', NOW - HOUR / 2, 'owner', 'approve the CSP'),
-      noteLine('T2', 'po', NOW - 40 * 60_000, 'n1'),
-      noteLine('T2', 'po', NOW - 30 * 60_000, 'n2'),
-      noteLine('T2', 'po', NOW - 20 * 60_000, 'n3'),
-      noteLine('T2', 'po', NOW - 10 * 60_000, 'n4'),
+  test('an expanded task names its priority as the team config does, each fact only when set; the row keeps the bare number', async () => {
+    const tasks = rowsOf(
+      [
+        createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, ref: null, week: null, goals: [], title: 'Bare' }),
+        createLine('T2', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 7, title: 'Named' }),
+        statusLine('T2', 'po', NOW, 'in-progress', 'halfway'),
+      ],
+      PRIORITIES,
     )
-    const t2 = tasks.find(t => t.id === 'T2')
-    expect(t2?.notes.items.map(n => n.text)).toEqual(['n4', 'n3', 'n2'])
-    expect(t2?.notes.more).toBe(4 - NOTES_SHOWN)
-    const quiet = { ref: 'docs/x.md', quotes: [] }
-    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: quiet, T2: quiet })
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [] }, T2: { ref: 'docs/x.md', quotes: [] } })
+    expect(blockAt(blocks, 'active:T1')?.rows.map(r => r.key)).toEqual(['active:T1', 'active-detail:T1:gap:facts', 'active-detail:T1:asked'])
+    expect(textAt(blocks, 'active-detail:T1:asked')).toBe('    │ asked by owner · added by lead · 10-13 13:00 · p2 correctness')
     expect(blockAt(blocks, 'active:T2')?.rows.map(r => r.key)).toEqual([
       'active:T2',
       'active-detail:T2:gap:facts',
       'active-detail:T2:asked',
-      'active-detail:T2:kind',
-      'active-detail:T2:dates',
-      'active-detail:T2:estimate',
       'active-detail:T2:note',
-      'active-detail:T2:evidence-due',
-      'active-detail:T2:parent',
-      'active-detail:T2:blocked-by',
-      'active-detail:T2:blocked-by:0',
-      'active-detail:T2:wait:0',
-      'active-detail:T2:notes',
-      'active-detail:T2:notes:0',
-      'active-detail:T2:notes:1',
-      'active-detail:T2:notes:2',
-      'active-detail:T2:notes:3',
       'active-detail:T2:see',
     ])
-    expect(textAt(blocks, 'active-detail:T2:kind')).toBe('    │ kind code · labels token-saving,ui')
-    expect(textAt(blocks, 'active-detail:T2:dates')).toBe('    │ start 10-13 · started 10-13 13:00 · eta 10-16 (moved 1×) · due moved 1×')
-    expect(textAt(blocks, 'active-detail:T2:estimate')).toBe('    │ est 1.5d')
-    expect(textAt(blocks, 'active-detail:T2:note')).toBe('    │ verifying: shipped · evidence abc123')
-    expect(textAt(blocks, 'active-detail:T2:evidence-due')).toBe('    │ evidence due 10-15 06:00')
-    expect(textAt(blocks, 'active-detail:T2:parent')).toBe(`    │ part of ${GLYPH.open} T1 Pane v2`)
-    expect(textAt(blocks, 'active-detail:T2:blocked-by:0')).toBe(`    │   └ ${GLYPH.done} T4 Vendor the core`)
-    expect(textAt(blocks, 'active-detail:T2:wait:0')).toBe('    │ waits on owner: approve the CSP')
-    expect(textAt(blocks, 'active-detail:T2:notes:0')).toBe('    │   ├ 10-13 13:50 po: n4')
-    expect(textAt(blocks, 'active-detail:T2:notes:3')).toBe("    │   └ +1 older (the register's show has them)")
-    // The parent shows its sub-tasks as a small tree and nothing it has no value for.
-    expect(blockAt(blocks, 'active:T1')?.rows.map(r => r.key)).toEqual([
-      'active:T1',
-      'active-detail:T1:gap:facts',
-      'active-detail:T1:asked',
-      'active-detail:T1:estimate',
-      'active-detail:T1:children',
-      'active-detail:T1:children:0',
-      'active-detail:T1:children:1',
-      'active-detail:T1:see',
-    ])
-    // A parent's size is its sub-tasks', as the register's show sums it.
-    expect(textAt(blocks, 'active-detail:T1:estimate')).toBe('    │ est 1.5d (sub-tasks)')
-    expect(textAt(blocks, 'active-detail:T1:children:0')).toBe(`    │   ├ ${GLYPH[t2?.shown ?? 'open']} T2 Show the fields`)
-    expect(textAt(blocks, 'active-detail:T1:children:1')).toBe(`    │   └ ${GLYPH.open} T3 Harden it`)
-    // A collapsed task with v2 facts is still the one line the list draws.
-    expect(blockAt(blocks, 'active:T3')?.rows.map(r => r.key)).toEqual(['active:T3'])
+    expect(textAt(blocks, 'active-detail:T2:asked')).toBe('    │ asked by owner · added by lead · 10-13 13:00 · p7 polish · week 10-13 · G10.2')
+    expect(textAt(blocks, 'active-detail:T2:note')).toBe('    │ in-progress: halfway')
     const collapsed = paneBlocks(snapshotOf(tasks, 'po'), 'mine', {})
+    expect(textAt(collapsed, 'active:T1')).toBe('▸ ○ T1 p2 NEW Bare')
+    expect(textAt(collapsed, 'active:T2')).toBe('▸ ◐ T2 p7 Named')
     expect(collapsed.flatMap(b => b.rows).filter(r => r.key.includes('-detail:'))).toEqual([])
-  })
-
-  test('an expanded parent names its first sub-tasks by number and says how many more it has', async () => {
-    const children = Array.from({ length: CHILDREN_SHOWN + 2 }, (_, i) => `T${i + 2}`)
-    const tasks = fold(
-      createLine('T1', { owner: 'po', by: 'lead', at: NOW, title: 'Parent' }),
-      ...children.flatMap(id => [createLine(id, { owner: 'po', by: 'lead', at: NOW }), linkLine(id, 'po', NOW, 'parent', 'T1')]),
-    )
-    const parent = tasks.find(t => t.id === 'T1')
-    expect(parent?.children.items.map(c => c.id)).toEqual(children.slice(0, CHILDREN_SHOWN))
-    expect(parent?.children.more).toBe(2)
-    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: 'docs/x.md', quotes: [] } })
-    const tree = blockAt(blocks, 'active:T1')?.rows.filter(r => r.key.startsWith('active-detail:T1:children')) ?? []
-    expect(tree.length).toBe(1 + CHILDREN_SHOWN + 1)
-    expect(textOf(tree[CHILDREN_SHOWN] ?? { key: '', spans: [] })).toBe(`    │   ├ ${GLYPH.open} T9 task T9`)
-    expect(textOf(tree[CHILDREN_SHOWN + 1] ?? { key: '', spans: [] })).toBe('    │   └ +2 more')
-  })
-
-  test("an estimate adds its share of a fleet week only from a fresh usage run, else it reads in its own unit", async () => {
-    const lines = [createLine('T1', { owner: 'po', by: 'lead', at: NOW }), updateLine('T1', 'po', NOW, { est: { value: 1.5, unit: 'd' } })]
-    const day = { cr: 100_000_000, msgs: 1000 }
-    const run = (date: string) => parseUsageRun(date, JSON.parse(usageRunJson({ '2026-10-12': day, '2026-10-13': day })))
-    expect(readLines(lines)[0]?.estimate).toBe('est 1.5d')
-    expect(readLines(lines, [], [], run('2026-10-01'))[0]?.estimate).toBe('est 1.5d')
-    // 1.5 days at 1000 messages a day of 100k tokens each, over a fleet week of 2 × 100M × 7/2.
-    expect(readLines(lines, [], [], run('2026-10-13'))[0]?.estimate).toBe('est 1.5d ≈ 0.15B = 21.4% of a fleet week')
-    expect(readLines([createLine('T1', { owner: 'po', by: 'lead', at: NOW })], [], [], run('2026-10-13'))[0]?.estimate).toBe(null)
-  })
-
-  test("an expanded task's detail comes first, before its quotes", async () => {
-    const tasks = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'owner', ref: 'docs/x.md:9', detail: 'ship it; done = merged' }))
-    const quotes = [{ ref: 'docs/x.md:9', lines: ['the roadmap line'] }]
-    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: 'docs/x.md:9', quotes } })
-    expect(blockAt(blocks, 'active:T1')?.rows.map(r => r.key).slice(0, 5)).toEqual([
-      'active:T1',
-      'active-detail:T1:gap:detail',
-      'active-detail:T1:detail',
-      'active-detail:T1:gap:0',
-      'active-detail:T1:quote:0:0',
-    ])
-    expect(textAt(blocks, 'active-detail:T1:detail')).toBe('    │ ship it; done = merged')
   })
 
   test('quotes read for an older ref are not shown once the ref changes', async () => {
@@ -625,12 +501,12 @@ describe('layout', () => {
     expect(failedDrawing(new TypeError("Cannot read properties of undefined (reading 'items')"))).toEqual([
       {
         key: 'error',
-        spans: [{ text: "⚠ the pane could not draw: Cannot read properties of undefined (reading 'items')", color: 'error' }],
+        spans: [{ text: "WARN the pane could not draw: Cannot read properties of undefined (reading 'items')", color: 'error' }],
         wrap: 'wrap',
         toggle: null,
       },
     ])
-    expect(failedDrawing('state store unavailable').map(textOf)).toEqual(['⚠ the pane could not draw: state store unavailable'])
+    expect(failedDrawing('state store unavailable').map(textOf)).toEqual(['WARN the pane could not draw: state store unavailable'])
   })
 })
 
@@ -683,24 +559,12 @@ describe('command', () => {
   })
 })
 
-const PATHS: RegisterPaths = {
-  events: 'R/tasks/events.jsonl',
-  aliases: 'R/tasks/aliases.jsonl',
-  pauses: 'R/tasks/pauses.jsonl',
-  marks: 'R/tasks/inbox-marks.jsonl',
-  inboxDir: 'R/inbox',
-  usageDir: 'R/usage',
-}
-
 describe('source', () => {
-  test('the register files sit under its folders, with slashes made forward and no trailing one', async () => {
-    expect(registerPaths({ tasksDir: 'D:\\team\\state\\', inboxDir: 'D:/team/state/inbox/', usageDir: 'D:\\u' })).toEqual({
+  test('the register files sit under its folders, named as teamrig names them, with slashes made forward and no trailing one', async () => {
+    expect(registerPaths({ tasksDir: 'D:\\team\\state\\', inboxDir: 'D:/team/state/inbox/' })).toEqual({
       events: 'D:/team/state/events.jsonl',
-      aliases: 'D:/team/state/aliases.jsonl',
-      pauses: 'D:/team/state/pauses.jsonl',
       marks: 'D:/team/state/inbox-marks.jsonl',
       inboxDir: 'D:/team/state/inbox',
-      usageDir: 'D:/u',
     })
   })
 
@@ -724,23 +588,47 @@ describe('source', () => {
   test('re-reads a file only when its stamp moves', async () => {
     const files = new MemoryFiles()
     files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW }))
-    files.write(PATHS.marks, markLine('po', 1, 's1', NOW))
+    files.write(PATHS.marks, markLine('po', 2, S1, NOW, 'b'))
     files.write(`${PATHS.inboxDir}/po.md`, 'a\nb\n\nc\n')
     const source = new TaskRegisterSource(files, PATHS)
 
-    const first = await source.poll({ claudeSession: 's1', pinned: null, now: NOW })
+    const first = await source.poll({ claudeSession: S1, pinned: null, now: NOW })
     expect(first?.area).toBe('po')
     expect(first?.areaSource).toBe('inbox-read')
-    expect(first?.unreadInbox).toBe(2)
+    expect(first?.unreadInbox).toBe(1)
     expect(files.reads.length).toBe(3)
 
-    expect(await source.poll({ claudeSession: 's1', pinned: null, now: NOW })).toBe(null)
+    expect(await source.poll({ claudeSession: S1, pinned: null, now: NOW })).toBe(null)
     expect(files.reads.length).toBe(3)
 
     files.write(PATHS.events, [createLine('T1', { owner: 'po', by: 'po', at: NOW }), statusLine('T1', 'po', NOW, 'done')].join('\n'))
-    const next = await source.poll({ claudeSession: 's1', pinned: null, now: NOW })
+    const next = await source.poll({ claudeSession: S1, pinned: null, now: NOW })
     expect(next?.tasks[0]?.status).toBe('done')
     expect(files.reads.length).toBe(4)
+  })
+
+  test('counts unread inbox lines as teamrig does: past the last line read, found by its hash after a trim, all after a rewrite', async () => {
+    const files = new MemoryFiles()
+    const inbox = `${PATHS.inboxDir}/po.md`
+    files.write(inbox, 'one\ntwo\nthree\n')
+    files.write(PATHS.marks, markLine('po', 2, S1, NOW, 'two'))
+    const source = new TaskRegisterSource(files, PATHS)
+    const unread = async () => (await source.poll({ claudeSession: S1, pinned: null, now: NOW, force: true }))?.unreadInbox
+    expect(await unread()).toBe(1)
+    // Appended: the lines past the mark.
+    files.write(inbox, 'one\ntwo\nthree\nfour\n')
+    expect(await unread()).toBe(2)
+    // Trimmed from the top: the last line read moved up, and only what follows it is unread.
+    files.write(inbox, 'two\nthree\nfour\n')
+    expect(await unread()).toBe(2)
+    // Rewritten: the last line read is gone, so every line is unread.
+    files.write(inbox, 'new one\nnew two\n')
+    expect(await unread()).toBe(2)
+    files.write(PATHS.marks, [markLine('po', 2, S1, NOW, 'two'), markLine('po', 2, S1, NOW + 1, 'new two')].join('\n'))
+    expect(await unread()).toBe(0)
+    // A mark that knows only a count (teamrig before line hashes) trusts it unless the inbox shrank below it.
+    files.write(PATHS.marks, markLine('po', 1, S1, NOW))
+    expect(await unread()).toBe(1)
   })
 
   test('a snapshot holds only the tasks a drawing can show: active, or finished within a day', async () => {
@@ -754,92 +642,46 @@ describe('source', () => {
       createLine('T4', { owner: 'etl', by: 'po', at: NOW - 3 * DAY }),
       statusLine('T4', 'etl', NOW - 2 * DAY, 'blocked', 'waits on T1'),
       createLine('T5', { owner: 'po', by: 'po', at: NOW - 3 * DAY }),
-      linkLine('T5', 'po', NOW - 3 * DAY, 'parent', 'T2'),
     ].join('\n'))
-    const snap = await new TaskRegisterSource(files, PATHS).poll({ claudeSession: 's1', pinned: 'po', now: NOW })
+    const snap = await new TaskRegisterSource(files, PATHS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
     expect(snap?.tasks.map(task => task.id)).toEqual(['T1', 'T3', 'T4', 'T5'])
-    expect(snap?.tasks.find(task => task.id === 'T5')?.parent).toEqual({ id: 'T2', shown: 'done', title: 'task T2' })
 
     const big = new MemoryFiles()
     big.write(PATHS.events, bigRegister(20_000).join('\n'))
-    const all = await new TaskRegisterSource(big, PATHS).poll({ claudeSession: 's1', pinned: 'po', now: NOW })
+    const all = await new TaskRegisterSource(big, PATHS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
     // po's 408 and the last task, its done line past the 20,000th; none of the 3,673 finished a month ago.
     expect(all?.tasks.length).toBe(409)
+    expect(all?.problem).toBe(null)
   })
 
-  test('v2 lines, renames and pauses read with no problem, and a moved rename or pause file refolds the tasks', async () => {
+  test('lines teamrig skips show as the problem with its counts, and a read that skips none clears it', async () => {
     const files = new MemoryFiles()
-    files.write(
-      PATHS.events,
-      [createLine('T1', { owner: 'toolchain', by: 'lead', at: NOW, tier: 4 }), noteLine('T1', 'toolchain', NOW, 'started')].join('\n'),
-    )
+    const good = createLine('T1', { owner: 'po', by: 'lead', at: NOW })
+    files.write(PATHS.events, [good, '{"v":2', createLine('T2', { owner: 'po', by: 'lead', at: NOW, lineKeys: { v: 3 } }), statusLine('T9', 'po', NOW, 'done')].join('\n'))
     const source = new TaskRegisterSource(files, PATHS)
-    const first = await source.poll({ claudeSession: 's1', pinned: 'teamrig', now: NOW })
-    expect(first?.problem).toBe(null)
-    expect(first?.tasks[0]?.owner).toBe('toolchain')
-
-    files.write(PATHS.aliases, aliasLine('toolchain', 'teamrig', NOW))
-    const renamed = await source.poll({ claudeSession: 's1', pinned: 'teamrig', now: NOW })
-    expect(renamed?.tasks[0]?.owner).toBe('teamrig')
-
-    files.write(PATHS.pauses, [pauseLine('P1', NOW, [4], 'budget'), '{"type":"pause"'].join('\n'))
-    const paused = await source.poll({ claudeSession: 's1', pinned: 'teamrig', now: NOW })
-    expect(paused?.tasks[0]?.shown).toBe('paused')
-    expect(paused?.problem).toBe('1 register line(s) this pane cannot read')
+    const first = await source.poll({ claudeSession: S1, pinned: 'po', now: NOW })
+    expect(first?.tasks.map(task => task.id)).toEqual(['T1'])
+    expect(first?.problem).toBe('events.jsonl: 1 unreadable line(s), 1 line(s) from a newer teamrig, 1 event(s) naming no task')
+    files.write(PATHS.events, good)
+    expect((await source.poll({ claudeSession: S1, pinned: 'po', now: NOW }))?.problem).toBe(null)
   })
 
-  test('a pin wins over the inbox read, and missing files read as an empty register', async () => {
+  test('names each task\'s priority from the team config it was given', async () => {
+    const files = new MemoryFiles()
+    files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 2 }))
+    const named = await new TaskRegisterSource(files, PATHS, PRIORITIES).poll({ claudeSession: S1, pinned: 'po', now: NOW })
+    expect(named?.tasks[0]?.priorityName).toBe('correctness')
+    const bare = await new TaskRegisterSource(files, PATHS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
+    expect(bare?.tasks[0]?.priorityName).toBe(null)
+  })
+
+  test('a pin wins over the inbox read, and missing files read as an empty register with no unread count', async () => {
     const source = new TaskRegisterSource(new MemoryFiles(), PATHS)
-    const snap = await source.poll({ claudeSession: 's1', pinned: 'etl', now: NOW })
+    const snap = await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW })
     expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, problem: null, now: NOW })
   })
 })
 
-describe('usage', () => {
-  const day = { cr: 100_000_000, msgs: 1000 }
-
-  test('reads the newest run by the date in its name, lists at most once a minute, and keeps the last run when a read fails', async () => {
-    const files = new MemoryFiles()
-    files.write('U/usage-2026-10-13.json', usageRunJson({ '2026-10-13': day }))
-    files.write('U/usage-2026-10-11.json', usageRunJson({ '2026-10-11': day }))
-    files.write('U/notes.txt', 'not a run')
-    files.write('U/live/usage-2026-10-14.json', usageRunJson({ '2026-10-14': day }))
-    const runs = new UsageRuns(files, 'U')
-    expect(await runs.refresh(NOW)).toBe(true)
-    expect(runs.current?.date).toBe('2026-10-13')
-    expect(files.reads).toEqual(['U/usage-2026-10-13.json'])
-
-    files.write('U/usage-2026-10-14.json', usageRunJson({ '2026-10-14': day }))
-    expect(await runs.refresh(NOW + USAGE_LIST_MS - 1)).toBe(false)
-    expect(files.lists).toEqual(['U'])
-
-    files.failNextRead = 'EBUSY: resource busy or locked'
-    expect(await runs.refresh(NOW + USAGE_LIST_MS)).toBe(false)
-    expect(runs.current?.date).toBe('2026-10-13')
-    expect(await runs.refresh(NOW + 2 * USAGE_LIST_MS)).toBe(true)
-    expect(runs.current?.date).toBe('2026-10-14')
-    expect(await runs.refresh(NOW + 3 * USAGE_LIST_MS)).toBe(false)
-    expect(files.reads.length).toBe(3)
-
-    files.write('U/usage-2026-10-15.json', 'not json')
-    expect(await runs.refresh(NOW + 4 * USAGE_LIST_MS)).toBe(true)
-    expect(runs.current).toBe(null)
-  })
-
-  test('a new usage run refolds the tasks, so an estimate gains its share of a fleet week', async () => {
-    const files = new MemoryFiles()
-    files.write(PATHS.events, [createLine('T1', { owner: 'po', by: 'po', at: NOW }), updateLine('T1', 'po', NOW, { est: { value: 1, unit: 'd' } })].join('\n'))
-    const source = new TaskRegisterSource(files, PATHS)
-    const first = await source.poll({ claudeSession: 's1', pinned: 'po', now: NOW })
-    expect(first?.tasks[0]?.estimate).toBe('est 1d')
-    expect(first?.problem).toBe(null)
-
-    files.write(`${PATHS.usageDir}/usage-2026-10-13.json`, usageRunJson({ '2026-10-12': day, '2026-10-13': day }))
-    expect(await source.poll({ claudeSession: 's1', pinned: 'po', now: NOW + USAGE_LIST_MS - 1 })).toBe(null)
-    const next = await source.poll({ claudeSession: 's1', pinned: 'po', now: NOW + USAGE_LIST_MS })
-    expect(next?.tasks[0]?.estimate).toMatch(/^est 1d ≈ .* of a fleet week$/)
-  })
-})
 
 /** Ports over a MemoryFiles register, recording what the class publishes and pins; `clock.now` moves its time. */
 function livePorts(files: MemoryFiles, ids: string[]) {
@@ -869,7 +711,7 @@ describe('live', () => {
     const files = new MemoryFiles()
     files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW }))
     files.failNextRead = 'EBUSY: events.jsonl'
-    const { ports, snapshot } = livePorts(files, ['s1'])
+    const { ports, snapshot } = livePorts(files, [S1])
     const live = new LiveRegister(ports)
 
     await live.refresh()
@@ -883,7 +725,7 @@ describe('live', () => {
     const files = new MemoryFiles()
     const first = createLine('T1', { owner: 'po', by: 'po', at: NOW })
     files.write(PATHS.events, first)
-    const { ports, snapshot, writes } = livePorts(files, ['s1'])
+    const { ports, snapshot, writes } = livePorts(files, [S1])
     const live = new LiveRegister(ports)
     await live.refresh()
     expect(snapshot().tasks.length).toBe(1)
@@ -906,20 +748,20 @@ describe('live', () => {
   })
 
   test('says what to set when nothing names where the register is', async () => {
-    const { ports, snapshot } = livePorts(new MemoryFiles(), ['s1'])
+    const { ports, snapshot } = livePorts(new MemoryFiles(), [S1])
     await new LiveRegister({ ...ports, source: { missing: 'no register: set its folders' } }).refresh()
     expect(snapshot().problem).toBe('no register: set its folders')
   })
 
   test('a pin is saved under the session and follows a /clear to the new session id', async () => {
-    const ids = ['s1']
+    const ids = [S1]
     const { ports, pins, snapshot } = livePorts(new MemoryFiles(), ids)
     const live = new LiveRegister(ports)
     await live.pin('etl')
-    expect(pins.get('s1')).toBe('etl')
+    expect(pins.get(S1)).toBe('etl')
     expect(snapshot().area).toBe('etl')
 
-    ids[0] = 's2'
+    ids[0] = S2
     await live.refresh()
     expect(snapshot().area).toBe(null)
 
@@ -930,12 +772,12 @@ describe('live', () => {
   test('writes only what changes the drawing: not a file move, nor a tick that moves no label', async () => {
     const files = new MemoryFiles()
     files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' }))
-    const { ports, clock, snapshot, writes } = livePorts(files, ['s1'])
+    const { ports, clock, snapshot, writes } = livePorts(files, [S1])
     const live = new LiveRegister(ports)
     await live.pin('po')
     expect(writes()).toBe(1)
 
-    files.write(PATHS.marks, markLine('etl', 0, 'another-session', NOW))
+    files.write(PATHS.marks, markLine('etl', 0, S2, NOW))
     await live.refresh()
     clock.now = NOW + HOUR / 2
     await live.tick()
@@ -950,7 +792,7 @@ describe('live', () => {
   test('a tick whose clock read fails shows the problem, and the next poll draws the tasks again', async () => {
     const files = new MemoryFiles()
     files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW }))
-    const { ports, snapshot } = livePorts(files, ['s1'])
+    const { ports, snapshot } = livePorts(files, [S1])
     let isClockDown = false
     const live = new LiveRegister({
       ...ports,
@@ -974,7 +816,7 @@ describe('live', () => {
   test('a write that fails never rejects a poll or a tick, and the next poll writes again', async () => {
     const files = new MemoryFiles()
     files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW }))
-    const { ports, snapshot, clock } = livePorts(files, ['s1'])
+    const { ports, snapshot, clock } = livePorts(files, [S1])
     let failures = 0
     let isStoreDown = true
     const live = new LiveRegister({
@@ -999,7 +841,7 @@ describe('live', () => {
   })
 
   test('starts the poll and the tick, and stop cancels both', async () => {
-    const { ports } = livePorts(new MemoryFiles(), ['s1'])
+    const { ports } = livePorts(new MemoryFiles(), [S1])
     const started: number[] = []
     let cancelled = 0
     const live = new LiveRegister(ports)

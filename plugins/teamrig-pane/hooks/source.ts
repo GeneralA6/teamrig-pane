@@ -1,36 +1,29 @@
-// Loads the register's files for one Claude session: each file is re-read only when its size
-// or mtime moved, so a poll that finds nothing new costs a few stats and no parsing (the usage
-// folder a listing at most every minute, usage.ts).
+// Loads the register's files for one Claude session: each file is re-read only when its size or
+// mtime moved, so a poll that finds nothing new costs a few stats and no parsing. Each file is parsed
+// by teamrig's own read entry (hooks/core/read), so the pane shows what teamrig's commands show.
 // File access goes through `Files`, which register.tsx backs with $.fs and tests with a fake.
 import type { AreaSource, Snapshot, TaskRow } from '../types'
-import { parseEvent, type TaskEvent } from './core/events'
-import { parseAlias, type AliasRecord } from './core/names'
-import { parsePauseRecord, type PauseLogRecord } from './core/pauses'
 import {
-  areaOfSession,
-  countInboxLines,
-  parseJsonl,
-  parseMark,
-  readTasks,
-  readTo,
-  unreadLines,
-  type InboxMark,
-  type Parsed,
-} from './log'
-import { UsageRuns } from './usage'
+  indexMarks,
+  inboxLines,
+  readMarks,
+  readRegister,
+  taskNumber,
+  unreadOf,
+  type MarkLogRead,
+  type PriorityConfig,
+  type RegisterSnapshot,
+} from './core/read/index'
+import { lineHash } from './line-hash'
+import { rowOf } from './log'
 import { isActive, isRecentlyFinished } from './view'
 
 export type FileStamp = { mtimeMs: number; size: number }
-
-/** A file in a listed folder, with its stamp. */
-export type ListedFile = FileStamp & { name: string }
 
 export interface Files {
   /** null when nothing is at the path. */
   stamp(path: string): Promise<FileStamp | null>
   read(path: string): Promise<string>
-  /** The files in a folder (not its sub-folders); empty when the folder is not there. */
-  list(dir: string): Promise<ListedFile[]>
 }
 
 /** A refusal naming a file that is there but cannot be read now: locked by a writer, or denied. */
@@ -52,33 +45,21 @@ export async function unlessMissing<T, M>(call: () => Promise<T>, exists: () => 
   }
 }
 
-/**
- * The register's files: its events, renames and pauses, which the tasks are folded from, the inbox read marks, and
- * the token-usage folder an estimate's share of a fleet week is read from.
- */
-export type RegisterPaths = { events: string; aliases: string; pauses: string; marks: string; inboxDir: string; usageDir: string }
+/** The register's files: the events the tasks are folded from, the inbox read marks, and the inbox folder. */
+export type RegisterPaths = { events: string; marks: string; inboxDir: string }
 
-/** The register's folders: its tasks folder (events, renames, pauses, inbox read marks), its inbox and its token-usage folder. */
-export type RegisterDirs = { tasksDir: string; inboxDir: string; usageDir: string }
+/** The register's folders: its state folder (events, inbox read marks) and its inbox folder. */
+export type RegisterDirs = { tasksDir: string; inboxDir: string }
 
 /** A path with forward slashes and no trailing one. */
 export function slashed(path: string): string {
   return path.replaceAll('\\', '/').replace(/\/+$/, '')
 }
 
-/** The register's files under its folders, with slashes made forward. */
+/** The register's files under its folders, named as teamrig names them, with slashes made forward. */
 export function registerPaths(dirs: RegisterDirs): RegisterPaths {
   const tasks = slashed(dirs.tasksDir)
-  const inbox = slashed(dirs.inboxDir)
-  const usage = slashed(dirs.usageDir)
-  return {
-    events: `${tasks}/events.jsonl`,
-    aliases: `${tasks}/aliases.jsonl`,
-    pauses: `${tasks}/pauses.jsonl`,
-    marks: `${tasks}/inbox-marks.jsonl`,
-    inboxDir: inbox,
-    usageDir: usage,
-  }
+  return { events: `${tasks}/events.jsonl`, marks: `${tasks}/inbox-marks.jsonl`, inboxDir: slashed(dirs.inboxDir) }
 }
 
 /**
@@ -87,10 +68,33 @@ export function registerPaths(dirs: RegisterDirs): RegisterPaths {
  */
 export const MAX_READ_BYTES = 4 * 1024 * 1024
 
+/** The last part of a path. */
+function fileName(path: string): string {
+  return path.slice(path.lastIndexOf('/') + 1)
+}
+
 /** A file the pane cannot read at once, named with its size; checked on the stamp, so the read is never tried. */
 export function tooBig(path: string, size: number): string {
-  const name = path.slice(path.lastIndexOf('/') + 1)
-  return `${name} is ${(size / 2 ** 20).toFixed(2)} MiB, over the 4 MiB a pane can read at once: it needs rotating`
+  return `${fileName(path)} is ${(size / 2 ** 20).toFixed(2)} MiB, over the 4 MiB a pane can read at once: it needs rotating`
+}
+
+/**
+ * The lines teamrig's reader skipped, in the words of its own WARN line (register commands): damaged
+ * lines, lines from a newer teamrig and events naming no task, then the inbox marks'; null when none.
+ */
+export function skippedText(paths: RegisterPaths, register: RegisterSnapshot, marks: MarkLogRead): string | null {
+  const { unreadable, newer } = register.read
+  const { orphans } = register.state
+  const parts: string[] = []
+  if (unreadable + newer + orphans > 0) {
+    parts.push(
+      `${fileName(paths.events)}: ${unreadable} unreadable line(s), ${newer} line(s) from a newer teamrig, ${orphans} event(s) naming no task`,
+    )
+  }
+  if (marks.unreadable + marks.newer > 0) {
+    parts.push(`${fileName(paths.marks)}: ${marks.unreadable} unreadable line(s), ${marks.newer} line(s) from a newer teamrig`)
+  }
+  return parts.length > 0 ? parts.join('; ') : null
 }
 
 /** One file's parsed content, refreshed when its stamp moves; a missing file reads as `empty`. */
@@ -130,63 +134,55 @@ class WatchedFile<T> {
 export type PollInput = { claudeSession: string; pinned: string | null; now: number; force?: boolean }
 
 export class TaskRegisterSource {
-  private readonly events: WatchedFile<Parsed<TaskEvent>>
-  private readonly aliases: WatchedFile<Parsed<AliasRecord>>
-  private readonly pauses: WatchedFile<Parsed<PauseLogRecord>>
-  private readonly marks: WatchedFile<Parsed<InboxMark>>
-  private readonly usage: UsageRuns
+  private readonly events: WatchedFile<RegisterSnapshot>
+  private readonly marks: WatchedFile<MarkLogRead>
   /**
-   * The tasks a drawing can show, as the register's three logs and the usage run last folded: the active
-   * ones and those finished within a day. Every draw reads the snapshot, so it grows with the live tasks,
-   * never with the register's history; a finished task ages out of the views between folds (view.ts).
+   * The tasks a drawing can show, as the events last folded: the active ones and those finished within a
+   * day. Every draw reads the snapshot, so it grows with the live tasks, never with the register's
+   * history; a finished task ages out of the views between folds (view.ts).
    */
   private tasks: TaskRow[] = []
-  private inbox: WatchedFile<number> | null = null
+  private inbox: WatchedFile<string[]> | null = null
   private lastArea: string | null = null
 
+  /** `priorities`: the team config's, which name each priority on a row; none leaves them unnamed. */
   constructor(
     private readonly files: Files,
     private readonly paths: RegisterPaths,
+    private readonly priorities: readonly PriorityConfig[] = [],
   ) {
-    this.events = new WatchedFile(files, paths.events, content => parseJsonl(content, parseEvent), { records: [], skipped: 0 })
-    this.aliases = new WatchedFile(files, paths.aliases, content => parseJsonl(content, parseAlias), { records: [], skipped: 0 })
-    this.pauses = new WatchedFile(files, paths.pauses, content => parseJsonl(content, parsePauseRecord), { records: [], skipped: 0 })
-    this.marks = new WatchedFile(files, paths.marks, content => parseJsonl(content, parseMark), { records: [], skipped: 0 })
-    this.usage = new UsageRuns(files, paths.usageDir)
+    this.events = new WatchedFile(files, paths.events, readRegister, readRegister(''))
+    this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
   }
 
   /** A new snapshot when anything it draws from changed since the last poll (or `force`), else null. */
   async poll({ claudeSession, pinned, now, force = false }: PollInput): Promise<Snapshot | null> {
-    // Each refresh runs (no short circuit), so every file that moved is read in this poll.
-    const moved = [await this.events.refresh(), await this.aliases.refresh(), await this.pauses.refresh(), await this.usage.refresh(now)]
-    const registerChanged = moved.includes(true)
+    const registerChanged = await this.events.refresh()
     if (registerChanged) {
-      const logs = {
-        events: this.events.current.records,
-        aliases: this.aliases.current.records,
-        pauses: this.pauses.current.records,
-        usage: this.usage.current,
-      }
-      this.tasks = readTasks(logs, now).filter(task => isActive(task) || isRecentlyFinished(task, now))
+      this.tasks = [...this.events.current.state.tasks.values()]
+        .map(task => rowOf(task, this.priorities))
+        .filter(task => isActive(task) || isRecentlyFinished(task, now))
+        .sort((a, b) => taskNumber(a.id) - taskNumber(b.id))
     }
     const marksChanged = await this.marks.refresh()
-    const marks = this.marks.current.records
-    const inboxArea = areaOfSession(marks, claudeSession)
+    const { byArea, areaBySession } = indexMarks(this.marks.current.marks)
+    const inboxArea = areaBySession.get(claudeSession) ?? null
     const area = pinned ?? inboxArea
     const areaSource: AreaSource | null = pinned !== null ? 'pinned' : inboxArea !== null ? 'inbox-read' : null
     const areaChanged = area !== this.lastArea
-    if (areaChanged) this.inbox = area === null ? null : new WatchedFile(this.files, `${this.paths.inboxDir}/${area}.md`, countInboxLines, 0)
+    if (areaChanged) this.inbox = area === null ? null : new WatchedFile(this.files, `${this.paths.inboxDir}/${area}.md`, inboxLines, [])
     this.lastArea = area
     const inboxChanged = this.inbox ? await this.inbox.refresh() : false
     if (!force && !registerChanged && !marksChanged && !areaChanged && !inboxChanged) return null
 
-    const skipped = [this.events, this.aliases, this.pauses, this.marks].reduce((sum, file) => sum + file.current.skipped, 0)
+    // An area that never ran `inbox read` has no mark: its count is unknown, not everything.
+    const mark = area === null ? undefined : byArea.get(area)
     return {
       tasks: this.tasks,
       area,
       areaSource,
-      unreadInbox: area !== null && this.inbox ? unreadLines(this.inbox.current, readTo(marks, area)) : null,
-      problem: skipped > 0 ? `${skipped} register line(s) this pane cannot read` : null,
+      unreadInbox: area !== null && this.inbox && mark !== undefined ? unreadOf(area, this.inbox.current, mark, lineHash).lines.length : null,
+      problem: skippedText(this.paths, this.events.current, this.marks.current),
       now,
     }
   }

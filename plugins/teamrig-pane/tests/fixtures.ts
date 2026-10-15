@@ -1,5 +1,7 @@
-// Register lines shaped as the task register writes them, and an in-memory `Files`.
-import type { FileStamp, Files, ListedFile } from '../hooks/source'
+// Register lines shaped as teamrig writes them (events v2, inbox marks v1), and an in-memory `Files`.
+import { EVENT_VERSION, MARK_VERSION } from '../hooks/core/read/index'
+import { lineHash } from '../hooks/line-hash'
+import type { FileStamp, Files } from '../hooks/source'
 
 export const NOW = Date.UTC(2026, 9, 13, 14, 0)
 export const HOUR = 3_600_000
@@ -8,25 +10,32 @@ export function iso(ms: number): string {
   return new Date(ms).toISOString()
 }
 
+/** Claude session ids, as teamrig records them on an inbox mark: a mark naming anything else is unreadable. */
+export const S1 = '00000000-0000-4000-8000-000000000001'
+export const S2 = '00000000-0000-4000-8000-000000000002'
+export const S3 = '00000000-0000-4000-8000-000000000003'
+
 type CreateOptions = {
   owner: string
   by: string
   at: number
-  tier?: number
+  priority?: number
   due?: string | null
   title?: string
   source?: string
-  ref?: string
+  /** null: a task with no ref (`--ref none`). */
+  ref?: string | null
   goals?: string[]
-  /** The register's `--detail`; left off the line when absent, as a task without one is written. */
-  detail?: string
-  /** Keys a later register version adds, on the line and in its task; this reader knows none of them. */
+  /** null: a task planned for no week. */
+  week?: string | null
+  /** Keys a later teamrig adds, on the line and in its task; this reader knows none of them. */
   lineKeys?: Record<string, unknown>
   taskKeys?: Record<string, unknown>
 }
 
 export function createLine(id: string, o: CreateOptions): string {
   return JSON.stringify({
+    v: EVENT_VERSION,
     type: 'create',
     id,
     at: iso(o.at),
@@ -35,12 +44,11 @@ export function createLine(id: string, o: CreateOptions): string {
       title: o.title ?? `task ${id}`,
       owner: o.owner,
       source: o.source ?? 'owner',
-      ref: o.ref ?? 'docs/x.md',
-      tier: o.tier ?? 3,
+      ref: o.ref === undefined ? 'docs/x.md' : o.ref,
+      priority: o.priority ?? 3,
       due: o.due ?? null,
       goals: o.goals ?? ['G10.2'],
-      week: '2026-10-13',
-      ...(o.detail === undefined ? {} : { detail: o.detail }),
+      week: o.week === undefined ? '2026-10-13' : o.week,
       ...o.taskKeys,
     },
     ...o.lineKeys,
@@ -54,48 +62,19 @@ export function statusLine(
   status: string,
   note: string | null = null,
   evidence: string | null = null,
-  /** v2 keys a status may carry, such as a verifying task's `evidenceDue`. */
-  extras: Record<string, unknown> = {},
+  skill: string | null = null,
 ): string {
-  return JSON.stringify({ type: 'status', id, at: iso(at), by, status, note, evidence, ...extras })
+  return JSON.stringify({ v: EVENT_VERSION, type: 'status', id, at: iso(at), by, status, note, evidence, skill })
 }
 
-/** A usage run's JSON (usage-report.mjs): one Claude session's cache reads and messages on each given day. */
-export function usageRunJson(perDay: Record<string, { cr: number; msgs: number }>): string {
-  return JSON.stringify([{ file: 'C:/Homes/a/.claude/projects/p/00000000-0000-4000-8000-000000000001.jsonl', perDay }])
+export function updateLine(id: string, by: string, at: number, changes: Record<string, unknown>, note: string | null = null): string {
+  return JSON.stringify({ v: EVENT_VERSION, type: 'update', id, at: iso(at), by, changes, note })
 }
 
-export function updateLine(id: string, by: string, at: number, changes: Record<string, unknown>): string {
-  return JSON.stringify({ type: 'update', id, at: iso(at), by, changes, note: null })
-}
-
-/** A v2 `link`: `id` is held by, a child of, … `target`. */
-export function linkLine(id: string, by: string, at: number, rel: string, target: string): string {
-  return JSON.stringify({ v: 2, type: 'link', id, at: iso(at), by, rel, target, note: null })
-}
-
-/** A v2 progress `note`. */
-export function noteLine(id: string, by: string, at: number, text: string): string {
-  return JSON.stringify({ v: 2, type: 'note', id, at: iso(at), by, text })
-}
-
-/** A v2 `wait` on someone or something outside the register. */
-export function waitLine(id: string, by: string, at: number, on: string, what: string): string {
-  return JSON.stringify({ v: 2, type: 'wait', id, at: iso(at), by, key: 'w1', on, what, until: null, note: null })
-}
-
-/** A pause record (pauses.jsonl) over the given tiers. */
-export function pauseLine(id: string, at: number, tiers: number[], note: string): string {
-  return JSON.stringify({ type: 'pause', id, at: iso(at), by: 'lead', tiers, owners: [], tasks: [], except: ['token-saving'], note })
-}
-
-/** A session rename record (aliases.jsonl). */
-export function aliasLine(from: string, to: string, at: number): string {
-  return JSON.stringify({ from, to, at: iso(at), by: 'lead' })
-}
-
-export function markLine(area: string, line: number, claudeSession: string, at: number): string {
-  return JSON.stringify({ area, line, at: iso(at), claudeSession })
+/** An `inbox read` mark: `line` lines read, the last of them `lastLine` (null: a mark that read none). */
+export function markLine(area: string, line: number, claudeSession: string, at: number, lastLine: string | null = null): string {
+  const lastLineHash = lastLine === null ? null : lineHash(lastLine)
+  return JSON.stringify({ v: MARK_VERSION, area, line, at: iso(at), claudeSession, lastLineHash })
 }
 
 /** A fake disk: `write` moves the stamp the way an append does; reads are counted. */
@@ -103,7 +82,6 @@ export class MemoryFiles implements Files {
   private readonly content = new Map<string, string>()
   private readonly stamps = new Map<string, FileStamp>()
   readonly reads: string[] = []
-  readonly lists: string[] = []
   /** When set, the next read throws this message (a locked or half-written file). */
   failNextRead: string | null = null
   private clock = 1
@@ -126,15 +104,6 @@ export class MemoryFiles implements Files {
     if (text === undefined) throw new Error(`ENOENT: ${path}`)
     return text
   }
-
-  async list(dir: string): Promise<ListedFile[]> {
-    this.lists.push(dir)
-    const prefix = `${dir}/`
-    return [...this.stamps].flatMap(([path, stamp]) => {
-      const name = path.slice(prefix.length)
-      return path.startsWith(prefix) && !name.includes('/') ? [{ name, ...stamp }] : []
-    })
-  }
 }
 
 const FLEET = ['po', 'lead', 'etl', 'security', 'analytics', 'symbols', 'toolchain', 'teamrig', 'api', 'webstore']
@@ -150,11 +119,11 @@ export function bigRegister(events: number): string[] {
     const id = `T${n}`
     const owner = FLEET[n % FLEET.length] ?? 'po'
     const at = NOW - 30 * 24 * HOUR + n * 60_000
-    lines.push(createLine(id, { owner, by: 'lead', at, title: `Task ${n} with a title of a usual length for the register`, detail: 'what done looks like, in a sentence or two' }))
+    lines.push(createLine(id, { owner, by: 'lead', at, title: `Task ${n} with a title of a usual length for the register`, ref: 'board/inbox/po.md:12' }))
     lines.push(statusLine(id, owner, at + HOUR, 'in-progress'))
-    lines.push(noteLine(id, owner, at + 2 * HOUR, 'a progress note of usual length'))
-    lines.push(updateLine(id, owner, at + 3 * HOUR, { eta: '2026-10-20' }))
-    if (n % FLEET.length !== 0) lines.push(statusLine(id, owner, at + 4 * HOUR, 'done', 'shipped', 'abc1234'))
+    lines.push(statusLine(id, owner, at + 2 * HOUR, 'in-progress', 'a progress note of usual length'))
+    lines.push(updateLine(id, owner, at + 3 * HOUR, { due: '2026-10-20' }))
+    if (n % FLEET.length !== 0) lines.push(statusLine(id, owner, at + 4 * HOUR, 'done', 'shipped', 'abc1234', 'none'))
   }
   return lines.slice(0, events)
 }

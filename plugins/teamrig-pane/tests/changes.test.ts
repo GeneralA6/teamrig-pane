@@ -233,7 +233,7 @@ describe('changes rows', () => {
     expect(textOf(blocks, `${REPO}:new.ts`)).toBe('R  new.ts ← old.ts')
     expect(textOf(blocks, `${REPO}:more`)).toBe('… 2 more')
     expect(textOf(blocks, `${REPO}:partial`)).toMatch(/4 MiB/)
-    expect(textOf(blocks, 'problem:C:/work/gone')).toBe('⚠ fatal: bad object HEAD')
+    expect(textOf(blocks, 'problem:C:/work/gone')).toBe('WARN fatal: bad object HEAD')
     expect(textOf(blocks, 'repo:C:/work/clean')).toBe('clean · main · clean')
     expect(textOf(blocks, 'outside')).toBe('── written outside git (1)')
   })
