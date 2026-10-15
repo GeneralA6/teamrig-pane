@@ -64,6 +64,7 @@ the next poll.
 | `events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task` | The same lines teamrig skips: run `teamrig doctor`, and update teamrig-pane if teamrig is newer. |
 | `events.jsonl is 4.12 MiB, over the 4 MiB a pane can read at once: it needs rotating` | The register outgrew one read; the last good tasks stay drawn. Report it to the team's lead. |
 | `WARN the pane could not draw: <error>` | A drawing failed; report it with the error text. |
+| In Changes, `No git repo yet: the session folder is in none, …` | Nothing to list yet: the session's folder is in no git repo, and no file the session or its agents edited is in one. The first file edited (Edit, Write, NotebookEdit) in a repo adds that repo; a file a shell command changes adds none. |
 | In Changes, `WARN <git's first error line>` under a repo | git could not read that repo (or took over 10 seconds); its header then names only the folder. A worktree whose folder was removed shows no warning: it leaves the view. |
 
 ## Limits

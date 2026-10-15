@@ -173,8 +173,9 @@ is a goal's roadmap item or names the task id), because boards and docs are rewr
 ## The Changes view
 
 `[Tasks] [Changes Δ3]` leads the pane in every state. Changes lists the files changed in each git repo the
-session works in: the repo of the session's folder and the repo of each file it writes (Edit, Write,
-NotebookEdit). A worktree is its own repo; once its folder is removed it leaves the view. Each repo has a header
+session works in: the repo of the session's folder and the repo of each file it or one of its agents writes
+(Edit, Write, NotebookEdit; a file a shell command changes adds no repo). Until one is found, the view says
+`No git repo yet` and why. A worktree is its own repo; once its folder is removed it leaves the view. Each repo has a header
 (`<folder> · <branch> · 3 changed`, or `clean`; the branch is left out when the folder bears its name, as a
 worktree's often does), then each file with git's two-letter code (`M `, ` M`, `??`), its path from the repo
 root, its lines added and removed (`+12 -3`; `+0 -0` for none, `binary` for a binary file; an untracked folder

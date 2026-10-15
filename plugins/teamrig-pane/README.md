@@ -122,7 +122,9 @@ two buttons wrap under each other rather than clip), above the prompt, and as th
 the pane holds the keyboard, `t` presses Tasks and `d` Changes (`c` already collapses tasks).
 
 Changes lists the files changed in the git repos the session works in: the repo of the session's folder,
-and the repo of each file the session writes (Edit, Write, NotebookEdit). A worktree is its own repo
+and the repo of each file the session or one of its agents writes (Edit, Write, NotebookEdit; a file a
+shell command changes adds no repo). Until one is found it says why: `No git repo yet: the session folder
+is in none, and no file the session or its agents edited (Edit, Write) is in one.` A worktree is its own repo
 (`git rev-parse --show-toplevel`, asked once a folder), and leaves the list once its folder is removed:
 git never runs in a folder that is gone. Each repo gets a ruled header (`mods-pane-v2 · pane-v2 · 3
 changed`, or `clean`; the branch is left out when the folder bears its name, as a worktree's often does),
