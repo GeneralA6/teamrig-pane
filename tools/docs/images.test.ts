@@ -7,10 +7,10 @@ import { drawPictures, IMAGES_DIR, stalePictures, writePictures } from './images
 import { parseXml } from './xml.ts';
 
 describe('drawPictures', () => {
-  it("draws the README's hero", () => {
+  it("draws the README's hero and features cards", () => {
     assert.deepEqual(
       drawPictures().map((picture) => picture.file),
-      ['hero.svg'],
+      ['hero.svg', 'features.svg'],
     );
   });
 

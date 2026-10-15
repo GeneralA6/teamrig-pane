@@ -1,7 +1,8 @@
 /**
- * The palette of the README picture's light-and-dark parts, the captions under the hero's window: each colour token
- * has a value for GitHub's light theme and one for its dark theme, and the reader's colour scheme picks the side. The
- * Claude Code window itself is dark in either theme, as a terminal is, and keeps its own palette.
+ * The palette of the README pictures' light-and-dark parts, the captions under the hero's window and the features
+ * cards: each colour token has a value for GitHub's light theme and one for its dark theme, and the reader's colour
+ * scheme picks the side. The hero's Claude Code window is dark in either theme, as a terminal is, and keeps its own
+ * palette.
  */
 import { SANS_FONTS } from './svg.ts';
 
