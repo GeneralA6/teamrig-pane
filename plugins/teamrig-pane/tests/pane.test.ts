@@ -4,14 +4,19 @@ import { expect, mock, test } from 'claude-code/testing'
 import { cells } from '../hooks/width'
 import { HOUR, NOW, bigRegister, createLine, iso, linkLine, markLine, noteLine, statusLine, updateLine, usageRunJson } from './fixtures'
 
-const HOME = 'C:\\Homes\\tester'
-const EVENTS = 'C:/Homes/tester/team-notes/tasks/events.jsonl'
-const MARKS = 'C:/Homes/tester/team-notes/tasks/inbox-marks.jsonl'
-const INBOX = 'C:/Homes/tester/team-notes/board/inbox/po.md'
-const USAGE_RUN = 'C:/Homes/tester/team-notes/token-usage/usage-2026-10-13.json'
+const HOME = '\\Homes\\tester'
+const EVENTS = '/Homes/tester/team-notes/tasks/events.jsonl'
+const MARKS = '/Homes/tester/team-notes/tasks/inbox-marks.jsonl'
+const INBOX = '/Homes/tester/team-notes/board/inbox/po.md'
+const USAGE_RUN = '/Homes/tester/team-notes/token-usage/usage-2026-10-13.json'
 
-/** The engine hands fs hooks native paths, so the fake keys every path one way. */
-const native = (path: string) => path.replaceAll('/', '\\')
+/**
+ * The engine resolves each $.fs path the host’s way before a hook sees it: Windows puts the drive on
+ * a rooted path and turns its slashes back (`/work/a` arrives as `D:\work\a`), POSIX keeps `/work/a`.
+ * A drive-letter path is absolute on Windows alone, so the test paths are rooted without one, absolute
+ * on every OS the CI runs, and the fake keys each in one form: forward slashes, no drive.
+ */
+const keyOf = (path: string) => path.replaceAll('\\', '/').replace(/^[A-Za-z]:/, '')
 
 /**
  * A file the fake disk refuses: its stat or its read rejects with `message`; `isSeen` false makes
@@ -26,31 +31,31 @@ function fakeDisk(on: On) {
   const reads: string[] = []
   let tick = 1
   on('fs.stat', async ($, e) => {
-    const lock = locks.get(native(e.path))
+    const lock = locks.get(keyOf(e.path))
     if (lock?.op === 'stat') return { deny: lock.message }
-    const file = files.get(native(e.path))
+    const file = files.get(keyOf(e.path))
     if (!file) return { deny: `ENOENT: ${e.path}` }
     const stat: FsStat = { kind: 'file', size: file.text.length, mtimeMs: file.mtimeMs, isLink: false }
     return { value: stat }
   })
   /** The files right under a folder; a folder exists while a file is in it. */
   const inFolder = (dir: string): FsEntry[] => {
-    const prefix = `${native(dir)}\\`
+    const prefix = `${keyOf(dir)}/`
     return [...files].flatMap(([path, file]) => {
       const name = path.slice(prefix.length)
-      if (!path.startsWith(prefix) || name.includes('\\')) return []
+      if (!path.startsWith(prefix) || name.includes('/')) return []
       return [{ name, kind: 'file' as const, size: file.text.length, mtimeMs: file.mtimeMs, isLink: false }]
     })
   }
   on('fs.exists', async ($, e) => {
-    if (locks.get(native(e.path))?.isSeen === false) return { value: false }
-    return { value: files.has(native(e.path)) || inFolder(e.path).length > 0 }
+    if (locks.get(keyOf(e.path))?.isSeen === false) return { value: false }
+    return { value: files.has(keyOf(e.path)) || inFolder(e.path).length > 0 }
   })
   on('fs.read', async ($, e) => {
-    reads.push(native(e.path))
-    const lock = locks.get(native(e.path))
+    reads.push(keyOf(e.path))
+    const lock = locks.get(keyOf(e.path))
     if (lock?.op === 'read') return { deny: lock.message }
-    const file = files.get(native(e.path))
+    const file = files.get(keyOf(e.path))
     return file ? { value: file.text } : { deny: `ENOENT: ${e.path}` }
   })
   on('fs.list', async ($, e) => {
@@ -59,10 +64,10 @@ function fakeDisk(on: On) {
   })
   return {
     reads,
-    write: (path: string, lines: string[]) => void files.set(native(path), { text: lines.join('\n'), mtimeMs: tick++ }),
-    lock: (path: string, lock: Lock) => void locks.set(native(path), lock),
-    unlock: (path: string) => void locks.delete(native(path)),
-    remove: (path: string) => void files.delete(native(path)),
+    write: (path: string, lines: string[]) => void files.set(keyOf(path), { text: lines.join('\n'), mtimeMs: tick++ }),
+    lock: (path: string, lock: Lock) => void locks.set(keyOf(path), lock),
+    unlock: (path: string) => void locks.delete(keyOf(path)),
+    remove: (path: string) => void files.delete(keyOf(path)),
   }
 }
 
@@ -104,7 +109,7 @@ function fakeGit(on: On, repos: FakeRepos) {
   return runs
 }
 
-/** The environment that names the register's folders (Windows-style, as a Windows host passes them) and its goals document. */
+/** The environment that names the register's folders (backslashed, as a Windows host passes them) and its goals document. */
 const REGISTER_ENV: Readonly<Record<string, string>> = {
   USERPROFILE: HOME,
   TEAMRIG_PANE_TASKS_DIR: `${HOME}\\team-notes\\tasks`,
@@ -150,7 +155,7 @@ async function start(
 
 test('docks the session area: its tasks, flags and unread inbox', async ($, on) => {
   const { opened } = await start(on)
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   expect(opened).toEqual(['teamrig-pane'])
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
@@ -162,7 +167,7 @@ test('docks the session area: its tasks, flags and unread inbox', async ($, on) 
 
 test('the all view lists every owner, blocked notes included', async ($, on) => {
   await start(on)
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   await pane.press({ key: 'all' })
@@ -172,7 +177,7 @@ test('the all view lists every owner, blocked notes included', async ($, on) => 
 
 test('picks up a new register event on the next poll', async ($, on) => {
   const { clock, disk } = await start(on)
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   disk.write(EVENTS, [
@@ -186,7 +191,7 @@ test('picks up a new register event on the next poll', async ($, on) => {
 
 test('a locked or denied register file keeps the last good tasks drawn under the problem, until it reads again', async ($, on) => {
   const { clock, disk } = await start(on)
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   const locks: Lock[] = [
     { op: 'stat', message: 'EBUSY: resource busy or locked, stat', isSeen: true },
@@ -220,7 +225,7 @@ test('lines of a newer register: an unknown type or a change of unknown keys alo
     createLine('T2', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Second task' }),
     '{"type":"status","id":"T2"',
   ])
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^⚠ 3 register line\(s\) this pane cannot read$/ })).toBeDefined()
@@ -232,7 +237,7 @@ test('lines of a newer register: an unknown type or a change of unknown keys alo
 test('missing register, marks and inbox files draw an empty register with no problem, and fill in as they appear', async ($, on) => {
   const { clock, disk } = await start(on)
   for (const path of [EVENTS, MARKS, INBOX]) disk.remove(path)
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(await pane.find({ text: /No area for this session yet/ })).toBeDefined()
   expect(await pane.find({ text: /⚠/ })).toBeUndefined()
@@ -258,7 +263,7 @@ test('a register of 20,000 events loads and draws in well under a second, and a 
   const { clock, disk } = await start(on)
   disk.write(EVENTS, bigRegister(20_000))
   const started = performance.now()
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   const loaded = performance.now()
   expect(await pane.find({ text: /po · 408 active/ })).toBeDefined()
@@ -321,7 +326,7 @@ test('docked, it pads the frame, spaces the tasks and wraps a long title under i
   const { disk } = await start(on)
   const title = 'Ship the task pane with wrapped lines that sit under the task id'
   disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title })])
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect((await pane.find({ type: 'Box' }))?.props).toMatchObject({ paddingX: 1, gap: 1 })
@@ -337,7 +342,7 @@ test('a title and note of CJK and emoji sequences wrap by display cells, no line
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title }),
     noteLine('T1', 'po', NOW - HOUR / 2, '進捗メモ 👩🏽‍💻 ✍️ 完了まであと少し'),
   ])
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   await pane.press({ key: 'active:T1' })
 
@@ -352,12 +357,12 @@ test('a title and note of CJK and emoji sequences wrap by display cells, no line
 test('with no folder named, no settings file and no teamrig project, it says what to set and reads nothing', async ($, on) => {
   const withoutUsage = Object.fromEntries(Object.entries(REGISTER_ENV).filter(([key]) => key !== 'TEAMRIG_PANE_USAGE_DIR'))
   const { disk } = await start(on, {}, { roots: {}, statuses: {} }, withoutUsage)
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   const problem = await pane.find({ text: /^⚠ no register found/ })
   expect(problem?.text.split(/\s+/).join(' ')).toBe(
-    "⚠ no register found: set TEAMRIG_PANE_TASKS_DIR, TEAMRIG_PANE_INBOX_DIR and TEAMRIG_PANE_USAGE_DIR, write them in C:/Homes/tester/.teamrig/pane.json, or start the session in a teamrig team's project (.teamrig.json)",
+    "⚠ no register found: set TEAMRIG_PANE_TASKS_DIR, TEAMRIG_PANE_INBOX_DIR and TEAMRIG_PANE_USAGE_DIR, write them in /Homes/tester/.teamrig/pane.json, or start the session in a teamrig team's project (.teamrig.json)",
   )
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
   expect(disk.reads).toEqual([])
@@ -365,11 +370,11 @@ test('with no folder named, no settings file and no teamrig project, it says wha
 
 test('with no folder named, it reads the register teamrig keeps for the team its pointer file names', async ($, on) => {
   const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
-  disk.write('C:/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
-  disk.write('C:/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
+  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
     createLine('T7', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the team register' }),
   ])
-  await $.session.start({ cwd: 'C:/work/app', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   await pane.press({ key: 'all' })
@@ -379,10 +384,10 @@ test('with no folder named, it reads the register teamrig keeps for the team its
 
 test('the settings file in the kit home names the folders, ~/ under the home folder', async ($, on) => {
   const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
-  disk.write('C:/Homes/tester/.teamrig/pane.json', [
+  disk.write('/Homes/tester/.teamrig/pane.json', [
     JSON.stringify({ tasksDir: '~/team-notes/tasks', inboxDir: '~/team-notes/board/inbox', usageDir: '~/team-notes/token-usage' }),
   ])
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
@@ -391,7 +396,7 @@ test('the settings file in the kit home names the folders, ~/ under the home fol
 
 test('draws each collapsed task as one Text: no Box beyond the root, the controls and their two button rows', async ($, on) => {
   await start(on)
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   await pane.press({ key: 'all' })
@@ -401,12 +406,12 @@ test('draws each collapsed task as one Text: no Box beyond the root, the control
 test('pressing a task shows its ask quoted from the inbox and the roadmap, pressing again hides it', async ($, on) => {
   const { disk } = await start(on)
   disk.write(INBOX, ['line one', 'line two', 'line three', '- 2026-10-13 12:40 lead: ship the pane with details'])
-  disk.write('C:/docs/ROADMAP.md', ['## G10', '  - [ ] G10.1g **Fix the formula** with `analytics`'])
+  disk.write('/docs/ROADMAP.md', ['## G10', '  - [ ] G10.1g **Fix the formula** with `analytics`'])
   const ref = '~/team-notes/board/inbox/po.md:4; docs/ROADMAP.md:2'
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane', ref, goals: ['G10.1g'] }),
   ])
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(await pane.find({ text: /ship the pane with details/ })).toBeUndefined()
 
@@ -433,7 +438,7 @@ test('an expanded task shows its register v2 facts, its estimate as a share of a
   ])
   const day = { cr: 100_000_000, msgs: 1000 }
   disk.write(USAGE_RUN, [usageRunJson({ '2026-10-12': day, '2026-10-13': day })])
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(await pane.find({ text: /kind code/ })).toBeUndefined()
 
@@ -448,7 +453,7 @@ test('an expanded task shows its register v2 facts, its estimate as a share of a
 
 test('an expanded blocked task shows its note in the details; collapse closes every task', async ($, on) => {
   await start(on)
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /collapse/ })).toBeUndefined()
@@ -470,7 +475,7 @@ test('inline above the prompt, it shows a few rows and points to the side dock',
     EVENTS,
     Array.from({ length: 10 }, (_, i) => createLine(`T${i + 1}`, { owner: 'po', by: 'po', at: NOW, title: `Task number ${i + 1}` })),
   )
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({
     plugin: 'teamrig-pane',
     surface: 'terminal',
@@ -489,7 +494,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   await start(on)
   let isStateDown = true
   on('state.get', async ($, e, next) => (isStateDown && e.key === 'expanded' ? { deny: 'state store unavailable' } : next(e)))
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^⚠ the pane could not draw: .*state store unavailable/ })).toBeDefined()
@@ -519,7 +524,7 @@ test('after a hot reload, a snapshot the older pane wrote reads as empty, never 
     if (!isOldValueStored || e.key !== 'snapshot' || answer.value === undefined) return answer
     return { value: { ...answer.value, value: PRE_V2_SNAPSHOT } }
   })
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   await pane.press({ key: 'all' })
 
@@ -539,7 +544,7 @@ test('resized to a narrow dock or inline, it draws every line inside the frame a
     linkLine('T1', 'po', NOW - HOUR, 'blocked-by', 'T3'),
     noteLine('T1', 'po', NOW - HOUR / 2, 'a progress note that also needs to wrap'),
   ])
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   await pane.press({ key: 'active:T1' })
 
@@ -562,7 +567,7 @@ test('resized to a narrow dock or inline, it draws every line inside the frame a
 
 test('a session starts minimized when the last one was left so: one row, docked or inline, a press on it opens the pane in full', async ($, on) => {
   const { store } = await start(on, { paneSize: 'minimized' })
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   for (const props of [PANE_PROPS, { ...PANE_PROPS, bodyColumns: 23 }, { ...PANE_PROPS, placement: 'inline' as const }]) {
@@ -579,7 +584,7 @@ test('a session starts minimized when the last one was left so: one row, docked 
 
 test('/tasklist opens a minimized pane in full', async ($, on) => {
   const { store } = await start(on, { paneSize: 'minimized' })
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   await $.command.run({ command: 'tasklist', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
@@ -602,7 +607,7 @@ function buttonLabel(node: unknown, key: string): string | null {
 
 test('the Tasks / Changes switch leads the pane in every view, width and placement, wrapping rather than clipping', async ($, on) => {
   await start(on)
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   for (const props of [PANE_PROPS, ...NARROW_AND_INLINE]) {
@@ -622,8 +627,8 @@ test('the Tasks / Changes switch leads the pane in every view, width and placeme
 })
 
 test("the Changes view lists each repo's changed files, counted on the switch and in the tab title", async ($, on) => {
-  const { clock, titles } = await start(on, {}, { roots: { 'C:/work': 'C:/work' }, statuses: { 'C:/work': REPO_STATUS } })
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  const { clock, titles } = await start(on, {}, { roots: { '/work': '/work' }, statuses: { '/work': REPO_STATUS } })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   // The session's repo is read in the background, after the pane opened with no count in its title; the
@@ -643,33 +648,33 @@ test("the Changes view lists each repo's changed files, counted on the switch an
 })
 
 test('a file the session writes adds its repo on the next poll; a failed write adds none; one outside any repo is listed as such', async ($, on) => {
-  const repos: FakeRepos = { roots: { 'C:/repo/src': 'C:/repo' }, statuses: { 'C:/repo': ['## main', ' M src/a.ts', ''].join('\0') } }
+  const repos: FakeRepos = { roots: { '/repo/src': '/repo' }, statuses: { '/repo': ['## main', ' M src/a.ts', ''].join('\0') } }
   const { clock, runs, titles } = await start(on, {}, repos)
   on('tool.call', { tool: 'Edit' }, async ($, e) => (e.file_path.endsWith('bad.ts') ? { result: 'no match', isError: true } : { result: 'edited' }))
   on('tool.call', { tool: 'Write' }, async () => ({ result: 'written' }))
   on('tool.call', { tool: 'Bash' }, async () => ({ result: 'ran' }))
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await clock.settle()
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   await pane.press({ key: 'changes' })
   expect(await pane.find({ text: /No git repo yet/ })).toBeDefined()
 
-  await $.tool.call({ tool: 'Edit', file_path: 'C:/other/bad.ts', old_string: 'a', new_string: 'b' })
-  await $.tool.call({ tool: 'Edit', file_path: 'C:/repo/src/a.ts', old_string: 'a', new_string: 'b' })
-  await $.tool.call({ tool: 'Write', file_path: 'C:/notes/plan.md', content: 'x' })
+  await $.tool.call({ tool: 'Edit', file_path: '/other/bad.ts', old_string: 'a', new_string: 'b' })
+  await $.tool.call({ tool: 'Edit', file_path: '/repo/src/a.ts', old_string: 'a', new_string: 'b' })
+  await $.tool.call({ tool: 'Write', file_path: '/notes/plan.md', content: 'x' })
   await clock.advance(3_000)
   expect(await pane.find({ text: /repo · main · 1 changed/ })).toBeDefined()
   expect(await pane.find({ text: /written outside git \(1\)/ })).toBeDefined()
-  expect(await pane.find({ text: /C:\/notes\/plan\.md/ })).toBeDefined()
+  expect(await pane.find({ text: /\/notes\/plan\.md/ })).toBeDefined()
   expect(await pane.find({ text: /bad\.ts/ })).toBeUndefined()
   expect(titles.at(-1)).toBe('Tasks · Δ2')
 
   // A shell call (a commit, say) is read on the next poll; with nothing new, the poll runs no git.
-  const statusRuns = () => runs.filter(run => run === 'status C:/repo').length
+  const statusRuns = () => runs.filter(run => run === 'status /repo').length
   const before = statusRuns()
   await clock.advance(3_000)
   expect(statusRuns()).toBe(before)
-  repos.statuses['C:/repo'] = '## main\0'
+  repos.statuses['/repo'] = '## main\0'
   await $.tool.call({ tool: 'Bash', command: 'git commit -am x' })
   await clock.advance(3_000)
   expect(statusRuns()).toBe(before + 1)
@@ -679,7 +684,7 @@ test('a file the session writes adds its repo on the next poll; a failed write a
 
 test('from the minimized strip, Changes opens the pane in full on the Changes view', async ($, on) => {
   const { clock, store } = await start(on, { paneSize: 'minimized' })
-  await $.session.start({ cwd: 'C:/work', surface: 'terminal', isInteractive: true })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await clock.settle()
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
