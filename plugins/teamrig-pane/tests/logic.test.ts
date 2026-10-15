@@ -5,7 +5,7 @@ import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
 import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { dockLayout, failedDrawing, inlineLayout, merged, wrapRow, type Drawn } from '../hooks/layout'
-import { GLYPH, paneBlocks, type Block, type Row } from '../hooks/rows'
+import { GLYPH, GLYPH_COLOR, paneBlocks, type Block, type Row } from '../hooks/rows'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
 import { areaView, flagsOf, ownerGroups, sameView } from '../hooks/view'
@@ -154,6 +154,15 @@ describe('log', () => {
     expect(STATUS_CONTRACT_MATCHES).toBe(true)
     const statuses: readonly TaskStatus[] = TASK_STATUSES
     expect(Object.keys(GLYPH).sort()).toEqual([...statuses].sort())
+  })
+
+  test('each status glyph is a one-cell text symbol, never an emoji, and waiting for proof is the green half of working', async () => {
+    for (const glyph of Object.values(GLYPH)) {
+      expect(cells(glyph)).toBe(1)
+      expect(/\p{Extended_Pictographic}/u.test(glyph)).toBe(false)
+    }
+    expect([GLYPH.verifying, GLYPH_COLOR.verifying]).toEqual(['◑', 'success'])
+    expect([GLYPH['in-progress'], GLYPH_COLOR['in-progress']]).toEqual(['◐', 'warning'])
   })
 
   test('binds a session to the area of its newest inbox read, whose mark is the area\'s read position', async () => {
