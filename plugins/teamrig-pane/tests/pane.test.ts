@@ -85,8 +85,11 @@ function fakeStore(on: On, kept: Readonly<Record<string, unknown>>) {
   return store
 }
 
-/** The repos a fake git knows: each folder's root, each root's `status --porcelain=v1 -b -z` output. Tests change it as they go. */
-type FakeRepos = { roots: Record<string, string>; statuses: Record<string, string> }
+/**
+ * The repos a fake git knows: each folder's root, each root's `status --porcelain=v1 -b -z` output, and the
+ * line counts' outputs (`diff --numstat -z`, `grep -c -z`; none by default). Tests change it as they go.
+ */
+type FakeRepos = { roots: Record<string, string>; statuses: Record<string, string>; numstats?: Record<string, string>; greps?: Record<string, string> }
 
 /** Answers $.process.run as git over `repos`, a folder it does not know being outside any repo; `runs` lists each as `<command> <cwd>`. */
 function fakeGit(on: On, repos: FakeRepos) {
@@ -94,11 +97,13 @@ function fakeGit(on: On, repos: FakeRepos) {
   const answer = (stdout: string, exitCode = 0, stderr = '') => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
   on('process.run', async ($, e) => {
     const cwd = e.init?.cwd ?? ''
-    const isRevParse = e.argv.includes('rev-parse')
-    runs.push(`${isRevParse ? 'rev-parse' : 'status'} ${cwd}`)
+    const command = e.argv.slice(1).find(arg => !arg.startsWith('-')) ?? ''
+    runs.push(`${command} ${cwd}`)
     const root = repos.roots[cwd]
-    if (isRevParse) return root === undefined ? answer('', 128, 'fatal: not a git repository') : answer(`${root}
+    if (command === 'rev-parse') return root === undefined ? answer('', 128, 'fatal: not a git repository') : answer(`${root}
 `)
+    if (command === 'diff') return answer(repos.numstats?.[cwd] ?? '')
+    if (command === 'grep') return repos.greps?.[cwd] === undefined ? answer('', 1) : answer(repos.greps[cwd])
     return answer(repos.statuses[cwd] ?? '## main\0')
   })
   return runs
@@ -634,6 +639,8 @@ test('/teamrig-pane opens a minimized pane in full', async ($, on) => {
 })
 
 const REPO_STATUS = ['## pane-v2', ' M hooks/a.ts', 'R  hooks/new.ts', 'hooks/old.ts', '?? tests/', ''].join('\0')
+const REPO_NUMSTAT = ['4\t1\thooks/a.ts', '2\t2\t', 'hooks/old.ts', 'hooks/new.ts', ''].join('\0')
+const REPO_GREP = ['tests/a.test.ts\u00006', 'tests/b.test.ts\u00003', ''].join('\n')
 const NARROW_AND_INLINE = [
   { ...PANE_PROPS, bodyColumns: 20 },
   { ...PANE_PROPS, bodyColumns: 12 },
@@ -667,8 +674,8 @@ test('the Tasks / Changes switch leads the pane in every view, width and placeme
   }
 })
 
-test("the Changes view lists each repo's changed files, counted on the switch and in the tab title", async ($, on) => {
-  const { clock, titles } = await start(on, {}, { roots: { '/work': '/work' }, statuses: { '/work': REPO_STATUS } })
+test("the Changes view lists each repo's changed files with their lines, counted on the switch and in the tab title", async ($, on) => {
+  const { clock, titles } = await start(on, {}, { roots: { '/work': '/work' }, statuses: { '/work': REPO_STATUS }, numstats: { '/work': REPO_NUMSTAT }, greps: { '/work': REPO_GREP } })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
@@ -680,8 +687,9 @@ test("the Changes view lists each repo's changed files, counted on the switch an
   expect(buttonLabel(await pane.drawn(), 'changes')).toBe('Changes Δ3')
   await pane.press({ key: 'changes' })
   expect(await pane.find({ text: /work · pane-v2 · 3 changed/ })).toBeDefined()
-  expect(await pane.find({ text: / M hooks\/a\.ts/ })).toBeDefined()
-  expect(await pane.find({ text: /R  hooks\/new\.ts ← hooks\/old\.ts/ })).toBeDefined()
+  expect(await pane.find({ text: / M hooks\/a\.ts \+4 -1/ })).toBeDefined()
+  expect(await pane.find({ text: /R  hooks\/new\.ts \+2 -2 ← hooks\/old\.ts/ })).toBeDefined()
+  expect(await pane.find({ text: /\?\? tests\/ \+9/ })).toBeDefined()
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
 
   await pane.press({ key: 'tasks' })

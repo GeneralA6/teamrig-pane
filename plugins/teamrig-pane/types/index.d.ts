@@ -67,8 +67,17 @@ export type ExpandedTasks = { readonly [id: string]: TaskDetail }
 /** `open`: the pane in full; `minimized`: its one-row strip (hooks/size.ts), what the person's close (✕) does. */
 export type PaneSize = 'open' | 'minimized'
 
-/** One file `git status` lists: its two-letter code (`XY`: ` M`, `A `, `??`), its path from the repo root, and where a rename or copy came from. */
-export type FileChange = { code: string; path: string; from: string | null }
+/**
+ * A file's changed lines: added and removed against HEAD (`git diff --numstat`), an untracked file's (or folder's)
+ * all added; `binary` when git counts no lines in it.
+ */
+export type LineCount = { kind: 'text'; added: number; removed: number } | { kind: 'binary' }
+
+/**
+ * One file `git status` lists: its two-letter code (`XY`: ` M`, `A `, `??`), its path from the repo root, where a
+ * rename or copy came from, and its changed lines (null when git could not count them).
+ */
+export type FileChange = { code: string; path: string; from: string | null; lines: LineCount | null }
 
 /** One repo the session works in, as its last `git status` left it (hooks/changes.ts). */
 export type RepoChanges = {

@@ -7,8 +7,9 @@
 // ctrl+x x) minimizes it to a one-row strip instead of closing it; a press on the strip or /teamrig-pane
 // opens it again, and the size is kept for the next session (size.ts). A switch row, first in every
 // state and width, the strip included, flips the body between the tasks and the Changes view: the
-// files changed in the git repos the session works in (changes.ts), counted as Δn on the switch and in
-// the tab title. Reads files and runs git status (no model calls); /teamrig-pane steers it.
+// files changed in the git repos the session works in and their lines (changes.ts), counted as Δn on
+// the switch and in the tab title. Reads files and runs git (status, diff, grep; no model calls);
+// /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 import type { ExpandedTasks, PaneView, Snapshot, TaskDetail, ViewMode } from '../types'
@@ -50,7 +51,7 @@ const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, NOTH
 const size = atom({ plugin: 'teamrig-pane', key: 'size' } as const, 'open')
 const view = atom({ plugin: 'teamrig-pane', key: 'view' } as const, 'tasks')
 /** The changes are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when ChangesSnapshot changes shape. */
-const CHANGES_SHAPE = 'changes-v1'
+const CHANGES_SHAPE = 'changes-v2'
 const changes = atom({ plugin: 'teamrig-pane', key: 'changes' } as const, EMPTY_CHANGES, { shape: CHANGES_SHAPE })
 
 /** The expanded tasks less one. */
