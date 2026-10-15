@@ -101,13 +101,16 @@ export function skippedText(paths: RegisterPaths, register: RegisterSnapshot, ma
 class WatchedFile<T> {
   private stampKey: string | null = null
   private value: T
+  private readonly files: Files
+  readonly path: string
+  private readonly parse: (content: string) => T
+  private readonly empty: T
 
-  constructor(
-    private readonly files: Files,
-    readonly path: string,
-    private readonly parse: (content: string) => T,
-    private readonly empty: T,
-  ) {
+  constructor(files: Files, path: string, parse: (content: string) => T, empty: T) {
+    this.files = files
+    this.path = path
+    this.parse = parse
+    this.empty = empty
     this.value = empty
   }
 
@@ -144,13 +147,15 @@ export class TaskRegisterSource {
   private tasks: TaskRow[] = []
   private inbox: WatchedFile<string[]> | null = null
   private lastArea: string | null = null
+  private readonly files: Files
+  private readonly paths: RegisterPaths
+  private readonly priorities: readonly PriorityConfig[]
 
   /** `priorities`: what names each priority on a row (places.ts finds them); a priority none names shows as its number alone. */
-  constructor(
-    private readonly files: Files,
-    private readonly paths: RegisterPaths,
-    private readonly priorities: readonly PriorityConfig[] = [],
-  ) {
+  constructor(files: Files, paths: RegisterPaths, priorities: readonly PriorityConfig[] = []) {
+    this.files = files
+    this.paths = paths
+    this.priorities = priorities
     this.events = new WatchedFile(files, paths.events, readRegister, readRegister(''))
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
   }

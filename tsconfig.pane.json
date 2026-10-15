@@ -1,5 +1,5 @@
 {
-  "//": "The plugin's typecheck (npm run typecheck:pane): its hooks, tests and scripts under the same strict flags as tools/. The engine's modules are typed by plugins/teamrig-pane/typecheck. Not named tsconfig.json, and not inside the plugin, so the engine that runs the plugin never reads it.",
+  "//": "The plugin's typecheck (npm run typecheck:pane): its hooks, tests and scripts under the same strict flags as tools/, and only syntax node can strip (erasableSyntaxOnly), so the coverage gate runs it under node. The engine's modules are typed by plugins/teamrig-pane/typecheck. Not named tsconfig.json, and not inside the plugin, so the engine that runs the plugin never reads it.",
   "compilerOptions": {
     "target": "ES2023",
     "lib": [
@@ -19,6 +19,7 @@
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true,
     "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
     "forceConsistentCasingInFileNames": true,

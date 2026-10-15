@@ -51,8 +51,11 @@ export class LiveRegister {
   private mustPublish = true
   /** The snapshot it last wrote; null until its first write (a hot reload starts it over). */
   private shown: Snapshot | null = null
+  private readonly ports: LivePorts
 
-  constructor(private readonly ports: LivePorts) {}
+  constructor(ports: LivePorts) {
+    this.ports = ports
+  }
 
   /** Starts the poll and the label tick on the engine's clock; neither rejects. */
   startTimers(every: (ms: number, fn: () => void) => Timer): void {
