@@ -114,7 +114,8 @@ const REGISTER_ENV: Readonly<Record<string, string>> = {
 
 /**
  * Starts the plugin over a fake disk, store and git; `kept` is what $.store holds from earlier
- * sessions, `env` the environment the plugin reads.
+ * sessions, `env` the environment the plugin reads. Each repo the git knows is on the disk: its
+ * root's `.git`, and a file in each folder named in it (git never runs in a folder that is not there).
  */
 async function start(
   on: On,
@@ -148,6 +149,10 @@ async function start(
   ])
   disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
   disk.write(INBOX, ['line one', 'line two', 'line three'])
+  for (const [folder, root] of Object.entries(repos.roots)) {
+    disk.write(`${root}/.git`, ['gitdir'])
+    disk.write(`${folder}/.keep`, [''])
+  }
   return { clock, disk, opened, registered, store, runs, titles }
 }
 
@@ -685,9 +690,12 @@ test("the Changes view lists each repo's changed files, counted on the switch an
 
 test('a file the session writes adds its repo on the next poll; a failed write adds none; one outside any repo is listed as such', async ($, on) => {
   const repos: FakeRepos = { roots: { '/repo/src': '/repo' }, statuses: { '/repo': ['## main', ' M src/a.ts', ''].join('\0') } }
-  const { clock, runs, titles } = await start(on, {}, repos)
+  const { clock, disk, runs, titles } = await start(on, {}, repos)
   on('tool.call', { tool: 'Edit' }, async ($, e) => (e.file_path.endsWith('bad.ts') ? { result: 'no match', isError: true } : { result: 'edited' }))
-  on('tool.call', { tool: 'Write' }, async () => ({ result: 'written' }))
+  on('tool.call', { tool: 'Write' }, async ($, e) => {
+    disk.write(e.file_path, [e.content])
+    return { result: 'written' }
+  })
   on('tool.call', { tool: 'Bash' }, async () => ({ result: 'ran' }))
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await clock.settle()
@@ -716,6 +724,23 @@ test('a file the session writes adds its repo on the next poll; a failed write a
   expect(statusRuns()).toBe(before + 1)
   expect(await pane.find({ text: /repo · main · clean/ })).toBeDefined()
   expect(titles.at(-1)).toBe('Tasks · Δ1')
+})
+
+test('a worktree removed while the session works leaves the Changes view, with no warning and no git run in it', async ($, on) => {
+  const { clock, disk, runs, titles } = await start(on, {}, { roots: { '/work': '/work' }, statuses: { '/work': REPO_STATUS } })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'changes' })
+  expect(await pane.find({ text: /work · pane-v2 · 3 changed/ })).toBeDefined()
+
+  for (const path of ['/work/.git', '/work/.keep']) disk.remove(path)
+  const before = runs.length
+  await clock.advance(60_000)
+  expect(runs.length).toBe(before)
+  expect(await pane.find({ text: /No git repo yet/ })).toBeDefined()
+  expect(await pane.find({ text: /WARN|detached/ })).toBeUndefined()
+  expect(titles.at(-1)).toBe('Tasks')
 })
 
 test('from the minimized strip, Changes opens the pane in full on the Changes view', async ($, on) => {

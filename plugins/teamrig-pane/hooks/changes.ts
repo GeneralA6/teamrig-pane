@@ -2,9 +2,11 @@
 // from the session's folder and from each file the session writes (Edit, Write, NotebookEdit: the
 // tool.call hooks in register.tsx), its root found once per folder with `git rev-parse
 // --show-toplevel` (a worktree's own root, never the main checkout's). A file written outside any repo
-// is listed as such, the newest OUTSIDE_KEPT. Each repo costs one `git --no-optional-locks status
-// --porcelain=v1 -b -z` (no index lock, so it never blocks a commit): on the next 3 s poll after a
-// write or a shell call (a burst of edits costs one run), every 60 s (a commit or a change made from
+// is listed as such, the newest OUTSIDE_KEPT. Git never runs in a folder that is not there: a folder is
+// checked before its root is asked, and a repo's `.git` before each read, so a repo whose folder or
+// `.git` is gone (a removed worktree) leaves the list. Each repo costs one `git --no-optional-locks
+// status --porcelain=v1 -b -z` (no index lock, so it never blocks a commit): on the next 3 s poll after
+// a write or a shell call (a burst of edits costs one run), every 60 s (a commit or a change made from
 // elsewhere), and at once when the person switches to the view. Runs git only; no model calls.
 import type { ChangesSnapshot, Cut, FileChange, RepoChanges } from '../types'
 import { POLL_MS, TICK_MS, type Timer } from './live'
@@ -23,6 +25,8 @@ export type GitRun = { exitCode: number; stdout: string; stderr: string; isStdou
 export type ChangesPorts = {
   /** Runs `git <args>` in `cwd`; rejects when git cannot start or outlasts its timeout. */
   git: (args: readonly string[], cwd: string) => Promise<GitRun>
+  /** Whether a file or folder is there; may reject when it cannot tell. */
+  exists: (path: string) => Promise<boolean>
   /** Writes the changes atom (each write redraws the pane). */
   publish: (next: ChangesSnapshot) => Promise<void>
 }
@@ -116,8 +120,8 @@ export class LiveChanges {
 
   /** Adds the repo `folder` is in, if any. Never rejects. */
   async addFolder(folder: string): Promise<void> {
-    const root = await this.rootOf(folder).catch(() => null)
-    if (root === null || this.repos.has(root)) return
+    const root = await this.rootOf(folder)
+    if (typeof root !== 'string' || this.repos.has(root)) return
     this.repos.add(root)
     this.isDirty = true
   }
@@ -125,7 +129,7 @@ export class LiveChanges {
   /** A file the session wrote: its repo is read on the next poll, or it is listed as outside git. Never rejects. */
   async noteWrite(path: string): Promise<void> {
     this.isDirty = true
-    const root = await this.rootOf(folderOf(path)).catch(() => undefined)
+    const root = await this.rootOf(folderOf(path))
     if (root === undefined) return
     if (root === null) this.outside = [path, ...this.outside.filter(known => known !== path)].slice(0, OUTSIDE_KEPT)
     else this.repos.add(root)
@@ -146,8 +150,8 @@ export class LiveChanges {
     this.isReading = true
     this.isDirty = false
     try {
-      const repos = await Promise.all([...this.repos].map(root => this.readRepo(root)))
-      const next: ChangesSnapshot = { repos, outside: [...this.outside], isRead: true }
+      const read = await Promise.all([...this.repos].map(root => this.readRepo(root)))
+      const next: ChangesSnapshot = { repos: read.filter(repo => repo !== null), outside: [...this.outside], isRead: true }
       if (this.shown !== null && JSON.stringify(this.shown) === JSON.stringify(next)) return
       await this.ports.publish(next)
       this.shown = next
@@ -158,19 +162,38 @@ export class LiveChanges {
     }
   }
 
-  /** A git that cannot start rejects, and the folder is asked again next time; one outside any repo is kept as null. */
-  private async rootOf(folder: string): Promise<string | null> {
+  /**
+   * A folder's repo root; null outside any repo, kept so the folder is asked once; undefined when the
+   * folder is not there or git cannot be asked, so it is asked again next time. Never rejects.
+   */
+  private async rootOf(folder: string): Promise<string | null | undefined> {
     const known = this.roots.get(folder)
     if (known !== undefined) return known
-    const ran = await this.ports.git(TOPLEVEL, folder)
-    const root = ran.exitCode === 0 && ran.stdout.trim() !== '' ? ran.stdout.trim() : null
-    this.roots.set(folder, root)
-    return root
+    try {
+      if (!(await this.ports.exists(folder))) return undefined
+      const ran = await this.ports.git(TOPLEVEL, folder)
+      const root = ran.exitCode === 0 && ran.stdout.trim() !== '' ? ran.stdout.trim() : null
+      this.roots.set(folder, root)
+      return root
+    } catch {
+      return undefined
+    }
   }
 
-  private async readRepo(root: string): Promise<RepoChanges> {
+  /** Drops a repo that is gone, and the folders known to be in it, so a later write there asks its root again. */
+  private forget(root: string): void {
+    this.repos.delete(root)
+    for (const [folder, known] of this.roots) if (known === root) this.roots.delete(folder)
+  }
+
+  /** One repo as git reads it now; null once its folder or its `.git` is gone, and it leaves the list. */
+  private async readRepo(root: string): Promise<RepoChanges | null> {
     const unread = { root, branch: null, files: kept<FileChange>([], CHANGES_KEPT), isPartial: false }
     try {
+      if (!(await this.ports.exists(`${root}/.git`))) {
+        this.forget(root)
+        return null
+      }
       const ran = await this.ports.git(STATUS, root)
       if (ran.exitCode !== 0) return { ...unread, problem: failure(ran) }
       const status = parseStatus(ran.stdout)
