@@ -124,7 +124,7 @@ describe('renderHero', () => {
       'waits on the mail key',
       `asked of others (${ASKED.length})`,
       'T13 →api p2 Mail key',
-      'finished today',
+      `finished today (${FINISHED.length})`,
       'T11 Signup API',
     ]);
     const glyphs = places.filter((place) => inPart(place, 'tasks') && place.element.attributes.has('data-glyph'));
