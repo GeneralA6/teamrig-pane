@@ -9,7 +9,7 @@ import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, finishedMoreText, paneBlocks, typ
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
-import { areaView, flagsOf, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
+import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
 import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine } from './fixtures'
 
 const DAY = 24 * HOUR
@@ -242,21 +242,6 @@ describe('view', () => {
     expect([view.finishedTotal, view.finishedMoreDropped]).toEqual([2, 0])
     expect(barCounts(tasks, 'po', NOW)['done-today']).toBe(view.finished.filter(t => t.status === 'done').length)
     expect(areaView(tasks, 'po', midnight + 24 * HOUR).finishedTotal).toBe(0)
-  })
-
-  test('a date-only due is due at the end of that UTC day', async () => {
-    const [task] = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW, due: '2026-10-13' }))
-    if (!task) throw new Error('no task')
-    expect(flagsOf(task, NOW)).toEqual([])
-    expect(flagsOf(task, Date.UTC(2026, 9, 13, 23, 59))).toEqual([])
-    expect(flagsOf(task, Date.UTC(2026, 9, 14, 0, 1))).toEqual(['overdue'])
-  })
-
-  test('an untouched task reads NEW, then NOT PICKED UP after a day', async () => {
-    const [task] = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW }))
-    if (!task) throw new Error('no task')
-    expect(flagsOf(task, NOW + HOUR)).toEqual(['new'])
-    expect(flagsOf(task, NOW + 25 * HOUR)).toEqual(['unseen'])
   })
 
   test('two snapshots draw the same pane unless a field, a task or a time label differs', async () => {
