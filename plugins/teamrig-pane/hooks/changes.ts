@@ -13,6 +13,7 @@
 // model calls. The repos and outside files found are kept apart from the drawn snapshot (KnownChanges),
 // so a reload that bumps the snapshot's shape still knows them.
 import type { ChangesSnapshot, Cut, FileChange, KnownChanges, LineCount, RepoChanges } from '../types'
+import { messageOf } from './errors'
 import { POLL_MS, TICK_MS, type Timer } from './live'
 
 export const EMPTY_CHANGES: ChangesSnapshot = { repos: [], outside: [], isRead: false }
@@ -154,10 +155,6 @@ function numstatArgs(isUnborn: boolean): string[] {
 function grepArgs(paths: readonly string[], isTextOnly: boolean): string[] {
   const textOnly = isTextOnly ? ['-I'] : []
   return ['--no-optional-locks', 'grep', '--untracked', ...textOnly, '-c', '-z', '-e', '', '--', ...paths.map(path => `${LITERAL}${path}`)]
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 /** The first line git wrote to stderr, or what its exit code says. */

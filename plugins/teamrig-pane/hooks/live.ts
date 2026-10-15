@@ -11,6 +11,7 @@
 // tasks, and when even that write fails the pane stays as last drawn and the next poll tries again.
 import type { Snapshot } from '../types'
 import { SESSION_NAME } from './core/read/index'
+import { messageOf } from './errors'
 import type { TaskRegisterSource } from './source'
 import { sameView } from './view'
 
@@ -140,8 +141,4 @@ export class LiveRegister {
     })
     if (written.last !== null) this.shown = written.last
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
