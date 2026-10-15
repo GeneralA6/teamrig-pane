@@ -76,7 +76,7 @@ failed. A session opens it by itself from 144 columns; `/teamrig-pane` opens it 
 
 Above the prompt it shows at most 6 one-line rows, the last saying how many it left out: that area
 is redrawn on every keystroke, so a full list there slows typing. The status bar takes only the rows
-past the 3 the list keeps, its own lines first to last, so it never pushes the tasks out. The side
+past the 4 the list keeps, its own lines first to last, so it never pushes the tasks out. The side
 dock shows the whole list.
 
 ## Status bar

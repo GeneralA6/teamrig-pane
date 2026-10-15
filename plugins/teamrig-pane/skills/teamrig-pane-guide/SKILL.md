@@ -122,7 +122,7 @@ session.
 | main screen (not fullscreen) | any | Above the prompt |
 
 Above the prompt it shows at most 6 one-line rows, the last saying how many it left out, because that area is
-redrawn on every keystroke. The status bar takes only the rows past the 3 the list keeps. The side dock shows
+redrawn on every keystroke. The status bar takes only the rows past the 4 the list keeps. The side dock shows
 the whole list.
 
 ## The Tasks view
