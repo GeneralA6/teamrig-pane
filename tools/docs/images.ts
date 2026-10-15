@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { renderFeatures } from './features.ts';
 import { renderHero } from './hero.ts';
 
 /**
- * The README's pictures, drawn in code: today the hero. A change to a drawing changes its picture, and
- * `images-cli.ts --check` fails until it is redrawn.
+ * The README's pictures, drawn in code: the hero and the features cards, in the README's order. A change to a
+ * drawing changes its picture, and `images-cli.ts --check` fails until it is redrawn.
  */
 
 export const IMAGES_DIR = 'docs/images';
@@ -16,7 +17,10 @@ export interface Picture {
 }
 
 export function drawPictures(): Picture[] {
-  return [{ file: 'hero.svg', svg: renderHero() }];
+  return [
+    { file: 'hero.svg', svg: renderHero() },
+    { file: 'features.svg', svg: renderFeatures() },
+  ];
 }
 
 const pathOf = (root: string, picture: Picture): string => join(root, IMAGES_DIR, picture.file);
