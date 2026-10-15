@@ -8,7 +8,8 @@ npm ci --ignore-scripts
 npm run setup
 ```
 
-`npm run setup` installs the git hooks: the scrub and DCO checks below run before each commit.
+`npm run setup` installs the git hooks: the scrub and DCO checks below run before each commit, and the
+[local gate](#the-local-gate) before each push.
 
 ## Sign-off (DCO)
 Every commit must carry a `Signed-off-by:` line that matches the commit author, certifying the
@@ -18,7 +19,7 @@ Every commit must carry a `Signed-off-by:` line that matches the commit author, 
 git commit -s
 ```
 
-The `commit-msg` hook and CI both reject a commit without it.
+The `commit-msg` hook and the local gate both reject a commit without it.
 
 ## Tests
 Every change ships tests, so the next change cannot break it unnoticed:
@@ -43,32 +44,49 @@ under `tools/` or `plugins/teamrig-pane/` is loaded by no test, or a file, or ei
 falls below the floors in `tools/ci/coverage.json`. That file names, each with its reason, the code
 it does not measure: `hooks/core/` (vendored; teamrig measures it), the files no node test can load
 yet, and the plugin tests only the engine can run. Never lower a floor or add an entry to pass a
-change: add the test. CI also runs `npm test` and the plugin
+change: add the test. When it runs, CI also runs `npm test` and the plugin
 tests on Linux, Windows and macOS under node 22 and 24, with a pinned Claude Code release
-(`.github/workflows/ci.yml`).
+(`.github/workflows/ci.yml`); while it is paused, the local gate runs them on your machine.
 
 `hooks/core/` is a copy of teamrig's read modules at the commit `scripts/teamrig-pin.json` names, made
-by `scripts/sync-core.ts`; never edit it by hand. CI's `hooks/core matches the teamrig pin` job runs
-`sync-core.ts --check` against teamrig and fails on any difference; teamrig is private, so that job
-alone reads the `TEAMRIG_READ_TOKEN` secret. After each sync, rerun `scripts/golden.ts` so
+by `scripts/sync-core.ts`; never edit it by hand. The `hooks/core matches the teamrig pin` check (a CI job
+and a step of the local gate) runs `sync-core.ts --check` against teamrig and fails on any difference;
+teamrig is private, so in CI that job alone reads the `TEAMRIG_READ_TOKEN` secret, and the local gate
+reads a teamrig checkout on your machine. After each sync, rerun `scripts/golden.ts` so
 `tests/golden-register.ts` holds what teamrig at the new pin writes and prints (the plugin README says
 how).
 
+## The local gate
+CI (`.github/workflows/ci.yml`) is paused until it is turned back on, and runs only when started by hand.
+Until then the `pre-push` hook from `npm run setup` runs every check CI runs (`tools/ci/local.ts`; the list is
+`tools/ci/local-checks.ts`) on the commit being pushed. Run it by hand with `node tools/ci/local.ts`.
+- It proves a committed tree: it refuses uncommitted changes, and a pushed commit that is not checked out.
+- It stops at the first failing check and prints its output.
+- A pass is recorded in the clone's git folder (`local-ci/<tree>.json`, shared by its worktrees), so a tree is
+  checked once; a new commit is checked again.
+- The core-sync check reads a teamrig git checkout: `--teamrig <dir>`, else the clone's
+  `git config teamrig.checkout <dir>`, else a `teamrig` folder beside this repository.
+- The plugin tests run in the Claude Code on your PATH, with an empty home folder as on a CI runner.
+- It cannot be skipped: never push with `--no-verify`.
+
+It runs on one machine, one Node and the Claude Code installed there, so a failure that only another OS,
+Node version or the pinned Claude Code release shows goes unseen until CI runs again.
+
 ## Branches and releases
-- Every change is its own branch off `main` and lands through a pull request once every CI check
-  passes on its head; it is rebase-merged and the branch is deleted.
+- Every change is its own branch off `main` and lands through a pull request once every check
+  passes on its head (the local gate while CI is paused); it is rebase-merged and the branch is deleted.
 - Nothing is pushed to `main` directly, and release tags are set only by the maintainer.
 - Installs take the version in `plugins/teamrig-pane/.claude-plugin/plugin.json`, not the newest commit:
   `claude plugin update` moves an install only when that version rises. So a change to anything under
   `plugins/teamrig-pane/` raises it, as MAJOR.MINOR.PATCH: while it is 0.x, the minor for a new feature
-  or a change that breaks how people use it, the patch for a fix. CI's `plugin version gate`
-  (`tools/ci/plugin-version-cli.ts`, also run by `npm run check`) fails a pull request that does not, and
+  or a change that breaks how people use it, the patch for a fix. The `plugin version gate`
+  (`tools/ci/plugin-version-cli.ts`, run by the local gate and `npm run check`) fails a pull request that does not, and
   one that gives the marketplace entry a version of its own, which Claude Code ignores. How users update:
   [Update](README.md#update).
 
 ## Scrub checks
 Two checks keep private data out of the history:
-1. **Generic** (in this repo, run by the hooks and CI): absolute home paths, e-mail addresses,
+1. **Generic** (in this repo, run by the hooks, the local gate and CI): absolute home paths, e-mail addresses,
    IP addresses, internal host names and common secret formats.
 2. **Private denylist** (optional, never committed): a file of your own terms, wired in with
    `git config --local teamrig.scrubDenylist <path>`. Once configured, the hooks fail closed if
