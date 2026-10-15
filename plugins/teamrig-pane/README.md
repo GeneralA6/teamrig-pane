@@ -12,15 +12,20 @@ every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick mov
 labels on. No model calls, so no tokens. A switch over the list flips it to the session's git changes
 (Tasks and Changes, below).
 
-- **mine**: the session's area. Shows active tasks in teamrig's plan order (priority, then due with
-  undated last, then id), each with its priority (`p2`) and due, NEW / NOT PICKED UP (untouched after
-  24 h) / overdue flags and, under a blocked task, its blocked note; then what the area asked of
-  others (the newest 8), what it finished in the last day (the newest 6) and how many of its inbox
-  lines are unread.
-- **all**: every owner's active tasks, with blocked counts.
+- **mine**: the session's area, under its status bar (Status bar, below). Shows active tasks in
+  teamrig's plan order (priority, then due with undated last, then id), each with its priority (`p2`)
+  and due, NEW / NOT PICKED UP (untouched after 24 h) / overdue flags and, under a blocked task, its
+  blocked note. Tasks waiting for proof lead, under `waiting for proof (N)`: they are the nearest to
+  done, so closing them comes first, and the rest follow under `other active (M)`. With none waiting,
+  neither heading shows. Then what the area asked of others (the newest 8), what it finished in the
+  last day (the newest 6) and how many of its inbox lines are unread.
+- **all**: every owner's active tasks, each owner's heading with its counts, a count with none left
+  out (`api · 4 active · 1 blocked · 1 waiting for proof`), and the tasks waiting for proof first in
+  each group.
 
-A task's glyph is its status as `teamrig list` names it: `○` open, `◐` in progress, `■` blocked, `✓`
-done, `✗` dropped.
+A task's glyph is its status as `teamrig list` names it: `○` open, `◐` in progress, `◑` verifying,
+`■` blocked, `✓` done, `✗` dropped. A verifying task's change has landed and waits for what proves
+it works; under it, `↳ proof: <note>` says what that is.
 
 The area is taken from the session's newest `teamrig inbox read --session <id>` (its mark in
 `inbox-marks.jsonl` names the Claude Code session), or pinned with `/teamrig-pane <session>`. A tab
@@ -28,10 +33,12 @@ teamrig binds by its Claude Code title (`/rename web`) gets the same mark, so th
 
 `/teamrig-pane [mine | all | auto | <session>]` opens the pane, switches the view, follows the inbox read
 again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
-and lists the team's sessions. In the pane, `m` and `a` switch views.
+and lists the team's sessions. In the pane, `m` and `a` switch views, and `o`, `v`, `w`, `b` and `n`
+show one status's tasks alone (Status bar, below).
 
 In the side dock the tasks sit a blank line apart, each wrapped title line starting under the task's
-id, and a ruled heading opens each section (asked of others, finished today, each owner in `all`).
+id, and a ruled heading opens each section (waiting for proof, other active, asked of others, finished
+today, each owner in `all`).
 Lines are measured in display cells, per character as the reader sees it (`hooks/width.ts`): CJK,
 fullwidth forms and emoji take two cells, an emoji sequence (a ZWJ family, a skin tone, a flag) is one
 character, and a cut never lands inside one, so no line runs past the pane's edge. However narrow the
@@ -63,7 +70,29 @@ least 110 columns wide; anywhere else it sits above the prompt, and `/teamrig-pa
 failed. A session opens it by itself from 144 columns; `/teamrig-pane` opens it at any width.
 
 Above the prompt it shows at most 6 one-line rows, the last saying how many it left out: that area
-is redrawn on every keystroke, so a full list there slows typing. The side dock shows the whole list.
+is redrawn on every keystroke, so a full list there slows typing. The status bar takes only the rows
+past the 3 the list keeps, its own lines first to last, so it never pushes the tasks out. The side
+dock shows the whole list.
+
+## Status bar
+
+Over the mine view's tasks, a row as wide as the pane shares its cells among the area's tasks by
+status, in this order: done today (green `█`), verifying (green `▓`), working, that is in progress
+(amber `█`), blocked (red `█`) and not started, that is open (dim `░`). Today is the UTC day, the one
+the due labels are in; tasks done on an earlier day, and dropped ones, are left out. The cells are
+shared by largest remainder, and a status with any task gets at least one. Under the row a dim line
+counts them (`1 done today · 1 verifying · 2 working`), skipping a status with none. An area with
+none of these tasks draws no bar, and the all view has none.
+
+A press on a status's cells or its count, or its key while the pane holds the keyboard (`o` done
+today, `v` verifying, `w` working, `b` blocked, `n` not started), shows only that status's tasks
+under the header: done today newest first, the others in plan order, every other section hidden. Its
+cells and count turn bold, and a dim line under the counts reads `showing verifying only, click again
+for all`. The same press again shows every task; one on another status switches to it. A shown status
+that empties keeps its count at 0 (`0 blocked`), so a press still clears it, and the list says so
+(`Nothing blocked.`). The filter is the pane's own state: it holds while you switch to all (which it
+does not filter) or to Changes, and is never kept across a reload; a new session, or a reload, shows
+every task again.
 
 ## Minimizing, not closing
 
