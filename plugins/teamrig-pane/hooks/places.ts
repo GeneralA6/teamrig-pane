@@ -22,8 +22,11 @@ export const TEAMRIG_ENV = { home: 'TEAMRIG_HOME', team: 'TEAMRIG_TEAM' } as con
 /** Every variable the pane's places come from. */
 export type PlaceVariable = (typeof PANE_ENV)[keyof typeof PANE_ENV] | (typeof TEAMRIG_ENV)[keyof typeof TEAMRIG_ENV]
 
-/** The variables as the environment Claude Code runs in has them (the engine reads each by its literal name). */
-export type PlacesEnv = Readonly<Partial<Record<PlaceVariable, string>>>
+/**
+ * The variables as the environment Claude Code runs in has them (the engine reads each by its literal name): one
+ * that is not set is absent, or undefined as `$.env.get` answers it.
+ */
+export type PlacesEnv = Readonly<Partial<Record<PlaceVariable, string | undefined>>>
 
 /** teamrig's pointer file: `{"team": "<id>"}` ties a project folder, and every folder below it, to a team. */
 export const TEAM_POINTER = '.teamrig.json'
@@ -178,7 +181,7 @@ async function findTeam(input: PlacesInput, variable: (name: PlaceVariable) => s
     if (text.value === null) continue
     const parsed = parseJson(text.value)
     if (parsed === undefined) return { ok: false, problem: `${path} is not JSON; expected {"team": "<id>"}` }
-    const team = isRecord(parsed) ? asString(parsed.team) : undefined
+    const team = isRecord(parsed) ? asString(parsed['team']) : undefined
     return team === undefined ? { ok: false, problem: `${path} has no "team" text; expected {"team": "<id>"}` } : checkTeam(team, path)
   }
   return { ok: true, value: null }
