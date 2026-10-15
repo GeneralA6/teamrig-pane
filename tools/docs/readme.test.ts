@@ -2,10 +2,11 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { IMAGES_DIR } from './images.ts';
+import { drawPictures, IMAGES_DIR } from './images.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const readme = readFileSync(`${ROOT}README.md`, 'utf8');
+const ci = readFileSync(`${ROOT}.github/workflows/ci.yml`, 'utf8');
 const pluginReadme = readFileSync(`${ROOT}plugins/teamrig-pane/README.md`, 'utf8');
 const TEAMRIG = 'https://github.com/GeneralA6/teamrig';
 
@@ -17,10 +18,26 @@ describe('README', () => {
     assert.match(readme, /^# teamrig-pane\n\n\*\*Your tasks, beside the conversation\.\*\*\n/);
   });
 
-  it('shows the hero with a text alternative a screen reader can stand on', () => {
-    const [, alt = ''] = readme.match(new RegExp(`!\\[([^\\]]*)\\]\\(${IMAGES_DIR}/hero\\.svg\\)`)) ?? [];
-    assert.ok(alt.length > 40, alt);
-    assert.doesNotMatch(alt, /^(hero|image|screenshot)\b/i);
+  it('shows every picture with a text alternative a screen reader can stand on', () => {
+    for (const picture of drawPictures()) {
+      const [, alt = ''] = readme.match(new RegExp(`!\\[([^\\]]*)\\]\\(${IMAGES_DIR}/${picture.file.replace('.', '\\.')}\\)`)) ?? [];
+      assert.ok(alt.length > 40, `${picture.file}: ${alt}`);
+      assert.doesNotMatch(alt, /^(hero|image|screenshot|features)\b/i);
+    }
+  });
+
+  it('lists what the pane needs: the Claude Code version CI installs, teamrig, the fullscreen layout, git', () => {
+    const [, needs = ''] = readme.match(/\n### Requirements\n([\s\S]*?)\n## /) ?? [];
+    const [, tested = ''] = ci.match(/@anthropic-ai\/claude-code@(\d+\.\d+\.\d+)/) ?? [];
+    assert.notEqual(tested, '');
+    assert.match(needs, new RegExp(`^- Claude Code, tested on ${tested.replaceAll('.', '\\.')} and later\\.$`, 'm'));
+    for (const need of [/^- teamrig:/m, /`"tui": "fullscreen"`/, /at least 110 columns/, /^- git, for the Changes view\./m, /Windows, macOS or Linux/]) {
+      assert.match(needs, need);
+    }
+  });
+
+  it('points AI assistants at llms.txt', () => {
+    assert.match(readme, /Using an AI assistant\? Point it at \[[^\]]*llms\.txt\]\(https:\/\/github\.com\/GeneralA6\/teamrig\/blob\/main\/llms\.txt\)/);
   });
 
   it('says it is part of teamrig, and links teamrig', () => {

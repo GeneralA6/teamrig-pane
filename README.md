@@ -17,9 +17,20 @@ claude plugin marketplace add GeneralA6/teamrig-pane
 claude plugin install teamrig-pane@teamrig-pane
 ```
 
-Then run `/teamrig-pane` in a session. In the fullscreen layout (`"tui": "fullscreen"`) the pane docks on
-the right from 110 columns and opens by itself from 144; anywhere else it sits above the prompt.
-Tested on Claude Code 2.1.295 and later.
+Then run `/teamrig-pane` in a session. In the fullscreen layout the pane docks on the right from 110
+columns and opens by itself from 144; anywhere else it sits above the prompt.
+
+### Requirements
+
+- Claude Code, tested on 2.1.295 and later.
+- teamrig: the pane shows its task list. It finds your team from `$TEAMRIG_TEAM` or the nearest
+  `.teamrig.json`, and says what to set when it can't.
+- Claude Code's fullscreen layout (`"tui": "fullscreen"` in its settings) and a terminal at least 110 columns
+  wide, to dock on the right.
+- git, for the Changes view.
+- Windows, macOS or Linux: each is tested.
+
+Nothing else: the pane runs inside Claude Code itself, with no server, browser or Node.js of its own.
 
 ## Update
 
@@ -33,6 +44,12 @@ claude plugin update teamrig-pane@teamrig-pane
 
 Then run `/reload-plugins` in each open session, or restart it. Claude Code does not check this marketplace for
 updates by itself unless you turn on its auto-update in `/plugin`, under Marketplaces.
+
+## Why it's different
+
+![Six cards. Your tasks, always in view: docked beside the conversation, in plan order. The whole team at a glance: every owner's tasks with how many are active or blocked. What needs you stands out: blocked, overdue, new and not picked up are marked. Details on a click. Changes, one press away. Fast, and costs no tokens: it reads files, never the model.](docs/images/features.svg)
+
+It is part of Claude Code's own screen, not another window: nothing to switch to, nothing else to keep running.
 
 ## What it shows
 
@@ -51,6 +68,9 @@ updates by itself unless you turn on its auto-update in `/plugin`, under Marketp
   60 s. No model calls, so no tokens.
 - **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; see
   [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
+
+Using an AI assistant? Point it at [teamrig's llms.txt](https://github.com/GeneralA6/teamrig/blob/main/llms.txt):
+teamrig and this pane explained for language models.
 
 [Plugin README](plugins/teamrig-pane/README.md) (every view, key and limit) ·
 [Contributing](CONTRIBUTING.md) · [teamrig](https://github.com/GeneralA6/teamrig) ·
