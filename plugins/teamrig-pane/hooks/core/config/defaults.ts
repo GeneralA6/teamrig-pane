@@ -3,6 +3,7 @@ import type {
   AlertsConfig,
   BudgetConfig,
   CommitsConfig,
+  LaunchConfig,
   LockConfig,
   OpenConfig,
   PushGuardConfig,
@@ -37,7 +38,7 @@ export const DEFAULT_REGISTER: RegisterConfig = {
   requireEvidenceOnDone: true,
   requireSkillOnDone: true,
   requireNoteOn: ['blocked', 'done', 'dropped'],
-  check: { staleAfterHours: 72, notPickedUpAfterHours: 24, weekLengthDays: 7 },
+  check: { staleAfterHours: 72, notPickedUpAfterHours: 24, prioritySkipAfterHours: 24, weekLengthDays: 7 },
 };
 
 export const DEFAULT_SKILLS: SkillsConfig = {
@@ -69,3 +70,12 @@ export const DEFAULT_ALERTS: AlertsConfig = { persistentFailureHours: 24 };
 export const DEFAULT_REFRESH: RefreshConfig = { enabled: true, contextTokens: 250_000, tabTitle: true };
 
 export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto' };
+
+/**
+ * The lead's model and effort for each key its `launch` entry leaves unset: Opus (Claude Code's `opus`
+ * alias, its newest Opus) at xhigh effort, since the lead plans, splits and judges the whole team's work.
+ * Not `best`: in a lead A/B, Fable at xhigh judged no better than Opus and cost 2.4 times as much. A team
+ * sets `launch.<lead id>.model` to `best` or a full model id to change it. The other sessions default to
+ * Claude Code's own.
+ */
+export const DEFAULT_LEAD_LAUNCH: Required<LaunchConfig> = { model: 'opus', effort: 'xhigh' };
