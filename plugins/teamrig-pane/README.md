@@ -201,4 +201,7 @@ teamrig's own register fixtures. `tests/golden.test.ts` then holds the pane to t
 print as teamrig's list lines, its unread counts and its `WARN` line equal teamrig's. Never edit the
 capture by hand.
 
-Checks: `claude plugin validate .` and `claude plugin test .` (neither typechecks).
+Checks: `claude plugin validate .` and `claude plugin test .` run it in the engine. `npm run typecheck:pane`, from the
+repository root, typechecks its hooks, tests and scripts under `tsconfig.pane.json`, against `typecheck/`: the
+engine ships no declarations for `claude-code` or `claude-code/testing`, so those files declare the subset the
+plugin calls. A call it adds that they lack fails the typecheck; declare it there, never as `any`.
