@@ -558,7 +558,7 @@ describe('width', () => {
 describe('command', () => {
   test('is /teamrig-pane, leaving /teamrig to the teamrig plugin, and every message names it', async () => {
     expect(COMMAND).toBe('teamrig-pane')
-    expect(USAGE).toBe('usage: /teamrig-pane [mine | all | auto | <area>]')
+    expect(USAGE).toBe('usage: /teamrig-pane [mine | all | auto | <session>]')
     expect(inlineReason({ isFullscreen: true, columns: 96 })).toContain('then /teamrig-pane again.')
   })
 
@@ -566,8 +566,10 @@ describe('command', () => {
     expect(parsePaneArgs('')).toEqual({ kind: 'open' })
     expect(parsePaneArgs(' All ')).toEqual({ kind: 'mode', mode: 'all' })
     expect(parsePaneArgs('auto')).toEqual({ kind: 'auto' })
-    expect(parsePaneArgs('po')).toEqual({ kind: 'pin', area: 'po' })
-    expect(parsePaneArgs('no such area!')).toEqual({ kind: 'usage' })
+    // Any other word names a session, by its id or its name (sessions.ts looks it up).
+    expect(parsePaneArgs('po')).toEqual({ kind: 'pin', word: 'po' })
+    expect(parsePaneArgs(' Web-API ')).toEqual({ kind: 'pin', word: 'web-api' })
+    expect(parsePaneArgs('no such area!')).toEqual({ kind: 'pin', word: 'no such area!' })
   })
 
   test('says why the pane sits above the prompt instead of docking', async () => {

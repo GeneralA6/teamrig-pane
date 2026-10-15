@@ -34,7 +34,7 @@ const DETAIL_LEAD: Span = { text: `${UNDER_ID}│ `, dim: true }
 export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', blocked: '■', done: '✓', dropped: '✗' }
 const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', blocked: 'error', done: 'success' }
 
-const NO_AREA = `No area for this session yet: run \`inbox read --session <area>\`, or /${COMMAND} <area> to pin one.`
+const NO_AREA = `No area for this session yet: /rename the tab to its session's id or name, run \`inbox read --session <id>\`, or /${COMMAND} <session> to pin one.`
 
 /** A block of one row, its key the block's. */
 export function single(key: string, spans: Span[], hang?: Span): Block {

@@ -1,30 +1,28 @@
 // The /teamrig-pane command: its name and its argument, parsed apart from the engine so every form is testable.
 import type { CommandPresentation } from 'claude-code'
 import type { ViewMode } from '../types'
-import { SESSION_NAME } from './core/read/index'
 
 /** The slash command the pane registers, kept apart from /teamrig, which the teamrig plugin itself uses. */
 export const COMMAND = 'teamrig-pane'
 
-export const USAGE = `usage: /${COMMAND} [mine | all | auto | <area>]`
+/** What the command takes; `<session>` is a session's id or name. */
+export const ARGUMENT_HINT = '[mine | all | auto | <session>]'
+
+export const USAGE = `usage: /${COMMAND} ${ARGUMENT_HINT}`
 
 /**
  * open: show the pane; mode: switch the view; auto: drop this session's pin and follow its
- * `inbox read` again; pin: show <area> in this session from now on; usage: unknown argument.
+ * `inbox read` again; pin: show the session `word` names (an id or a name, looked up by sessions.ts) in
+ * this session from now on. The keywords come first, so a session named mine, all or auto is pinned by its id.
  */
-export type PaneCommand =
-  | { kind: 'open' }
-  | { kind: 'mode'; mode: ViewMode }
-  | { kind: 'auto' }
-  | { kind: 'pin'; area: string }
-  | { kind: 'usage' }
+export type PaneCommand = { kind: 'open' } | { kind: 'mode'; mode: ViewMode } | { kind: 'auto' } | { kind: 'pin'; word: string }
 
 export function parsePaneArgs(args: string): PaneCommand {
   const word = args.trim().toLowerCase()
   if (word === '') return { kind: 'open' }
   if (word === 'mine' || word === 'all') return { kind: 'mode', mode: word }
   if (word === 'auto') return { kind: 'auto' }
-  return SESSION_NAME.test(word) ? { kind: 'pin', area: word } : { kind: 'usage' }
+  return { kind: 'pin', word }
 }
 
 /** The fullscreen layout docks a pane beside the transcript from this width (engine: `CommandPresentation`). */

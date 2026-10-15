@@ -13,9 +13,10 @@
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 import type { ExpandedTasks, PaneView, Snapshot, TaskDetail, ViewMode } from '../types'
-import { COMMAND, inlineReason, parsePaneArgs, USAGE } from './command'
+import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
+import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails } from './details'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
 import { dockLayout, failedDrawing, inlineLayout, type Drawn } from './layout'
@@ -62,6 +63,8 @@ function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
 
 export const register: Register = on => {
   let live: LiveRegister | null = null
+  /** The team `/teamrig-pane <session>` looks its word up in; set when the session starts, null with no team. */
+  let team: TeamLookup | null = null
   /** Reads what an expanded task's refs point at; set when the session starts. */
   let details: TaskDetails | null = null
   /** Draws and keeps the pane's size; set when the session starts. */
@@ -75,7 +78,7 @@ export const register: Register = on => {
     await $.command.register({
       name: COMMAND,
       description: "Show this session's register tasks in the side pane",
-      argumentHint: '[mine | all | auto | <area>]',
+      argumentHint: ARGUMENT_HINT,
     })
     live?.stop()
     tracked?.stop()
@@ -104,6 +107,7 @@ export const register: Register = on => {
     }
     const places = await findPlaces({ env, files, home: home ?? null, cwd: e.cwd })
     const paths = places.found ? registerPaths(places.dirs) : { missing: places.problem }
+    team = places.found && places.team !== null ? { files, paths: places.team } : null
     details = new TaskDetails(files, { inboxDir: 'missing' in paths ? null : paths.inboxDir, home: home ?? null, cwd: e.cwd, goalsDoc: places.goalsDoc })
     const started = new LiveRegister({
       source: 'missing' in paths ? paths : new TaskRegisterSource(files, paths, places.found ? places.priorities : []),
@@ -154,9 +158,13 @@ export const register: Register = on => {
 
   on('command.run', { command: COMMAND }, async ($, e) => {
     const command = parsePaneArgs(e.args)
-    if (command.kind === 'usage') return { text: USAGE }
+    if (command.kind === 'pin') {
+      // A word that names no session is answered, and neither pins nor opens the pane.
+      const found = await findSession(command.word, team)
+      if (!found.ok) return { text: found.problem }
+      await live?.pin(found.id)
+    }
     if (command.kind === 'mode') await update($, mode, () => command.mode)
-    if (command.kind === 'pin') await live?.pin(command.area)
     if (command.kind === 'auto') await live?.pin(null)
     await sizer?.set('open')
     await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })

@@ -393,6 +393,34 @@ test('with no folder named, it reads the register teamrig keeps for the team its
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
 })
 
+test('/teamrig-pane <session> pins the session an id or a name names; a word naming none pins nothing and lists the sessions', async ($, on) => {
+  const { disk, opened, store } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  const team = '/Homes/tester/.teamrig/teams/web'
+  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write(`${team}/config.json`, [JSON.stringify({ sessions: ['lead', 'api'], names: { api: 'web-backend' } })])
+  disk.write(`${team}/state/events.jsonl`, [createLine('T7', { owner: 'api', by: 'lead', at: NOW - HOUR, title: 'Ship the api' })])
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  const run = (args: string) => $.command.run({ command: 'teamrig-pane', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+  const opens = opened.length
+
+  const unknown = await run('web')
+  expect(unknown.text).toBe('Not pinned (team web): web is not a session on this team (sessions: lead (web-lead), api (web-backend)).')
+  expect(store.get(`pin:${S1}`)).toBeUndefined()
+  expect(opened.length).toBe(opens)
+
+  // The name the user renamed the session to since the pane started is read from the rename log at the command.
+  disk.write(`${team}/state/renames.jsonl`, [JSON.stringify({ v: 1, id: 'api', from: 'web-backend', to: 'web-api', at: iso(NOW), by: 'api' })])
+  expect((await run('Web-API')).text).toBeUndefined()
+  expect(store.get(`pin:${S1}`)).toBe('api')
+  expect(await pane.find({ text: /^api \(pinned\) · 1 active/ })).toBeDefined()
+  expect(await pane.find({ text: /Ship the api/ })).toBeDefined()
+
+  await run('lead')
+  expect(store.get(`pin:${S1}`)).toBe('lead')
+  expect(await pane.find({ text: /^lead \(pinned\) · 0 active/ })).toBeDefined()
+})
+
 test('the settings file in the kit home names the folders, ~/ under the home folder', async ($, on) => {
   const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   disk.write('/Homes/tester/.teamrig/pane.json', [

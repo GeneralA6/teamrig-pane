@@ -104,7 +104,7 @@ export class LiveRegister {
     }
   }
 
-  /** Pins this session to `area`, or with null follows its `inbox read` again. */
+  /** Pins this session to `area`, or with null follows its `inbox read` (or the tab-title binding, which writes the same mark) again. */
   async pin(area: string | null): Promise<void> {
     const session = await this.currentSession()
     await this.ports.savePin(session.id, area)

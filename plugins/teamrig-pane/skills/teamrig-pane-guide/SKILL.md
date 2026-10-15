@@ -53,7 +53,7 @@ Then run `/reload-plugins` in each open session, or restart it.
 ## The command
 
 ```text
-/teamrig-pane [mine | all | auto | <area>]
+/teamrig-pane [mine | all | auto | <session>]
 ```
 
 | Form | What it does |
@@ -61,8 +61,8 @@ Then run `/reload-plugins` in each open session, or restart it.
 | `/teamrig-pane` | Opens the pane (also a minimized one). |
 | `/teamrig-pane mine` | Opens it on this session's area. |
 | `/teamrig-pane all` | Opens it on every owner's active tasks. |
-| `/teamrig-pane <area>` | Pins this Claude Code session to the area `<area>` (a teamrig session id), then opens it. |
-| `/teamrig-pane auto` | Drops the pin: the area follows this session's newest `teamrig inbox read` again. |
+| `/teamrig-pane <session>` | Pins this Claude Code session to the teamrig session `<session>` names, by its id or its name (as `teamrig who` lists them), then opens it. |
+| `/teamrig-pane auto` | Drops the pin: the area follows this session's newest `teamrig inbox read` (or its title binding) again. |
 
 Each form opens the pane. When the pane cannot dock, the command answers with the reason, for example:
 
@@ -70,8 +70,18 @@ Each form opens the pane. When the pane cannot dock, the command answers with th
 Shown above the prompt: the terminal is 96 columns wide and the side dock needs 110. Widen or maximize the window, then /teamrig-pane again.
 ```
 
-Any other argument answers `usage: /teamrig-pane [mine | all | auto | <area>]`. The argument is read in lower
-case.
+A word that names no session on the team pins nothing and leaves the pane as it is; the answer lists the team's
+sessions as `id (name)`:
+
+```text
+Not pinned (team shop): web is not a session on this team (sessions: lead (shop-lead), api (shop-api)).
+```
+
+The session is looked up as teamrig's own commands look one up, in the team config and its rename log, read again
+at each command, so a name given since the pane started counts. With no team config to read (the folders named by
+variables or the settings file), the word is taken as the session id, and a word that cannot be one answers
+`usage: /teamrig-pane [mine | all | auto | <session>]`. The argument is read in lower case, and `mine`, `all` and
+`auto` are always the forms above.
 
 ## Keys
 
@@ -108,12 +118,14 @@ redrawn on every keystroke. The side dock shows the whole list.
 
 ## The Tasks view
 
-The area is the teamrig session the pane shows as "mine". It comes from a pin (`/teamrig-pane <area>`), else from
-the newest `teamrig inbox read --session <area>` run in this Claude Code session (teamrig records which Claude
-Code session read). With neither, the pane says:
+The area is the teamrig session the pane shows as "mine". It comes from a pin (`/teamrig-pane <session>`), else from
+the newest `teamrig inbox read --session <id>` run in this Claude Code session (teamrig records which Claude
+Code session read). teamrig's prompt hook records the same when it binds a tab by its Claude Code title: a tab
+renamed to a session's id or name (`/rename web`) binds at its next prompt, and the pane follows it. With none
+of these, the pane says:
 
 ```text
-No area for this session yet: run `inbox read --session <area>`, or /teamrig-pane <area> to pin one.
+No area for this session yet: /rename the tab to its session's id or name, run `inbox read --session <id>`, or /teamrig-pane <session> to pin one.
 ```
 
 **mine** shows, under a header `web (pinned) · 3 active · inbox 2 unread`:
@@ -185,6 +197,7 @@ The pane never writes. To change what it shows, run teamrig (see the
 | To | Run |
 | --- | --- |
 | bind the pane to your area and clear the unread count | `teamrig inbox read --session <you>` |
+| bind a tab you opened yourself, marking nothing read | `/rename <you>`, then send a prompt |
 | start, block or finish a task | `teamrig set T12 --status in-progress --session <you>` |
 | ask another session for work (shows in `asked of others`) | `teamrig add --owner <session> --title "..." --priority p2 --session <you>` |
 | give a task details to quote | `teamrig update T12 --ref "docs/spec.md:40-42" --session <you>` |
