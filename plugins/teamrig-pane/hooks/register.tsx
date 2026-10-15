@@ -1,6 +1,7 @@
 // teamrig-pane: docks this session's list from the task register (where it is: places.ts) on the right
-// of the fullscreen UI. `mine` shows the session's area: its active tasks in plan order, what it
-// asked of others, what it finished in the last day, and its unread inbox lines; `all` shows
+// of the fullscreen UI. `mine` shows the session's area: a status bar of its tasks (status-bar.ts),
+// its work waiting for proof, its other active tasks in plan order, what it asked of others, what it
+// finished in the last day, and its unread inbox lines; `all` shows
 // every owner's active tasks. A press on a task row expands it: the ask and its goals' roadmap items
 // quoted where its refs still point, who asked and when, its priority, week and goals, its status
 // note and evidence, and the files it names. The close mark (✕,
@@ -21,6 +22,7 @@ import { TaskDetails } from './details'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
 import { dockLayout, failedDrawing, inlineLayout, type Drawn } from './layout'
 import { NOTHING_EXPANDED, paneBlocks, type Span } from './rows'
+import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
 import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
 import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from './changes'
@@ -248,6 +250,8 @@ export const register: Register = on => {
     let shown: ViewMode = 'mine'
     let open: ExpandedTasks = NOTHING_EXPANDED
     let body: Drawn[] = []
+    /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
+    let barLines: BarPiece[][] = []
     try {
       isMinimized = (await read($, size)) === 'minimized'
       current = await read($, view)
@@ -259,11 +263,15 @@ export const register: Register = on => {
         const missing = await read($, requirements)
         const viewBlocks = current === 'tasks' ? paneBlocks(snap, shown, open) : changesBlocks(changed, isGitMissing(missing))
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
-        body = inline
-          ? inlineLayout(blocks, Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows))
-          : dockLayout(blocks, e.props.bodyColumns - 2 * PAD_COLUMNS)
+        const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
+        const bar = current === 'tasks' && shown === 'mine' ? statusBar(snap, columns) : null
+        // Inline, the bar's lines count in the capped rows.
+        const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
+        barLines = bar === null ? [] : inline ? bar.lines.slice(0, inlineBarRows(bar, cap)) : bar.lines
+        body = inline ? inlineLayout(blocks, cap - barLines.length) : dockLayout(blocks, columns)
       }
     } catch (error) {
+      barLines = []
       body = failedDrawing(error)
     }
 
@@ -375,9 +383,21 @@ export const register: Register = on => {
       ) : (
         switchRow
       )
+    // The status bar leads the tasks: its segments in one row as wide as the body, its counts under it.
+    const statusRows =
+      barLines.length === 0 ? null : (
+        <Box key="status-bar" flexDirection="column">
+          {barLines.map((line, i) => (
+            <Box key={`status-bar:${i}`} flexDirection="row">
+              {line.map(piece => styled(piece, piece.key))}
+            </Box>
+          ))}
+        </Box>
+      )
     return (
       <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={inline ? 0 : 1}>
         {controls}
+        {statusRows}
         {body.map(drawBlock)}
       </Box>
     )
