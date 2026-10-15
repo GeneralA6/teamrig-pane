@@ -11,7 +11,7 @@ export const GOLDEN_SESSION = '00000000-0000-4000-8000-000000000001'
 /** One inbox state: the files as teamrig left them and what `teamrig inbox status` printed for them. */
 export type InboxState = { label: string; inbox: string; marks: string; status: string }
 
-/** One of teamrig's own register fixtures and what `teamrig list --status all` printed for it. */
+/** One of teamrig's own register fixtures and what `teamrig list --status all --all` (every field) printed for it. */
 export type ListedFixture = { name: string; events: string; list: string; warn: string }
 
 export type GoldenRegister = {
@@ -21,7 +21,7 @@ export type GoldenRegister = {
   generatedAt: number
   /** The files the pane reads, by path under GOLDEN_ROOT: `kit/...` (the kit home) and `proj/...` (the project). */
   files: Record<string, string>
-  /** `teamrig list --status all` on the final register: what it printed, and its WARN line ('' when none). */
+  /** `teamrig list --status all --all` (every field) on the final register: what it printed, and its WARN line ('' when none). */
   list: string
   warn: string
   inbox: InboxState[]

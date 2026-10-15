@@ -17,7 +17,7 @@ const PATHS = registerPaths({ tasksDir: `${KIT}/teams/demo/state`, inboxDir: `${
 /** `MM-DD` or `MM-DD HH:MM`, as teamrig's shortUtc shortens a date. */
 const shortUtc = (text: string) => text.slice(5).replace('T', ' ')
 
-/** A row in the words of `teamrig list` (formatTask, src/register/views.ts): each fact it prints, from the pane's row. */
+/** A row in the words of `teamrig list --all` (formatTask, src/register/views.ts): each fact it prints, from the pane's row. */
 function listLine(row: TaskRow): string {
   const parts = [`${row.id} ${row.status}`, priorityText(row.priority), `owner ${row.owner}`]
   if (row.due !== null) parts.push(`due ${shortUtc(row.due)}`)
