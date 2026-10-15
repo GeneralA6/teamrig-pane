@@ -6,7 +6,7 @@ import { NOTHING_EXPANDED, paneBlocks } from '../hooks/rows'
 import { BAR_LOOK, BAR_STATUSES, barCells, barCounts, drawnText, filterText, inlineBarRows, statusBar, utcDay, type BarCounts, type BarPiece } from '../hooks/status-bar'
 import { statusLines } from '../hooks/view'
 import { cells } from '../hooks/width'
-import { HOUR, NOW, createLine, statusLine } from './fixtures'
+import { HOUR, NOW, createLine, statusLine, updateLine } from './fixtures'
 
 const DAY = 24 * HOUR
 /** The start of NOW's UTC day. */
@@ -134,6 +134,16 @@ describe('status bar counts', () => {
     expect(barCounts(tasks, 'po', MIDNIGHT + 30 * 60_000)['done-today']).toBe(1)
     expect(barCounts(tasks, 'po', MIDNIGHT - 30_000)['done-today']).toBe(1)
     expect(barCounts(tasks, 'po', MIDNIGHT + DAY)['done-today']).toBe(0)
+  })
+
+  test('a task is done today by when it was done: a later update to one done yesterday leaves it out', async () => {
+    const tasks = rowsOf(
+      createLine('T1', { owner: 'po', by: 'po', at: MIDNIGHT - DAY }),
+      statusLine('T1', 'po', MIDNIGHT - HOUR, 'done', 'shipped', 'abc1234', 'none'),
+      updateLine('T1', 'lead', NOW, { priority: 1 }, 'reprioritized after the fact'),
+    )
+    expect(tasks[0]?.updatedAt).not.toBe(tasks[0]?.statusAt)
+    expect(barCounts(tasks, 'po', NOW)['done-today']).toBe(0)
   })
 })
 
