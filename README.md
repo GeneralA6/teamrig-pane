@@ -17,14 +17,14 @@ claude plugin marketplace add GeneralA6/teamrig-pane
 claude plugin install teamrig-pane@teamrig-pane
 ```
 
-Then run `/teamrig` in a session. In the fullscreen layout (`"tui": "fullscreen"`) the pane docks on
+Then run `/teamrig-pane` in a session. In the fullscreen layout (`"tui": "fullscreen"`) the pane docks on
 the right from 110 columns and opens by itself from 144; anywhere else it sits above the prompt.
 Tested on Claude Code 2.1.295 and later.
 
 ## What it shows
 
 - **Tasks:** your active tasks in plan order, what blocks them, what you asked of others, what you
-  finished today and your unread inbox lines. `/teamrig all` shows every owner's tasks.
+  finished today and your unread inbox lines. `/teamrig-pane all` shows every owner's tasks.
 - **Details:** click a task, or press Enter on it, to read its ask, quoted from the file its ref
   points at, then who asked and when, its goals and its status note.
 - **Changes:** the files changed in each git repo the session works in, from `git status`.
