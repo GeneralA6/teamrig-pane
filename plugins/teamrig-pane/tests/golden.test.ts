@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow } from '../types'
-import { priorityText, readMarks, readRegister } from '../hooks/core/read/index'
+import { priorityText, readMarks, readRegister, waitsText } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { findPlaces } from '../hooks/places'
 import { registerPaths, skippedText, TaskRegisterSource } from '../hooks/source'
@@ -21,11 +21,13 @@ const shortUtc = (text: string) => text.slice(5).replace('T', ' ')
 function listLine(row: TaskRow): string {
   const parts = [`${row.id} ${row.status}`, priorityText(row.priority), `owner ${row.owner}`]
   if (row.due !== null) parts.push(`due ${shortUtc(row.due)}`)
+  if (row.after.length > 0) parts.push(`after ${row.after.join(',')}`)
   if (row.week !== null) parts.push(`week ${shortUtc(row.week)}`)
   parts.push(`from ${row.source}`)
   if (row.goals.length > 0) parts.push(`goals ${row.goals.join(',')}`)
-  const blocked = row.status === 'blocked' && row.note !== null ? ` (blocked: ${row.note})` : ''
-  return `${parts.join(', ')} | ${row.title}${blocked}`
+  const said = row.status === 'waiting' ? [row.waits.length > 0 ? waitsText(row.waits) : null, row.note].filter(part => part !== null) : []
+  const waiting = said.length > 0 ? ` (waiting: ${said.join('; ')})` : ''
+  return `${parts.join(', ')} | ${row.title}${waiting}`
 }
 
 /** The task lines teamrig printed, sorted as the test sorts the pane's. */

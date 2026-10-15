@@ -33,8 +33,8 @@ export type AreaView = {
   finished: TaskRow[]
 }
 
-/** An owner's active tasks, those waiting for proof first, and how many of them are blocked or waiting for proof. */
-export type OwnerGroup = { owner: string; active: TaskLine[]; blocked: number; verifying: number }
+/** An owner's active tasks, the verifying ones first, and how many of them are waiting or verifying. */
+export type OwnerGroup = { owner: string; active: TaskLine[]; waiting: number; verifying: number }
 
 export function isActive(task: TaskRow): boolean {
   return ACTIVE_STATUSES.includes(task.status)
@@ -111,7 +111,7 @@ export function ownerGroups(tasks: readonly TaskRow[], now: number): OwnerGroup[
     .map(([owner, list]) => ({
       owner,
       active: [...list].sort(proofFirst).map(lineOf(now)),
-      blocked: list.filter(t => t.status === 'blocked').length,
+      waiting: list.filter(t => t.status === 'waiting').length,
       verifying: list.filter(isVerifying).length,
     }))
 }
@@ -150,6 +150,8 @@ const TASK_FIELDS: { readonly [K in keyof TaskRow]-?: K } = {
   priorityAt: 'priorityAt',
   assignedAt: 'assignedAt',
   ownerSeenAt: 'ownerSeenAt',
+  waits: 'waits',
+  after: 'after',
 }
 const FIELDS = Object.values(TASK_FIELDS)
 

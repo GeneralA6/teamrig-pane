@@ -1,6 +1,6 @@
 // The status bar atop the Tasks view (mine): one line of colored blocks as wide as the body, each status
 // of the area's own tasks a segment sized by its share, and under it a dim line of the counts. The
-// statuses are done today, waiting for proof, working, blocked and not started; a task done on an
+// statuses are done today, verifying, working, waiting and not started; a task done on an
 // earlier day and a dropped one are left out. "Today" is the UTC day of the snapshot's clock, as every
 // date the pane draws is UTC (a bare due date means the end of its UTC day). A press on a segment or
 // its count, or the count's key, filters the list to that status (rows.ts) and a second press clears
@@ -12,7 +12,7 @@ import type { Span } from './rows'
 import { cells } from './width'
 
 /** The bar's statuses in the order they draw: what closed today, what waits for its proof, then what is left. */
-export const BAR_STATUSES: readonly BarStatus[] = ['done-today', 'verifying', 'working', 'blocked', 'not-started']
+export const BAR_STATUSES: readonly BarStatus[] = ['done-today', 'verifying', 'working', 'waiting', 'not-started']
 
 type BarLook = {
   /** How the counts line names it. */
@@ -29,10 +29,10 @@ type BarLook = {
 
 export const BAR_LOOK: Readonly<Record<BarStatus, BarLook>> = {
   'done-today': { word: 'done today', block: '█', color: 'success', hotkey: 'o', none: 'Nothing done today.' },
-  verifying: { word: 'verifying', block: '▓', color: 'success', hotkey: 'v', none: 'Nothing waiting for proof.' },
+  verifying: { word: 'verifying', block: '▓', color: 'success', hotkey: 'v', none: 'Nothing to verify.' },
   working: { word: 'working', block: '█', color: 'warning', hotkey: 'w', none: 'Nothing in progress.' },
-  blocked: { word: 'blocked', block: '█', color: 'error', hotkey: 'b', none: 'Nothing blocked.' },
-  'not-started': { word: 'not started', block: '░', color: undefined, hotkey: 'n', none: 'Nothing waiting to start.' },
+  waiting: { word: 'waiting', block: '█', color: 'error', hotkey: 'i', none: 'Nothing waiting.' },
+  'not-started': { word: 'not started', block: '░', color: undefined, hotkey: 'n', none: 'Nothing left to start.' },
 }
 
 export type BarCounts = Readonly<Record<BarStatus, number>>
@@ -52,7 +52,7 @@ export type StatusBar = { lines: BarPiece[][]; filter: BarStatus | null }
 const SEPARATOR = ' · '
 
 function noCounts(): Record<BarStatus, number> {
-  return { 'done-today': 0, verifying: 0, working: 0, blocked: 0, 'not-started': 0 }
+  return { 'done-today': 0, verifying: 0, working: 0, waiting: 0, 'not-started': 0 }
 }
 
 /** `2026-10-15`: the UTC day of an instant, the day the pane's due and time labels are in. */
@@ -69,8 +69,8 @@ export function barStatusOf(task: TaskRow, today: string): BarStatus | null {
       return 'verifying'
     case 'in-progress':
       return 'working'
-    case 'blocked':
-      return 'blocked'
+    case 'waiting':
+      return 'waiting'
     case 'open':
       return 'not-started'
     case 'dropped':

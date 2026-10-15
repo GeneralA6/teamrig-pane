@@ -154,7 +154,7 @@ describe('log', () => {
     expect(rowsOf(lines).map(task => task.priorityName)).toEqual([null, null, null])
   })
 
-  test('a task with no ref and no week, a priority-only update and a blocked status read as teamrig writes them', async () => {
+  test('a task with no ref and no week, a priority-only update and an old blocked status read as teamrig reads them: waiting, with no reasons', async () => {
     const [task] = fold(
       createLine('T1', { owner: 'po', by: 'lead', at: NOW, ref: null, week: null }),
       updateLine('T1', 'lead', NOW + HOUR, { priority: 1 }),
@@ -163,8 +163,24 @@ describe('log', () => {
     expect(task?.ref).toBe(null)
     expect(task?.week).toBe(null)
     expect(task?.priority).toBe(1)
-    expect(task?.status).toBe('blocked')
+    expect(task?.status).toBe('waiting')
     expect(task?.note).toBe('waits on the owner')
+    expect([task?.waits, task?.after]).toEqual([[], []])
+  })
+
+  test('a waiting task carries its reasons and an open one its plan dependency, and the row says what it waits for', async () => {
+    const waits = [{ kind: 'decision', who: 'owner' }, { kind: 'task', id: 'T1' }, { kind: 'time', at: '2026-10-16 14:00' }]
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      statusLine('T1', 'po', NOW - HOUR, 'in-progress'),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      statusLine('T2', 'po', NOW - HOUR, 'in-progress'),
+      JSON.stringify({ ...JSON.parse(statusLine('T2', 'po', NOW, 'waiting', 'the copy first')), waits }),
+      JSON.stringify({ ...JSON.parse(createLine('T3', { owner: 'po', by: 'po', at: NOW })), task: { ...JSON.parse(createLine('T3', { owner: 'po', by: 'po', at: NOW })).task, after: ['T1'] } }),
+    )
+    const [, waiting, open] = tasks
+    expect(waiting?.waits).toEqual(waits)
+    expect(open?.after).toEqual(['T1'])
   })
 
   test('the statuses the plugin contract spells out are teamrig\'s, and each draws a glyph', async () => {
@@ -248,15 +264,15 @@ describe('view', () => {
     expect(sameView(base, { ...base, tasks: started })).toBe(false)
   })
 
-  test('groups every owner with active tasks and counts the blocked ones', async () => {
+  test('groups every owner with active tasks and counts the waiting ones', async () => {
     const tasks = fold(
       createLine('T1', { owner: 'security', by: 'lead', at: NOW }),
-      statusLine('T1', 'security', NOW, 'blocked', 'needs owner'),
+      statusLine('T1', 'security', NOW, 'waiting', 'needs owner'),
       createLine('T2', { owner: 'etl', by: 'lead', at: NOW }),
       createLine('T3', { owner: 'etl', by: 'etl', at: NOW }),
       statusLine('T3', 'etl', NOW, 'done'),
     )
-    expect(ownerGroups(tasks, NOW).map(g => [g.owner, g.active.length, g.blocked])).toEqual([
+    expect(ownerGroups(tasks, NOW).map(g => [g.owner, g.active.length, g.waiting])).toEqual([
       ['etl', 1, 0],
       ['security', 1, 1],
     ])
@@ -275,7 +291,7 @@ describe('view', () => {
     expect(view.active.map(l => l.task.id)).toEqual(['T1'])
     const [group] = ownerGroups(tasks, NOW)
     expect(group?.active.map(l => l.task.id)).toEqual(['T3', 'T2', 'T1'])
-    expect([group?.blocked, group?.verifying]).toEqual([0, 2])
+    expect([group?.waiting, group?.verifying]).toEqual([0, 2])
   })
 })
 
@@ -296,11 +312,11 @@ describe('rows', () => {
     now: NOW,
   })
 
-  test('a task is one block to press, its title wrapping under its id, a blocked one with its note, finished ones dim', async () => {
+  test('a task is one block to press, its title wrapping under its id, a waiting one with its note, finished ones dim', async () => {
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, due: '2026-10-14', title: 'Ship it' }),
       createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR }),
-      statusLine('T2', 'po', NOW, 'blocked', 'needs owner'),
+      statusLine('T2', 'po', NOW, 'waiting', 'needs owner'),
       createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Old work' }),
       statusLine('T3', 'po', NOW, 'done'),
     )
@@ -313,6 +329,15 @@ describe('rows', () => {
     expect(blockAt(blocks, 'active:T1')?.toggle).toBe('T1')
     expect(blockAt(blocks, 'active:T2')?.rows.map(r => r.key)).toEqual(['active:T2', 'active-note:T2'])
     expect(textAt(blocks, 'active-note:T2')).toBe('    ↳ needs owner')
+    const reasons = fold(
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      JSON.stringify({ ...JSON.parse(statusLine('T2', 'po', NOW, 'waiting', 'the copy first')), waits: [{ kind: 'decision', who: 'owner' }, { kind: 'task', id: 'T1' }] }),
+      createLine('T4', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      JSON.stringify({ ...JSON.parse(statusLine('T4', 'po', NOW, 'waiting')), waits: [{ kind: 'time', at: '2026-10-16 14:00' }] }),
+    )
+    const said = paneBlocks(snapshotOf(reasons, 'po'), 'mine')
+    expect(textAt(said, 'active-note:T2')).toBe('    ↳ decision owner · on T1; the copy first')
+    expect(textAt(said, 'active-note:T4')).toBe('    ↳ until Fri 10-16 14:00')
     expect(textAt(blocks, 'finished')).toBe('── finished today')
     expect(blockAt(blocks, 'finished')?.opensSection).toBe(true)
     expect(rowAt(blocks, 'finished:T3')?.spans).toEqual([{ text: '▸ ✓ T3 Old work', dim: true }])
@@ -344,12 +369,12 @@ describe('rows', () => {
     expect(rowAt(blocks, 'problem')?.spans).toEqual([{ text: 'WARN events.jsonl: 1 unreadable line(s)', color: 'warning' }])
   })
 
-  test('an in-progress task draws ◐ and a blocked one ■, a blocked one with nothing to say drawing no note; both count active', async () => {
+  test('an in-progress task draws ◐ and a waiting one ■, a waiting one with nothing to say drawing no note; both count active', async () => {
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'First' }),
       statusLine('T1', 'po', NOW, 'in-progress'),
       createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Second' }),
-      statusLine('T2', 'po', NOW, 'blocked'),
+      statusLine('T2', 'po', NOW, 'waiting'),
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
     expect(textAt(blocks, 'active:T1')).toBe('▸ ◐ T1 p3 First')
@@ -362,7 +387,7 @@ describe('rows', () => {
     const ref = '~/team-notes/board/inbox/po.md:4; docs/x.md:9'
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'owner', ref, goals: ['G10.2', 'G15'], title: 'Ship it' }),
-      statusLine('T1', 'po', NOW, 'blocked', 'needs owner', 'abc123'),
+      statusLine('T1', 'po', NOW, 'waiting', 'needs owner', 'abc123'),
       createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', ref: 'quote' }),
     )
     const quotes = [{ ref: '~/team-notes/board/inbox/po.md:4', lines: ['2026-10-13 lead: ship the pane'] }]
@@ -387,7 +412,7 @@ describe('rows', () => {
     expect(textAt(blocks, 'active-detail:T1:gap:0')).toBe('    │ ')
     expect(textAt(blocks, 'active-detail:T1:quote:0:0')).toBe('    │ 2026-10-13 lead: ship the pane')
     expect(textAt(blocks, 'active-detail:T1:asked')).toBe('    │ asked by owner · added by lead · 10-13 13:00 · p3 · week 10-13 · G10.2 · G15')
-    expect(textAt(blocks, 'active-detail:T1:note')).toBe('    │ blocked: needs owner · evidence abc123')
+    expect(textAt(blocks, 'active-detail:T1:note')).toBe('    │ waiting: needs owner · evidence abc123')
     expect(textAt(blocks, 'active-detail:T1:see')).toBe('    │ see docs/x.md')
     expect(textAt(blocks, 'active-detail:T2:see')).toBe('    │ see quote')
     expect(textAt(blocks, 'active-detail:T2:asked')).toBe('    │ asked by po · 10-13 13:00 · p3 · week 10-13 · G10.2')
@@ -435,13 +460,13 @@ describe('rows', () => {
   test('the all view heads each owner with a ruled heading and its counts, the session area marked', async () => {
     const tasks = fold(
       createLine('T1', { owner: 'security', by: 'lead', at: NOW }),
-      statusLine('T1', 'security', NOW, 'blocked', 'needs owner'),
+      statusLine('T1', 'security', NOW, 'waiting', 'needs owner'),
       createLine('T2', { owner: 'etl', by: 'etl', at: NOW }),
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'etl'), 'all')
     expect(blocks.map(b => b.key)).toEqual(['owner:etl', 'etl:T2', 'owner:security', 'security:T1'])
     expect(blockAt(blocks, 'security:T1')?.rows.map(r => r.key)).toEqual(['security:T1', 'security-note:T1'])
-    expect(rowAt(blocks, 'owner:security')?.spans.map(s => s.text)).toEqual(['── ', 'security', ' · 1 active · 1 blocked'])
+    expect(rowAt(blocks, 'owner:security')?.spans.map(s => s.text)).toEqual(['── ', 'security', ' · 1 active · 1 waiting'])
     expect(rowAt(blocks, 'owner:security')?.rule).toBe(true)
     expect(rowAt(blocks, 'owner:etl')?.spans[1]?.color).toBe('claude')
     expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => b.opensSection)).toEqual([false, true])
@@ -459,8 +484,8 @@ describe('rows', () => {
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
     expect(blocks.map(b => b.key)).toEqual(['header', 'proof', 'proof:T2', 'proof:T3', 'active', 'active:T1'])
     expect(textAt(blocks, 'header')).toBe('po · 3 active · inbox 2 unread')
-    expect(textAt(blocks, 'proof')).toBe('── waiting for proof (2)')
-    expect(rowAt(blocks, 'proof')?.spans[1]).toEqual({ text: 'waiting for proof (2)', color: 'success' })
+    expect(textAt(blocks, 'proof')).toBe('── verifying (2)')
+    expect(rowAt(blocks, 'proof')?.spans[1]).toEqual({ text: 'verifying (2)', color: 'success' })
     expect(blockAt(blocks, 'proof')?.opensSection).toBe(true)
     expect(textAt(blocks, 'proof:T2')).toBe('▸ ◑ T2 p3 10-16 Shipped')
     expect(rowAt(blocks, 'proof:T2')?.spans[1]).toEqual({ text: '◑ T2', color: 'success', bold: true })
@@ -496,7 +521,7 @@ describe('rows', () => {
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'all')
     expect(blocks.map(b => b.key)).toEqual(['owner:etl', 'etl:T2', 'etl:T1'])
-    expect(rowAt(blocks, 'owner:etl')?.spans.map(s => s.text)).toEqual(['── ', 'etl', ' · 2 active · 1 waiting for proof'])
+    expect(rowAt(blocks, 'owner:etl')?.spans.map(s => s.text)).toEqual(['── ', 'etl', ' · 2 active · 1 verifying'])
     expect(textAt(blocks, 'etl-note:T2')).toBe('    ↳ proof: one clean night')
   })
 })
@@ -757,7 +782,7 @@ describe('source', () => {
       createLine('T3', { owner: 'po', by: 'po', at: NOW - 3 * DAY }),
       statusLine('T3', 'po', NOW - HOUR, 'dropped'),
       createLine('T4', { owner: 'etl', by: 'po', at: NOW - 3 * DAY }),
-      statusLine('T4', 'etl', NOW - 2 * DAY, 'blocked', 'waits on T1'),
+      statusLine('T4', 'etl', NOW - 2 * DAY, 'waiting', 'waits on T1'),
       createLine('T5', { owner: 'po', by: 'po', at: NOW - 3 * DAY }),
     ].join('\n'))
     const snap = await new TaskRegisterSource(files, PATHS).poll({ claudeSession: S1, pinned: 'po', now: NOW })

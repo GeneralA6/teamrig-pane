@@ -13,7 +13,7 @@ const DAY = 24 * HOUR
 const MIDNIGHT = Date.UTC(2026, 9, 13)
 
 function countsOf(partial: Partial<Record<BarStatus, number>>): BarCounts {
-  return { 'done-today': 0, verifying: 0, working: 0, blocked: 0, 'not-started': 0, ...partial }
+  return { 'done-today': 0, verifying: 0, working: 0, waiting: 0, 'not-started': 0, ...partial }
 }
 
 /** The cells of each status with any, in bar order. */
@@ -40,27 +40,27 @@ const textOf = (line: readonly BarPiece[] | undefined) => (line ?? []).map(piece
 describe('status bar cells', () => {
   test('one status fills the bar; even shares split it evenly', async () => {
     expect(widthsOf({ working: 3 }, 10)).toEqual([['working', 10]])
-    expect(widthsOf({ 'done-today': 1, verifying: 1, working: 1, blocked: 1 }, 8)).toEqual([
+    expect(widthsOf({ 'done-today': 1, verifying: 1, working: 1, waiting: 1 }, 8)).toEqual([
       ['done-today', 2],
       ['verifying', 2],
       ['working', 2],
-      ['blocked', 2],
+      ['waiting', 2],
     ])
   })
 
   test('the cells left after the whole shares go to the largest remainders, a tie to the earlier status', async () => {
     // 3/7/2/4/9 of 25 in 48 cells: whole shares 5/13/3/7/17 leave 3 cells, for remainders 19, 21 and 17 of 25.
-    expect(widthsOf({ 'done-today': 3, verifying: 7, working: 2, blocked: 4, 'not-started': 9 }, 48)).toEqual([
+    expect(widthsOf({ 'done-today': 3, verifying: 7, working: 2, waiting: 4, 'not-started': 9 }, 48)).toEqual([
       ['done-today', 6],
       ['verifying', 13],
       ['working', 4],
-      ['blocked', 8],
+      ['waiting', 8],
       ['not-started', 17],
     ])
-    expect(widthsOf({ verifying: 1, working: 1, blocked: 1 }, 4)).toEqual([
+    expect(widthsOf({ verifying: 1, working: 1, waiting: 1 }, 4)).toEqual([
       ['verifying', 2],
       ['working', 1],
-      ['blocked', 1],
+      ['waiting', 1],
     ])
   })
 
@@ -77,11 +77,11 @@ describe('status bar cells', () => {
   })
 
   test('a bar narrower than its statuses gives one cell each to the largest counts, a tie to the earlier; no width, no cells', async () => {
-    const counts = { 'done-today': 1, verifying: 5, working: 2, blocked: 5, 'not-started': 1 }
+    const counts = { 'done-today': 1, verifying: 5, working: 2, waiting: 5, 'not-started': 1 }
     expect(widthsOf(counts, 3)).toEqual([
       ['verifying', 1],
       ['working', 1],
-      ['blocked', 1],
+      ['waiting', 1],
     ])
     expect(widthsOf(counts, 1)).toEqual([['verifying', 1]])
     expect(widthsOf(counts, 0)).toEqual([])
@@ -92,7 +92,7 @@ describe('status bar cells', () => {
     for (const width of [5, 7, 13, 48]) {
       for (const big of [1, 2, 9, 40, 997]) {
         for (const small of [0, 1, 3]) {
-          const counts = countsOf({ 'done-today': small, verifying: big, working: small * 2, blocked: 1, 'not-started': big + small })
+          const counts = countsOf({ 'done-today': small, verifying: big, working: small * 2, waiting: 1, 'not-started': big + small })
           const out = barCells(counts, width)
           expect(BAR_STATUSES.reduce((sum, status) => sum + out[status], 0)).toBe(width)
           expect(BAR_STATUSES.every(status => (counts[status] > 0) === (out[status] > 0))).toBe(true)
@@ -111,14 +111,14 @@ describe('status bar counts', () => {
       createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR }),
       statusLine('T3', 'po', NOW, 'verifying', 'health check passes'),
       createLine('T4', { owner: 'po', by: 'po', at: NOW - HOUR }),
-      statusLine('T4', 'po', NOW, 'blocked', 'waits on the owner'),
+      statusLine('T4', 'po', NOW, 'waiting', 'waits on the owner'),
       createLine('T5', { owner: 'po', by: 'po', at: NOW - HOUR }),
       statusLine('T5', 'po', NOW, 'done'),
       createLine('T6', { owner: 'po', by: 'po', at: NOW - HOUR }),
       statusLine('T6', 'po', NOW, 'dropped', 'not needed'),
       createLine('T7', { owner: 'etl', by: 'po', at: NOW - HOUR }),
     )
-    expect(barCounts(tasks, 'po', NOW)).toEqual(countsOf({ 'done-today': 1, verifying: 1, working: 1, blocked: 1, 'not-started': 1 }))
+    expect(barCounts(tasks, 'po', NOW)).toEqual(countsOf({ 'done-today': 1, verifying: 1, working: 1, waiting: 1, 'not-started': 1 }))
   })
 
   test('today is the UTC day of the clock: a task done a minute before midnight is not done today', async () => {
@@ -200,7 +200,7 @@ describe('status bar filter', () => {
   const keysOf = (blocks: readonly { key: string }[]) => blocks.map(block => block.key)
 
   test('each count carries its own key, none of them one the pane already uses', async () => {
-    expect(BAR_STATUSES.map(status => BAR_LOOK[status].hotkey)).toEqual(['o', 'v', 'w', 'b', 'n'])
+    expect(BAR_STATUSES.map(status => BAR_LOOK[status].hotkey)).toEqual(['o', 'v', 'w', 'i', 'n'])
     const counts = statusBar(snap, null, 80)?.lines[1]?.filter(piece => piece.status !== null)
     expect(counts?.map(piece => [piece.key, piece.hotkey])).toEqual([
       ['count:done-today', 'o'],
@@ -224,11 +224,11 @@ describe('status bar filter', () => {
   })
 
   test('a filter whose status has no task left keeps its count, at 0, so a press can clear it; with no bar, none holds', async () => {
-    const bar = statusBar(snap, 'blocked', 80)
+    const bar = statusBar(snap, 'waiting', 80)
     expect(bar?.lines[0]?.map(piece => piece.key)).toEqual(['bar:done-today', 'bar:verifying', 'bar:not-started'])
-    expect(textOf(bar?.lines[1])).toBe('2 done today · 2 verifying · 0 blocked · 1 not started')
-    expect(bar?.filter).toBe('blocked')
-    expect(statusBar(snapshotOf(tasks, 'etl'), 'blocked', 80)).toBe(null)
+    expect(textOf(bar?.lines[1])).toBe('2 done today · 2 verifying · 0 waiting · 1 not started')
+    expect(bar?.filter).toBe('waiting')
+    expect(statusBar(snapshotOf(tasks, 'etl'), 'waiting', 80)).toBe(null)
   })
 
   test('filtered, the mine view lists the header and that status alone: done today newest first, the rest in plan order', async () => {

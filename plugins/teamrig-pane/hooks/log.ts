@@ -2,8 +2,8 @@
 // read entry (src/read/index.ts) and the modules it reaches, written by scripts/sync-core.ts, so every
 // event, status and line teamrig writes reads here as teamrig's own commands read it (T248). This file
 // only maps a folded task to the row the pane draws.
-import type { TaskRow, TaskStatus } from '../types'
-import { priorityName, type PriorityConfig, type Task, type TaskStatus as ReadStatus } from './core/read/index'
+import type { TaskRow, TaskStatus, WaitRow } from '../types'
+import { priorityName, type PriorityConfig, type Task, type TaskStatus as ReadStatus, type WaitReason } from './core/read/index'
 
 /** True only when A and B are the same union. */
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
@@ -11,6 +11,8 @@ type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 // typecheck (an editor, tsc) the day teamrig adds a status the contract does not have, or drops one.
 // `claude plugin test` does not typecheck, so tests/logic.test.ts checks the statuses at run time.
 export const STATUS_CONTRACT_MATCHES: Same<TaskStatus, ReadStatus> = true
+// The same for what a waiting task waits for.
+export const WAIT_CONTRACT_MATCHES: Same<WaitRow, WaitReason> = true
 
 /** A task as the pane draws it, its priority named as the team config names it. */
 export function rowOf(task: Task, priorities: readonly PriorityConfig[]): TaskRow {
@@ -37,5 +39,7 @@ export function rowOf(task: Task, priorities: readonly PriorityConfig[]): TaskRo
     priorityAt: task.priorityAt,
     assignedAt: task.assignedAt,
     ownerSeenAt: task.ownerSeenAt,
+    waits: task.waits,
+    after: task.after,
   }
 }

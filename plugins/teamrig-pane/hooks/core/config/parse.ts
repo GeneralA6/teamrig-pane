@@ -1,7 +1,7 @@
 // Copied from teamrig's src/config/parse.ts by scripts/sync-core.ts: change it there, then run the sync.
 import { isRecord, type JsonRecord } from '../core/guards.ts';
 import { NAME_PATTERN, NAME_RULE } from '../core/ids.ts';
-import { isTaskStatus, SESSION_NAME, TASK_STATUSES, type TaskStatus } from '../register/model.ts';
+import { isTaskStatus, LEGACY_WAITING_HINT, LEGACY_WAITING_STATUS, SESSION_NAME, TASK_STATUSES, type TaskStatus } from '../register/model.ts';
 import {
   DEFAULT_ALERTS,
   DEFAULT_BUDGET,
@@ -31,6 +31,7 @@ import {
   TERMINALS,
   WEEKDAYS,
   type BudgetConfig,
+  type BudgetLiftConfig,
   type BudgetReset,
   type CommitsConfig,
   type KitConfig,
@@ -270,6 +271,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
     overAction: isOverAction(overAction) ? overAction : defaults.overAction,
     escalate: isEscalation(escalate) ? escalate : defaults.escalate,
     ...(quietHours === undefined ? {} : { quietHours }),
+    lift: parseBudgetLift(read, read.section(raw, 'lift', path)),
     ...(statusSnapshotDir === undefined ? {} : { statusSnapshotDir }),
     maxBytesPerHook: read.integer(raw, 'maxBytesPerHook', path, defaults.maxBytesPerHook, CONFIG_LIMITS.maxBytesPerHook),
   };
@@ -311,6 +313,19 @@ function parseQuietHours(read: ConfigReader, raw: JsonRecord): QuietHours | unde
     return undefined;
   }
   return { startUtc, endUtc, action };
+}
+
+/** `budget.lift`: the highest stop % of a lift, and of the reserve release; the reserve bound is never below the other. */
+function parseBudgetLift(read: ConfigReader, raw: JsonRecord): BudgetLiftConfig {
+  const path = 'budget.lift';
+  const defaults = DEFAULT_BUDGET.lift;
+  const maxStopPct = read.number(raw, 'maxStopPct', path, defaults.maxStopPct, CONFIG_LIMITS.liftMaxStopPct);
+  const reserveStopPct = read.number(raw, 'reserveStopPct', path, defaults.reserveStopPct, CONFIG_LIMITS.liftReserveStopPct);
+  if (reserveStopPct < maxStopPct) {
+    read.report(`${path}.reserveStopPct`, `is below maxStopPct (${reserveStopPct} < ${maxStopPct})`);
+    return { maxStopPct, reserveStopPct: maxStopPct };
+  }
+  return { maxStopPct, reserveStopPct };
 }
 
 /** `budget.sessions`: a share and an optional fixed daily % for sessions on the team. */
@@ -400,7 +415,8 @@ function parseStatus(read: ConfigReader, value: unknown, path: string): TaskStat
   if (isTaskStatus(value)) {
     return value;
   }
-  read.report(path, `expected one of ${TASK_STATUSES.join(', ')}, got ${describe(value)}`);
+  const hint = value === LEGACY_WAITING_STATUS ? ` (${LEGACY_WAITING_HINT})` : '';
+  read.report(path, `expected one of ${TASK_STATUSES.join(', ')}, got ${describe(value)}${hint}`);
   return undefined;
 }
 
