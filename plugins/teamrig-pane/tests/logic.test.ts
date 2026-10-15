@@ -97,6 +97,23 @@ describe('log', () => {
     expect(task?.goals).toEqual(['G10.2a', 'G11'])
   })
 
+  test('carries when the status and the priority last changed, who wrote the newest event, and the skill the status named', async () => {
+    const [task] = fold(
+      createLine('T1', { owner: 'po', by: 'lead', at: NOW, priority: 3 }),
+      statusLine('T1', 'po', NOW + HOUR, 'in-progress'),
+      statusLine('T1', 'po', NOW + 2 * HOUR, 'in-progress', 'halfway'),
+      updateLine('T1', 'lead', NOW + 3 * HOUR, { priority: 1 }),
+      updateLine('T1', 'po', NOW + 4 * HOUR, { due: '2026-10-20' }),
+    )
+    // A repeated status keeps when it was taken; an update that leaves the priority keeps when it was set.
+    expect(task?.statusAt).toBe(iso(NOW + HOUR))
+    expect(task?.priorityAt).toBe(iso(NOW + 3 * HOUR))
+    expect(task?.updatedBy).toBe('po')
+    expect(task?.skill).toBe(null)
+    const [done] = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW }), statusLine('T1', 'po', NOW + HOUR, 'done', 'shipped', 'abc1234', 'teamrig-ship-change'))
+    expect([done?.skill, done?.statusAt, done?.priorityAt, done?.updatedBy]).toEqual(['teamrig-ship-change', iso(NOW + HOUR), iso(NOW), 'po'])
+  })
+
   test('a create whose goals are not all text is skipped and counted unreadable', async () => {
     const line = JSON.stringify({
       v: 2,
@@ -227,6 +244,8 @@ describe('view', () => {
     const named = rowsOf([createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', priority: 7 })], PRIORITIES)
     const bare = rowsOf([createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', priority: 7 })])
     expect(sameView({ ...base, tasks: bare }, { ...base, tasks: named })).toBe(false)
+    const started = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' }), statusLine('T1', 'po', NOW, 'open', null, null, 'none'))
+    expect(sameView(base, { ...base, tasks: started })).toBe(false)
   })
 
   test('groups every owner with active tasks and counts the blocked ones', async () => {

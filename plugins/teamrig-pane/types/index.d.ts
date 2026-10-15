@@ -20,6 +20,10 @@ export type TaskRow = {
   note: string | null
   /** The newest evidence recorded (a sha or a path); a status change without one keeps it. */
   evidence: string | null
+  /** The skill the newest status change names (`none` for a one-off); null when it named none. */
+  skill: string | null
+  /** When the task took its status: its create, or the newest status event that changed it (a repeat keeps it). */
+  statusAt: string
   /** Who asked: the config's `ownerSource` (the human owner), or a session name. */
   source: string
   /** Where the ask is written: `file:line` refs, `;`-separated, or a short quote ref; null when none. */
@@ -30,8 +34,11 @@ export type TaskRow = {
   week: string | null
   createdBy: string
   createdAt: string
-  /** The newest event of any kind. */
+  /** The newest event of any kind, and the session that wrote it. */
   updatedAt: string
+  updatedBy: string
+  /** When the task took its priority: its create, or the newest update that changed it. */
+  priorityAt: string
   /** When the current owner got the task: its create, or the newest handoff. */
   assignedAt: string
   /** The owner's newest event since then; null = the owner has not touched it. */
