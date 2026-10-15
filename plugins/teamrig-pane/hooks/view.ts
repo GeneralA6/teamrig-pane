@@ -21,7 +21,9 @@ export type TaskLine = { task: TaskRow; flags: Flag[] }
 
 export type AreaView = {
   area: string
-  /** Its active tasks in teamrig's plan order: by priority, then due (undated last), then id. */
+  /** Its tasks waiting for their proof (verifying), in plan order: drawn first, as the ones to close. */
+  verifying: TaskLine[]
+  /** Its other active tasks in teamrig's plan order: by priority, then due (undated last), then id. */
   active: TaskLine[]
   /** Active tasks it asked of other sessions, newest first, capped at MAX_ASKED. */
   asked: TaskLine[]
@@ -30,10 +32,21 @@ export type AreaView = {
   finished: TaskRow[]
 }
 
-export type OwnerGroup = { owner: string; active: TaskLine[]; blocked: number }
+/** An owner's active tasks, those waiting for proof first, and how many of them are blocked or waiting for proof. */
+export type OwnerGroup = { owner: string; active: TaskLine[]; blocked: number; verifying: number }
 
 export function isActive(task: TaskRow): boolean {
   return ACTIVE_STATUSES.includes(task.status)
+}
+
+/** Shipped and waiting for its proof: active until the proof is in. */
+export function isVerifying(task: TaskRow): boolean {
+  return task.status === 'verifying'
+}
+
+/** Waiting for proof first, the ones to close, then teamrig's plan order. */
+function proofFirst(a: TaskRow, b: TaskRow): number {
+  return Number(isVerifying(b)) - Number(isVerifying(a)) || byPlanOrder(a, b)
 }
 
 /** A date-only due means the end of that UTC day; an unreadable one is never overdue (teamrig's dueTime). */
@@ -60,21 +73,22 @@ function newestFirst(a: TaskRow, b: TaskRow): number {
 }
 
 export function areaView(tasks: readonly TaskRow[], area: string, now: number): AreaView {
-  const active = tasks.filter(t => t.owner === area && isActive(t)).sort(byPlanOrder)
+  const own = tasks.filter(t => t.owner === area && isActive(t)).sort(byPlanOrder)
   const asked = tasks.filter(t => t.createdBy === area && t.owner !== area && isActive(t)).sort(newestFirst)
   const finished = tasks
     .filter(t => t.owner === area && isRecentlyFinished(t, now))
     .sort(newestFirst)
   return {
     area,
-    active: active.map(lineOf(now)),
+    verifying: own.filter(isVerifying).map(lineOf(now)),
+    active: own.filter(t => !isVerifying(t)).map(lineOf(now)),
     asked: asked.slice(0, MAX_ASKED).map(lineOf(now)),
     askedTotal: asked.length,
     finished: finished.slice(0, MAX_FINISHED),
   }
 }
 
-/** Every owner with active tasks, by name, each list in plan order. */
+/** Every owner with active tasks, by name, each list waiting for proof first, then in plan order. */
 export function ownerGroups(tasks: readonly TaskRow[], now: number): OwnerGroup[] {
   const byOwner = new Map<string, TaskRow[]>()
   for (const task of tasks) {
@@ -85,8 +99,9 @@ export function ownerGroups(tasks: readonly TaskRow[], now: number): OwnerGroup[
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([owner, list]) => ({
       owner,
-      active: [...list].sort(byPlanOrder).map(lineOf(now)),
+      active: [...list].sort(proofFirst).map(lineOf(now)),
       blocked: list.filter(t => t.status === 'blocked').length,
+      verifying: list.filter(isVerifying).length,
     }))
 }
 
