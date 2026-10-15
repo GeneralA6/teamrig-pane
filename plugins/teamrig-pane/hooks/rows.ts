@@ -135,6 +135,16 @@ function finishedBlock(task: TaskRow, expanded: ExpandedTasks): Block {
   return { key, toggle: task.id, rows }
 }
 
+/**
+ * The dim line under the finished tasks when the cap cut `more` of them: how many, how many of those were dropped,
+ * and the key that lists today's done ones in full (the status bar's filter, which leaves the dropped ones out).
+ */
+export function finishedMoreText(more: number, dropped: number): string {
+  const droppedText = dropped > 0 ? ` (${dropped} dropped)` : ''
+  const list = more > dropped ? `; press ${BAR_LOOK['done-today'].hotkey} for today's done` : ''
+  return `… ${more} more${droppedText}${list}`
+}
+
 /** `── label ───────`, ruled to the body's edge, a blank line above it. */
 export function heading(key: string, label: Span[]): Block {
   return { key, opensSection: true, rows: [{ key, spans: [{ text: '── ', dim: true }, ...label], rule: true }] }
@@ -170,8 +180,11 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   blocks.push(...view.active.map(line => taskBlock('active', line, expanded)))
   if (view.askedTotal > 0) blocks.push(heading('asked', [{ text: `asked of others (${view.askedTotal})`, dim: true }]))
   blocks.push(...view.asked.map(line => taskBlock('asked', line, expanded, line.task.owner)))
-  if (view.finished.length > 0) blocks.push(heading('finished', [{ text: 'finished today', dim: true }]))
+  if (view.finishedTotal > 0) blocks.push(heading('finished', [{ text: `finished today (${view.finishedTotal})`, dim: true }]))
   blocks.push(...view.finished.map(task => finishedBlock(task, expanded)))
+  const finishedMore = view.finishedTotal - view.finished.length
+  if (finishedMore > 0)
+    blocks.push(single('finished-more', [{ text: finishedMoreText(finishedMore, view.finishedMoreDropped), dim: true }]))
   return blocks
 }
 

@@ -2,7 +2,7 @@
 // register.tsx only lays them out. The order and the due are teamrig's own (hooks/core/read).
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, byPlanOrder, dueTime } from './core/read/index'
-import { barStatusOf, utcDay } from './status-bar'
+import { barStatusOf, isFinishedOn, utcDay } from './status-bar'
 
 const DAY_MS = 86_400_000
 /**
@@ -10,8 +10,7 @@ const DAY_MS = 86_400_000
  * `register.check.notPickedUpAfterHours`; the pane keeps that setting's default, 24 hours.
  */
 export const NOT_PICKED_UP_MS = DAY_MS
-/** Finished tasks stay listed (dim) this long. */
-export const RECENT_MS = DAY_MS
+/** The finished tasks listed under the area's own, newest first; the rest are counted (AreaView). */
 export const MAX_FINISHED = 6
 export const MAX_ASKED = 8
 
@@ -29,8 +28,12 @@ export type AreaView = {
   /** Active tasks it asked of other sessions, newest first, capped at MAX_ASKED. */
   asked: TaskLine[]
   askedTotal: number
-  /** Its tasks done or dropped within RECENT_MS, newest first, capped at MAX_FINISHED. */
+  /** Its tasks done or dropped today, the UTC day of `now` (status-bar.ts isFinishedOn), newest first, capped at MAX_FINISHED. */
   finished: TaskRow[]
+  /** How many it finished today, those past the cap too. */
+  finishedTotal: number
+  /** How many past the cap were dropped: the status bar's done-today filter lists the done ones alone. */
+  finishedMoreDropped: number
 }
 
 /** An owner's active tasks, the verifying ones first, and how many of them are waiting or verifying. */
@@ -60,11 +63,6 @@ export function flagsOf(task: TaskRow, now: number): Flag[] {
   return flags
 }
 
-/** Done or dropped within RECENT_MS, so still listed as finished. */
-export function isRecentlyFinished(task: TaskRow, now: number): boolean {
-  return !isActive(task) && now - Date.parse(task.updatedAt) <= RECENT_MS
-}
-
 function lineOf(now: number) {
   return (task: TaskRow): TaskLine => ({ task, flags: flagsOf(task, now) })
 }
@@ -76,9 +74,9 @@ function newestFirst(a: TaskRow, b: TaskRow): number {
 export function areaView(tasks: readonly TaskRow[], area: string, now: number): AreaView {
   const own = tasks.filter(t => t.owner === area && isActive(t)).sort(byPlanOrder)
   const asked = tasks.filter(t => t.createdBy === area && t.owner !== area && isActive(t)).sort(newestFirst)
-  const finished = tasks
-    .filter(t => t.owner === area && isRecentlyFinished(t, now))
-    .sort(newestFirst)
+  const today = utcDay(now)
+  const finished = tasks.filter(t => t.owner === area && isFinishedOn(t, today)).sort(newestFirst)
+  const finishedMore = finished.slice(MAX_FINISHED)
   return {
     area,
     verifying: own.filter(isVerifying).map(lineOf(now)),
@@ -86,6 +84,8 @@ export function areaView(tasks: readonly TaskRow[], area: string, now: number): 
     asked: asked.slice(0, MAX_ASKED).map(lineOf(now)),
     askedTotal: asked.length,
     finished: finished.slice(0, MAX_FINISHED),
+    finishedTotal: finished.length,
+    finishedMoreDropped: finishedMore.filter(t => t.status === 'dropped').length,
   }
 }
 
@@ -163,9 +163,9 @@ function sameValue(a: FieldValue, b: FieldValue): boolean {
   return a === b
 }
 
-/** What `now` changes in a drawing of the task: its flags and whether it still lists as finished. */
+/** What `now` changes in a drawing of the task: its flags and whether it still lists as finished today (and counts as done today). */
 function timeLabel(task: TaskRow, now: number): string {
-  return `${flagsOf(task, now).join(',')}|${isRecentlyFinished(task, now)}`
+  return `${flagsOf(task, now).join(',')}|${isFinishedOn(task, utcDay(now))}`
 }
 
 /**
