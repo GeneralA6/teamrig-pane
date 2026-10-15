@@ -132,6 +132,8 @@ declare module 'claude-code' {
       changes: Shaped<ChangesSnapshot>
       known: Shaped<KnownChanges>
       requirements: RequirementProblem[]
+      /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
+      filter: BarStatus | null
     }
   }
 }

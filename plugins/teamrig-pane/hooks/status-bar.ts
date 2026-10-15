@@ -2,8 +2,10 @@
 // of the area's own tasks a segment sized by its share, and under it a dim line of the counts. The
 // statuses are done today, waiting for proof, working, blocked and not started; a task done on an
 // earlier day and a dropped one are left out. "Today" is the UTC day of the snapshot's clock, as every
-// date the pane draws is UTC (a bare due date means the end of its UTC day). Pure data: register.tsx
-// draws the pieces.
+// date the pane draws is UTC (a bare due date means the end of its UTC day). A press on a segment or
+// its count, or the count's key, filters the list to that status (rows.ts) and a second press clears
+// it; the filtered segment and count draw bold, a dim line under the counts says so. Pure data:
+// register.tsx draws the pieces and keeps the filter.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import type { Span } from './rows'
@@ -19,23 +21,33 @@ type BarLook = {
   block: string
   /** Its segment's color; none draws it dim. */
   color: ThemeKey | undefined
+  /** The key that filters to it, one free of the pane's others (t, d, m, a, c). */
+  hotkey: string
+  /** What the list says when it is filtered to the status and none is left. */
+  none: string
 }
 
 export const BAR_LOOK: Readonly<Record<BarStatus, BarLook>> = {
-  'done-today': { word: 'done today', block: '█', color: 'success' },
-  verifying: { word: 'verifying', block: '▓', color: 'success' },
-  working: { word: 'working', block: '█', color: 'warning' },
-  blocked: { word: 'blocked', block: '█', color: 'error' },
-  'not-started': { word: 'not started', block: '░', color: undefined },
+  'done-today': { word: 'done today', block: '█', color: 'success', hotkey: 'o', none: 'Nothing done today.' },
+  verifying: { word: 'verifying', block: '▓', color: 'success', hotkey: 'v', none: 'Nothing waiting for proof.' },
+  working: { word: 'working', block: '█', color: 'warning', hotkey: 'w', none: 'Nothing in progress.' },
+  blocked: { word: 'blocked', block: '█', color: 'error', hotkey: 'b', none: 'Nothing blocked.' },
+  'not-started': { word: 'not started', block: '░', color: undefined, hotkey: 'n', none: 'Nothing waiting to start.' },
 }
 
 export type BarCounts = Readonly<Record<BarStatus, number>>
 
-/** A run of the bar's text; `status` names the status it stands for, null for a separator. */
-export type BarPiece = Span & { key: string; status: BarStatus | null }
+/**
+ * A run of the bar's text: `status` names the status a press on it filters to, null for a separator or the
+ * filter's line; `hotkey` the key that does the same, a count's only.
+ */
+export type BarPiece = Span & { key: string; status: BarStatus | null; hotkey: string | null }
 
-/** The bar's lines: its segments, then the counts wrapped to its width. */
-export type StatusBar = { lines: BarPiece[][] }
+/**
+ * The bar's lines: its segments, the counts wrapped to its width, then the filter's line while one is on.
+ * `filter` is the status the list is filtered to, null when it shows all.
+ */
+export type StatusBar = { lines: BarPiece[][]; filter: BarStatus | null }
 
 const SEPARATOR = ' · '
 
@@ -127,7 +139,7 @@ function wrapCounts(words: readonly BarPiece[], columns: number): BarPiece[][] {
       used = 0
     }
     if (line.length > 0) {
-      line.push({ key: `sep:${word.key}`, text: SEPARATOR, dim: true, status: null })
+      line.push({ key: `sep:${word.key}`, text: SEPARATOR, dim: true, status: null, hotkey: null })
       used += SEPARATOR.length
     }
     line.push(word)
@@ -137,26 +149,36 @@ function wrapCounts(words: readonly BarPiece[], columns: number): BarPiece[][] {
   return lines
 }
 
+/** The dim line under the counts while the list is filtered to `status`. */
+export function filterText(status: BarStatus): string {
+  return `showing ${BAR_LOOK[status].word} only, click again for all`
+}
+
 /**
  * The bar over the area's tasks, `width` cells wide (one at least), its counts line skipping the statuses
- * with none; null with no area, a snapshot not yet read, or no task to show.
+ * with none but the one `filter` names, which stays, at 0 too, so a press can clear it. The filtered
+ * segment and count draw bold, the count not dim. Null with no area, a snapshot not yet read, or no task to
+ * show: then no filter holds either.
  */
-export function statusBar(snap: Snapshot, width: number): StatusBar | null {
+export function statusBar(snap: Snapshot, filter: BarStatus | null, width: number): StatusBar | null {
   if (snap.area === null || snap.now === 0) return null
   const counts = barCounts(snap.tasks, snap.area, snap.now)
   if (totalOf(counts) === 0) return null
   const columns = Math.max(1, width)
   const widths = barCells(counts, columns)
-  const segments = BAR_STATUSES.filter(status => widths[status] > 0).map(
-    (status): BarPiece => {
-      const look = BAR_LOOK[status]
-      return { key: `bar:${status}`, text: look.block.repeat(widths[status]), color: look.color, dim: look.color === undefined, status }
-    },
-  )
-  const words = BAR_STATUSES.filter(status => counts[status] > 0).map(
-    (status): BarPiece => ({ key: `count:${status}`, text: `${counts[status]} ${BAR_LOOK[status].word}`, dim: true, status }),
-  )
-  return { lines: [segments, ...wrapCounts(words, columns)] }
+  const segments = BAR_STATUSES.filter(status => widths[status] > 0).map((status): BarPiece => {
+    const look = BAR_LOOK[status]
+    const text = look.block.repeat(widths[status])
+    return { key: `bar:${status}`, text, color: look.color, dim: look.color === undefined, bold: status === filter, status, hotkey: null }
+  })
+  const words = BAR_STATUSES.filter(status => counts[status] > 0 || status === filter).map((status): BarPiece => {
+    const look = BAR_LOOK[status]
+    const isFiltered = status === filter
+    return { key: `count:${status}`, text: `${counts[status]} ${look.word}`, dim: !isFiltered, bold: isFiltered, status, hotkey: look.hotkey }
+  })
+  const lines = [segments, ...wrapCounts(words, columns)]
+  if (filter !== null) lines.push([{ key: 'filter', text: filterText(filter), dim: true, status: null, hotkey: null }])
+  return { lines, filter }
 }
 
 /** Inline, the rows the list keeps before the bar takes any: its header, its first task and the line saying what it left out. */
