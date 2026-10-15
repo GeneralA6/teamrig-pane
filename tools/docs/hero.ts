@@ -216,7 +216,7 @@ function tasksView(): string[] {
   rows(ACTIVE, false);
   section(`asked of others (${ASKED.length})`);
   rows(ASKED, false);
-  section('finished today');
+  section(`finished today (${FINISHED.length})`);
   rows(FINISHED, true);
   return out;
 }

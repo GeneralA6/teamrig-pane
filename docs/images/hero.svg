@@ -65,8 +65,8 @@ text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helveti
 <g data-glyph="open"><circle cx="620" cy="291" r="4.5" fill="none" stroke="#e6edf3" stroke-width="1.5"/></g>
 <text x="632" y="296" class="mono pane"><tspan fill="#e6edf3" font-weight="600">T13</tspan><tspan fill="#79c0ff"> →api</tspan><tspan fill="#8b949e"> p2</tspan><tspan fill="#e6edf3"> Mail key</tspan></text>
 <path d="M604 325.5h14" stroke="#30363d"/>
-<text x="624" y="330" class="mono pane" textLength="117.6" lengthAdjust="spacingAndGlyphs"><tspan fill="#8b949e">finished today</tspan></text>
-<path d="M749.6 325.5H924" stroke="#30363d"/>
+<text x="624" y="330" class="mono pane" textLength="151.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#8b949e">finished today (1)</tspan></text>
+<path d="M783.2 325.5H924" stroke="#30363d"/>
 <path d="M604 346.5l5.5 4.5l-5.5 4.5z" fill="#8b949e"/>
 <g data-glyph="done"><path d="M615.5 351l3 3.2l6-6.7" fill="none" stroke="#8b949e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g>
 <text x="632" y="356" class="mono pane"><tspan fill="#8b949e">T11</tspan><tspan fill="#8b949e"> Signup API</tspan></text>
