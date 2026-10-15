@@ -94,11 +94,11 @@ export class LiveChanges {
   private shown: ChangesSnapshot | null = null
   private timers: Timer[] = []
 
+  private readonly ports: ChangesPorts
+
   /** `seed` is what the pane drew before a hot reload: its repos and outside files stay known. */
-  constructor(
-    private readonly ports: ChangesPorts,
-    seed: ChangesSnapshot = EMPTY_CHANGES,
-  ) {
+  constructor(ports: ChangesPorts, seed: ChangesSnapshot = EMPTY_CHANGES) {
+    this.ports = ports
     for (const repo of seed.repos) this.repos.add(repo.root)
     this.outside = seed.outside.slice(0, OUTSIDE_KEPT)
   }

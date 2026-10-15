@@ -24,7 +24,11 @@ export type SizePorts = {
 }
 
 export class PaneSizer {
-  constructor(private readonly ports: SizePorts) {}
+  private readonly ports: SizePorts
+
+  constructor(ports: SizePorts) {
+    this.ports = ports
+  }
 
   /** Draws the size the store kept: `open` when none is kept or the store cannot be read. */
   async restore(): Promise<PaneSize> {

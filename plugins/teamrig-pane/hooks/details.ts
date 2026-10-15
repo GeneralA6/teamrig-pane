@@ -184,10 +184,13 @@ export function goalItem(content: string, goal: string): { number: number; text:
 
 /** Reads the lines a task's refs point at, and its goals' items, when the person expands it. */
 export class TaskDetails {
-  constructor(
-    private readonly files: Files,
-    private readonly places: RefPlaces,
-  ) {}
+  private readonly files: Files
+  private readonly places: RefPlaces
+
+  constructor(files: Files, places: RefPlaces) {
+    this.files = files
+    this.places = places
+  }
 
   async load(task: TaskRow): Promise<TaskDetail> {
     const quotes: RefQuote[] = []
