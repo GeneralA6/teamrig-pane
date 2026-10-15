@@ -3,7 +3,7 @@ import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { NOTHING_EXPANDED, paneBlocks } from '../hooks/rows'
-import { BAR_LOOK, BAR_STATUSES, barCells, barCounts, filterText, inlineBarRows, statusBar, utcDay, type BarCounts, type BarPiece } from '../hooks/status-bar'
+import { BAR_LOOK, BAR_STATUSES, barCells, barCounts, drawnText, filterText, inlineBarRows, statusBar, utcDay, type BarCounts, type BarPiece } from '../hooks/status-bar'
 import { statusLines } from '../hooks/view'
 import { cells } from '../hooks/width'
 import { HOUR, NOW, createLine, statusLine } from './fixtures'
@@ -36,6 +36,8 @@ const snapshotOf = (tasks: TaskRow[], area: string | null, now = NOW): Snapshot 
 })
 
 const textOf = (line: readonly BarPiece[] | undefined) => (line ?? []).map(piece => piece.text).join('')
+/** A line as the terminal draws it: each count behind its key. */
+const drawnOf = (line: readonly BarPiece[] | undefined) => (line ?? []).map(drawnText).join('')
 
 describe('status bar cells', () => {
   test('one status fills the bar; even shares split it evenly', async () => {
@@ -157,16 +159,37 @@ describe('status bar lines', () => {
     expect(bar?.lines.slice(1).map(textOf)).toEqual(['1 done today', '2 verifying', '1 not started'])
     expect(statusBar(snapshotOf(tasks, 'po'), null, 48)?.lines.map(textOf)).toEqual([
       `${'█'.repeat(12)}${'▓'.repeat(24)}${'░'.repeat(12)}`,
-      '1 done today · 2 verifying · 1 not started',
+      '1 done today · 2 verifying',
+      '1 not started',
     ])
   })
 
   test('the counts wrap at the width, a dim separator only between two on a line, each line inside the bar\'s width', async () => {
-    const bar = statusBar(snapshotOf(tasks, 'po'), null, 30)
-    expect(bar?.lines.slice(1).map(textOf)).toEqual(['1 done today · 2 verifying', '1 not started'])
+    const bar = statusBar(snapshotOf(tasks, 'po'), null, 34)
+    expect(bar?.lines.slice(1).map(drawnOf)).toEqual(['o: 1 done today · v: 2 verifying', 'n: 1 not started'])
     expect(bar?.lines[1]?.[1]).toEqual({ key: 'sep:count:verifying', text: ' · ', dim: true, status: null, hotkey: null })
-    expect(bar?.lines.every(line => cells(textOf(line)) <= 30)).toBe(true)
+    expect(bar?.lines.every(line => cells(drawnOf(line)) <= 34)).toBe(true)
     expect(cells(textOf(statusBar(snapshotOf(tasks, 'po'), null, 0)?.lines[0]))).toBe(1)
+  })
+
+  test("the counts wrap by their drawn width, each count's key included, so no line runs past the bar", async () => {
+    // The text alone is 42 cells, drawn 51: a line counted by its text overflowed in 42 to 50 columns, and the row
+    // squeezed its separators to one cell each, their dots wrapping onto a line of their own.
+    expect(cells(textOf(statusBar(snapshotOf(tasks, 'po'), null, 80)?.lines[1]))).toBe(42)
+    expect(statusBar(snapshotOf(tasks, 'po'), null, 51)?.lines.slice(1).map(drawnOf)).toEqual(['o: 1 done today · v: 2 verifying · n: 1 not started'])
+    expect(statusBar(snapshotOf(tasks, 'po'), null, 50)?.lines.slice(1).map(drawnOf)).toEqual(['o: 1 done today · v: 2 verifying', 'n: 1 not started'])
+    // From 16, the widest count's own cells (`n: 1 not started`): a narrower line holds it alone, as wide as it is.
+    for (let width = 16; width <= 60; width++) {
+      const lines = statusBar(snapshotOf(tasks, 'po'), null, width)?.lines ?? []
+      expect(lines.every(line => cells(drawnOf(line)) <= width)).toBe(true)
+    }
+  })
+
+  test("a count draws behind its key, a colon and a space; a segment, a separator or the filter's line as its text", async () => {
+    const bar = statusBar(snapshotOf(tasks, 'po'), 'verifying', 80)
+    expect(bar?.lines[1]?.map(drawnText)).toEqual(['o: 1 done today', ' · ', 'v: 2 verifying', ' · ', 'n: 1 not started'])
+    expect(bar?.lines[0]?.map(drawnText)).toEqual(bar?.lines[0]?.map(piece => piece.text))
+    expect(bar?.lines[2]?.map(drawnText)).toEqual([filterText('verifying')])
   })
 
   test('no bar with no area, before the first read, or with no task to show', async () => {
@@ -177,7 +200,8 @@ describe('status bar lines', () => {
 
   test('inline, the bar takes the rows past the three the list keeps, first lines first', async () => {
     const bar = statusBar(snapshotOf(tasks, 'po'), null, 48)
-    expect([6, 5, 4, 3, 1].map(rows => inlineBarRows(bar, rows))).toEqual([2, 2, 1, 0, 0])
+    expect(bar?.lines.length).toBe(3)
+    expect([7, 6, 5, 4, 3, 1].map(rows => inlineBarRows(bar, rows))).toEqual([3, 3, 2, 1, 0, 0])
     expect(inlineBarRows(null, 6)).toBe(0)
   })
 })
