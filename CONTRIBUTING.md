@@ -48,7 +48,9 @@ tests on Linux, Windows and macOS under node 22 and 24, with a pinned Claude Cod
 (`.github/workflows/ci.yml`).
 
 `hooks/core/` is a copy of teamrig's read modules at the commit `scripts/teamrig-pin.json` names, made
-by `scripts/sync-core.ts`; never edit it by hand. After each sync, rerun `scripts/golden.ts` so
+by `scripts/sync-core.ts`; never edit it by hand. CI's `hooks/core matches the teamrig pin` job runs
+`sync-core.ts --check` against teamrig and fails on any difference; teamrig is private, so that job
+alone reads the `TEAMRIG_READ_TOKEN` secret. After each sync, rerun `scripts/golden.ts` so
 `tests/golden-register.ts` holds what teamrig at the new pin writes and prints (the plugin README says
 how).
 
