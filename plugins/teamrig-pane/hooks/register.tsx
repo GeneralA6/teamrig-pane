@@ -392,6 +392,7 @@ export const register: Register = on => {
     // The status bar leads the tasks: its segments in one row as wide as the body, its counts under it.
     // A press on a segment or a count (or the count's key) filters the list to that status, a second
     // press on the same one clears it, and one on another switches to it.
+    // A count's Button draws its key before it (`o: `), which the bar counts in its widths (status-bar.ts drawnText).
     const filterTo = (status: BarStatus) => void update($, barFilter, current => (current === status ? null : status))
     const drawPiece = (piece: BarPiece) => {
       const status = piece.status

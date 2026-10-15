@@ -1,7 +1,7 @@
 // The status bar atop the Tasks view (mine): one line of colored blocks as wide as the body, each status
-// of the area's own tasks a segment sized by its share, and under it a dim line of the counts. The
-// statuses are done today, verifying, working, waiting and not started; a task done on an
-// earlier day and a dropped one are left out. "Today" is the UTC day of the snapshot's clock, as every
+// of the area's own tasks a segment sized by its share, and under it the counts, dim, each behind its
+// key and wrapped to the bar's width as drawn (drawnText). The statuses are done today, verifying,
+// working, waiting and not started; a task done on an earlier day and a dropped one are left out. "Today" is the UTC day of the snapshot's clock, as every
 // date the pane draws is UTC (a bare due date means the end of its UTC day). A press on a segment or
 // its count, or the count's key, filters the list to that status (rows.ts) and a second press clears
 // it; the filtered segment and count draw bold, a dim line under the counts says so. Pure data:
@@ -126,21 +126,39 @@ export function barCells(counts: BarCounts, width: number): Record<BarStatus, nu
   return out
 }
 
-/** The counts in lines of `columns` cells, a dim ` · ` between two on a line; a count wider than a line has one to itself. */
+/**
+ * A piece as the terminal draws it: a count behind its key, as the engine draws a plain Button with a hotkey
+ * (the key, a colon and a space: `o: 2 done today`), any other piece as its text alone.
+ */
+export function drawnText(piece: BarPiece): string {
+  return piece.hotkey === null ? piece.text : `${piece.hotkey}: ${piece.text}`
+}
+
+/** The cells a piece takes as drawn (drawnText): what every width the bar lays out is counted in. */
+function drawnCells(piece: BarPiece): number {
+  return cells(drawnText(piece))
+}
+
+/**
+ * The counts in lines of `columns` cells as drawn, each count's key included, a dim ` · ` between two on a line;
+ * a count wider than a line has one to itself. Measured by the text alone, a line of keyed counts ran past the
+ * bar's width, and the row squeezed its separators to one cell, their dots wrapping onto a line of their own.
+ */
 function wrapCounts(words: readonly BarPiece[], columns: number): BarPiece[][] {
   const lines: BarPiece[][] = []
   let line: BarPiece[] = []
   let used = 0
   for (const word of words) {
-    const width = cells(word.text)
-    if (line.length > 0 && used + SEPARATOR.length + width > columns) {
+    const separator: BarPiece = { key: `sep:${word.key}`, text: SEPARATOR, dim: true, status: null, hotkey: null }
+    const width = drawnCells(word)
+    if (line.length > 0 && used + drawnCells(separator) + width > columns) {
       lines.push(line)
       line = []
       used = 0
     }
     if (line.length > 0) {
-      line.push({ key: `sep:${word.key}`, text: SEPARATOR, dim: true, status: null, hotkey: null })
-      used += SEPARATOR.length
+      line.push(separator)
+      used += drawnCells(separator)
     }
     line.push(word)
     used += width
