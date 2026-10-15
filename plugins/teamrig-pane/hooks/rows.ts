@@ -30,9 +30,9 @@ const UNDER_ID = '    '
 /** Starts each detail line, a wrapped one too: the guide that ties the details to their task. */
 const DETAIL_LEAD: Span = { text: `${UNDER_ID}│ `, dim: true }
 
-/** By the task's status. */
-export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', blocked: '■', done: '✓', dropped: '✗' }
-const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', blocked: 'error', done: 'success' }
+/** By the task's status: `◑` is shipped work waiting for its proof, the other half of `◐` working. */
+export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', blocked: '■', done: '✓', dropped: '✗' }
+export const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', verifying: 'success', blocked: 'error', done: 'success' }
 
 const NO_AREA = `No area for this session yet: /rename the tab to its session's id or name, run \`inbox read --session <id>\`, or /${COMMAND} <session> to pin one.`
 

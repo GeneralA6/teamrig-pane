@@ -1,7 +1,7 @@
 // Copied from teamrig's src/config/parse.ts by scripts/sync-core.ts: change it there, then run the sync.
 import { isRecord, type JsonRecord } from '../core/guards.ts';
 import { NAME_PATTERN, NAME_RULE } from '../core/ids.ts';
-import { isTaskStatus, SESSION_NAME, type TaskStatus } from '../register/model.ts';
+import { isTaskStatus, SESSION_NAME, TASK_STATUSES, type TaskStatus } from '../register/model.ts';
 import {
   DEFAULT_ALERTS,
   DEFAULT_BUDGET,
@@ -251,6 +251,7 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
       (value, itemPath) => parseStatus(read, value, itemPath),
       CONFIG_LIMITS.requireNoteOn.maxItems,
     ),
+    autoArchive: read.boolean(raw, 'autoArchive', path, defaults.autoArchive),
     check: {
       staleAfterHours: read.integer(check, 'staleAfterHours', `${path}.check`, defaults.check.staleAfterHours, { min: 1 }),
       notPickedUpAfterHours: read.integer(check, 'notPickedUpAfterHours', `${path}.check`, defaults.check.notPickedUpAfterHours, { min: 1 }),
@@ -279,7 +280,7 @@ function parseStatus(read: ConfigReader, value: unknown, path: string): TaskStat
   if (isTaskStatus(value)) {
     return value;
   }
-  read.report(path, `expected one of open, in-progress, blocked, done, dropped, got ${describe(value)}`);
+  read.report(path, `expected one of ${TASK_STATUSES.join(', ')}, got ${describe(value)}`);
   return undefined;
 }
 

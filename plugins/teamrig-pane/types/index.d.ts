@@ -1,5 +1,5 @@
 /** A task's status as teamrig's read entry spells it (hooks/log.ts fails to compile when they part). */
-export type TaskStatus = 'open' | 'in-progress' | 'blocked' | 'done' | 'dropped'
+export type TaskStatus = 'open' | 'in-progress' | 'verifying' | 'blocked' | 'done' | 'dropped'
 
 /** The first few of a list, and how many it left out. */
 export type Cut<T> = { items: T[]; more: number }

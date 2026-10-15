@@ -1,12 +1,15 @@
 // Copied from teamrig's src/register/model.ts by scripts/sync-core.ts: change it there, then run the sync.
 import { ID_PATTERN } from '../core/ids.ts';
 
-/** Task states. The first three are active: the task still needs its owner. */
-export const TASK_STATUSES = ['open', 'in-progress', 'blocked', 'done', 'dropped'] as const;
+/**
+ * Task states. The first four are active: the task still needs its owner. `verifying` is a change that has
+ * shipped and waits for what proves it (a test run, a night's flow, a number), named in its status note.
+ */
+export const TASK_STATUSES = ['open', 'in-progress', 'verifying', 'blocked', 'done', 'dropped'] as const;
 
 export type TaskStatus = (typeof TASK_STATUSES)[number];
 
-export const ACTIVE_STATUSES: readonly TaskStatus[] = ['open', 'in-progress', 'blocked'];
+export const ACTIVE_STATUSES: readonly TaskStatus[] = ['open', 'in-progress', 'verifying', 'blocked'];
 
 export function isTaskStatus(value: unknown): value is TaskStatus {
   return TASK_STATUSES.some((status) => status === value);
