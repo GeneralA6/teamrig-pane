@@ -199,7 +199,7 @@ After teamrig changes those modules, move the pin, sync and commit the copy with
 `--teamrig` is a teamrig git checkout; the modules are read from its history (`git cat-file`), never
 from its working tree, so a local edit there cannot reach the pane. `--ref` takes a sha, branch or tag
 and writes the commit it names to the pin. `--check` also fails on a file under `hooks/core/` that no
-copy names; CI runs it on every pull request (the `hooks/core matches the teamrig pin` job). The plugin contract (`types/index.d.ts`) cannot import, so it spells the status unions
+copy names; the local gate runs it before each push, and CI, when it runs, as the `hooks/core matches the teamrig pin` job. The plugin contract (`types/index.d.ts`) cannot import, so it spells the status unions
 out; a spec fails when the register adds or drops a status the pane has no glyph for.
 
 Then capture teamrig again at the new pin, and commit the capture with the sync:
