@@ -111,10 +111,15 @@ describe('the pane guide documents the command', () => {
 });
 
 describe('the pane guide documents the keys', () => {
-  it('lists each hotkey of the pane, and no letter it does not bind', () => {
-    const bound = Array.from(read(`${PLUGIN}/hooks/register.tsx`).matchAll(/hotkey="([a-z])"/g), (match) => match[1] ?? '').sort();
+  it("lists each hotkey of the pane, the status bar's counts' too, and no letter it does not bind", () => {
+    const register = read(`${PLUGIN}/hooks/register.tsx`);
+    const fixed = Array.from(register.matchAll(/hotkey="([a-z])"/g), (match) => match[1] ?? '');
+    const counts = Array.from(read(`${PLUGIN}/hooks/status-bar.ts`).matchAll(/hotkey: '([a-z])'/g), (match) => match[1] ?? '');
+    const bound = [...fixed, ...counts].sort();
     const documented = rowsStarting(skill, /^`[a-z]`$/).map((cell) => cell.slice(1, -1)).sort();
-    assert.ok(bound.length > 0, 'register.tsx binds hotkeys');
+    assert.ok(fixed.length > 0, 'register.tsx binds hotkeys');
+    assert.ok(counts.length > 0, 'status-bar.ts gives each count a key');
+    assert.ok(register.includes('hotkey={piece.hotkey}'), "register.tsx binds the counts' keys");
     assert.deepEqual(documented, bound);
   });
 });
@@ -152,7 +157,7 @@ describe('the pane guide states the limits the code holds', () => {
     ['Polls', [constant('live.ts', 'POLL_MS') / 1000, constant('live.ts', 'TICK_MS') / 1000]],
     ['`asked of others`', [constant('view.ts', 'MAX_ASKED')]],
     ['`finished today`', [constant('view.ts', 'MAX_FINISHED')]],
-    ['Above the prompt', [constant('register.tsx', 'INLINE_MAX_ROWS')]],
+    ['Above the prompt', [constant('register.tsx', 'INLINE_MAX_ROWS'), constant('status-bar.ts', 'INLINE_LIST_ROWS')]],
     ['Dock', [constant('register.tsx', 'DOCK_COLUMNS'), constant('command.ts', 'DOCK_MIN_COLUMNS')]],
     ['Changes, per repo', [constant('changes.ts', 'CHANGES_KEPT')]],
     ['Changes, outside any repo', [constant('changes.ts', 'OUTSIDE_KEPT')]],

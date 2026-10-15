@@ -79,7 +79,7 @@ the next poll.
 | `asked of others` | the newest 8 |
 | `finished today` | done or dropped in the last 24 hours, the newest 6 |
 | `NOT PICKED UP` | untouched by its owner 24 hours after it was assigned |
-| Above the prompt | 6 rows, the last saying how many it left out |
+| Above the prompt | 6 rows, the last saying how many it left out; the status bar takes those past the list's 3 |
 | Dock | asks for 58 columns; the side dock needs a terminal of 110 |
 | Changes, per repo | the first 200 files, the rest counted |
 | Changes, outside any repo | the newest 20 files |

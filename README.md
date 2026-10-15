@@ -47,8 +47,10 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
 
 ## What it shows
 
-- **Tasks:** your active tasks in plan order, what blocks them, what you asked of others, what you
-  finished today and your unread inbox lines. `/teamrig-pane all` shows every owner's tasks, and
+- **Tasks:** a bar of how your work stands (done today, waiting for proof, working, blocked, not
+  started; a click shows one status alone), then your active tasks in plan order, those waiting for
+  proof first, what blocks them, what you asked of others, what you finished today and your unread
+  inbox lines. `/teamrig-pane all` shows every owner's tasks, and
   `/teamrig-pane <session>` shows another session's, named by its id or its name.
 - **Details:** click a task, or press Enter on it, to read its ask, quoted from the file its ref
   points at, then who asked and when, its goals and its status note.
