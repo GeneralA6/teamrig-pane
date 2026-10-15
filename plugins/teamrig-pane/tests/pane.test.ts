@@ -170,7 +170,7 @@ async function start(
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, due: '2026-10-14', title: 'Ship the task pane' }),
     createLine('T2', { owner: 'security', by: 'lead', at: NOW - HOUR, priority: 1, title: 'Rotate the local URI' }),
-    statusLine('T2', 'security', NOW, 'blocked', 'needs owner paste'),
+    statusLine('T2', 'security', NOW, 'waiting', 'needs owner paste'),
   ])
   disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
   disk.write(INBOX, ['line one', 'line two', 'line three'])
@@ -193,7 +193,7 @@ test('docks the session area: its tasks, flags and unread inbox', async ($, on) 
   expect(await pane.find({ text: /Rotate the local URI/ })).toBeUndefined()
 })
 
-test('the all view lists every owner, blocked notes included', async ($, on) => {
+test('the all view lists every owner, waiting notes included', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
@@ -223,7 +223,7 @@ test("the area's Tasks view leads with a bar of its tasks by status and their co
   expect(segments.map(found => found.props['color'])).toEqual(['success', 'success', undefined])
   for (const count of ['1 done today', '1 verifying', '1 not started'])
     expect(await pane.find({ type: 'Text', text: count })).toBeDefined()
-  expect(await pane.find({ text: /working|blocked/ })).toBeUndefined()
+  expect(await pane.find({ text: /working|waiting/ })).toBeUndefined()
   // The bar sits between the switch and the tasks.
   const drawn = await pane.drawn()
   const rootKeys = childrenOf(drawn).map(child => propsOf(child)).map(props => (props !== null && 'key' in props ? props.key : null))
@@ -261,7 +261,7 @@ test("a press on a status's count or segment filters the list to it, again clear
   await pane.press({ key: 'count:verifying' })
   expect(await listed()).toEqual([false, true])
   expect(await pane.find({ text: 'showing verifying only, click again for all' })).toBeDefined()
-  expect(await pane.find({ text: /waiting for proof \(/ })).toBeUndefined()
+  expect(await pane.find({ text: /verifying \(/ })).toBeUndefined()
   expect(await pane.find({ type: 'Text', text: '1 verifying' })).toMatchObject({ props: { bold: true } })
 
   await pane.press({ key: 'bar:not-started' })
@@ -271,30 +271,30 @@ test("a press on a status's count or segment filters the list to it, again clear
   await pane.press({ key: 'count:not-started' })
   expect(await listed()).toEqual([true, true])
   expect(await pane.find({ text: /^showing/ })).toBeUndefined()
-  expect(await pane.find({ text: /waiting for proof \(1\)/ })).toBeDefined()
+  expect(await pane.find({ text: /verifying \(1\)/ })).toBeDefined()
 })
 
 test('a filter whose status empties keeps its count at 0 and says nothing is left, until a press clears it', async ($, on) => {
   const { clock, disk } = await start(on)
   const lines = [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' }),
-    statusLine('T1', 'po', NOW - HOUR / 2, 'blocked', 'waits on the owner'),
+    statusLine('T1', 'po', NOW - HOUR / 2, 'waiting', 'waits on the owner'),
     createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Check the roll' }),
   ]
   disk.write(EVENTS, lines)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  await pane.press({ key: 'count:blocked' })
+  await pane.press({ key: 'count:waiting' })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
 
   disk.write(EVENTS, [...lines, statusLine('T1', 'po', NOW, 'in-progress')])
   await clock.advance(3_000)
-  expect(await pane.find({ type: 'Text', text: '0 blocked' })).toMatchObject({ props: { bold: true } })
-  expect(await pane.find({ text: 'Nothing blocked.' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: '0 waiting' })).toMatchObject({ props: { bold: true } })
+  expect(await pane.find({ text: 'Nothing waiting.' })).toBeDefined()
   expect(await pane.find({ text: /Ship the task pane|Check the roll/ })).toBeUndefined()
 
-  await pane.press({ key: 'count:blocked' })
-  expect(await pane.find({ text: /blocked/ })).toBeUndefined()
+  await pane.press({ key: 'count:waiting' })
+  expect(await pane.find({ text: /waiting/ })).toBeUndefined()
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
 })
 
@@ -644,7 +644,7 @@ test("with both folders named and no team to read, an expanded task's priority i
   expect(await pane.find({ text: /│ asked by owner · added by lead · 10-13 13:00 · p2 correctness( · |$)/m })).toBeDefined()
 })
 
-test('an expanded blocked task shows its note in the details; collapse closes every task', async ($, on) => {
+test('an expanded waiting task shows its note in the details; collapse closes every task', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
@@ -653,7 +653,7 @@ test('an expanded blocked task shows its note in the details; collapse closes ev
 
   await pane.press({ key: 'security:T2' })
   await pane.press({ key: 'po:T1' })
-  expect(await pane.find({ text: /│ blocked: needs owner paste$/m })).toBeDefined()
+  expect(await pane.find({ text: /│ waiting: needs owner paste$/m })).toBeDefined()
   expect(await pane.find({ text: /↳ needs owner paste/ })).toBeUndefined()
 
   await pane.press({ key: 'collapse' })
@@ -736,7 +736,7 @@ test('resized to a narrow dock or inline, it draws every line inside the frame a
   const { disk } = await start(on)
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 1, due: '2026-10-14', title: 'Ship the task pane with a title long enough to wrap' }),
-    statusLine('T1', 'po', NOW - HOUR / 2, 'blocked', 'a status note that also needs to wrap', 'evidence long enough to wrap too'),
+    statusLine('T1', 'po', NOW - HOUR / 2, 'waiting', 'a status note that also needs to wrap', 'evidence long enough to wrap too'),
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })

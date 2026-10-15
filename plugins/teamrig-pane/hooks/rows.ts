@@ -1,12 +1,12 @@
 // The pane's body as blocks of rows of styled spans: pure data from a snapshot. A block is what
-// draws as one element (layout.ts): a task with its blocked or proof note or details under it, a header, a
+// draws as one element (layout.ts): a task with what it waits for, its proof note or its details under it, a header, a
 // heading. The terminal lays out and paints a pane's whole tree, its scroll only a window over it,
 // and an inline pane's frame grows to fit the tree in the live area redrawn on every keystroke: the
 // tree's size is what the pane costs, so a block is one Text (its unstyled spans plain strings, a
 // task's inside the Button that expands it), never a box per row, and inline the rows are capped.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, ExpandedTasks, Snapshot, TaskDetail, TaskRow, TaskStatus, ViewMode } from '../types'
-import { priorityText } from './core/read/index'
+import { priorityText, waitsText } from './core/read/index'
 import { COMMAND } from './command'
 import { refLabel, refParts } from './details'
 import { BAR_LOOK } from './status-bar'
@@ -32,10 +32,10 @@ const UNDER_ID = '    '
 const DETAIL_LEAD: Span = { text: `${UNDER_ID}│ `, dim: true }
 
 /** By the task's status: `◑` is shipped work waiting for its proof, the other half of `◐` working. */
-export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', blocked: '■', done: '✓', dropped: '✗' }
-export const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', verifying: 'success', blocked: 'error', done: 'success' }
-/** A status note's color: why a blocked task is held, what proves a verifying one; others draw in the text color. */
-const NOTE_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { blocked: 'error', verifying: 'success' }
+export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', waiting: '■', done: '✓', dropped: '✗' }
+export const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', verifying: 'success', waiting: 'error', done: 'success' }
+/** A status note's color: what a waiting task waits for, what proves a verifying one; others draw in the text color. */
+const NOTE_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { waiting: 'error', verifying: 'success' }
 
 const NO_AREA = `No area for this session yet: /rename the tab to its session's id or name, run \`inbox read --session <id>\`, or /${COMMAND} <session> to pin one.`
 
@@ -85,10 +85,17 @@ function detailRows(section: string, task: TaskRow, detail: TaskDetail): Row[] {
   return rows
 }
 
-/** What its status note says under a task: why a blocked one is held, `proof: …` what a verifying one waits for; null for other statuses or no note. */
+/**
+ * What its status says under a task: what a waiting one waits for, then its note, as `teamrig list` words them
+ * (`decision owner · on T5; the schema first`); `proof: …` what a verifying one waits for; null for other statuses
+ * or nothing to say.
+ */
 function noteText(task: TaskRow): string | null {
+  if (task.status === 'waiting') {
+    const parts = [task.waits.length > 0 ? waitsText(task.waits) : null, task.note].filter((part): part is string => part !== null)
+    return parts.length === 0 ? null : parts.join('; ')
+  }
   if (task.note === null) return null
-  if (task.status === 'blocked') return task.note
   if (task.status === 'verifying') return `proof: ${task.note}`
   return null
 }
@@ -156,7 +163,7 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
   // Work waiting for its proof leads, the tasks to close first; the rest of the active work then has its own heading.
   if (view.verifying.length > 0) {
-    blocks.push(heading('proof', [{ text: `waiting for proof (${view.verifying.length})`, color: 'success' }]))
+    blocks.push(heading('proof', [{ text: `verifying (${view.verifying.length})`, color: 'success' }]))
     blocks.push(...view.verifying.map(line => taskBlock('proof', line, expanded)))
     if (view.active.length > 0) blocks.push(heading('active', [{ text: `other active (${view.active.length})`, dim: true }]))
   }
@@ -172,9 +179,9 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
   const groups = ownerGroups(snap.tasks, snap.now)
   if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
   return groups.flatMap((group, i) => {
-    const blocked = group.blocked > 0 ? ` · ${group.blocked} blocked` : ''
-    const verifying = group.verifying > 0 ? ` · ${group.verifying} waiting for proof` : ''
-    const counts = ` · ${group.active.length} active${blocked}${verifying}`
+    const waiting = group.waiting > 0 ? ` · ${group.waiting} waiting` : ''
+    const verifying = group.verifying > 0 ? ` · ${group.verifying} verifying` : ''
+    const counts = ` · ${group.active.length} active${waiting}${verifying}`
     const owner: Span[] = [
       { text: group.owner, bold: true, color: group.owner === snap.area ? 'claude' : undefined },
       { text: counts, dim: true },

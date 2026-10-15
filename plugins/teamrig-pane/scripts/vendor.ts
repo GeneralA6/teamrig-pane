@@ -37,6 +37,7 @@ export const CORE_FILES: readonly string[] = [
   'register/model.ts',
   'register/snapshot.ts',
   'register/views.ts',
+  'register/waits.ts',
 ]
 
 /** Static imports and re-exports (`import x from '…'`, `export { y } from '…'`), across lines. */

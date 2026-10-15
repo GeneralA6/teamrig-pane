@@ -1,5 +1,14 @@
 /** A task's status as teamrig's read entry spells it (hooks/log.ts fails to compile when they part). */
-export type TaskStatus = 'open' | 'in-progress' | 'verifying' | 'blocked' | 'done' | 'dropped'
+export type TaskStatus = 'open' | 'in-progress' | 'verifying' | 'waiting' | 'done' | 'dropped'
+
+/**
+ * One thing a waiting task waits for, as teamrig's read entry types it (hooks/log.ts fails to compile when they
+ * part): a decision or approval by a session or the owner, another task, or a UTC time (`YYYY-MM-DD HH:MM`).
+ */
+export type WaitRow =
+  | { readonly kind: 'decision' | 'approval'; readonly who: string }
+  | { readonly kind: 'task'; readonly id: string }
+  | { readonly kind: 'time'; readonly at: string }
 
 /** The first few of a list, and how many it left out. */
 export type Cut<T> = { items: T[]; more: number }
@@ -16,7 +25,7 @@ export type TaskRow = {
   /** `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`, UTC; a bare day means its end. */
   due: string | null
   status: TaskStatus
-  /** The note of the newest status change (why it is blocked, what was done). */
+  /** The note of the newest status change (why it waits, what was done). */
   note: string | null
   /** The newest evidence recorded (a sha or a path); a status change without one keeps it. */
   evidence: string | null
@@ -43,6 +52,10 @@ export type TaskRow = {
   assignedAt: string
   /** The owner's newest event since then; null = the owner has not touched it. */
   ownerSeenAt: string | null
+  /** What a waiting task waits for; empty in any other status, and for an old `blocked` line, which reads as waiting. */
+  waits: readonly WaitRow[]
+  /** The tasks to finish before this one starts (`after T5`, its plan dependency); empty when none. */
+  after: readonly string[]
 }
 
 /**
@@ -124,8 +137,8 @@ export type PaneView = 'tasks' | 'changes'
 /** `mine`: this session's area; `all`: every owner's active tasks. */
 export type ViewMode = 'mine' | 'all'
 
-/** A segment of the status bar over the area's tasks (hooks/status-bar.ts): done today, verifying, in progress, blocked, open. */
-export type BarStatus = 'done-today' | 'verifying' | 'working' | 'blocked' | 'not-started'
+/** A segment of the status bar over the area's tasks (hooks/status-bar.ts): done today, verifying, in progress, waiting, open. */
+export type BarStatus = 'done-today' | 'verifying' | 'working' | 'waiting' | 'not-started'
 
 declare module 'claude-code' {
   interface PluginState {
