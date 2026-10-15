@@ -161,9 +161,11 @@ What the host draws and the mod can't change:
 
 The pane parses, renames and folds the register with the register's own modules, so every event type,
 status and rename it writes reads here too, and a line the pane cannot read is one the register cannot
-read either. `scripts/sync-core.ts` copies them into `hooks/core/` (which ones and how: `scripts/vendor.ts`),
-making the coordinator's `guards.ts` import local and refusing a module that imports anything outside
-the copied set. Never edit `hooks/core/` by hand: change the register, then sync.
+read either. `scripts/sync-core.ts` copies teamrig's read entry (`src/read/index.ts`) and every module it
+reaches into `hooks/core/`, each at its path under teamrig's `src/` (which ones and how: `scripts/vendor.ts`),
+from the teamrig commit `scripts/teamrig-pin.json` names. It refuses a module that imports anything
+outside the copied set, and a listed module the read entry no longer reaches. Never edit `hooks/core/`
+by hand: change teamrig, then sync.
 
 A read that fails leaves the last good tasks drawn under a `⚠` line naming the problem, and the next
 poll reads again. A file refused as locked or denied (`EBUSY`, `EPERM`, `EACCES`) counts as there,
@@ -185,14 +187,15 @@ harness, 20,000 events (3.2 MiB, 4,082 tasks, 409 kept) load and draw in 350-400
 reads what the older code wrote as not yet read, drawing `Reading the register…` until its first poll
 (at most 3 s), instead of rows with fields missing or a `No area` line it has not looked for yet.
 
-After any change to those register modules, sync and commit the copy:
+After teamrig changes those modules, move the pin, sync and commit the copy with the pin:
 
-    node --disable-warning=ExperimentalWarning scripts/sync-core.ts --register <dir> --guards <file>           # write hooks/core
-    node --disable-warning=ExperimentalWarning scripts/sync-core.ts --register <dir> --guards <file> --check   # list drift, exit 1
+    node --disable-warning=ExperimentalWarning scripts/sync-core.ts --teamrig <repo> --ref <commit>   # move the pin, write hooks/core
+    node --disable-warning=ExperimentalWarning scripts/sync-core.ts --teamrig <repo> --check          # list drift from the pin, exit 1
 
-`--register` is the register's folder (its modules are under `src/`) and `--guards` the type-guard
-module they import from outside it. Name a staging copy of the register to sync the pane in the same
-step as a register swap. The plugin
+`--teamrig` is a teamrig git checkout; the modules are read from its history (`git cat-file`), never
+from its working tree, so a local edit there cannot reach the pane. `--ref` takes a sha, branch or tag
+and writes the commit it names to the pin. `--check` also fails on a file under `hooks/core/` that no
+copy names. The plugin
 contract (`types/index.d.ts`) cannot import, so it spells the status unions out; a spec fails when
 the register adds or drops a status the pane has no glyph for.
 

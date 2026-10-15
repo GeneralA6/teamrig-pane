@@ -41,8 +41,8 @@ file under `tools/` is loaded by no test, or a file or the total falls below the
 tests on Linux, Windows and macOS under node 22 and 24, with a pinned Claude Code release
 (`.github/workflows/ci.yml`).
 
-`hooks/core/` is a copy of the register's own modules, made by `scripts/sync-core.ts`; never edit it
-by hand (the plugin README says how to sync it).
+`hooks/core/` is a copy of teamrig's read modules at the commit `scripts/teamrig-pin.json` names, made
+by `scripts/sync-core.ts`; never edit it by hand (the plugin README says how to sync it).
 
 ## Branches and releases
 - Every change is its own branch off `main` and lands through a pull request once every CI check
