@@ -1,5 +1,6 @@
-// The Changes view as blocks of rows (rows.ts): per repo a ruled header (its folder, branch and how many
-// files changed), then its files as one block, each row git's two-letter code, the path and its lines
+// The Changes view as blocks of rows (rows.ts): per repo a ruled header (its folder, its branch unless
+// the folder bears its name, and how many files changed; only the folder while git can't read it),
+// then its files as one block, each row git's two-letter code, the path and its lines
 // added and removed (`binary` for a binary file); then the files written outside any repo. The switch's
 // badge and the tab title count the same files.
 import type { ChangesSnapshot, FileChange, LineCount, RepoChanges } from '../types'
@@ -51,13 +52,17 @@ function fileRow(root: string, file: FileChange): Row {
   return { key: `${root}:${file.path}`, spans: [...codeSpans(file.code), { text: ` ${file.path}` }, ...lineSpans(file.lines), ...from], hang: UNDER_PATH }
 }
 
-function repoBlocks(repo: RepoChanges, index: number): Block[] {
+/** A read repo's branch and count, ` · main · 3 changed`; the branch left out when the folder bears its name, as a worktree's does. */
+function repoState(repo: RepoChanges, name: string): Span[] {
   const count = repo.files.items.length + repo.files.more
-  const header: Span[] = [
-    { text: repoName(repo.root), bold: true },
-    { text: ` · ${repo.branch ?? 'detached'}`, dim: true },
-    { text: count > 0 ? ` · ${count} changed` : ' · clean', dim: true },
-  ]
+  const branch: Span[] = repo.branch === name ? [] : [{ text: ` · ${repo.branch ?? 'detached'}`, dim: true }]
+  return [...branch, { text: count > 0 ? ` · ${count} changed` : ' · clean', dim: true }]
+}
+
+function repoBlocks(repo: RepoChanges, index: number): Block[] {
+  const name = repoName(repo.root)
+  // Git did not read a repo with a problem: it has no branch or files to show, only why.
+  const header: Span[] = [{ text: name, bold: true }, ...(repo.problem === null ? repoState(repo, name) : [])]
   // The first repo sits under the buttons, already a gap away.
   const head: Block = { key: `repo:${repo.root}`, opensSection: index > 0, rows: [{ key: `repo:${repo.root}`, spans: header, rule: true }] }
   if (repo.problem !== null) return [head, single(`problem:${repo.root}`, [{ text: `WARN ${repo.problem}`, color: 'warning' }], { text: '  ' })]
