@@ -21,6 +21,19 @@ Then run `/teamrig-pane` in a session. In the fullscreen layout (`"tui": "fullsc
 the right from 110 columns and opens by itself from 144; anywhere else it sits above the prompt.
 Tested on Claude Code 2.1.295 and later.
 
+## Update
+
+Claude Code moves an install only when the version in the plugin's `plugin.json` rises, and every release raises it.
+To take the newest one:
+
+```sh
+claude plugin marketplace update teamrig-pane
+claude plugin update teamrig-pane@teamrig-pane
+```
+
+Then run `/reload-plugins` in each open session, or restart it. Claude Code does not check this marketplace for
+updates by itself unless you turn on its auto-update in `/plugin`, under Marketplaces.
+
 ## What it shows
 
 - **Tasks:** your active tasks in plan order, what blocks them, what you asked of others, what you

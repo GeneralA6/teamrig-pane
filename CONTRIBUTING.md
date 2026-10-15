@@ -57,8 +57,14 @@ how).
 ## Branches and releases
 - Every change is its own branch off `main` and lands through a pull request once every CI check
   passes on its head; it is rebase-merged and the branch is deleted.
-- Nothing is pushed to `main` directly, and release tags are set only by the maintainer. Installs
-  track `main`.
+- Nothing is pushed to `main` directly, and release tags are set only by the maintainer.
+- Installs take the version in `plugins/teamrig-pane/.claude-plugin/plugin.json`, not the newest commit:
+  `claude plugin update` moves an install only when that version rises. So a change to anything under
+  `plugins/teamrig-pane/` raises it, as MAJOR.MINOR.PATCH: while it is 0.x, the minor for a new feature
+  or a change that breaks how people use it, the patch for a fix. CI's `plugin version gate`
+  (`tools/ci/plugin-version-cli.ts`, also run by `npm run check`) fails a pull request that does not, and
+  one that gives the marketplace entry a version of its own, which Claude Code ignores. How users update:
+  [Update](README.md#update).
 
 ## Scrub checks
 Two checks keep private data out of the history:

@@ -41,6 +41,13 @@ describe('README', () => {
     for (const target of targets.filter((path) => !/^https?:/.test(path))) assert.ok(existsSync(`${ROOT}${target}`), target);
   });
 
+  it('tells how to update: refresh the marketplace, update the plugin, then reload or restart', () => {
+    const [, update = ''] = readme.match(/\n## Update\n([\s\S]*?)\n## /) ?? [];
+    assert.match(update, /```sh\nclaude plugin marketplace update teamrig-pane\nclaude plugin update teamrig-pane@teamrig-pane\n```/);
+    assert.match(update, /`\/reload-plugins`[^.]*, or restart it/);
+    assert.match(update, /auto-update/);
+  });
+
   it('draws no pictographs (emoji)', () => {
     assert.doesNotMatch(readme, /\p{Extended_Pictographic}/u);
   });
