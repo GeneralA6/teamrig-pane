@@ -26,14 +26,13 @@ describe('README', () => {
     }
   });
 
-  it('lists what the pane needs: the Claude Code version CI installs, teamrig, the fullscreen layout, git', () => {
+  it('names only the major needs: the Claude Code version CI installs, its fullscreen layout, and teamrig', () => {
     const [, needs = ''] = readme.match(/\n### Requirements\n([\s\S]*?)\n## /) ?? [];
     const [, tested = ''] = ci.match(/@anthropic-ai\/claude-code@(\d+\.\d+\.\d+)/) ?? [];
     assert.notEqual(tested, '');
-    assert.match(needs, new RegExp(`^- Claude Code, tested on ${tested.replaceAll('.', '\\.')} and later\\.$`, 'm'));
-    for (const need of [/^- teamrig:/m, /`"tui": "fullscreen"`/, /at least 110 columns/, /^- git, for the Changes view\./m, /Windows, macOS or Linux/]) {
-      assert.match(needs, need);
-    }
+    assert.match(needs, new RegExp(`^Claude Code ${tested.replaceAll('.', '\\.')} or later in its fullscreen layout \\(\`"tui": "fullscreen"\`[^)]*\\), and teamrig\\.`, 'm'));
+    assert.match(needs, /the pane says so and how\s+to fix it\./);
+    assert.ok(needs.trim().split('\n').length <= 3, `Requirements is ${needs.trim().split('\n').length} lines; keep it to the major needs`);
   });
 
   it('points AI assistants at llms.txt', () => {

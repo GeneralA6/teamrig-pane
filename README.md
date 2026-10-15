@@ -22,15 +22,9 @@ columns and opens by itself from 144; anywhere else it sits above the prompt.
 
 ### Requirements
 
-- Claude Code, tested on 2.1.295 and later.
-- teamrig: the pane shows its task list. It finds your team from `$TEAMRIG_TEAM` or the nearest
-  `.teamrig.json`, and says what to set when it can't.
-- Claude Code's fullscreen layout (`"tui": "fullscreen"` in its settings) and a terminal at least 110 columns
-  wide, to dock on the right.
-- git, for the Changes view.
-- Windows, macOS or Linux: each is tested.
-
-Nothing else: the pane runs inside Claude Code itself, with no server, browser or Node.js of its own.
+Claude Code 2.1.295 or later in its fullscreen layout (`"tui": "fullscreen"` in its settings), and teamrig.
+If something is missing, such as a window too narrow to dock or a team it can't find, the pane says so and how
+to fix it.
 
 ## Update
 
