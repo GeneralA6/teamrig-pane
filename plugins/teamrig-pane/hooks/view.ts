@@ -137,6 +137,8 @@ const TASK_FIELDS: { readonly [K in keyof TaskRow]-?: K } = {
   status: 'status',
   note: 'note',
   evidence: 'evidence',
+  skill: 'skill',
+  statusAt: 'statusAt',
   source: 'source',
   ref: 'ref',
   goals: 'goals',
@@ -144,6 +146,8 @@ const TASK_FIELDS: { readonly [K in keyof TaskRow]-?: K } = {
   createdBy: 'createdBy',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
+  updatedBy: 'updatedBy',
+  priorityAt: 'priorityAt',
   assignedAt: 'assignedAt',
   ownerSeenAt: 'ownerSeenAt',
 }

@@ -48,7 +48,7 @@ const EMPTY_SNAPSHOT: Snapshot = { tasks: [], area: null, areaSource: null, unre
  * value reads as absent (the empty snapshot, until the reload's first poll). Bump it whenever the
  * Snapshot or TaskRow type in ../types changes shape.
  */
-const SNAPSHOT_SHAPE = 'register-v3'
+const SNAPSHOT_SHAPE = 'register-v4'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
 const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, NOTHING_EXPANDED)

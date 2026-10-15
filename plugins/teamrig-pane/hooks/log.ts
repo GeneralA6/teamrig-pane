@@ -24,6 +24,8 @@ export function rowOf(task: Task, priorities: readonly PriorityConfig[]): TaskRo
     status: task.status,
     note: task.note,
     evidence: task.evidence,
+    skill: task.skill,
+    statusAt: task.statusAt,
     source: task.source,
     ref: task.ref,
     goals: task.goals,
@@ -31,6 +33,8 @@ export function rowOf(task: Task, priorities: readonly PriorityConfig[]): TaskRo
     createdBy: task.createdBy,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
+    updatedBy: task.updatedBy,
+    priorityAt: task.priorityAt,
     assignedAt: task.assignedAt,
     ownerSeenAt: task.ownerSeenAt,
   }
