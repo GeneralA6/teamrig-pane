@@ -10,7 +10,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DEFAULT_REGISTER } from '../hooks/core/config/defaults.ts'
+import { DEFAULT_REGISTER } from '../hooks/core/read/index.ts'
 import { GOLDEN_SESSION, goldenModule, underGoldenRoot, type GoldenRegister, type InboxState, type ListedFixture } from './golden-format.ts'
 import { parsePin } from './vendor.ts'
 
