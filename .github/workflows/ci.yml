@@ -29,6 +29,8 @@ jobs:
       - run: node tools/dco/cli.ts --github
       # Fails on a skipped, focused or todo plugin test (see CONTRIBUTING.md).
       - run: node tools/ci/plugin-tests-cli.ts
+      # Fails when a README picture is stale: run `npm run docs:images` and commit the result.
+      - run: node tools/docs/images-cli.ts --check
 
   coverage:
     name: coverage gate
