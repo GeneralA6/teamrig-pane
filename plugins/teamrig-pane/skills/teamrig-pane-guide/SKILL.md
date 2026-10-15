@@ -22,13 +22,16 @@ module in Claude Code's own runtime), an early-access plugin surface that may ch
 
 | Needs | Version or setting | Why |
 | --- | --- | --- |
-| Claude Code | 2.1.295 or later | CI runs the plugin's tests on 2.1.295, the oldest release they pass on; earlier test kits cannot draw a pane. |
+| Claude Code | 2.1.295 or later | CI runs the plugin's tests on 2.1.295, the oldest release they pass on; earlier test kits cannot draw a pane. On an older one the pane draws a `WARN` line with the fix. |
 | Fullscreen layout | `"tui": "fullscreen"` in `~/.claude/settings.json` | Only the fullscreen layout docks the pane on the right. Without it the pane sits above the prompt. |
 | Terminal width | 110 columns to dock, 144 to open by itself | Narrower, the pane sits above the prompt; `/teamrig-pane` opens it at any width. |
 | teamrig | a team with a register | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). |
-| git | on the PATH | Only for the Changes tab, which runs `git status` per repo, and `git diff` and `git grep` to count the changed lines. |
+| git | on the PATH | Only for the Changes tab, which runs `git status` per repo, and `git diff` and `git grep` to count the changed lines. Without it the pane draws a `WARN` line with the fix. |
 | Node.js | none to use it; 22.18 or later to develop it | The pane runs inside Claude Code. The repository's tools and tests run on Node (`engines` in `package.json`). |
 | Operating system | Linux, Windows or macOS | CI runs the tests on ubuntu, windows and macos, each on Node 22 and 24, and the plugin tests in Claude Code on each. CI is paused for now: each change is tested before it is pushed on one machine, Node and Claude Code release, so the others go unchecked until CI runs again. |
+
+The pane checks the Claude Code version and git once a session, when it starts, and draws one `WARN` line
+above its body for each that falls short ([reference.md](reference.md#warn-lines-and-their-fixes)).
 
 Turn on the fullscreen layout: add `"tui": "fullscreen"` to the top-level object in `~/.claude/settings.json`,
 then restart or resume the session. No other setting is needed.

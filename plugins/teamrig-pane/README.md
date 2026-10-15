@@ -1,6 +1,7 @@
 # teamrig-pane
 
-Install it from a session (it is tested on Claude Code 2.1.295 and later):
+Install it from a session. It needs Claude Code 2.1.295 or later, the oldest it is tested on, and says so on
+an older one:
 
     /plugin install teamrig-pane --marketplace GeneralA6/teamrig-pane
 
@@ -132,7 +133,9 @@ then its files: git's two-letter code (the staged letter green, the unstaged one
 dim), the path from the repo root, its lines (`+12` added in green, `-3` removed in red; `+0 -0` or
 `binary` dim; an untracked folder sums its files) and a rename's source (`← old.ts`). The first 200
 files a repo are listed and the rest counted; a repo git can't read shows only its folder in the header
-and git's first error line under it. Files written outside any repo come last, the newest 20.
+and git's first error line under it. Files written outside any repo come last, the newest 20. When git can't be
+started at all (`git --version`, run once a session), a `WARN` line above the view says so, and the view lists
+nothing rather than wait on git.
 
 Each repo costs one `git --no-optional-locks status --porcelain=v1 -b -z` (no index lock, so it never
 blocks a commit; 10 s timeout), and while it has changed files one `git diff HEAD --numstat -z` and up
