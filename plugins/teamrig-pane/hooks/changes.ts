@@ -1,14 +1,17 @@
-// The Changes view's data: the files changed in the git repos this session works in. A repo is known
-// from the session's folder and from each file the session writes (Edit, Write, NotebookEdit: the
-// tool.call hooks in register.tsx), its root found once per folder with `git rev-parse
+// The Changes view's data: the files changed in the git repos this session works in, and their changed
+// lines. A repo is known from the session's folder and from each file the session writes (Edit, Write,
+// NotebookEdit: the tool.call hooks in register.tsx), its root found once per folder with `git rev-parse
 // --show-toplevel` (a worktree's own root, never the main checkout's). A file written outside any repo
 // is listed as such, the newest OUTSIDE_KEPT. Git never runs in a folder that is not there: a folder is
 // checked before its root is asked, and a repo's `.git` before each read, so a repo whose folder or
-// `.git` is gone (a removed worktree) leaves the list. Each repo costs one `git --no-optional-locks
-// status --porcelain=v1 -b -z` (no index lock, so it never blocks a commit): on the next 3 s poll after
-// a write or a shell call (a burst of edits costs one run), every 60 s (a commit or a change made from
-// elsewhere), and at once when the person switches to the view. Runs git only; no model calls.
-import type { ChangesSnapshot, Cut, FileChange, RepoChanges } from '../types'
+// `.git` is gone (a removed worktree) leaves the list. A read costs one `git --no-optional-locks status
+// --porcelain=v1 -b -z` (no index lock, so it never blocks a commit); while files changed, one `diff
+// HEAD --numstat -z` counts the tracked files' lines and one `grep --untracked -I -c` the untracked
+// ones' (a second grep only to tell an untracked binary file from an empty one). A repo is read on the
+// next 3 s poll after a write or a shell call (a burst of edits costs one read), every 60 s (a commit or
+// a change made from elsewhere), and at once when the person switches to the view. Runs git only; no
+// model calls.
+import type { ChangesSnapshot, Cut, FileChange, LineCount, RepoChanges } from '../types'
 import { POLL_MS, TICK_MS, type Timer } from './live'
 
 export const EMPTY_CHANGES: ChangesSnapshot = { repos: [], outside: [], isRead: false }
@@ -16,8 +19,16 @@ export const EMPTY_CHANGES: ChangesSnapshot = { repos: [], outside: [], isRead: 
 export const CHANGES_KEPT = 200
 /** The most files kept that were written outside any repo. */
 export const OUTSIDE_KEPT = 20
+/** The most characters of untracked paths one grep names, well under Windows' 32,767-character command line; the rest go uncounted. */
+export const PATHSPEC_BUDGET = 16_000
 const TOPLEVEL = ['rev-parse', '--show-toplevel'] as const
 const STATUS = ['--no-optional-locks', 'status', '--porcelain=v1', '-b', '-z'] as const
+/** Names a path as it is spelled, never as a glob. */
+const LITERAL = ':(literal)'
+/** A status line on a branch with no commit yet. */
+const UNBORN = /^(?:No commits yet|Initial commit) on (.+)$/
+const BINARY: LineCount = { kind: 'binary' }
+const NO_LINES: ReadonlyMap<string, LineCount> = new Map()
 
 /** What a git run answers: `$.process.run`'s result, the fields read here. */
 export type GitRun = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: boolean }
@@ -41,7 +52,7 @@ export function folderOf(path: string): string {
 
 /** The branch a `## ` status line names: `main...origin/main [ahead 1]`, `No commits yet on main`; null when detached. */
 export function branchOf(line: string): string | null {
-  const unborn = /^(?:No commits yet|Initial commit) on (.+)$/.exec(line)
+  const unborn = UNBORN.exec(line)
   if (unborn?.[1] !== undefined) return unborn[1]
   if (line.startsWith('HEAD (no branch)')) return null
   const name = line.split(' [')[0]?.split('...')[0] ?? ''
@@ -50,22 +61,60 @@ export function branchOf(line: string): string | null {
 
 /**
  * Reads `git status --porcelain=v1 -b -z`: NUL-separated entries, the branch's `## ` first, each
- * file `XY path`, a rename's or copy's source path the entry after it.
+ * file `XY path`, a rename's or copy's source path the entry after it. `isUnborn`: the branch has no
+ * commit yet, so there is no HEAD to count lines against. The lines are counted after (withLines).
  */
-export function parseStatus(stdout: string): { branch: string | null; files: FileChange[] } {
+export function parseStatus(stdout: string): { branch: string | null; isUnborn: boolean; files: FileChange[] } {
   const entries = stdout.split('\0')
   let branch: string | null = null
+  let isUnborn = false
   const files: FileChange[] = []
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i] ?? ''
-    if (entry.startsWith('## ')) branch = branchOf(entry.slice(3))
-    else if (entry.length > 3) {
+    if (entry.startsWith('## ')) {
+      branch = branchOf(entry.slice(3))
+      isUnborn = UNBORN.test(entry.slice(3))
+    } else if (entry.length > 3) {
       const code = entry.slice(0, 2)
       const from = /[RC]/.test(code) ? (entries[++i] ?? null) : null
-      files.push({ code, path: entry.slice(3), from })
+      files.push({ code, path: entry.slice(3), from, lines: null })
     }
   }
-  return { branch, files }
+  return { branch, isUnborn, files }
+}
+
+/**
+ * Reads `git diff --numstat -z`: each file `added TAB removed TAB path` NUL-ended, a rename's or copy's
+ * path left empty and its source and new path the next two entries; `-` for both counts of a binary
+ * file. Keyed by the path git status lists (a rename's new one).
+ */
+export function parseNumstat(stdout: string): Map<string, LineCount> {
+  const lines = new Map<string, LineCount>()
+  const entries = stdout.split('\0')
+  for (let i = 0; i < entries.length; i++) {
+    const match = /^(-|\d+)\t(-|\d+)\t(.*)$/s.exec(entries[i] ?? '')
+    if (match === null) continue
+    const [, added = '-', removed = '-', named = ''] = match
+    let path = named
+    if (path === '') {
+      i += 2
+      path = entries[i] ?? ''
+    }
+    if (path === '') continue
+    lines.set(path, added === '-' || removed === '-' ? BINARY : { kind: 'text', added: Number(added), removed: Number(removed) })
+  }
+  return lines
+}
+
+/** Reads `git grep -c -z`: one line a file, `path NUL count`. */
+export function parseGrepCounts(stdout: string): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const line of stdout.split('\n')) {
+    const cut = line.lastIndexOf('\0')
+    const count = line.slice(cut + 1).trim()
+    if (cut > 0 && /^\d+$/.test(count)) counts.set(line.slice(0, cut), Number(count))
+  }
+  return counts
 }
 
 /** How many files the view lists: every repo's changed files, then those written outside any repo. */
@@ -75,6 +124,34 @@ export function changeCount(changes: ChangesSnapshot): number {
 
 function kept<T>(items: readonly T[], most: number): Cut<T> {
   return { items: items.slice(0, most), more: Math.max(0, items.length - most) }
+}
+
+/** Lines that were all added: an untracked file's or folder's. */
+function allAdded(count: number): LineCount {
+  return { kind: 'text', added: count, removed: 0 }
+}
+
+/** The first paths whose pathspecs fit PATHSPEC_BUDGET characters. */
+function withinBudget(paths: readonly string[]): string[] {
+  const named: string[] = []
+  let used = 0
+  for (const path of paths) {
+    used += LITERAL.length + path.length + 1
+    if (used > PATHSPEC_BUDGET) break
+    named.push(path)
+  }
+  return named
+}
+
+/** The tracked files' lines against HEAD; with no commit yet, the staged lines (against the empty tree). */
+function numstatArgs(isUnborn: boolean): string[] {
+  return ['--no-optional-locks', 'diff', isUnborn ? '--cached' : 'HEAD', '--numstat', '-z']
+}
+
+/** Counts each named untracked file's lines (`-e ''` matches every line, whatever `grep.patternType` says); `-I` leaves binary files out. */
+function grepArgs(paths: readonly string[], isTextOnly: boolean): string[] {
+  const textOnly = isTextOnly ? ['-I'] : []
+  return ['--no-optional-locks', 'grep', '--untracked', ...textOnly, '-c', '-z', '-e', '', '--', ...paths.map(path => `${LITERAL}${path}`)]
 }
 
 function messageOf(error: unknown): string {
@@ -197,9 +274,61 @@ export class LiveChanges {
       const ran = await this.ports.git(STATUS, root)
       if (ran.exitCode !== 0) return { ...unread, problem: failure(ran) }
       const status = parseStatus(ran.stdout)
-      return { root, branch: status.branch, files: kept(status.files, CHANGES_KEPT), isPartial: ran.isStdoutTruncated, problem: null }
+      const files = kept(status.files, CHANGES_KEPT)
+      const items = await this.withLines(root, files.items, status.isUnborn)
+      return { root, branch: status.branch, files: { items, more: files.more }, isPartial: ran.isStdoutTruncated, problem: null }
     } catch (error) {
       return { ...unread, problem: messageOf(error) }
     }
+  }
+
+  /** The files with their changed lines: one numstat while a tracked file changed, the greps while an untracked one is listed. Never rejects. */
+  private async withLines(root: string, files: readonly FileChange[], isUnborn: boolean): Promise<FileChange[]> {
+    const untracked = files.filter(file => file.code === '??').map(file => file.path)
+    const [tracked, fresh] = await Promise.all([
+      untracked.length < files.length ? this.trackedLines(root, isUnborn) : NO_LINES,
+      untracked.length > 0 ? this.untrackedLines(root, untracked) : NO_LINES,
+    ])
+    return files.map(file => ({ ...file, lines: (file.code === '??' ? fresh : tracked).get(file.path) ?? null }))
+  }
+
+  /** Each tracked file's lines; none when git fails or its list was cut short. Never rejects. */
+  private async trackedLines(root: string, isUnborn: boolean): Promise<ReadonlyMap<string, LineCount>> {
+    const ran = await this.ports.git(numstatArgs(isUnborn), root).catch(() => null)
+    return ran === null || ran.exitCode !== 0 || ran.isStdoutTruncated ? NO_LINES : parseNumstat(ran.stdout)
+  }
+
+  /**
+   * Each untracked entry's lines, all added: a file's, binary or empty when `-I` left it out (a second
+   * grep tells which), and a folder's summed over the text files in it (none counted when it holds no
+   * text). Paths past PATHSPEC_BUDGET, and every path when grep fails, go uncounted. Never rejects.
+   */
+  private async untrackedLines(root: string, paths: readonly string[]): Promise<ReadonlyMap<string, LineCount>> {
+    const named = withinBudget(paths)
+    const lines = new Map<string, LineCount>()
+    const text = await this.grepCounts(root, named, true)
+    if (text === null) return lines
+    const left: string[] = []
+    for (const path of named) {
+      if (path.endsWith('/')) {
+        const inside = [...text].filter(([file]) => file.startsWith(path))
+        if (inside.length > 0) lines.set(path, allAdded(inside.reduce((sum, [, count]) => sum + count, 0)))
+        continue
+      }
+      const count = text.get(path)
+      if (count === undefined) left.push(path)
+      else lines.set(path, allAdded(count))
+    }
+    if (left.length === 0) return lines
+    const any = await this.grepCounts(root, left, false)
+    if (any !== null) for (const path of left) lines.set(path, any.has(path) ? BINARY : allAdded(0))
+    return lines
+  }
+
+  /** Each named file's line count; null when grep fails or its list was cut short (exit 1 only says no line matched). Never rejects. */
+  private async grepCounts(root: string, paths: readonly string[], isTextOnly: boolean): Promise<Map<string, number> | null> {
+    const ran = await this.ports.git(grepArgs(paths, isTextOnly), root).catch(() => null)
+    if (ran === null || ran.isStdoutTruncated || (ran.exitCode !== 0 && ran.exitCode !== 1)) return null
+    return parseGrepCounts(ran.stdout)
   }
 }

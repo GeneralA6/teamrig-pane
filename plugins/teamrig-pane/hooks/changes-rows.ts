@@ -1,7 +1,8 @@
 // The Changes view as blocks of rows (rows.ts): per repo a ruled header (its folder, branch and how many
-// files changed), then its files as one block, each row git's two-letter code and the path; then the
-// files written outside any repo. The switch's badge and the tab title count the same files.
-import type { ChangesSnapshot, FileChange, RepoChanges } from '../types'
+// files changed), then its files as one block, each row git's two-letter code, the path and its lines
+// added and removed (`binary` for a binary file); then the files written outside any repo. The switch's
+// badge and the tab title count the same files.
+import type { ChangesSnapshot, FileChange, LineCount, RepoChanges } from '../types'
 import { changeCount } from './changes'
 import { heading, single, type Block, type Row, type Span } from './rows'
 
@@ -35,9 +36,19 @@ function codeSpans(code: string): Span[] {
   ]
 }
 
+/** A file's changed lines: `+12` added in green, `-3` removed in red, `+0 -0` dim when neither (a mode change, an empty file); nothing while uncounted. */
+export function lineSpans(lines: LineCount | null): Span[] {
+  if (lines === null) return []
+  if (lines.kind === 'binary') return [{ text: ' binary', dim: true }]
+  if (lines.added === 0 && lines.removed === 0) return [{ text: ' +0 -0', dim: true }]
+  const added: Span[] = lines.added > 0 ? [{ text: ` +${lines.added}`, color: 'success' }] : []
+  const removed: Span[] = lines.removed > 0 ? [{ text: ` -${lines.removed}`, color: 'error' }] : []
+  return [...added, ...removed]
+}
+
 function fileRow(root: string, file: FileChange): Row {
   const from: Span[] = file.from === null ? [] : [{ text: ` ← ${file.from}`, dim: true }]
-  return { key: `${root}:${file.path}`, spans: [...codeSpans(file.code), { text: ` ${file.path}` }, ...from], hang: UNDER_PATH }
+  return { key: `${root}:${file.path}`, spans: [...codeSpans(file.code), { text: ` ${file.path}` }, ...lineSpans(file.lines), ...from], hang: UNDER_PATH }
 }
 
 function repoBlocks(repo: RepoChanges, index: number): Block[] {
