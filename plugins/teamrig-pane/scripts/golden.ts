@@ -176,7 +176,7 @@ try {
   const events = read(eventsFile)
   const newer = JSON.stringify({ v: 3, type: 'vote', id: 'T1', at: new Date().toISOString(), by: 'lead', choice: 'ship' })
   writeFileSync(eventsFile, `${events}${newer}\n{"v":2,"type":"status","id":"T2"\n${orphanOf(events)}\n`)
-  const listed = teamrig(['list', '--status', 'all'])
+  const listed = teamrig(['list', '--status', 'all', '--all'])
   const generatedAt = Date.now()
   const files: Record<string, string> = {
     'kit/teams/demo/config.json': clean(read(configFile)),
@@ -190,7 +190,7 @@ try {
   const fixtures: ListedFixture[] = FIXTURES.map(name => {
     const text = git(['cat-file', 'blob', `${pin}:src/register/testdata/${name}`]).toString('utf8')
     writeFileSync(eventsFile, text)
-    const printed = teamrig(['list', '--status', 'all'])
+    const printed = teamrig(['list', '--status', 'all', '--all'])
     return { name, events: text, list: clean(printed.stdout), warn: clean(printed.stderr) }
   })
 
