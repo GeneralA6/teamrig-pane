@@ -4,15 +4,15 @@
 // every owner's active tasks. A press on a task row expands it: the ask and its goals' roadmap items
 // quoted where its refs still point, who asked and when, its priority, week and goals, its status
 // note and evidence, and the files it names. The close mark (✕,
-// ctrl+x x) minimizes it to a one-row strip instead of closing it; a press on the strip or /tasklist
+// ctrl+x x) minimizes it to a one-row strip instead of closing it; a press on the strip or /teamrig
 // opens it again, and the size is kept for the next session (size.ts). A switch row, first in every
 // state and width, the strip included, flips the body between the tasks and the Changes view: the
 // files changed in the git repos the session works in (changes.ts), counted as Δn on the switch and in
-// the tab title. Reads files and runs git status (no model calls); /tasklist steers it.
+// the tab title. Reads files and runs git status (no model calls); /teamrig steers it.
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 import type { ExpandedTasks, PaneView, Snapshot, TaskDetail, ViewMode } from '../types'
-import { inlineReason, parseTaskListArgs, USAGE } from './command'
+import { inlineReason, parsePaneArgs, USAGE } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
 import { TaskDetails } from './details'
@@ -31,7 +31,7 @@ const PAD_COLUMNS = 1
 /** Most rows an inline pane (above the prompt) shows, its last one saying what it left out. */
 const INLINE_MAX_ROWS = 6
 /** What the close hook answers the person's close with: the engine logs it as why the pane stayed. */
-const MINIMIZED = 'minimized to its strip: a press on it, or /tasklist, opens it again'
+const MINIMIZED = 'minimized to its strip: a press on it, or /teamrig, opens it again'
 /** How long one git run may take before it is killed and the repo shows the failure. */
 const GIT_TIMEOUT_MS = 10_000
 
@@ -72,7 +72,7 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
-      name: 'tasklist',
+      name: 'teamrig',
       description: "Show this session's register tasks in the side pane",
       argumentHint: '[mine | all | auto | <area>]',
     })
@@ -150,8 +150,8 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'tasklist' }, async ($, e) => {
-    const command = parseTaskListArgs(e.args)
+  on('command.run', { command: 'teamrig' }, async ($, e) => {
+    const command = parsePaneArgs(e.args)
     if (command.kind === 'usage') return { text: USAGE }
     if (command.kind === 'mode') await update($, mode, () => command.mode)
     if (command.kind === 'pin') await live?.pin(command.area)

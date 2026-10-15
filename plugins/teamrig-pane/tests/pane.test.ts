@@ -128,7 +128,7 @@ async function start(
   const clock = mock.clock(on, { now: NOW })
   on('session.id', async () => ({ value: S1 }))
   on('session.start', async ($, e) => ({ cwd: e.cwd }))
-  on('command.register', async () => ({ value: { command: 'tasklist' } }))
+  on('command.register', async () => ({ value: { command: 'teamrig' } }))
   const opened: string[] = []
   const titles: string[] = []
   on('ui.open', async ($, e) => {
@@ -594,12 +594,12 @@ test('a session starts minimized when the last one was left so: one row, docked 
   expect(store.get('paneSize')).toBe('open')
 })
 
-test('/tasklist opens a minimized pane in full', async ($, on) => {
+test('/teamrig opens a minimized pane in full', async ($, on) => {
   const { store } = await start(on, { paneSize: 'minimized' })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  await $.command.run({ command: 'tasklist', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+  await $.command.run({ command: 'teamrig', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
   expect(store.get('paneSize')).toBe('open')
 })

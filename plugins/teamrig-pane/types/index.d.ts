@@ -38,7 +38,7 @@ export type TaskRow = {
   ownerSeenAt: string | null
 }
 
-/** How the pane knows this session's area: pinned by /tasklist, or its newest `inbox read`. */
+/** How the pane knows this session's area: pinned by /teamrig, or its newest `inbox read`. */
 export type AreaSource = 'pinned' | 'inbox-read'
 
 /** Everything a drawing needs, rebuilt when a register file changes. */
