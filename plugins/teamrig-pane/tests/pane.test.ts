@@ -443,6 +443,29 @@ test("an expanded task names its priority as its team's config does, with its we
   expect(await pane.find({ text: /│ in-progress: details drawn · evidence abc1234$/m })).toBeDefined()
 })
 
+test("a team with no config file names an expanded task's priority by teamrig's defaults", async ($, on) => {
+  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
+    createLine('T7', { owner: 'web', by: 'lead', at: NOW - HOUR, priority: 1, title: 'Ship the team register' }),
+  ])
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: { ...PANE_PROPS, bodyColumns: 200 } })
+  await pane.press({ key: 'all' })
+  await pane.press({ key: 'web:T7' })
+  expect(await pane.find({ text: /│ asked by owner · added by lead · 10-13 13:00 · p1 keep the lights on( · |$)/m })).toBeDefined()
+})
+
+test("with both folders named and no team to read, an expanded task's priority is named by teamrig's defaults", async ($, on) => {
+  // The default env names both folders, and no pointer file is above /work.
+  await start(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: { ...PANE_PROPS, bodyColumns: 200 } })
+  await pane.press({ key: 'all' })
+  await pane.press({ key: 'po:T1' })
+  expect(await pane.find({ text: /│ asked by owner · added by lead · 10-13 13:00 · p2 correctness( · |$)/m })).toBeDefined()
+})
+
 test('an expanded blocked task shows its note in the details; collapse closes every task', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })

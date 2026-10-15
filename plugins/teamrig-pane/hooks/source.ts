@@ -145,7 +145,7 @@ export class TaskRegisterSource {
   private inbox: WatchedFile<string[]> | null = null
   private lastArea: string | null = null
 
-  /** `priorities`: the team config's, which name each priority on a row; none leaves them unnamed. */
+  /** `priorities`: what names each priority on a row (places.ts finds them); a priority none names shows as its number alone. */
   constructor(
     private readonly files: Files,
     private readonly paths: RegisterPaths,
