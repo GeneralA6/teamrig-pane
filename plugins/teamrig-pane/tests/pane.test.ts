@@ -203,6 +203,39 @@ test('the all view lists every owner, blocked notes included', async ($, on) => 
   expect(await pane.find({ text: /needs owner paste/ })).toBeDefined()
 })
 
+test("the area's Tasks view leads with a bar of its tasks by status and their counts; the all and Changes views draw none", async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, [
+    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' }),
+    createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Check the roll' }),
+    statusLine('T2', 'po', NOW, 'verifying', 'health check passes'),
+    createLine('T3', { owner: 'po', by: 'po', at: NOW - 72 * HOUR, title: 'Closed before today' }),
+    statusLine('T3', 'po', NOW - 48 * HOUR, 'done'),
+    createLine('T4', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Closed today' }),
+    statusLine('T4', 'po', NOW, 'done'),
+    createLine('T5', { owner: 'security', by: 'po', at: NOW - HOUR, title: 'Rotate the local URI' }),
+  ])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  const segments = await pane.findAll({ type: 'Text', text: /^[█▓░]+$/ })
+  expect(segments.map(found => found.text)).toEqual(['█'.repeat(16), '▓'.repeat(16), '░'.repeat(16)])
+  expect(segments.map(found => found.props['color'])).toEqual(['success', 'success', undefined])
+  for (const count of ['1 done today', '1 verifying', '1 not started'])
+    expect(await pane.find({ type: 'Text', text: count })).toBeDefined()
+  expect(await pane.find({ text: /working|blocked/ })).toBeUndefined()
+  // The bar sits between the switch and the tasks.
+  const drawn = await pane.drawn()
+  const rootKeys = childrenOf(drawn).map(child => propsOf(child)).map(props => (props !== null && 'key' in props ? props.key : null))
+  expect(rootKeys.indexOf('status-bar')).toBe(1)
+
+  await pane.press({ key: 'all' })
+  expect(keyedNode(await pane.drawn(), 'status-bar')).toBe(null)
+  await pane.press({ key: 'mine' })
+  await pane.press({ key: 'changes' })
+  expect(keyedNode(await pane.drawn(), 'status-bar')).toBe(null)
+})
+
 test('picks up a new register event on the next poll', async ($, on) => {
   const { clock, disk } = await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
@@ -563,7 +596,11 @@ test('inline above the prompt, it shows a few rows and points to the side dock',
   })
 
   expect((await pane.find({ type: 'Box' }))?.props).toMatchObject({ gap: 0 })
+  // The bar's two lines count in the few rows, and the list keeps its header, first task and pointer.
+  expect(await pane.find({ type: 'Text', text: '░'.repeat(48) })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: '10 not started' })).toBeDefined()
   expect(await pane.find({ text: /Task number 1$/ })).toBeDefined()
+  expect(await pane.find({ text: /Task number 3$/ })).toBeUndefined()
   expect(await pane.find({ text: /Task number 10/ })).toBeUndefined()
   expect(await pane.find({ text: /more lines in the side dock/ })).toBeDefined()
 })

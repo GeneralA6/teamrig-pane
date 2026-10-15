@@ -117,6 +117,9 @@ export type PaneView = 'tasks' | 'changes'
 /** `mine`: this session's area; `all`: every owner's active tasks. */
 export type ViewMode = 'mine' | 'all'
 
+/** A segment of the status bar over the area's tasks (hooks/status-bar.ts): done today, verifying, in progress, blocked, open. */
+export type BarStatus = 'done-today' | 'verifying' | 'working' | 'blocked' | 'not-started'
+
 declare module 'claude-code' {
   interface PluginState {
     // The snapshot, the changes and the known repos are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE), so a reload never draws one an older pane wrote.
