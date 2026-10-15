@@ -3,7 +3,8 @@
 // session's team (`<kit home>/teams/<team>/state`, or the team config's `paths.state` and
 // `paths.inbox`). The session's team's config, read by teamrig's own reader, also names the
 // priorities; with no config to read, teamrig's defaults name them. The goals document comes from
-// its variable or the settings file, else none.
+// its variable or the settings file, else none. The team's config and rename log, read again by
+// sessions.ts at each `/teamrig-pane <session>`, name its sessions.
 import { DEFAULT_REGISTER, parseConfigText, type ConfigRead, type PriorityConfig } from './core/read/index'
 import { slashed, type Files, type RegisterDirs } from './source'
 
@@ -40,12 +41,15 @@ type SettingKey = (typeof SETTING_KEYS)[number]
 type Settings = Partial<Record<SettingKey, string>>
 type DirKey = Exclude<SettingKey, 'goalsDoc'>
 
+/** The files that name a team's sessions, where teamrig keeps them: its config and its rename log; either may not be there. */
+export type TeamFiles = { team: string; config: string; renames: string }
+
 /**
- * The register's folders and the priorities' names (the team config's, else teamrig's defaults), or the problem the
- * pane shows instead of tasks; the goals document either way.
+ * The register's folders, the priorities' names (the team config's, else teamrig's defaults) and the session's team's
+ * files (null when no team was found), or the problem the pane shows instead of tasks; the goals document either way.
  */
 export type Places =
-  | { found: true; dirs: RegisterDirs; priorities: readonly PriorityConfig[]; goalsDoc: string | null }
+  | { found: true; dirs: RegisterDirs; priorities: readonly PriorityConfig[]; team: TeamFiles | null; goalsDoc: string | null }
   | { found: false; problem: string; goalsDoc: string | null }
 
 export type PlacesInput = {
@@ -81,13 +85,16 @@ export async function findPlaces(input: PlacesInput): Promise<Places> {
   // Both folders named: the team is looked for only to name the priorities, so a team that cannot be found or read
   // leaves teamrig's defaults instead of a problem.
   if (tasksDir !== undefined && inboxDir !== undefined) {
-    return { found: true, dirs: { tasksDir, inboxDir }, priorities: team.ok ? team.value.priorities : DEFAULT_REGISTER.priorities, goalsDoc }
+    return team.ok
+      ? { found: true, dirs: { tasksDir, inboxDir }, priorities: team.value.priorities, team: team.value.files, goalsDoc }
+      : { found: true, dirs: { tasksDir, inboxDir }, priorities: DEFAULT_REGISTER.priorities, team: null, goalsDoc }
   }
   if (!team.ok) return { found: false, problem: team.problem, goalsDoc }
   return {
     found: true,
     dirs: { tasksDir: tasksDir ?? team.value.state, inboxDir: inboxDir ?? team.value.inbox },
     priorities: team.value.priorities,
+    team: team.value.files,
     goalsDoc,
   }
 }
@@ -130,8 +137,8 @@ async function readSettings(files: PlacesInput['files'], path: string, isNamed: 
   return { ok: true, value: settings }
 }
 
-/** What a team's config sets for the pane: the team's state and inbox folders, and its priorities. */
-type TeamFolders = { state: string; inbox: string; priorities: readonly PriorityConfig[] }
+/** What a team's config sets for the pane: the team's state and inbox folders, its priorities, and the files naming its sessions. */
+type TeamFolders = { state: string; inbox: string; priorities: readonly PriorityConfig[]; files: TeamFiles }
 
 /** Why teamrig cannot read a config: where in it, then what. */
 type ConfigIssue = Extract<ConfigRead, { status: 'unreadable' }>['issue']
@@ -162,10 +169,19 @@ async function teamFolders(
   }
   const paths = read?.config.paths ?? {}
   const state = inTeamHome(paths.state) ?? `${teamHome}/state`
-  return { ok: true, value: { state, inbox: inTeamHome(paths.inbox) ?? `${state}/inbox`, priorities: read?.config.register.priorities ?? DEFAULT_REGISTER.priorities } }
+  return {
+    ok: true,
+    value: {
+      state,
+      inbox: inTeamHome(paths.inbox) ?? `${state}/inbox`,
+      priorities: read?.config.register.priorities ?? DEFAULT_REGISTER.priorities,
+      files: { team: team.value, config: configPath, renames: `${state}/renames.jsonl` },
+    },
+  }
 }
 
-function issueText(issue: ConfigIssue): string {
+/** Why teamrig cannot read a config, as one line: where in it, then what. */
+export function issueText(issue: ConfigIssue): string {
   return issue.path === '' ? issue.message : `${issue.path}: ${issue.message}`
 }
 
