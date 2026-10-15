@@ -73,7 +73,7 @@ either button, which opens the pane on that view, press `t` or `d` while the pan
 for the plugin), so the next session, after a restart or a hot reload too, opens as the last one was
 left. The plugin's own close and an unload still close it.
 
-A mod can't bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig"` to
+A mod can't bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to
 `~/.claude/keybindings.json` (the context it belongs under is unverified).
 
 What the host draws and the mod can't change:
