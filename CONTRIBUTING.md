@@ -34,7 +34,8 @@ Every change ships tests, so the next change cannot break it unnoticed:
   (`npm run plugin-tests`) fails on one in a plugin test, and on a file that imports
   `claude-code/testing` without a `*.test.ts` or `*.test.tsx` name, which the runner never runs.
 
-`npm run check` runs the gates CI runs on the tree: typecheck, coverage, the plugin test gate and
+`npm run check` runs the gates CI runs on the tree: typecheck (`tools/` under `tsconfig.json`, the plugin's
+hooks, tests and scripts under `tsconfig.pane.json`), coverage, the plugin test gate and
 scrub. Its coverage gate (`npm run coverage`) fails when any tools test fails or is skipped, a source
 file under `tools/` is loaded by no test, or a file or the total falls below the floors in
 `tools/ci/coverage.json`. Never lower a floor to pass a change. CI also runs `npm test` and the plugin

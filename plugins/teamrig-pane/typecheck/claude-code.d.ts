@@ -1,0 +1,184 @@
+// The engine's `claude-code` module as this plugin calls it, for the typecheck only (tsconfig.pane.json at
+// the repo root). Claude Code runs a mod's hooks itself and ships no declarations for this module, so these
+// are written from the plugin's own calls: the subset it uses, typed as strictly as those calls allow.
+// They prove the plugin agrees with itself; `claude plugin test` runs it in the engine, which is what proves
+// the engine agrees. A call the plugin adds that is not here fails the typecheck: add it here, as the
+// engine's documentation or a test run shows it, never as `any`. The plugin's own state (`PluginState`)
+// is declared in ../types/index.d.ts, the contract the manifest names.
+
+/** The tree a render hook returns: the engine draws it; the plugin never reads one back. */
+declare namespace JSX {
+  interface Element {
+    readonly type: unknown
+    readonly props: unknown
+  }
+  /** Every component takes a `key` among its siblings. */
+  interface IntrinsicAttributes {
+    readonly key?: string | number | undefined
+  }
+  /** Children go in a component's `children` prop. */
+  interface ElementChildrenAttribute {
+    children: unknown
+  }
+  /** No lowercase host elements: every element is one of the engine's components (`$.ui.resolve`). */
+  interface IntrinsicElements {}
+}
+
+declare module 'claude-code' {
+  /** The theme colors a span may take; the theme picks the actual color. */
+  export type ThemeKey = 'warning' | 'error' | 'success' | 'suggestion' | 'subtle' | 'claude'
+
+  /** What a component may hold: elements, text, numbers, nothing, or lists of them. */
+  export type Child = JSX.Element | string | number | boolean | null | undefined | readonly Child[]
+
+  export type BoxProps = {
+    readonly flexDirection?: 'row' | 'column'
+    readonly flexWrap?: 'wrap' | 'nowrap'
+    readonly gap?: number
+    readonly columnGap?: number
+    readonly paddingX?: number
+    readonly children?: Child
+  }
+  export type TextProps = {
+    readonly color?: ThemeKey | undefined
+    readonly bold?: boolean | undefined
+    readonly dimColor?: boolean | undefined
+    readonly wrap?: 'wrap' | 'truncate-end'
+    readonly children?: Child
+  }
+  /** A button: labelled, or `plain` around its children; `hotkey` presses it from the keyboard. */
+  export type ButtonProps = {
+    readonly label?: string
+    readonly hotkey?: string
+    readonly variant?: 'primary' | 'secondary'
+    readonly plain?: boolean
+    readonly onPress: () => void
+    readonly children?: Child
+  }
+  export type Component<P> = (props: P) => JSX.Element
+  /** The components a render hook draws with, resolved for the surface the request came from. */
+  export type Components = { readonly Box: Component<BoxProps>; readonly Text: Component<TextProps>; readonly Button: Component<ButtonProps> }
+
+  /** A value kept under a shape tag: read under another tag, it reads as absent. */
+  export type Shaped<T> = { readonly shape: string; readonly value: T }
+  /** Each plugin's `$.state` keys and their types; a plugin declares its own entry (module augmentation). */
+  export interface PluginState {}
+  type Unshaped<V> = V extends Shaped<infer T> ? T : V
+  /** One `$.state` key of one plugin, holding a `T`. */
+  export interface Atom<T> {
+    readonly plugin: string
+    readonly key: string
+    readonly initial: T
+  }
+  /** Declares a state key: `initial` until it is written; `shape` tags a value whose type may change between versions. */
+  export function atom<P extends keyof PluginState, K extends keyof PluginState[P] & string>(
+    id: { readonly plugin: P; readonly key: K },
+    initial: Unshaped<PluginState[P][K]>,
+    options?: { readonly shape: string },
+  ): Atom<Unshaped<PluginState[P][K]>>
+  export function read<T>($: Context, atom: Atom<T>): Promise<T>
+  export function update<T>($: Context, atom: Atom<T>, change: (current: T) => T): Promise<void>
+
+  export type FsStat = { readonly kind: 'file' | 'dir'; readonly size: number; readonly mtimeMs: number; readonly isLink: boolean }
+  export type FsEntry = FsStat & { readonly name: string }
+  export type ProcessInit = { readonly cwd?: string; readonly timeoutMs?: number }
+  export type ProcessResult = {
+    readonly exitCode: number
+    readonly stdout: string
+    readonly stderr: string
+    readonly isStdoutTruncated: boolean
+    readonly isStderrTruncated: boolean
+  }
+  /** A timer `$.clock.every` started. */
+  export type Timer = { cancel(): void }
+  export type CommandSpec = { readonly name: string; readonly description: string; readonly argumentHint?: string }
+  export type PaneOpen = { readonly id: string; readonly title?: string; readonly columns?: number }
+
+  /** What the plugin asks the engine for; each is an event a test (or another plugin) can answer beneath it. */
+  export interface Context {
+    readonly command: { register(spec: CommandSpec): Promise<{ command: string }> }
+    readonly env: { get(name: string): Promise<string | undefined> }
+    readonly fs: { stat(path: string): Promise<FsStat>; exists(path: string): Promise<boolean>; read(path: string): Promise<string> }
+    readonly session: { id(): Promise<string> }
+    readonly clock: { now(): Promise<number>; every(ms: number, fn: () => void): Timer }
+    readonly store: { get(key: string): Promise<unknown>; set(key: string, value: unknown): Promise<void>; delete(key: string): Promise<void> }
+    readonly process: { run(argv: readonly string[], init?: ProcessInit): Promise<ProcessResult> }
+    readonly ui: { open(pane: PaneOpen): Promise<{ isPlaced: boolean }>; resolve(request: RenderRequest): Components }
+  }
+
+  /** Where the fullscreen layout would draw a command's pane: the dock needs the fullscreen layout and enough columns. */
+  export type CommandPresentation = { readonly isFullscreen: boolean; readonly columns: number }
+  /** Who closes a pane: the person (the close mark, ctrl+x x), the plugin itself, or the engine unloading it. */
+  export type PaneCloseOrigin = { readonly kind: 'person' | 'plugin' | 'unload' }
+  export type SessionStart = { readonly cwd: string; readonly surface: 'terminal'; readonly isInteractive: boolean }
+  export type CommandRun = {
+    readonly command: string
+    readonly args: string
+    readonly origin: { readonly kind: 'composer' }
+    readonly presentation: CommandPresentation
+  }
+  /** A pane's props as the engine draws it: docked on the right, or inline above the prompt. */
+  export type PaneProps = {
+    readonly title: string
+    readonly isFocused: boolean
+    readonly bodyColumns: number
+    readonly placement: 'dock' | 'inline'
+    readonly scroll: { readonly offset: number; readonly bodyRows: number }
+    readonly view: Readonly<Record<string, unknown>>
+  }
+  export type RenderRequest = { readonly plugin: string; readonly surface: 'terminal'; readonly component: string; readonly requestId: string; readonly props: PaneProps }
+
+  /** The tool inputs the plugin watches, by tool name. */
+  export interface ToolInputs {
+    Edit: { readonly file_path: string; readonly old_string: string; readonly new_string: string; readonly replace_all?: boolean }
+    Write: { readonly file_path: string; readonly content: string }
+    NotebookEdit: { readonly notebook_path: string; readonly new_source: string }
+    Bash: { readonly command: string }
+    PowerShell: { readonly command: string }
+  }
+  export type ToolName = keyof ToolInputs
+  export type ToolCall<T extends ToolName = ToolName> = { readonly tool: T } & ToolInputs[T]
+  /** A tool call's outcome: what it returned, a `deny` when a hook refused it, `isError` when it ran and failed. */
+  export type ToolResult = { readonly result?: string; readonly deny?: string; readonly isError?: boolean }
+
+  /** An effect's answer: its value, or why it was refused (`$` rejects with the reason). */
+  export type Answer<V> = { readonly value: V; readonly deny?: undefined } | { readonly deny: string; readonly value?: undefined }
+
+  /** Every event, with what narrows a handler to some of them, its payload and its result. */
+  export interface Events {
+    'session.start': { filter: never; e: SessionStart; result: { readonly cwd?: string } }
+    'session.id': { filter: never; e: Readonly<Record<string, never>>; result: Answer<string> }
+    'command.register': { filter: never; e: CommandSpec; result: Answer<{ command: string }> }
+    'command.run': { filter: { readonly command: string }; e: CommandRun; result: { readonly text?: string } }
+    'ui.open': { filter: { readonly id: string }; e: PaneOpen; result: Answer<{ isPlaced: boolean }> }
+    'ui.close': { filter: { readonly id: string }; e: { readonly id: string; readonly origin: PaneCloseOrigin }; result: { readonly deny?: string } }
+    'ui.render': { filter: { readonly component: string; readonly requestId: string }; e: RenderRequest; result: JSX.Element }
+    'fs.stat': { filter: never; e: { readonly path: string }; result: Answer<FsStat> }
+    'fs.exists': { filter: never; e: { readonly path: string }; result: Answer<boolean> }
+    'fs.read': { filter: never; e: { readonly path: string }; result: Answer<string> }
+    'store.get': { filter: never; e: { readonly key: string }; result: Answer<unknown> }
+    'store.set': { filter: never; e: { readonly key: string; readonly value: unknown }; result: Answer<void> }
+    'store.delete': { filter: never; e: { readonly key: string }; result: Answer<void> }
+    'store.keys': { filter: never; e: Readonly<Record<string, never>>; result: Answer<string[]> }
+    'process.run': { filter: never; e: { readonly argv: readonly string[]; readonly init?: ProcessInit }; result: Answer<ProcessResult> }
+    'state.get': { filter: never; e: { readonly plugin: string; readonly key: string }; result: Answer<Shaped<unknown> | undefined> }
+  }
+  export type EventName = keyof Events
+
+  /** Hands the event on to the next handler, the engine's own last. */
+  export type Next<E, R> = (e: E) => Promise<R>
+  export type Handler<E, R> = ($: Context, e: E, next: Next<E, R>) => R | Promise<R>
+  /** A registered handler; `catch` answers in its place when it throws. */
+  export interface Registration<E, R> {
+    catch(fallback: Handler<E, R>): Registration<E, R>
+  }
+
+  /** Registers a handler: for every event of a name, or for those matching `filter`. */
+  export interface On {
+    <T extends ToolName>(event: 'tool.call', filter: { readonly tool: T }, handler: Handler<ToolCall<T>, ToolResult>): Registration<ToolCall<T>, ToolResult>
+    <K extends EventName>(event: K, handler: Handler<Events[K]['e'], Events[K]['result']>): Registration<Events[K]['e'], Events[K]['result']>
+    <K extends EventName>(event: K, filter: Events[K]['filter'], handler: Handler<Events[K]['e'], Events[K]['result']>): Registration<Events[K]['e'], Events[K]['result']>
+  }
+  /** A mod's hooks module exports `register`, which the engine calls once with `on`. */
+  export type Register = (on: On) => void
+}

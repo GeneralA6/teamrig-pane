@@ -1,0 +1,34 @@
+{
+  "//": "The plugin's typecheck (npm run typecheck:pane): its hooks, tests and scripts under the same strict flags as tools/. The engine's modules are typed by plugins/teamrig-pane/typecheck. Not named tsconfig.json, and not inside the plugin, so the engine that runs the plugin never reads it.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": [
+      "ES2023"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "types": [
+      "node"
+    ],
+    "jsx": "preserve",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true
+  },
+  "include": [
+    "plugins/teamrig-pane/hooks",
+    "plugins/teamrig-pane/tests",
+    "plugins/teamrig-pane/scripts",
+    "plugins/teamrig-pane/types",
+    "plugins/teamrig-pane/typecheck"
+  ]
+}
