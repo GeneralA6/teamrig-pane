@@ -50,7 +50,10 @@ describe('README', () => {
   });
 
   it("never gives /teamrig, the teamrig plugin's own command, as the pane's, here or in the plugin README", () => {
-    for (const text of [readme, pluginReadme]) assert.doesNotMatch(text, /`\/teamrig(?![\w-])/);
+    for (const text of [readme, pluginReadme]) {
+      assert.doesNotMatch(text, /`\/teamrig(?![\w-])/);
+      assert.doesNotMatch(text, /command:teamrig(?![\w-])/);
+    }
   });
 
   it('links the plugin README, CONTRIBUTING and the licence, and every local link resolves', () => {
