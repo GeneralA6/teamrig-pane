@@ -38,7 +38,10 @@ export type TaskRow = {
   ownerSeenAt: string | null
 }
 
-/** How the pane knows this session's area: pinned by /teamrig-pane, or its newest `inbox read`. */
+/**
+ * How the pane knows this session's area: pinned by /teamrig-pane, or its newest `inbox read` mark, which teamrig's
+ * prompt hook also writes when it binds a tab by its Claude Code title.
+ */
 export type AreaSource = 'pinned' | 'inbox-read'
 
 /** Everything a drawing needs, rebuilt when a register file changes. */

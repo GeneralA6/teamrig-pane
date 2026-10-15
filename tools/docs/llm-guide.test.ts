@@ -91,7 +91,7 @@ function anchors(text: string): Set<string> {
 
 describe('the pane guide documents the command', () => {
   const command = captured('command.ts', /export const COMMAND = '([^']+)'/);
-  const forms = captured('command.ts', /export const USAGE = `usage: \/\$\{COMMAND\} \[([^\]]+)\]`/).split(' | ');
+  const forms = captured('command.ts', /export const ARGUMENT_HINT = '\[([^\]]+)\]'/).split(' | ');
 
   it('gives the usage line as the pane answers it', () => {
     assert.ok(skill.includes(`/${command} [${forms.join(' | ')}]`));
