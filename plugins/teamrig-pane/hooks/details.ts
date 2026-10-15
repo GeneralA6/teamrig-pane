@@ -1,9 +1,9 @@
 // The ask behind a task, quoted from where its ref points, for the details under an expanded row.
 // A ref is `file:line` parts, and a line number drifts when its file is rewritten, so a line is
 // quoted only when something still ties it to the task:
-// - an inbox line (board/inbox/<area>.md) by its date. Inboxes are append-only (the register counts
-//   unread lines by position), so line N stays the line that asked; one dated more than a day after
-//   the task was created means the inbox was rewritten after all.
+// - an inbox line (`inbox/<area>.md`) by its date. teamrig only appends to an inbox until someone
+//   trims or rewrites it, so line N stays the line that asked; one dated more than a day after the
+//   task was created means the inbox was trimmed or rewritten since.
 // - any other line by its goal or the task's id. It must be a roadmap item (`- [ ] G10.1e ...`,
 //   `- S4 ...`) of one of the task's goals, sit inside one, or name the task (boards cite register
 //   ids). Other board and agenda lines are only named (T6's board/po.md:6 came to hold another item).
@@ -39,8 +39,9 @@ export type LineRef = { file: string; lines: number[] }
  */
 export type RefPlaces = { inboxDir: string | null; home: string | null; cwd: string | null; goalsDoc: string | null }
 
-/** A ref's parts: `;`-separated, each a `file:line` ref or a short quote ref. */
-export function refParts(ref: string): string[] {
+/** A ref's parts: `;`-separated, each a `file:line` ref or a short quote ref; none for a task with no ref. */
+export function refParts(ref: string | null): string[] {
+  if (ref === null) return []
   return ref
     .split(';')
     .map(part => part.trim())

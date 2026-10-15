@@ -1,11 +1,13 @@
 // What the pane shows, as plain data: pure functions over the folded tasks, so the drawing in
-// register.tsx only lays them out. Order and flags follow the register's views.ts/fold.ts.
+// register.tsx only lays them out. The order and the due are teamrig's own (hooks/core/read).
 import type { Snapshot, TaskRow } from '../types'
-import { ACTIVE_STATUSES } from './core/model'
-import { taskNumber } from './log'
+import { ACTIVE_STATUSES, byPlanOrder, dueTime } from './core/read/index'
 
 const DAY_MS = 86_400_000
-/** The register's `check` flags an untouched task as NOT-PICKED-UP after this. */
+/**
+ * teamrig's `register check` flags an untouched task as NOT-PICKED-UP after the team config's
+ * `register.check.notPickedUpAfterHours`; the pane keeps that setting's default, 24 hours.
+ */
 export const NOT_PICKED_UP_MS = DAY_MS
 /** Finished tasks stay listed (dim) this long. */
 export const RECENT_MS = DAY_MS
@@ -19,7 +21,7 @@ export type TaskLine = { task: TaskRow; flags: Flag[] }
 
 export type AreaView = {
   area: string
-  /** Its active tasks, by tier, then due, then id. */
+  /** Its active tasks in teamrig's plan order: by priority, then due (undated last), then id. */
   active: TaskLine[]
   /** Active tasks it asked of other sessions, newest first, capped at MAX_ASKED. */
   asked: TaskLine[]
@@ -34,33 +36,12 @@ export function isActive(task: TaskRow): boolean {
   return ACTIVE_STATUSES.includes(task.status)
 }
 
-/** A date-only due is due at the end of that UTC day (model.ts dueInstant). */
-export function dueInstant(due: string): number | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/.exec(due)
-  if (!m) return null
-  const [, y, mo, d, hh, mm] = m
-  const day = Date.UTC(Number(y), Number(mo) - 1, Number(d))
-  if (hh === undefined || mm === undefined) return day + DAY_MS - 1
-  return day + (Number(hh) * 60 + Number(mm)) * 60_000
-}
-
-function dueTime(task: TaskRow): number {
-  return (task.due === null ? null : dueInstant(task.due)) ?? Number.POSITIVE_INFINITY
-}
-
-/** Tier first, then the earliest due (undated last), then the oldest id (fold.ts byPlanOrder). */
-export function byPlanOrder(a: TaskRow, b: TaskRow): number {
-  if (a.tier !== b.tier) return a.tier - b.tier
-  const ad = dueTime(a)
-  const bd = dueTime(b)
-  if (ad !== bd) return ad - bd
-  return taskNumber(a) - taskNumber(b)
-}
-
+/** A date-only due means the end of that UTC day; an unreadable one is never overdue (teamrig's dueTime). */
 export function flagsOf(task: TaskRow, now: number): Flag[] {
   if (!isActive(task)) return []
   const flags: Flag[] = []
-  if (dueTime(task) < now) flags.push('overdue')
+  const due = dueTime(task)
+  if (due !== undefined && due < now) flags.push('overdue')
   if (task.ownerSeenAt === null) flags.push(now - Date.parse(task.assignedAt) > NOT_PICKED_UP_MS ? 'unseen' : 'new')
   return flags
 }
@@ -105,11 +86,11 @@ export function ownerGroups(tasks: readonly TaskRow[], now: number): OwnerGroup[
     .map(([owner, list]) => ({
       owner,
       active: [...list].sort(byPlanOrder).map(lineOf(now)),
-      blocked: list.filter(t => t.shown === 'blocked').length,
+      blocked: list.filter(t => t.status === 'blocked').length,
     }))
 }
 
-/** "10-14" or "10-14 18:00" (model.ts shortDate). */
+/** "10-14" or "10-14 18:00": a due or week without its year. */
 export function shortDue(due: string): string {
   return due.slice(5)
 }
@@ -124,45 +105,27 @@ const TASK_FIELDS: { readonly [K in keyof TaskRow]-?: K } = {
   id: 'id',
   title: 'title',
   owner: 'owner',
-  tier: 'tier',
+  priority: 'priority',
+  priorityName: 'priorityName',
   due: 'due',
   status: 'status',
-  shown: 'shown',
-  markers: 'markers',
-  holds: 'holds',
-  pause: 'pause',
-  notes: 'notes',
   note: 'note',
   evidence: 'evidence',
-  detail: 'detail',
   source: 'source',
   ref: 'ref',
   goals: 'goals',
+  week: 'week',
   createdBy: 'createdBy',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   assignedAt: 'assignedAt',
   ownerSeenAt: 'ownerSeenAt',
-  kind: 'kind',
-  labels: 'labels',
-  start: 'start',
-  eta: 'eta',
-  dueRevisions: 'dueRevisions',
-  etaRevisions: 'etaRevisions',
-  startedAt: 'startedAt',
-  doneAt: 'doneAt',
-  estimate: 'estimate',
-  evidenceDue: 'evidenceDue',
-  parent: 'parent',
-  children: 'children',
-  blockedBy: 'blockedBy',
-  waits: 'waits',
 }
 const FIELDS = Object.values(TASK_FIELDS)
 
 type FieldValue = TaskRow[keyof TaskRow]
 
-/** The lists and the note are built anew by each fold, so they compare by value. */
+/** The goals list is built anew by each read, so it compares by value. */
 function sameValue(a: FieldValue, b: FieldValue): boolean {
   if (typeof a === 'object' && a !== null && typeof b === 'object' && b !== null) return JSON.stringify(a) === JSON.stringify(b)
   return a === b

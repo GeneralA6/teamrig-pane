@@ -1,15 +1,15 @@
 // Where the register is, read once when the session starts. Each folder comes from the first of: its
 // TEAMRIG_PANE_* variable, the pane's settings file, then where teamrig keeps the register of the
 // session's team (`<kit home>/teams/<team>/state`, or the team config's `paths.state` and
-// `paths.inbox`). The goals document comes from its variable or the settings file, else none.
-import { asString, isRecord, pick } from './core/guards'
+// `paths.inbox`). A team's config, read by teamrig's own reader, also names its priorities. The
+// goals document comes from its variable or the settings file, else none.
+import { parseConfigText, type ConfigRead, type PriorityConfig } from './core/read/index'
 import { slashed, type Files, type RegisterDirs } from './source'
 
 /** The variables the pane reads. */
 export const PANE_ENV = {
   tasksDir: 'TEAMRIG_PANE_TASKS_DIR',
   inboxDir: 'TEAMRIG_PANE_INBOX_DIR',
-  usageDir: 'TEAMRIG_PANE_USAGE_DIR',
   goalsDoc: 'TEAMRIG_PANE_GOALS_DOC',
   /** The settings file, in place of `<kit home>/pane.json`. */
   settings: 'TEAMRIG_PANE_SETTINGS',
@@ -31,14 +31,17 @@ export const TEAM_POINTER = '.teamrig.json'
 const TEAM_ID = /^[a-z][a-z0-9-]{0,31}$/
 
 /** What the settings file may set; every key is optional. */
-const SETTING_KEYS = ['tasksDir', 'inboxDir', 'usageDir', 'goalsDoc'] as const
+const SETTING_KEYS = ['tasksDir', 'inboxDir', 'goalsDoc'] as const
 type SettingKey = (typeof SETTING_KEYS)[number]
 type Settings = Partial<Record<SettingKey, string>>
 type DirKey = Exclude<SettingKey, 'goalsDoc'>
 
-/** The register's folders, or the problem the pane shows instead of tasks; the goals document either way. */
+/**
+ * The register's folders and the team config's priorities (none when no team config was read), or the problem the
+ * pane shows instead of tasks; the goals document either way.
+ */
 export type Places =
-  | { found: true; dirs: RegisterDirs; goalsDoc: string | null }
+  | { found: true; dirs: RegisterDirs; priorities: readonly PriorityConfig[]; goalsDoc: string | null }
   | { found: false; problem: string; goalsDoc: string | null }
 
 export type PlacesInput = {
@@ -70,19 +73,14 @@ export async function findPlaces(input: PlacesInput): Promise<Places> {
   const chosen = (key: DirKey): string | undefined => fromEnv[key] ?? settings.value[key]
   const tasksDir = chosen('tasksDir')
   const inboxDir = chosen('inboxDir')
-  const usageDir = chosen('usageDir')
-  if (tasksDir !== undefined && inboxDir !== undefined && usageDir !== undefined) {
-    return { found: true, dirs: { tasksDir, inboxDir, usageDir }, goalsDoc }
-  }
+  // Both folders named: no team is looked for, so no team config names the priorities.
+  if (tasksDir !== undefined && inboxDir !== undefined) return { found: true, dirs: { tasksDir, inboxDir }, priorities: [], goalsDoc }
   const team = await teamFolders(input, variable, kit, settingsPath)
   if (!team.ok) return { found: false, problem: team.problem, goalsDoc }
   return {
     found: true,
-    dirs: {
-      tasksDir: tasksDir ?? team.value.state,
-      inboxDir: inboxDir ?? team.value.inbox,
-      usageDir: usageDir ?? `${team.value.state}/token-usage`,
-    },
+    dirs: { tasksDir: tasksDir ?? team.value.state, inboxDir: inboxDir ?? team.value.inbox },
+    priorities: team.value.priorities,
     goalsDoc,
   }
 }
@@ -125,13 +123,22 @@ async function readSettings(files: PlacesInput['files'], path: string, isNamed: 
   return { ok: true, value: settings }
 }
 
-/** The team's state and inbox folders as teamrig lays them out, or why they cannot be found. */
+/** What a team's config sets for the pane: the team's state and inbox folders, and its priorities. */
+type TeamFolders = { state: string; inbox: string; priorities: readonly PriorityConfig[] }
+
+/** Why teamrig cannot read a config: where in it, then what. */
+type ConfigIssue = Extract<ConfigRead, { status: 'unreadable' }>['issue']
+
+/**
+ * The team's state and inbox folders as teamrig lays them out, or why they cannot be found. A team with no config
+ * file keeps them under its home and names no priorities.
+ */
 async function teamFolders(
   input: PlacesInput,
   variable: (name: PlaceVariable) => string | undefined,
   kit: string | null,
   settingsPath: string | null,
-): Promise<Found<{ state: string; inbox: string }>> {
+): Promise<Found<TeamFolders>> {
   const team = await findTeam(input, variable)
   if (!team.ok) return team
   if (team.value === null || kit === null) return { ok: false, problem: nothingNamed(settingsPath, kit === null) }
@@ -139,15 +146,20 @@ async function teamFolders(
   const configPath = `${teamHome}/config.json`
   const config = await readIfThere(input.files, configPath)
   if (!config.ok) return config
-  const parsed = config.value === null ? {} : parseJson(config.value)
-  if (!isRecord(parsed)) return { ok: false, problem: `${configPath} is not a JSON object` }
+  const read = config.value === null ? null : parseConfigText(config.value)
+  if (read?.status === 'unreadable') return { ok: false, problem: `${configPath}: ${issueText(read.issue)}` }
   const inTeamHome = (path: string | undefined): string | undefined => {
     if (path === undefined) return undefined
     const forward = slashed(path)
     return isAbsolute(forward) ? forward : `${teamHome}/${forward}`
   }
-  const state = inTeamHome(asString(pick(parsed, 'paths', 'state'))) ?? `${teamHome}/state`
-  return { ok: true, value: { state, inbox: inTeamHome(asString(pick(parsed, 'paths', 'inbox'))) ?? `${state}/inbox` } }
+  const paths = read?.config.paths ?? {}
+  const state = inTeamHome(paths.state) ?? `${teamHome}/state`
+  return { ok: true, value: { state, inbox: inTeamHome(paths.inbox) ?? `${state}/inbox`, priorities: read?.config.register.priorities ?? [] } }
+}
+
+function issueText(issue: ConfigIssue): string {
+  return issue.path === '' ? issue.message : `${issue.path}: ${issue.message}`
 }
 
 /** The session's team: `$TEAMRIG_TEAM`, else the nearest pointer file up from its folder; null for none. */
@@ -162,7 +174,7 @@ async function findTeam(input: PlacesInput, variable: (name: PlaceVariable) => s
     if (text.value === null) continue
     const parsed = parseJson(text.value)
     if (parsed === undefined) return { ok: false, problem: `${path} is not JSON; expected {"team": "<id>"}` }
-    const team = asString(pick(parsed, 'team'))
+    const team = isRecord(parsed) ? asString(parsed.team) : undefined
     return team === undefined ? { ok: false, problem: `${path} has no "team" text; expected {"team": "<id>"}` } : checkTeam(team, path)
   }
   return { ok: true, value: null }
@@ -190,6 +202,14 @@ async function readIfThere(files: PlacesInput['files'], path: string): Promise<F
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
 /** The parsed JSON, or undefined when the text is not JSON. */
 function parseJson(text: string): unknown {
   try {
@@ -201,7 +221,7 @@ function parseJson(text: string): unknown {
 
 /** What to set when nothing names the register: the variables, the settings file, or a teamrig project. */
 function nothingNamed(settingsPath: string | null, isHomeless: boolean): string {
-  const variables = `${PANE_ENV.tasksDir}, ${PANE_ENV.inboxDir} and ${PANE_ENV.usageDir}`
+  const variables = `${PANE_ENV.tasksDir} and ${PANE_ENV.inboxDir}`
   const file = settingsPath === null ? `a settings file named by ${PANE_ENV.settings}` : settingsPath
   const team = isHomeless ? `set ${TEAMRIG_ENV.home} for teamrig's register` : `start the session in a teamrig team's project (${TEAM_POINTER})`
   return `no register found: set ${variables}, write them in ${file}, or ${team}`

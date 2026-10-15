@@ -2,8 +2,8 @@
 // of the fullscreen UI. `mine` shows the session's area: its active tasks in plan order, what it
 // asked of others, what it finished in the last day, and its unread inbox lines; `all` shows
 // every owner's active tasks. A press on a task row expands it: the ask and its goals' roadmap items
-// quoted where its refs still point, who asked, the register v2 facts it has (kind, dates, estimate,
-// parent, sub-tasks, blockers, waits), its newest notes, and the files it names. The close mark (✕,
+// quoted where its refs still point, who asked and when, its priority, week and goals, its status
+// note and evidence, and the files it names. The close mark (✕,
 // ctrl+x x) minimizes it to a one-row strip instead of closing it; a press on the strip or /tasklist
 // opens it again, and the size is kept for the next session (size.ts). A switch row, first in every
 // state and width, the strip included, flips the body between the tasks and the Changes view: the
@@ -24,7 +24,7 @@ import { EMPTY_CHANGES, LiveChanges } from './changes'
 import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 
 const PANE = 'teamrig-pane'
-/** The dock width it asks for: an id, tier, due and a 40-column title line, inside the padding. */
+/** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
 const DOCK_COLUMNS = 58
 /** Columns of space between the pane's frame and its text, each side. */
 const PAD_COLUMNS = 1
@@ -43,7 +43,7 @@ const EMPTY_SNAPSHOT: Snapshot = { tasks: [], area: null, areaSource: null, unre
  * value reads as absent (the empty snapshot, until the reload's first poll). Bump it whenever the
  * Snapshot or TaskRow type in ../types changes shape.
  */
-const SNAPSHOT_SHAPE = 'register-v2'
+const SNAPSHOT_SHAPE = 'register-v3'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
 const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, NOTHING_EXPANDED)
@@ -79,8 +79,8 @@ export const register: Register = on => {
     live?.stop()
     tracked?.stop()
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
-    // A path that is not there stamps null and a folder that is not there lists empty; a locked or
-    // denied one, or any other failure, throws to the poll (source.ts unlessMissing).
+    // A path that is not there stamps null; a locked or denied one, or any other failure, throws to
+    // the poll (source.ts unlessMissing).
     const files: Files = {
       stamp: path =>
         unlessMissing(
@@ -92,20 +92,10 @@ export const register: Register = on => {
           null,
         ),
       read: path => $.fs.read(path),
-      list: dir =>
-        unlessMissing(
-          async () => {
-            const entries = await $.fs.list(dir)
-            return entries.flatMap(entry => (entry.kind === 'file' ? [{ name: entry.name, mtimeMs: entry.mtimeMs, size: entry.size }] : []))
-          },
-          () => $.fs.exists(dir),
-          [],
-        ),
     }
     const env: PlacesEnv = {
       TEAMRIG_PANE_TASKS_DIR: await $.env.get('TEAMRIG_PANE_TASKS_DIR'),
       TEAMRIG_PANE_INBOX_DIR: await $.env.get('TEAMRIG_PANE_INBOX_DIR'),
-      TEAMRIG_PANE_USAGE_DIR: await $.env.get('TEAMRIG_PANE_USAGE_DIR'),
       TEAMRIG_PANE_GOALS_DOC: await $.env.get('TEAMRIG_PANE_GOALS_DOC'),
       TEAMRIG_PANE_SETTINGS: await $.env.get('TEAMRIG_PANE_SETTINGS'),
       TEAMRIG_HOME: await $.env.get('TEAMRIG_HOME'),
@@ -115,7 +105,7 @@ export const register: Register = on => {
     const paths = places.found ? registerPaths(places.dirs) : { missing: places.problem }
     details = new TaskDetails(files, { inboxDir: 'missing' in paths ? null : paths.inboxDir, home: home ?? null, cwd: e.cwd, goalsDoc: places.goalsDoc })
     const started = new LiveRegister({
-      source: 'missing' in paths ? paths : new TaskRegisterSource(files, paths),
+      source: 'missing' in paths ? paths : new TaskRegisterSource(files, paths, places.found ? places.priorities : []),
       sessionId: () => $.session.id(),
       now: () => $.clock.now(),
       publish: async change => {

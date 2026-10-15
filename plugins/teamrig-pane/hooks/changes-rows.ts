@@ -49,7 +49,7 @@ function repoBlocks(repo: RepoChanges, index: number): Block[] {
   ]
   // The first repo sits under the buttons, already a gap away.
   const head: Block = { key: `repo:${repo.root}`, opensSection: index > 0, rows: [{ key: `repo:${repo.root}`, spans: header, rule: true }] }
-  if (repo.problem !== null) return [head, single(`problem:${repo.root}`, [{ text: `⚠ ${repo.problem}`, color: 'warning' }], { text: '  ' })]
+  if (repo.problem !== null) return [head, single(`problem:${repo.root}`, [{ text: `WARN ${repo.problem}`, color: 'warning' }], { text: '  ' })]
   const rows = repo.files.items.map(file => fileRow(repo.root, file))
   if (repo.files.more > 0) rows.push({ key: `${repo.root}:more`, spans: [{ text: `… ${repo.files.more} more`, dim: true }] })
   if (repo.isPartial) rows.push({ key: `${repo.root}:partial`, spans: [{ text: "… git's list ran past 4 MiB and stops short", dim: true }] })

@@ -135,7 +135,7 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number): Drawn
 /** The body when building it threw: one line naming the error, so the pane is never left blank. */
 export function failedDrawing(error: unknown): Drawn[] {
   const message = error instanceof Error ? error.message : String(error)
-  return [{ key: 'error', spans: [{ text: `⚠ the pane could not draw: ${message}`, color: 'error' }], wrap: 'wrap', toggle: null }]
+  return [{ key: 'error', spans: [{ text: `WARN the pane could not draw: ${message}`, color: 'error' }], wrap: 'wrap', toggle: null }]
 }
 
 /**
