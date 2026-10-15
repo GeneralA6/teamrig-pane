@@ -17,8 +17,10 @@ labels on. No model calls, so no tokens. A switch over the list flips it to the 
   and due, NEW / NOT PICKED UP (untouched after 24 h) / overdue flags and, under a waiting task, what
   it waits for and its note. Verifying tasks lead, under `verifying (N)`: they are the nearest to
   done, so closing them comes first, and the rest follow under `other active (M)`. With none verifying,
-  neither heading shows. Then what the area asked of others (the newest 8), what it finished in the
-  last day (the newest 6) and how many of its inbox lines are unread.
+  neither heading shows. Then what the area asked of others (the newest 8), what it finished today,
+  the UTC day the status bar counts (the newest 6 under `finished today (N)`, then a dim line saying
+  how many more, how many of those were dropped, and that `o` lists every one done today), and how
+  many of its inbox lines are unread.
 - **all**: every owner's active tasks, each owner's heading with its counts, a count with none left
   out (`api · 4 active · 1 waiting · 1 verifying`), and the verifying tasks first in
   each group.
@@ -84,8 +86,9 @@ status, in this order: done today (green `█`), verifying (green `▓`), workin
 (amber `█`), waiting (red `█`) and not started, that is open (dim `░`). Today is the UTC day, the one
 the due labels are in; tasks done on an earlier day, and dropped ones, are left out. The cells are
 shared by largest remainder, and a status with any task gets at least one. Under the row a dim line
-counts them (`1 done today · 1 verifying · 2 working`), skipping a status with none. An area with
-none of these tasks draws no bar, and the all view has none.
+counts them, each behind its key (`o: 1 done today · v: 1 verifying · w: 2 working`), skipping a
+status with none; where the counts, keys included, are wider than the pane they wrap onto more lines.
+An area with none of these tasks draws no bar, and the all view has none.
 
 A press on a status's cells or its count, or its key while the pane holds the keyboard (`o` done
 today, `v` verifying, `w` working, `i` waiting, `n` not started), shows only that status's tasks
@@ -212,7 +215,7 @@ is append-only, about 310 bytes an event in a working register, so `events.jsonl
 13,500 events unless it is rotated. A file over it is named with its size (`events.jsonl is 4.12 MiB, over the 4 MiB a pane can
 read at once`) from its stamp, never read, and the last good tasks stay drawn; a pane started then has
 none to draw. Under it, the whole register is re-read and refolded only when a file moved, and the
-snapshot every draw reads keeps only the tasks a view can show (active, or finished within a day), so
+snapshot every draw reads keeps only the tasks a view can show (active, or finished today), so
 drawing grows with the live tasks, never with the register's history. Through the engine's test
 harness, 20,000 of its shorter events (3.4 MiB, 4,082 tasks, 409 kept) load and draw in 185-200 ms,
 a redraw takes 43-48 ms and a switch to `all` 36-40 ms (three runs, 2026-10-15); a poll with nothing

@@ -144,7 +144,8 @@ No area for this session yet: /rename the tab to its session's id or name, run `
    come) lead under `verifying (n)`, because closing them comes first; the rest follow under
    `other active (n)`. With none waiting, neither heading shows;
 2. `asked of others (n)`: active tasks the area asked of other sessions, the newest 8;
-3. `finished today`: its tasks done or dropped in the last 24 hours, the newest 6.
+3. `finished today (n)`: its tasks done or dropped today, the UTC day the status bar counts, the newest 6. Past
+   them a dim line says how many more, how many of those were dropped, and that `o` lists every one done today.
 
 `(pinned)` shows only for a pin. `inbox n unread` counts the lines in the area's inbox past its last
 `teamrig inbox read`; it is missing when the area never ran one.
@@ -180,10 +181,11 @@ Over **mine**, one row as wide as the pane shares its cells among the area's tas
 | red `█` | `waiting` | waiting on a decision, an approval, a task or a time |
 | dim `░` | `not started` | open |
 
-Under it, a dim line counts them (`1 done today · 1 verifying · 2 working · 1 waiting`), leaving out a status with
-none. Today is the UTC day; tasks done on an earlier day, and dropped ones, are left out. The cells are shared by
-largest remainder, and a status with any task gets at least one. With none of these tasks there is no bar, and
-**all** has none.
+Under it, a dim line counts them, each behind its key (`o: 1 done today · v: 1 verifying · w: 2 working · i: 1 waiting`),
+leaving out a status with none; where the counts, keys included, are wider than the pane they wrap onto more lines.
+Today is the UTC day; tasks done on an earlier day, and dropped ones, are left out. The cells are shared by largest
+remainder, and a status with any task gets at least one. With none of these tasks there is no bar, and **all** has
+none.
 
 A click on a status's cells or its count, or its key (`o`, `v`, `w`, `i`, `n`), shows that status's tasks alone
 under the header: today's done ones newest first, the others in plan order; the other sections hide. Its cells and
