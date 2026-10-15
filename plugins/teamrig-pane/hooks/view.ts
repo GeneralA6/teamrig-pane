@@ -1,21 +1,13 @@
 // What the pane shows, as plain data: pure functions over the folded tasks, so the drawing in
 // register.tsx only lays them out. The order and the due are teamrig's own (hooks/core/read).
 import type { BarStatus, Snapshot, TaskRow } from '../types'
-import { ACTIVE_STATUSES, byPlanOrder, dueTime } from './core/read/index'
+import { ACTIVE_STATUSES, byPlanOrder } from './core/read/index'
+import { flagsOf, type Flag } from './meta'
 import { barStatusOf, isFinishedOn, utcDay } from './status-bar'
 
-const DAY_MS = 86_400_000
-/**
- * teamrig's `register check` flags an untouched task as NOT-PICKED-UP after the team config's
- * `register.check.notPickedUpAfterHours`; the pane keeps that setting's default, 24 hours.
- */
-export const NOT_PICKED_UP_MS = DAY_MS
 /** The finished tasks listed under the area's own, newest first; the rest are counted (AreaView). */
 export const MAX_FINISHED = 6
 export const MAX_ASKED = 8
-
-/** overdue: past its due; new: the owner has not touched it yet; unseen: still untouched after a day. */
-export type Flag = 'overdue' | 'new' | 'unseen'
 
 export type TaskLine = { task: TaskRow; flags: Flag[] }
 
@@ -53,15 +45,6 @@ function proofFirst(a: TaskRow, b: TaskRow): number {
   return Number(isVerifying(b)) - Number(isVerifying(a)) || byPlanOrder(a, b)
 }
 
-/** A date-only due means the end of that UTC day; an unreadable one is never overdue (teamrig's dueTime). */
-export function flagsOf(task: TaskRow, now: number): Flag[] {
-  if (!isActive(task)) return []
-  const flags: Flag[] = []
-  const due = dueTime(task)
-  if (due !== undefined && due < now) flags.push('overdue')
-  if (task.ownerSeenAt === null) flags.push(now - Date.parse(task.assignedAt) > NOT_PICKED_UP_MS ? 'unseen' : 'new')
-  return flags
-}
 
 function lineOf(now: number) {
   return (task: TaskRow): TaskLine => ({ task, flags: flagsOf(task, now) })
