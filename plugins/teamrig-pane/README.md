@@ -21,11 +21,13 @@ labels on. No model calls, so no tokens. A switch over the list flips it to the 
 A task's glyph is its status as `teamrig list` names it: `○` open, `◐` in progress, `■` blocked, `✓`
 done, `✗` dropped.
 
-The area is taken from the session's newest `teamrig inbox read --session <area>` (its mark in
-`inbox-marks.jsonl` names the Claude Code session), or pinned with `/teamrig-pane <area>`.
+The area is taken from the session's newest `teamrig inbox read --session <id>` (its mark in
+`inbox-marks.jsonl` names the Claude Code session), or pinned with `/teamrig-pane <session>`. A tab
+teamrig binds by its Claude Code title (`/rename web`) gets the same mark, so the pane follows it too.
 
-`/teamrig-pane [mine | all | auto | <area>]` opens the pane, switches the view, follows the inbox read
-again (`auto`) or pins an area. In the pane, `m` and `a` switch views.
+`/teamrig-pane [mine | all | auto | <session>]` opens the pane, switches the view, follows the inbox read
+again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
+and lists the team's sessions. In the pane, `m` and `a` switch views.
 
 In the side dock the tasks sit a blank line apart, each wrapped title line starting under the task's
 id, and a ruled heading opens each section (asked of others, finished today, each owner in `all`).
