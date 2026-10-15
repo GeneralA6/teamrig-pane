@@ -473,6 +473,14 @@ describe('changes rows', () => {
     expect(lineSpans(null)).toEqual([])
   })
 
+  test('a worktree whose folder bears its branch name names it once', () => {
+    const root = 'C:/work/t300-guide'
+    const blocks = changesBlocks({ repos: [repo({ root, branch: 't300-guide', files: { items: [change(' M', 'a.ts')], more: 0 } })], outside: [], isRead: true })
+    expect(textOf(blocks, `repo:${root}`)).toBe('t300-guide · 1 changed')
+    const other = changesBlocks({ repos: [repo({ root, branch: 'main' })], outside: [], isRead: true })
+    expect(textOf(other, `repo:${root}`)).toBe('t300-guide · main · clean')
+  })
+
   test("each repo under a ruled header: a detached one, one git can't read, one cut short; then the files outside git", () => {
     const blocks = changesBlocks({
       repos: [
@@ -497,6 +505,7 @@ describe('changes rows', () => {
     expect(textOf(blocks, `${REPO}:t/`)).toBe('?? t/')
     expect(textOf(blocks, `${REPO}:more`)).toBe('… 2 more')
     expect(textOf(blocks, `${REPO}:partial`)).toMatch(/4 MiB/)
+    expect(textOf(blocks, 'repo:C:/work/gone')).toBe('gone')
     expect(textOf(blocks, 'problem:C:/work/gone')).toBe('WARN fatal: bad object HEAD')
     expect(textOf(blocks, 'repo:C:/work/clean')).toBe('clean · main · clean')
     expect(textOf(blocks, 'outside')).toBe('── written outside git (1)')
