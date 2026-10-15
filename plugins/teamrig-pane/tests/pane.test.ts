@@ -75,6 +75,9 @@ const PANE_PROPS = {
   view: {},
 } as const
 
+/** A dock wide enough that a requirement's WARN line is one drawn line, so a test can match all of it. */
+const WIDE = { ...PANE_PROPS, bodyColumns: 200 } as const
+
 /** Answers $.store beneath the plugin from a map the test reads: `kept` starts as what earlier sessions left. */
 function fakeStore(on: On, kept: Readonly<Record<string, unknown>>) {
   const store = new Map(Object.entries(kept))
@@ -849,11 +852,9 @@ test('on a Claude Code older than it needs, it says so above the tasks, with the
   const { clock } = await start(on, {}, { roots: {}, statuses: {} }, REGISTER_ENV, { value: { version: '2.1.290', base: '2.1.290' } })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await clock.settle()
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
-  expect(await pane.find({ text: /WARN Claude Code 2\.1\.290 is older than/ })).toBeDefined()
-  expect(await pane.find({ text: /2\.1\.295 or later/ })).toBeDefined()
-  expect(await pane.find({ text: /run claude update/ })).toBeDefined()
+  expect(await pane.find({ text: /WARN Claude Code 2\.1\.290 is older than teamrig-pane needs \(2\.1\.295 or later\): run claude update, then restart Claude Code\./ })).toBeDefined()
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
 })
 
@@ -877,10 +878,9 @@ test('when the engine gives no version, a short line says the check failed, and 
   const { clock } = await start(on, {}, { roots: {}, statuses: {} }, REGISTER_ENV, { deny: 'no version here' })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await clock.settle()
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
-  expect(await pane.find({ text: /WARN The teamrig-pane check for/ })).toBeDefined()
-  expect(await pane.find({ text: /no version here/ })).toBeDefined()
+  expect(await pane.find({ text: /WARN The teamrig-pane check for Claude Code failed \(.*no version here\)\./ })).toBeDefined()
   expect(await pane.find({ text: /older than|could not be started/ })).toBeUndefined()
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
 })
