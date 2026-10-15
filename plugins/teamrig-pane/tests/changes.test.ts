@@ -188,6 +188,42 @@ describe('changes', () => {
     changes.stop()
     expect(cancelled).toBe(2)
   })
+
+  test('the poll reads again only once something may have changed (a shell call marks it); the tick reads in any case', async () => {
+    const { calls, ports } = fakeGit({ 'C:/work/repo': REPO }, {})
+    const statuses = () => calls.filter(call => call.startsWith('status')).length
+    // A read asks git before its first await, so each timer's read shows at once.
+    const started = async () => {
+      const changes = new LiveChanges(ports)
+      await changes.addFolder('C:/work/repo')
+      await changes.refresh()
+      const fired: (() => void)[] = []
+      changes.startTimers((_ms, fn) => {
+        fired.push(fn)
+        return { cancel: () => undefined }
+      })
+      return { changes, poll: fired[0], tick: fired[1] }
+    }
+    const polled = await started()
+    polled.poll?.()
+    expect(statuses()).toBe(1)
+    polled.changes.markDirty()
+    polled.poll?.()
+    expect(statuses()).toBe(2)
+
+    const ticked = await started()
+    expect(statuses()).toBe(3)
+    ticked.tick?.()
+    expect(statuses()).toBe(4)
+  })
+
+  test('a folder git cannot be asked about adds no repo', async () => {
+    const { published, ports } = fakeGit({}, {})
+    const changes = new LiveChanges({ ...ports, git: async () => Promise.reject(new Error('spawn git ENOENT')) })
+    await changes.addFolder('C:/work/repo')
+    await changes.refresh()
+    expect(published).toEqual([{ repos: [], outside: [], isRead: true }])
+  })
 })
 
 describe('changes rows', () => {

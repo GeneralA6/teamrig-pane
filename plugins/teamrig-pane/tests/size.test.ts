@@ -24,7 +24,7 @@ describe('size', () => {
     expect(storedSize({ size: 'minimized' })).toBe('open')
   })
 
-  test('restores the kept size, open when the store cannot be read', async () => {
+  test('restores the kept size, open when the store cannot be read, and answers it though it cannot be drawn', async () => {
     const kept = ports('minimized')
     expect(await new PaneSizer(kept.sizePorts).restore()).toBe('minimized')
     expect(kept.shown).toEqual(['minimized'])
@@ -32,6 +32,10 @@ describe('size', () => {
     const unreadable = ports('minimized', ['load'])
     expect(await new PaneSizer(unreadable.sizePorts).restore()).toBe('open')
     expect(unreadable.shown).toEqual(['open'])
+
+    const undrawn = ports('minimized', ['show'])
+    expect(await new PaneSizer(undrawn.sizePorts).restore()).toBe('minimized')
+    expect(undrawn.shown).toEqual([])
   })
 
   test("the person's close is refused and minimizes the pane; the plugin's own close and an unload go through", async () => {

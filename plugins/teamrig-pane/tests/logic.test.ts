@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow, TaskStatus } from '../types'
 import { inlineReason, parseTaskListArgs } from '../hooks/command'
-import { LiveRegister, type LivePorts, type Timer } from '../hooks/live'
+import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
 import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { dockLayout, failedDrawing, inlineLayout, merged, wrapRow, type Drawn } from '../hooks/layout'
@@ -273,6 +273,18 @@ describe('rows', () => {
     expect(blockAt(blocks, 'finished')?.opensSection).toBe(true)
     expect(rowAt(blocks, 'finished:T3')?.spans).toEqual([{ text: '▸ ✓ T3 Old work', dim: true }])
     expect(blockAt(blocks, 'finished:T3')?.toggle).toBe('T3')
+  })
+
+  test('the tasks an area asked of others follow its own, newest first, each naming its owner', async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Mine' }),
+      createLine('T2', { owner: 'etl', by: 'po', at: NOW - 2 * HOUR, title: 'Older ask' }),
+      createLine('T3', { owner: 'web', by: 'po', at: NOW - HOUR, title: 'Newer ask' }),
+    )
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
+    expect(blocks.map(b => b.key)).toEqual(['header', 'active:T1', 'asked', 'asked:T3', 'asked:T2'])
+    expect(textAt(blocks, 'asked')).toBe('── asked of others (2)')
+    expect(rowAt(blocks, 'asked:T3')?.spans[2]).toEqual({ text: ' →web', color: 'suggestion' })
   })
 
   test('a snapshot never read says the register is being read, not that the session has no area; a failed first read shows why', () => {
@@ -852,5 +864,37 @@ describe('live', () => {
     expect(started).toEqual([3_000, 60_000])
     live.stop()
     expect(cancelled).toBe(2)
+  })
+
+  test('the poll reads the session and the register; the tick reads the clock', async () => {
+    const { ports } = livePorts(new MemoryFiles(), [S1])
+    const asked: string[] = []
+    const fired: (() => void)[] = []
+    // Each timer asks its first port before its first await, so what it asked shows at once.
+    const live = new LiveRegister({
+      ...ports,
+      sessionId: async () => {
+        asked.push('session')
+        return S1
+      },
+      now: async () => {
+        asked.push('now')
+        return NOW
+      },
+    })
+    live.startTimers((_ms, fn): Timer => {
+      fired.push(fn)
+      return { cancel: () => undefined }
+    })
+    const [poll, tick] = fired
+    poll?.()
+    expect(asked).toEqual(['session'])
+    tick?.()
+    expect(asked).toEqual(['session', 'now'])
+  })
+
+  test('keeps a session’s pin under a store key of its own', () => {
+    expect(pinKey(S1)).toBe(`pin:${S1}`)
+    expect(pinKey(S2)).not.toBe(pinKey(S1))
   })
 })
