@@ -1,43 +1,44 @@
 # teamrig-pane
 
-**Your session's tasks, beside the conversation.** teamrig-pane is a Claude Code plugin that docks the
-session's tasks from a [teamrig](https://github.com/GeneralA6/teamrig) task register on the right of
-Claude Code's fullscreen UI, and flips to the session's git changes with one key. It reads files only:
-no model calls, so no tokens.
+**Your tasks, beside the conversation.**
+
+A Claude Code plugin that docks your session's tasks on the right of the conversation, and flips to
+the files you changed with one press. Part of [teamrig](https://github.com/GeneralA6/teamrig).
+
+![Claude Code with teamrig-pane docked beside the conversation: the session's active tasks in plan order, a blocked task's note, what it asked of others and what it finished today, then one press on Changes lists the files changed in its repo.](docs/images/hero.svg)
+
+> **Pre-release.** The pane is built on Claude Code's function hooks, an early-access plugin surface
+> that may change between releases. Nothing is stable yet and there is no release.
+
+## Get started
 
 ```sh
 claude plugin marketplace add GeneralA6/teamrig-pane
 claude plugin install teamrig-pane@teamrig-pane
 ```
 
-or, from a session, `/plugin install teamrig-pane --marketplace GeneralA6/teamrig-pane`. The pane is
-tested on Claude Code 2.1.295 and later.
-
-Then run `/teamrig` in a session. The pane docks on the right in the fullscreen layout
-(`"tui": "fullscreen"`) from 110 columns, and opens by itself from 144; anywhere else it sits above the
-prompt.
-
-> **Pre-release.** The pane is built on Claude Code's function hooks, an early-access plugin surface
-> that may change between releases. Nothing is stable yet and there is no release.
+Then run `/teamrig` in a session. In the fullscreen layout (`"tui": "fullscreen"`) the pane docks on
+the right from 110 columns and opens by itself from 144; anywhere else it sits above the prompt.
+Tested on Claude Code 2.1.295 and later.
 
 ## What it shows
 
-- **Tasks:** the session's area (its active tasks in plan order, what blocks them, what it asked of
-  others, what it finished today, its unread inbox lines), or every owner's tasks with `all`. Press a
-  task to expand its details: the ask quoted from where its ref points, its goals, notes, sub-tasks
-  and waits.
-- **Changes:** the files changed in each git repo the session works in, from
-  `git status --porcelain`, refreshed after each write.
+- **Tasks:** your active tasks in plan order, what blocks them, what you asked of others, what you
+  finished today and your unread inbox lines. `/teamrig all` shows every owner's tasks.
+- **Details:** click a task, or press Enter on it, to read its ask, quoted from the file its ref
+  points at, then who asked and when, its goals and its status note.
+- **Changes:** the files changed in each git repo the session works in, from `git status`.
+  Press the switch, or `t` and `d` while the pane holds the keyboard.
 
-## Where it finds the register
+## How it reads teamrig
 
-By default, where teamrig keeps the register of the session's team (`~/.teamrig/teams/<team>/state`,
-the team named by `$TEAMRIG_TEAM` or the nearest `.teamrig.json`). Each folder can be named instead by
-a `TEAMRIG_PANE_*` variable or in `~/.teamrig/pane.json`; see
-[Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
+- **The same reader.** teamrig's own read modules are copied into the plugin at a pinned commit, and
+  a golden test holds the pane's rows to what `teamrig list` prints.
+- **Files only.** A stat every 3 s re-reads a file only when its size or time moved, plus a tick every
+  60 s. No model calls, so no tokens.
+- **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; see
+  [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
 
-The plugin's own [README](plugins/teamrig-pane/README.md) covers every view, key and limit.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Licensed under [Apache-2.0](LICENSE).
+[Plugin README](plugins/teamrig-pane/README.md) (every view, key and limit) ·
+[Contributing](CONTRIBUTING.md) · [teamrig](https://github.com/GeneralA6/teamrig) ·
+Licensed under [Apache-2.0](LICENSE).
