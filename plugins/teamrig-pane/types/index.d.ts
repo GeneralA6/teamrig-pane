@@ -102,6 +102,15 @@ export type ChangesSnapshot = { repos: RepoChanges[]; outside: string[]; isRead:
 /** The repo roots and outside files the session has found, all a reloaded pane needs to read them again. */
 export type KnownChanges = { roots: string[]; outside: string[] }
 
+/** A version's three numbers: `2.1.295` is major 2, minor 1, patch 295. */
+export type Version = { major: number; minor: number; patch: number }
+
+/** What the pane needs and lacks (hooks/requirements.ts), each drawn as one line with its fix. */
+export type RequirementProblem =
+  | { kind: 'claude-code-old'; running: Version }
+  | { kind: 'git-unstartable'; reason: string }
+  | { kind: 'check-failed'; requirement: 'Claude Code'; reason: string }
+
 /** What the pane's body shows, picked with the switch over it: the register's tasks, or the session's git changes (hooks/changes.ts). */
 export type PaneView = 'tasks' | 'changes'
 
@@ -119,6 +128,7 @@ declare module 'claude-code' {
       view: PaneView
       changes: Shaped<ChangesSnapshot>
       known: Shaped<KnownChanges>
+      requirements: RequirementProblem[]
     }
   }
 }
