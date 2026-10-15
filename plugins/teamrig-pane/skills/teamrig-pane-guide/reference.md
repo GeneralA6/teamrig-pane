@@ -64,7 +64,7 @@ the next poll.
 | `events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task` | The same lines teamrig skips: run `teamrig doctor`, and update teamrig-pane if teamrig is newer. |
 | `events.jsonl is 4.12 MiB, over the 4 MiB a pane can read at once: it needs rotating` | The register outgrew one read; the last good tasks stay drawn. Report it to the team's lead. |
 | `WARN the pane could not draw: <error>` | A drawing failed; report it with the error text. |
-| In Changes, `WARN <git's first error line>` under a repo | git could not read that repo (or took over 10 seconds). |
+| In Changes, `WARN <git's first error line>` under a repo | git could not read that repo (or took over 10 seconds); its header then names only the folder. A worktree whose folder was removed shows no warning: it leaves the view. |
 
 ## Limits
 
@@ -79,7 +79,7 @@ the next poll.
 | Dock | asks for 58 columns; the side dock needs a terminal of 110 |
 | Changes, per repo | the first 200 files, the rest counted |
 | Changes, outside any repo | the newest 20 files |
-| One git run | 10 seconds |
+| One git run | 10 seconds; a line count that takes longer is left out |
 | Quoted ref | 3 lines, 320 characters a line |
 
 The pane never writes the register, the inboxes or any repo. It keeps only its size and the pins in the

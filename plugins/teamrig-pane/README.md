@@ -121,16 +121,21 @@ the pane holds the keyboard, `t` presses Tasks and `d` Changes (`c` already coll
 
 Changes lists the files changed in the git repos the session works in: the repo of the session's folder,
 and the repo of each file the session writes (Edit, Write, NotebookEdit). A worktree is its own repo
-(`git rev-parse --show-toplevel`, asked once a folder). Each repo gets a ruled header (`mods-pane-v2 ·
-pane-v2 · 3 changed`, or `clean`), then its files: git's two-letter code (the staged letter green, the
-unstaged one yellow, `??` untracked dim), the path from the repo root and a rename's source
-(`← old.ts`). The first 200 files a repo are listed and the rest counted; a repo git can't read shows
-git's first error line. Files written outside any repo come last, the newest 20.
+(`git rev-parse --show-toplevel`, asked once a folder), and leaves the list once its folder is removed:
+git never runs in a folder that is gone. Each repo gets a ruled header (`mods-pane-v2 · pane-v2 · 3
+changed`, or `clean`; the branch is left out when the folder bears its name, as a worktree's often does),
+then its files: git's two-letter code (the staged letter green, the unstaged one yellow, `??` untracked
+dim), the path from the repo root, its lines (`+12` added in green, `-3` removed in red; `+0 -0` or
+`binary` dim; an untracked folder sums its files) and a rename's source (`← old.ts`). The first 200
+files a repo are listed and the rest counted; a repo git can't read shows only its folder in the header
+and git's first error line under it. Files written outside any repo come last, the newest 20.
 
 Each repo costs one `git --no-optional-locks status --porcelain=v1 -b -z` (no index lock, so it never
-blocks a commit; 10 s timeout): on the next 3 s poll after a write or a shell call (Bash, PowerShell; a
-burst of edits costs one run), every 60 s for changes made from elsewhere, and at once on a switch to
-Changes. Git only, no model calls. After a hot reload the repos and files already drawn stay known.
+blocks a commit; 10 s timeout), and while it has changed files one `git diff HEAD --numstat -z` and up
+to two `git grep --untracked -c` runs for their lines (also lock-free; a count git can't give is left
+out, with no warning): on the next 3 s poll after a write or a shell call (Bash, PowerShell; a burst of
+edits costs one run), every 60 s for changes made from elsewhere, and at once on a switch to Changes.
+Git only, no model calls. After a hot reload the repos and files already drawn stay known.
 
 `Δn` on the Changes button counts the files the view lists, and so does the pane's tab title
 (`Tasks · Δ3`). The title is set by opening the open pane again under the same id, only when the count
@@ -141,8 +146,8 @@ What the host draws and the mod can't change:
 - there is no fixed header: the body scrolls as one, so in a long list the switch scrolls up out of view
   with the rows;
 - the tab strip, and so the title's `Δn`, shows only while more than one pane is open;
-- a mod can't show or focus the built-in Diff pane (`/diff`), so Changes is the plugin's own git status
-  list: files, not their lines.
+- a mod can't show or focus the built-in Diff pane (`/diff`), so Changes is the plugin's own list of
+  git's changes: each file and its line counts, not the diff itself.
 
 ## Reading the register
 
