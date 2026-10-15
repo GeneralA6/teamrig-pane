@@ -77,7 +77,7 @@ export const CHANGED: readonly { readonly code: string; readonly path: string }[
   { code: '??', path: 'docs/signup.md' },
 ];
 
-export const CAPTIONS = { tasks: 'Your tasks, beside the conversation', changes: 'One press on Changes: the files changed in your repo' } as const;
+export const CAPTIONS = { tasks: "Your tasks: what's next, what's blocked, what's done", changes: 'One press on Changes: the files changed in your repo' } as const;
 
 const STORY =
   `Claude Code in its fullscreen layout. Beside the conversation, teamrig-pane docks the session's tasks: ` +
