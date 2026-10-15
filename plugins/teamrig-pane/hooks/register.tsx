@@ -13,7 +13,7 @@
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
-import type { ExpandedTasks, PaneView, RequirementProblem, Snapshot, TaskDetail, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, PaneView, RequirementProblem, Snapshot, TaskDetail, ViewMode } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
@@ -67,6 +67,8 @@ const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KN
 const NOTHING_MISSING: RequirementProblem[] = []
 /** What the pane lacks (requirements.ts); each session start checks again and writes it anew, a hot reload's too. */
 const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, NOTHING_MISSING)
+/** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
+const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
 
 /** The expanded tasks less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -95,6 +97,8 @@ export const register: Register = on => {
     })
     live?.stop()
     tracked?.stop()
+    // A filter is a look for the moment, never kept: a new session, or a hot reload, lists every task again.
+    await update($, barFilter, () => null)
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
     // A path that is not there stamps null; a locked or denied one, or any other failure, throws to
     // the poll (source.ts unlessMissing).
@@ -261,10 +265,12 @@ export const register: Register = on => {
         shown = await read($, mode)
         open = await read($, expanded)
         const missing = await read($, requirements)
-        const viewBlocks = current === 'tasks' ? paneBlocks(snap, shown, open) : changesBlocks(changed, isGitMissing(missing))
-        const blocks = [...requirementBlocks(missing), ...viewBlocks]
         const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
-        const bar = current === 'tasks' && shown === 'mine' ? statusBar(snap, columns) : null
+        const bar = current === 'tasks' && shown === 'mine' ? statusBar(snap, await read($, barFilter), columns) : null
+        // With no bar there is nothing to filter by, and the list shows every task.
+        const viewBlocks =
+          current === 'tasks' ? paneBlocks(snap, shown, open, bar?.filter ?? null) : changesBlocks(changed, isGitMissing(missing))
+        const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
         barLines = bar === null ? [] : inline ? bar.lines.slice(0, inlineBarRows(bar, cap)) : bar.lines
@@ -384,12 +390,28 @@ export const register: Register = on => {
         switchRow
       )
     // The status bar leads the tasks: its segments in one row as wide as the body, its counts under it.
+    // A press on a segment or a count (or the count's key) filters the list to that status, a second
+    // press on the same one clears it, and one on another switches to it.
+    const filterTo = (status: BarStatus) => void update($, barFilter, current => (current === status ? null : status))
+    const drawPiece = (piece: BarPiece) => {
+      const status = piece.status
+      if (status === null) return styled(piece, piece.key)
+      return piece.hotkey === null ? (
+        <Button key={piece.key} plain onPress={() => filterTo(status)}>
+          {styled(piece)}
+        </Button>
+      ) : (
+        <Button key={piece.key} plain hotkey={piece.hotkey} onPress={() => filterTo(status)}>
+          {styled(piece)}
+        </Button>
+      )
+    }
     const statusRows =
       barLines.length === 0 ? null : (
         <Box key="status-bar" flexDirection="column">
           {barLines.map((line, i) => (
             <Box key={`status-bar:${i}`} flexDirection="row">
-              {line.map(piece => styled(piece, piece.key))}
+              {line.map(drawPiece)}
             </Box>
           ))}
         </Box>

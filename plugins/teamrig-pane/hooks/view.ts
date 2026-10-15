@@ -1,7 +1,8 @@
 // What the pane shows, as plain data: pure functions over the folded tasks, so the drawing in
 // register.tsx only lays them out. The order and the due are teamrig's own (hooks/core/read).
-import type { Snapshot, TaskRow } from '../types'
+import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, byPlanOrder, dueTime } from './core/read/index'
+import { barStatusOf, utcDay } from './status-bar'
 
 const DAY_MS = 86_400_000
 /**
@@ -86,6 +87,16 @@ export function areaView(tasks: readonly TaskRow[], area: string, now: number): 
     askedTotal: asked.length,
     finished: finished.slice(0, MAX_FINISHED),
   }
+}
+
+/**
+ * The area's own tasks at one status of the status bar (status-bar.ts), as its filter lists them, today
+ * the UTC day of `now`: those done today newest first, the others in plan order.
+ */
+export function statusLines(tasks: readonly TaskRow[], area: string, now: number, status: BarStatus): TaskLine[] {
+  const today = utcDay(now)
+  const order = status === 'done-today' ? newestFirst : byPlanOrder
+  return tasks.filter(t => t.owner === area && barStatusOf(t, today) === status).sort(order).map(lineOf(now))
 }
 
 /** Every owner with active tasks, by name, each list waiting for proof first, then in plan order. */

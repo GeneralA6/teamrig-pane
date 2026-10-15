@@ -5,11 +5,12 @@
 // tree's size is what the pane costs, so a block is one Text (its unstyled spans plain strings, a
 // task's inside the Button that expands it), never a box per row, and inline the rows are capped.
 import type { ThemeKey } from 'claude-code'
-import type { ExpandedTasks, Snapshot, TaskDetail, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, Snapshot, TaskDetail, TaskRow, TaskStatus, ViewMode } from '../types'
 import { priorityText } from './core/read/index'
 import { COMMAND } from './command'
 import { refLabel, refParts } from './details'
-import { areaView, ownerGroups, shortDue, shortTime, type TaskLine } from './view'
+import { BAR_LOOK } from './status-bar'
+import { areaView, ownerGroups, shortDue, shortTime, statusLines, type TaskLine } from './view'
 
 /** A run of text in one style. No `color` (absent or undefined, as a span picks it by a condition) draws in the theme's text color. */
 export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean }
@@ -132,7 +133,15 @@ export function heading(key: string, label: Span[]): Block {
   return { key, opensSection: true, rows: [{ key, spans: [{ text: '── ', dim: true }, ...label], rule: true }] }
 }
 
-function mineBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
+/** The area's tasks at the status the bar filters to, under no heading: what the filter's line names. */
+function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expanded: ExpandedTasks): Block[] {
+  const lines = statusLines(snap.tasks, area, snap.now, filter)
+  if (lines.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
+  if (filter === 'done-today') return lines.map(line => finishedBlock(line.task, expanded))
+  return lines.map(line => taskBlock(filter === 'verifying' ? 'proof' : 'active', line, expanded))
+}
+
+function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null): Block[] {
   if (snap.area === null) return [single('no-area', [{ text: NO_AREA, dim: true }])]
   const view = areaView(snap.tasks, snap.area, snap.now)
   const header: Span[] = [{ text: view.area, bold: true }]
@@ -142,6 +151,8 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
   if (snap.unreadInbox !== null)
     header.push({ text: ` · inbox ${snap.unreadInbox} unread`, color: snap.unreadInbox > 0 ? 'warning' : 'subtle' })
   const blocks: Block[] = [{ key: 'header', rows: [{ key: 'header', spans: header, rule: true }] }]
+  // Filtered from the status bar, the header leads that status's tasks alone.
+  if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
   // Work waiting for its proof leads, the tasks to close first; the rest of the active work then has its own heading.
   if (view.verifying.length > 0) {
@@ -177,10 +188,16 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
 /**
  * The body under the buttons: the register's problem, if any, then the mode's view, expanded tasks with their details.
  * A snapshot never read (`now` 0: the pane's first moments, or a hot reload's until its first poll) says so, instead of
- * an empty list or a missing area it has not yet looked for.
+ * an empty list or a missing area it has not yet looked for. `filter`, the status bar's (status-bar.ts),
+ * narrows the mine view to the area's tasks at that status; null shows them all.
  */
-export function paneBlocks(snap: Snapshot, mode: ViewMode, expanded: ExpandedTasks = NOTHING_EXPANDED): Block[] {
+export function paneBlocks(
+  snap: Snapshot,
+  mode: ViewMode,
+  expanded: ExpandedTasks = NOTHING_EXPANDED,
+  filter: BarStatus | null = null,
+): Block[] {
   if (snap.now === 0 && snap.problem === null) return [single('reading', [{ text: 'Reading the register…', dim: true }])]
   const problem = snap.problem === null ? [] : [single('problem', [{ text: `WARN ${snap.problem}`, color: 'warning' }], { text: '  ' })]
-  return [...problem, ...(mode === 'mine' ? mineBlocks(snap, expanded) : allBlocks(snap, expanded))]
+  return [...problem, ...(mode === 'mine' ? mineBlocks(snap, expanded, filter) : allBlocks(snap, expanded))]
 }

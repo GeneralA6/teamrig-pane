@@ -2,7 +2,9 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { BAR_STATUSES, barCells, barCounts, inlineBarRows, statusBar, utcDay, type BarCounts, type BarPiece } from '../hooks/status-bar'
+import { NOTHING_EXPANDED, paneBlocks } from '../hooks/rows'
+import { BAR_LOOK, BAR_STATUSES, barCells, barCounts, filterText, inlineBarRows, statusBar, utcDay, type BarCounts, type BarPiece } from '../hooks/status-bar'
+import { statusLines } from '../hooks/view'
 import { cells } from '../hooks/width'
 import { HOUR, NOW, createLine, statusLine } from './fixtures'
 
@@ -145,37 +147,101 @@ describe('status bar lines', () => {
   )
 
   test('a line of blocks as wide as the body, then the counts skipping the statuses with none', async () => {
-    const bar = statusBar(snapshotOf(tasks, 'po'), 12)
+    const bar = statusBar(snapshotOf(tasks, 'po'), null, 12)
     expect(bar?.lines.length).toBe(4)
     expect(bar?.lines[0]).toEqual([
-      { key: 'bar:done-today', text: '███', color: 'success', dim: false, status: 'done-today' },
-      { key: 'bar:verifying', text: '▓▓▓▓▓▓', color: 'success', dim: false, status: 'verifying' },
-      { key: 'bar:not-started', text: '░░░', color: undefined, dim: true, status: 'not-started' },
+      { key: 'bar:done-today', text: '███', color: 'success', dim: false, bold: false, status: 'done-today', hotkey: null },
+      { key: 'bar:verifying', text: '▓▓▓▓▓▓', color: 'success', dim: false, bold: false, status: 'verifying', hotkey: null },
+      { key: 'bar:not-started', text: '░░░', color: undefined, dim: true, bold: false, status: 'not-started', hotkey: null },
     ])
     expect(bar?.lines.slice(1).map(textOf)).toEqual(['1 done today', '2 verifying', '1 not started'])
-    expect(statusBar(snapshotOf(tasks, 'po'), 48)?.lines.map(textOf)).toEqual([
+    expect(statusBar(snapshotOf(tasks, 'po'), null, 48)?.lines.map(textOf)).toEqual([
       `${'█'.repeat(12)}${'▓'.repeat(24)}${'░'.repeat(12)}`,
       '1 done today · 2 verifying · 1 not started',
     ])
   })
 
   test('the counts wrap at the width, a dim separator only between two on a line, each line inside the bar\'s width', async () => {
-    const bar = statusBar(snapshotOf(tasks, 'po'), 30)
+    const bar = statusBar(snapshotOf(tasks, 'po'), null, 30)
     expect(bar?.lines.slice(1).map(textOf)).toEqual(['1 done today · 2 verifying', '1 not started'])
-    expect(bar?.lines[1]?.[1]).toEqual({ key: 'sep:count:verifying', text: ' · ', dim: true, status: null })
+    expect(bar?.lines[1]?.[1]).toEqual({ key: 'sep:count:verifying', text: ' · ', dim: true, status: null, hotkey: null })
     expect(bar?.lines.every(line => cells(textOf(line)) <= 30)).toBe(true)
-    expect(cells(textOf(statusBar(snapshotOf(tasks, 'po'), 0)?.lines[0]))).toBe(1)
+    expect(cells(textOf(statusBar(snapshotOf(tasks, 'po'), null, 0)?.lines[0]))).toBe(1)
   })
 
   test('no bar with no area, before the first read, or with no task to show', async () => {
-    expect(statusBar(snapshotOf(tasks, null), 40)).toBe(null)
-    expect(statusBar(snapshotOf(tasks, 'po', 0), 40)).toBe(null)
-    expect(statusBar(snapshotOf(tasks, 'etl'), 40)).toBe(null)
+    expect(statusBar(snapshotOf(tasks, null), null, 40)).toBe(null)
+    expect(statusBar(snapshotOf(tasks, 'po', 0), null, 40)).toBe(null)
+    expect(statusBar(snapshotOf(tasks, 'etl'), null, 40)).toBe(null)
   })
 
   test('inline, the bar takes the rows past the three the list keeps, first lines first', async () => {
-    const bar = statusBar(snapshotOf(tasks, 'po'), 48)
+    const bar = statusBar(snapshotOf(tasks, 'po'), null, 48)
     expect([6, 5, 4, 3, 1].map(rows => inlineBarRows(bar, rows))).toEqual([2, 2, 1, 0, 0])
     expect(inlineBarRows(null, 6)).toBe(0)
+  })
+})
+
+describe('status bar filter', () => {
+  const tasks = rowsOf(
+    createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Not started yet' }),
+    createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, priority: 2, title: 'Check the roll' }),
+    statusLine('T2', 'po', NOW - HOUR / 2, 'verifying', 'health check passes'),
+    createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, priority: 1, title: 'Check the dashboard' }),
+    statusLine('T3', 'po', NOW - HOUR / 2, 'verifying', 'one clean roll'),
+    createLine('T4', { owner: 'po', by: 'po', at: NOW - 2 * HOUR, title: 'Closed this morning' }),
+    statusLine('T4', 'po', NOW - HOUR, 'done'),
+    createLine('T5', { owner: 'po', by: 'po', at: NOW - 2 * HOUR, title: 'Closed just now' }),
+    statusLine('T5', 'po', NOW, 'done'),
+    createLine('T6', { owner: 'po', by: 'po', at: NOW - 72 * HOUR, title: 'Closed days ago' }),
+    statusLine('T6', 'po', NOW - 48 * HOUR, 'done'),
+  )
+  const snap = snapshotOf(tasks, 'po')
+  const keysOf = (blocks: readonly { key: string }[]) => blocks.map(block => block.key)
+
+  test('each count carries its own key, none of them one the pane already uses', async () => {
+    expect(BAR_STATUSES.map(status => BAR_LOOK[status].hotkey)).toEqual(['o', 'v', 'w', 'b', 'n'])
+    const counts = statusBar(snap, null, 80)?.lines[1]?.filter(piece => piece.status !== null)
+    expect(counts?.map(piece => [piece.key, piece.hotkey])).toEqual([
+      ['count:done-today', 'o'],
+      ['count:verifying', 'v'],
+      ['count:not-started', 'n'],
+    ])
+  })
+
+  test('the filtered segment and count draw bold, the count no longer dim, and a dim line says what the list shows', async () => {
+    const bar = statusBar(snap, 'verifying', 80)
+    expect(bar?.filter).toBe('verifying')
+    expect(bar?.lines[0]?.map(piece => [piece.key, piece.bold])).toEqual([
+      ['bar:done-today', false],
+      ['bar:verifying', true],
+      ['bar:not-started', false],
+    ])
+    expect(bar?.lines[1]?.find(piece => piece.key === 'count:verifying')).toMatchObject({ bold: true, dim: false })
+    expect(bar?.lines[1]?.find(piece => piece.key === 'count:done-today')).toMatchObject({ bold: false, dim: true })
+    expect(bar?.lines[2]).toEqual([{ key: 'filter', text: filterText('verifying'), dim: true, status: null, hotkey: null }])
+    expect(filterText('verifying')).toBe('showing verifying only, click again for all')
+  })
+
+  test('a filter whose status has no task left keeps its count, at 0, so a press can clear it; with no bar, none holds', async () => {
+    const bar = statusBar(snap, 'blocked', 80)
+    expect(bar?.lines[0]?.map(piece => piece.key)).toEqual(['bar:done-today', 'bar:verifying', 'bar:not-started'])
+    expect(textOf(bar?.lines[1])).toBe('2 done today · 2 verifying · 0 blocked · 1 not started')
+    expect(bar?.filter).toBe('blocked')
+    expect(statusBar(snapshotOf(tasks, 'etl'), 'blocked', 80)).toBe(null)
+  })
+
+  test('filtered, the mine view lists the header and that status alone: done today newest first, the rest in plan order', async () => {
+    expect(keysOf(paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'done-today'))).toEqual(['header', 'finished:T5', 'finished:T4'])
+    expect(keysOf(paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'verifying'))).toEqual(['header', 'proof:T3', 'proof:T2'])
+    expect(keysOf(paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'not-started'))).toEqual(['header', 'active:T1'])
+    const none = paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'working')
+    expect(keysOf(none)).toEqual(['header', 'none-filtered'])
+    expect(none[1]?.rows[0]?.spans).toEqual([{ text: 'Nothing in progress.', dim: true }])
+    expect(statusLines(tasks, 'po', NOW, 'done-today').map(line => line.task.id)).toEqual(['T5', 'T4'])
+  })
+
+  test('the all view takes no filter', async () => {
+    expect(keysOf(paneBlocks(snap, 'all', NOTHING_EXPANDED, 'verifying'))).toEqual(keysOf(paneBlocks(snap, 'all')))
   })
 })
