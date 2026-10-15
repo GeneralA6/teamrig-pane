@@ -10,11 +10,13 @@
 // ones' (a second grep only to tell an untracked binary file from an empty one). A repo is read on the
 // next 3 s poll after a write or a shell call (a burst of edits costs one read), every 60 s (a commit or
 // a change made from elsewhere), and at once when the person switches to the view. Runs git only; no
-// model calls.
-import type { ChangesSnapshot, Cut, FileChange, LineCount, RepoChanges } from '../types'
+// model calls. The repos and outside files found are kept apart from the drawn snapshot (KnownChanges),
+// so a reload that bumps the snapshot's shape still knows them.
+import type { ChangesSnapshot, Cut, FileChange, KnownChanges, LineCount, RepoChanges } from '../types'
 import { POLL_MS, TICK_MS, type Timer } from './live'
 
 export const EMPTY_CHANGES: ChangesSnapshot = { repos: [], outside: [], isRead: false }
+export const NOTHING_KNOWN: KnownChanges = { roots: [], outside: [] }
 /** The most files kept per repo; the rest are counted. */
 export const CHANGES_KEPT = 200
 /** The most files kept that were written outside any repo. */
@@ -164,6 +166,21 @@ function failure(ran: GitRun): string {
   return line?.trim() ?? `git exited ${ran.exitCode}`
 }
 
+/** The repos and outside files a drawn snapshot holds. */
+export function knownOf(changes: ChangesSnapshot): KnownChanges {
+  return { roots: changes.repos.map(repo => repo.root), outside: [...changes.outside] }
+}
+
+/**
+ * What a reloaded pane starts from: the known repos and files, and those of the snapshot it drew when
+ * that still reads (a pane that kept no known list yet wrote only the snapshot).
+ */
+export function knownSeed(drawn: ChangesSnapshot, kept: KnownChanges): KnownChanges {
+  const roots = new Set([...kept.roots, ...drawn.repos.map(repo => repo.root)])
+  const outside = new Set([...kept.outside, ...drawn.outside])
+  return { roots: [...roots], outside: [...outside].slice(0, OUTSIDE_KEPT) }
+}
+
 export class LiveChanges {
   /** Each folder's repo root, null outside any repo: one rev-parse a folder. */
   private readonly roots = new Map<string, string | null>()
@@ -177,10 +194,10 @@ export class LiveChanges {
 
   private readonly ports: ChangesPorts
 
-  /** `seed` is what the pane drew before a hot reload: its repos and outside files stay known. */
-  constructor(ports: ChangesPorts, seed: ChangesSnapshot = EMPTY_CHANGES) {
+  /** `seed` is what the pane knew before a hot reload: its repos and outside files stay known. */
+  constructor(ports: ChangesPorts, seed: KnownChanges = NOTHING_KNOWN) {
     this.ports = ports
-    for (const repo of seed.repos) this.repos.add(repo.root)
+    for (const root of seed.roots) this.repos.add(root)
     this.outside = seed.outside.slice(0, OUTSIDE_KEPT)
   }
 

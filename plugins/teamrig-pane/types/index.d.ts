@@ -99,6 +99,9 @@ export type RepoChanges = {
 /** The Changes view's data: each repo the session works in, then the files it wrote outside any repo, newest first. */
 export type ChangesSnapshot = { repos: RepoChanges[]; outside: string[]; isRead: boolean }
 
+/** The repo roots and outside files the session has found, all a reloaded pane needs to read them again. */
+export type KnownChanges = { roots: string[]; outside: string[] }
+
 /** What the pane's body shows, picked with the switch over it: the register's tasks, or the session's git changes (hooks/changes.ts). */
 export type PaneView = 'tasks' | 'changes'
 
@@ -107,7 +110,7 @@ export type ViewMode = 'mine' | 'all'
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot and the changes are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CHANGES_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the changes and the known repos are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -115,6 +118,7 @@ declare module 'claude-code' {
       size: PaneSize
       view: PaneView
       changes: Shaped<ChangesSnapshot>
+      known: Shaped<KnownChanges>
     }
   }
 }

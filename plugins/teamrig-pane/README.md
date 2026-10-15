@@ -137,7 +137,8 @@ blocks a commit; 10 s timeout), and while it has changed files one `git diff HEA
 to two `git grep --untracked -c` runs for their lines (also lock-free; a count git can't give is left
 out, with no warning): on the next 3 s poll after a write or a shell call (Bash, PowerShell; a burst of
 edits costs one run), every 60 s for changes made from elsewhere, and at once on a switch to Changes.
-Git only, no model calls. After a hot reload the repos and files already drawn stay known.
+Git only, no model calls. After a hot reload the repos and files already found stay known, also after a
+version that changes how the drawn changes are kept.
 
 `Δn` on the Changes button counts the files the view lists, and so does the pane's tab title
 (`Tasks · Δ3`). The title is set by opening the open pane again under the same id, only when the count
@@ -183,7 +184,10 @@ new reads nothing.
 `$.state` outlives a hot reload, so the snapshot is kept under a shape tag (`SNAPSHOT_SHAPE` in
 `hooks/register.tsx`): bump it whenever the `Snapshot` or `TaskRow` type changes, and a reloaded pane
 reads what the older code wrote as not yet read, drawing `Reading the register…` until its first poll
-(at most 3 s), instead of rows with fields missing or a `No area` line it has not looked for yet.
+(at most 3 s), instead of rows with fields missing or a `No area` line it has not looked for yet. The
+drawn changes are kept the same way (`CHANGES_SHAPE`), and the repos and files found apart from them
+under a shape of their own (`KNOWN_SHAPE`, bumped only when `KnownChanges` changes), so a bump of
+`CHANGES_SHAPE` never makes a reloaded pane forget the repos the session found.
 
 After teamrig changes those modules, move the pin, sync and commit the copy with the pin:
 
