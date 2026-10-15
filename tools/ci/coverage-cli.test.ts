@@ -52,7 +52,7 @@ describe('coverage-cli', () => {
   it('passes a fully tested repo and prints the totals', () => {
     const { status, output } = gate({});
     assert.equal(status, 0, output);
-    assert.match(output, /coverage: 1 tests; 1 files: lines 100%, branches 100%, functions 100%/);
+    assert.match(output, /coverage: 1 tests; tools\/ 1 files: lines 100%, branches 100%, functions 100%/);
   });
 
   it('fails a new file that no test loads, before it is committed', () => {

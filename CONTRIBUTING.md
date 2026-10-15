@@ -36,9 +36,14 @@ Every change ships tests, so the next change cannot break it unnoticed:
 
 `npm run check` runs the gates CI runs on the tree: typecheck (`tools/` under `tsconfig.json`, the plugin's
 hooks, tests and scripts under `tsconfig.pane.json`), coverage, the plugin test gate and
-scrub. Its coverage gate (`npm run coverage`) fails when any tools test fails or is skipped, a source
-file under `tools/` is loaded by no test, or a file or the total falls below the floors in
-`tools/ci/coverage.json`. Never lower a floor to pass a change. CI also runs `npm test` and the plugin
+scrub. Its coverage gate (`npm run coverage`) runs the tools tests and the plugin's `*.test.ts` under
+node, with `tools/pane-kit/` standing in for the engine (`claude-code/testing` and the plugin's `.ts`
+import paths), and measures both. It fails when any of those tests fails or is skipped, a source file
+under `tools/` or `plugins/teamrig-pane/` is loaded by no test, or a file, or either folder's total,
+falls below the floors in `tools/ci/coverage.json`. That file names, each with its reason, the code
+it does not measure: `hooks/core/` (vendored; teamrig measures it), the files no node test can load
+yet, and the plugin tests only the engine can run. Never lower a floor or add an entry to pass a
+change: add the test. CI also runs `npm test` and the plugin
 tests on Linux, Windows and macOS under node 22 and 24, with a pinned Claude Code release
 (`.github/workflows/ci.yml`).
 

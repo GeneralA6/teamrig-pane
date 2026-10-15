@@ -1,13 +1,25 @@
 import { isRecord } from '../lib/guards.ts';
 
-/** The test files, as `npm test` runs them. */
+/** The tools' test files, as `npm test` runs them. */
 export const TEST_FILES: readonly string[] = ['tools/**/*.test.ts'];
 
 /** A test file by its name, whether or not `npm test` runs it: never a source file to cover. */
 const TEST_NAME = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
-/** The folders whose TypeScript files must be tested. */
-export const SOURCE_DIRS: readonly string[] = ['tools'];
+/** The repository tools' folder: TypeScript only, tested by `npm test`. */
+const TOOLS_DIR = 'tools';
+
+/**
+ * The plugin's folder: its hooks and scripts (`.ts` and `.tsx`) are measured by its own tests, run here by node
+ * through the kit in tools/pane-kit, except the test files that take the engine (`engineTests`).
+ */
+const PLUGIN_DIR = 'plugins/teamrig-pane';
+
+/** The folders whose code must be tested; each has its own total. */
+export const SOURCE_DIRS: readonly string[] = [TOOLS_DIR, PLUGIN_DIR];
+
+/** What the coverage run imports first, so node runs a plugin test as the engine would: tools/pane-kit/register.ts. */
+export const PANE_KIT_IMPORT = new URL('../pane-kit/register.ts', import.meta.url).href;
 
 /** Where the policy lives, for the messages that tell a contributor what to edit. */
 export const POLICY_FILE = 'tools/ci/coverage.json';
@@ -40,6 +52,12 @@ export interface CoveragePolicy {
   readonly testSupport: readonly string[];
   /** Files with no runtime code, which no test can load, each with the reason. */
   readonly typeOnly: ReadonlyMap<string, string>;
+  /** Source files with runtime code that no node test can load yet, each with the reason: listed, never hidden. */
+  readonly unmeasured: ReadonlyMap<string, string>;
+  /** Code copied from elsewhere and measured there (a folder ends with `/`), each with where. */
+  readonly vendored: ReadonlyMap<string, string>;
+  /** Plugin test files only the engine can run (they take `$` and `on`), each with the reason. */
+  readonly engineTests: ReadonlyMap<string, string>;
   readonly exceptions: ReadonlyMap<string, CoverageException>;
 }
 
@@ -132,12 +150,17 @@ function parseMap<T>(value: unknown, name: string, entry: (path: string, value: 
   return ok(map);
 }
 
-function parseTypeOnly(path: string, value: unknown): Parsed<string> {
-  const reason = nonEmpty(value);
-  return reason === undefined ? fail(`typeOnly["${path}"] needs a reason`) : ok(reason);
+/** An entry of a map whose values are reasons a reviewer can check. */
+function reasonEntry(name: string): (path: string, value: unknown) => Parsed<string> {
+  return (path, value) => {
+    const reason = nonEmpty(value);
+    return reason === undefined ? fail(`${name}["${path}"] needs a reason`) : ok(reason);
+  };
 }
 
-const POLICY_KEYS: ReadonlySet<string> = new Set(['$comment', 'total', 'perFile', 'testSupport', 'typeOnly', 'exceptions']);
+const REASON_MAPS = ['typeOnly', 'unmeasured', 'vendored', 'engineTests'] as const;
+
+const POLICY_KEYS: ReadonlySet<string> = new Set(['$comment', 'total', 'perFile', 'testSupport', ...REASON_MAPS, 'exceptions']);
 
 /** Reads the coverage policy, refusing unknown keys, so a typo never silently relaxes a floor. */
 export function parsePolicy(value: unknown): PolicyResult {
@@ -161,46 +184,101 @@ export function parsePolicy(value: unknown): PolicyResult {
   if (!Array.isArray(testSupport) || !testSupport.every((entry): entry is string => nonEmpty(entry) !== undefined)) {
     return invalid('testSupport must be a list of file paths or folders ending with /');
   }
-  const typeOnly = parseMap(value['typeOnly'], 'typeOnly', parseTypeOnly);
-  if (!typeOnly.ok) {
-    return invalid(typeOnly.problem);
+  const maps = new Map<(typeof REASON_MAPS)[number], ReadonlyMap<string, string>>();
+  for (const name of REASON_MAPS) {
+    const parsed = parseMap(value[name], name, reasonEntry(name));
+    if (!parsed.ok) {
+      return invalid(parsed.problem);
+    }
+    maps.set(name, parsed.value);
   }
   const exceptions = parseMap(value['exceptions'], 'exceptions', (path, raw) => parseException(path, raw, perFile.value));
   if (!exceptions.ok) {
     return invalid(exceptions.problem);
   }
-  return { kind: 'ok', policy: { total: total.value, perFile: perFile.value, testSupport, typeOnly: typeOnly.value, exceptions: exceptions.value } };
+  const reasons = (name: (typeof REASON_MAPS)[number]): ReadonlyMap<string, string> => maps.get(name) ?? new Map();
+  return {
+    kind: 'ok',
+    policy: {
+      total: total.value,
+      perFile: perFile.value,
+      testSupport,
+      typeOnly: reasons('typeOnly'),
+      unmeasured: reasons('unmeasured'),
+      vendored: reasons('vendored'),
+      engineTests: reasons('engineTests'),
+      exceptions: exceptions.value,
+    },
+  };
 }
 
-function isTestSupport(path: string, testSupport: readonly string[]): boolean {
-  return testSupport.some((entry) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry));
+/** Whether a path is one of the entries, a folder entry (ending with `/`) holding everything under it. */
+function listedIn(path: string, entries: Iterable<string>): boolean {
+  return [...entries].some((entry) => (entry.endsWith('/') ? path.startsWith(entry) : path === entry));
 }
 
-function inSourceDir(path: string): boolean {
-  return SOURCE_DIRS.some((dir) => path.startsWith(`${dir}/`));
+function sourceDirOf(path: string): string | undefined {
+  return SOURCE_DIRS.find((dir) => path.startsWith(`${dir}/`));
+}
+
+/** The plugin's code includes JSX (`.tsx`); the tools are `.ts` only. */
+function isSourceName(path: string, dir: string): boolean {
+  return path.endsWith('.ts') || (dir === PLUGIN_DIR && path.endsWith('.tsx'));
 }
 
 /** The files that must be tested, from a file listing with `/` separators. */
 export function sourceFiles(listing: readonly string[], policy: CoveragePolicy): string[] {
-  return listing.filter((path) => path.endsWith('.ts') && !TEST_NAME.test(path) && inSourceDir(path) && !isTestSupport(path, policy.testSupport));
+  return listing.filter((path) => {
+    const dir = sourceDirOf(path);
+    return (
+      dir !== undefined &&
+      isSourceName(path, dir) &&
+      !path.endsWith('.d.ts') &&
+      !TEST_NAME.test(path) &&
+      !listedIn(path, policy.testSupport) &&
+      !listedIn(path, policy.vendored.keys())
+    );
+  });
 }
 
-/** Test files `npm test` never runs: a test that never runs cannot catch a regression. */
-export function strayTests(listing: readonly string[]): string[] {
-  return listing
-    .filter((path) => TEST_NAME.test(path))
-    .filter((path) => !(path.endsWith('.test.ts') && inSourceDir(path)))
-    .map((path) => `${path}: \`npm test\` never runs it; name a test <name>.test.ts under ${SOURCE_DIRS.map((dir) => `${dir}/`).join(' or ')}`);
+/** The plugin's test files node runs: every one, `.ts`, but those that take the engine. */
+export function pluginTests(listing: readonly string[], policy: CoveragePolicy): string[] {
+  return listing.filter((path) => path.startsWith(`${PLUGIN_DIR}/`) && path.endsWith('.test.ts') && !policy.engineTests.has(path));
 }
 
-/** The `node --test` arguments for one coverage run, writing lcov and TAP to the given files. */
-export function suiteArgs(policy: CoveragePolicy, lcovPath: string, tapPath: string): string[] {
+function strayReason(path: string, policy: CoveragePolicy): string | undefined {
+  const dir = sourceDirOf(path);
+  if (dir === PLUGIN_DIR) {
+    if (path.endsWith('.test.tsx') && !policy.engineTests.has(path)) {
+      return 'node cannot run JSX, so the coverage run never runs it; write it as <name>.test.ts, or list it under engineTests with the reason';
+    }
+    return path.endsWith('.test.ts') || path.endsWith('.test.tsx') ? undefined : 'the plugin test runner never runs it; name it <name>.test.ts';
+  }
+  return dir === TOOLS_DIR && path.endsWith('.test.ts')
+    ? undefined
+    : `\`npm test\` never runs it; name a test <name>.test.ts under ${SOURCE_DIRS.map((source) => `${source}/`).join(' or ')}`;
+}
+
+/** Test files no run ever runs: a test that never runs cannot catch a regression. */
+export function strayTests(listing: readonly string[], policy: CoveragePolicy): string[] {
+  return listing.filter((path) => TEST_NAME.test(path)).flatMap((path) => {
+    const reason = strayReason(path, policy);
+    return reason === undefined ? [] : [`${path}: ${reason}`];
+  });
+}
+
+/**
+ * The `node --test` arguments for one coverage run of the tools' tests and the plugin's, writing lcov and TAP to
+ * the given files. Node strips the types of both (each typecheck holds them to erasableSyntaxOnly).
+ */
+export function suiteArgs(policy: CoveragePolicy, listing: readonly string[], lcovPath: string, tapPath: string): string[] {
   return [
+    `--import=${PANE_KIT_IMPORT}`,
     '--test',
     '--experimental-test-coverage',
     ...SOURCE_DIRS.map((dir) => `--test-coverage-include=${dir}/**`),
     '--test-coverage-exclude=**/*.test.ts',
-    ...policy.testSupport.map((entry) => `--test-coverage-exclude=${entry.endsWith('/') ? `${entry}**` : entry}`),
+    ...[...policy.testSupport, ...policy.vendored.keys()].map((entry) => `--test-coverage-exclude=${entry.endsWith('/') ? `${entry}**` : entry}`),
     '--test-reporter=spec',
     '--test-reporter-destination=stdout',
     '--test-reporter=lcov',
@@ -208,6 +286,7 @@ export function suiteArgs(policy: CoveragePolicy, lcovPath: string, tapPath: str
     '--test-reporter=tap',
     `--test-reporter-destination=${tapPath}`,
     ...TEST_FILES,
+    ...pluginTests(listing, policy),
   ];
 }
 
@@ -342,6 +421,9 @@ function fileFindings(path: string, file: FileCoverage | undefined, policy: Cove
   if (policy.typeOnly.has(path)) {
     return file === undefined ? [] : [`${path}: a test loads it, so it is not type-only; remove it from typeOnly in ${POLICY_FILE}`];
   }
+  if (policy.unmeasured.has(path)) {
+    return file === undefined ? [] : [`${path}: a test loads it now, so it can be measured; remove it from unmeasured in ${POLICY_FILE}`];
+  }
   if (file === undefined) {
     return [`${path}: no test loads it; add a test that imports or runs it (a file with only types goes under typeOnly in ${POLICY_FILE})`];
   }
@@ -360,25 +442,45 @@ export function coverageFindings(run: CoverageRun, policy: CoveragePolicy): stri
   const sources = sourceFiles(run.listing, policy);
   const sourceSet = new Set(sources);
   const byPath = new Map(run.report.filter((file) => sourceSet.has(file.path)).map((file) => [file.path, file]));
-  const findings = [...runFindings(run.summary, run.status), ...strayTests(run.listing)];
+  const findings = [...runFindings(run.summary, run.status), ...strayTests(run.listing, policy)];
   findings.push(...sources.flatMap((path) => fileFindings(path, byPath.get(path), policy)));
-  for (const path of [...policy.exceptions.keys(), ...policy.typeOnly.keys()]) {
+  for (const path of [...policy.exceptions.keys(), ...policy.typeOnly.keys(), ...policy.unmeasured.keys()]) {
     if (!sourceSet.has(path)) {
       findings.push(`${path}: is listed in ${POLICY_FILE} but is not a source file; remove it`);
     }
   }
-  const totalGaps = gaps(totalOf([...byPath.values()]), policy.total);
-  if (totalGaps.length > 0) {
-    findings.push(`total: ${totalGaps.join(', ')}`);
+  for (const entry of policy.vendored.keys()) {
+    if (!run.listing.some((path) => listedIn(path, [entry]))) {
+      findings.push(`${entry}: is listed as vendored in ${POLICY_FILE} but holds no file; remove it`);
+    }
+  }
+  for (const path of policy.engineTests.keys()) {
+    if (!(run.listing.includes(path) && TEST_NAME.test(path))) {
+      findings.push(`${path}: is listed under engineTests in ${POLICY_FILE} but is not a test file; remove it`);
+    }
+  }
+  for (const [dir, files] of measuredByDir([...byPath.values()])) {
+    const totalGaps = gaps(totalOf(files), policy.total);
+    if (totalGaps.length > 0) {
+      findings.push(`total ${dir}/: ${totalGaps.join(', ')}`);
+    }
   }
   return findings;
 }
 
-/** One line for a passing run: the test count and the totals over the measured source files. */
+/** The measured files of each source folder, in SOURCE_DIRS order, leaving out a folder with none. */
+function measuredByDir(files: readonly FileCoverage[]): [string, FileCoverage[]][] {
+  return SOURCE_DIRS.map((dir): [string, FileCoverage[]] => [dir, files.filter((file) => file.path.startsWith(`${dir}/`))]).filter(([, measured]) => measured.length > 0);
+}
+
+/** One line for a passing run: the test count, then each source folder's totals over its measured files. */
 export function coverageTotals(run: CoverageRun, policy: CoveragePolicy): string {
   const sourceSet = new Set(sourceFiles(run.listing, policy));
   const measured = run.report.filter((file) => sourceSet.has(file.path));
-  const total = totalOf(measured);
   const tests = run.summary === undefined ? '' : `${run.summary.tests} tests; `;
-  return `${tests}${measured.length} files: ${METRICS.map((metric) => `${metric} ${shown(percent(total[metric]))}`).join(', ')}`;
+  const folders = measuredByDir(measured).map(([dir, files]) => {
+    const total = totalOf(files);
+    return `${dir}/ ${files.length} files: ${METRICS.map((metric) => `${metric} ${shown(percent(total[metric]))}`).join(', ')}`;
+  });
+  return `${tests}${folders.length === 0 ? 'no files measured' : folders.join('; ')}`;
 }

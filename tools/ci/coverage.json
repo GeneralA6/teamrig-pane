@@ -1,8 +1,19 @@
 {
-  "$comment": "The coverage gate (tools/ci/coverage-cli.ts, run by `npm run coverage` and CI). Floors are percentages. An exception lowers one file's floors and needs a reason a reviewer accepted; never lower the total or per-file floors to pass a change.",
+  "$comment": "The coverage gate (tools/ci/coverage-cli.ts, run by `npm run coverage` and CI). Floors are percentages, and each source folder (tools/, plugins/teamrig-pane/) must meet the total floors on its own. An exception lowers one file's floors and needs a reason a reviewer accepted; never lower the total or per-file floors to pass a change. unmeasured lists code no node test can load yet: it is named here, never hidden, and the gate fails once a test loads it.",
   "total": { "lines": 97, "branches": 93, "functions": 96 },
   "perFile": { "lines": 90, "branches": 80, "functions": 85 },
-  "testSupport": ["tools/lib/fake-git.ts", "tools/lib/temp-repo.ts"],
+  "testSupport": ["tools/lib/fake-git.ts", "tools/lib/temp-repo.ts", "plugins/teamrig-pane/tests/"],
   "typeOnly": {},
+  "unmeasured": {
+    "plugins/teamrig-pane/hooks/register.tsx": "The engine's entry: JSX and the engine's runtime (atom, read, update from claude-code), which node cannot load. tests/pane.test.ts drives every hook it registers, under `claude plugin test`, whose runner reports no coverage.",
+    "plugins/teamrig-pane/scripts/sync-core.ts": "A maintainer's script run against a teamrig checkout at the pinned commit; its logic is scripts/vendor.ts, measured here. Its own reads and writes have no test yet.",
+    "plugins/teamrig-pane/scripts/golden.ts": "A maintainer's script that runs teamrig's CLI from a checkout at the pinned commit to capture tests/golden-register.ts; golden.test.ts holds the pane to that capture. Its own steps have no test yet."
+  },
+  "vendored": {
+    "plugins/teamrig-pane/hooks/core/": "teamrig's read modules, copied byte for byte by scripts/sync-core.ts at the pinned commit; teamrig's own coverage gate measures them."
+  },
+  "engineTests": {
+    "plugins/teamrig-pane/tests/pane.test.ts": "Its tests take the engine ($, on): they mount the pane and answer the engine's effects, which only `claude plugin test` provides."
+  },
   "exceptions": {}
 }
