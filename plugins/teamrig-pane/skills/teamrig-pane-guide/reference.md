@@ -63,6 +63,9 @@ the next poll.
 | `<path> cannot be read (<error>)` | Check the file's permissions; the pane reads again on the next poll. |
 | `events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task` | The same lines teamrig skips: run `teamrig doctor`, and update teamrig-pane if teamrig is newer. |
 | `events.jsonl is 4.12 MiB, over the 4 MiB a pane can read at once: it needs rotating` | The register outgrew one read; the last good tasks stay drawn. Report it to the team's lead. |
+| `Claude Code <version> is older than teamrig-pane needs (2.1.295 or later): run claude update, then restart Claude Code.` | Update Claude Code, then restart it. Checked once a session, when it starts. |
+| `git could not be started (<reason>): install it from git-scm.com, then restart Claude Code. The Changes view needs it.` | Install git, or put it on the PATH, then restart Claude Code. The Tasks view works without it; the Changes view stays empty. |
+| `The teamrig-pane check for Claude Code failed (<reason>).` | The engine gave no version; the pane works on. Report it with the reason. |
 | `WARN the pane could not draw: <error>` | A drawing failed; report it with the error text. |
 | In Changes, `No git repo yet: the session folder is in none, …` | Nothing to list yet: the session's folder is in no git repo, and no file the session or its agents edited is in one. The first file edited (Edit, Write, NotebookEdit) in a repo adds that repo; a file a shell command changes adds none. |
 | In Changes, `WARN <git's first error line>` under a repo | git could not read that repo (or took over 10 seconds); its header then names only the folder. A worktree whose folder was removed shows no warning: it leaves the view. |

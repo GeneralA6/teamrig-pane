@@ -23,8 +23,8 @@ columns and opens by itself from 144; anywhere else it sits above the prompt.
 ### Requirements
 
 Claude Code 2.1.295 or later in its fullscreen layout (`"tui": "fullscreen"` in its settings), and teamrig.
-If something is missing, such as a window too narrow to dock or a team it can't find, the pane says so and how
-to fix it.
+It checks the rest itself: if something is missing, such as git, a newer Claude Code, room to dock or a team,
+the pane says so and how to fix it.
 
 ## Update
 
