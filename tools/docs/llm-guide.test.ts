@@ -165,7 +165,7 @@ describe('the pane guide states the limits the code holds', () => {
     ['Quoted ref', [constant('details.ts', 'MAX_QUOTED_LINES'), constant('details.ts', 'MAX_QUOTE_CHARS')]],
     ['Card links', [constant('links.ts', 'MAX_LINKS'), constant('links.ts', 'MAX_ADDRESS_CHARS')]],
     ['Search results', [constant('search.ts', 'MAX_RESULTS')]],
-    ['Older done', [constant('done.ts', 'MAX_DONE_ROWS'), constant('done.ts', 'HELD_DAYS')]],
+    ['Archive', [constant('done.ts', 'MAX_DONE_ROWS'), constant('done.ts', 'HELD_DAYS')]],
   ];
 
   for (const [label, values] of limits) {

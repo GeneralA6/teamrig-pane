@@ -47,7 +47,8 @@ teamrig binds by its Claude Code title (`/rename web`) gets the same mark, so th
 again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
 and lists the team's sessions. In the pane, `m` and `a` switch views, and `o`, `v`, `w`, `i` and `n`
 show one status's tasks alone (Status bar, below); on a task's page `b` and `f` go back and forward, and
-in the dock `s` searches the tasks and `h` lists the finished ones a week at a time (below).
+in the dock the Find field (`s`) searches the tasks and `archive` (`h`) lists the finished ones a week at a time
+(below).
 
 In the side dock the tasks sit a blank line apart, each wrapped title and meta line starting under the
 title, and a blank line and a bold heading open each section (each owner in `all`).
@@ -91,7 +92,8 @@ you left to the middle of the dock, and the list keeps back and forward while a 
 `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed over 8 days ago says so on
 its page. Above the prompt ids are plain words and no page shows.
 
-`search` (`s`, in the dock's mine and all row) shows a Find field. Each word typed must match, case aside,
+The dock always shows a Find field under its buttons; `s` or a click puts the cursor in it, and it never takes
+the keys by itself, so the pane's other keys keep working. Each word typed must match, case aside,
 a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
 evidence or ref (one that starts with a mark, `.md`, matches anywhere), and the body lists the matches as
 you type, the matched words underlined: an active task as its title and a dim line of whose it is and the
@@ -99,9 +101,9 @@ fields matched, a finished one on one dim line with when it closed. It searches 
 area's active tasks and those finished in the last 8 days, never older ones: the active ones in plan order, then
 the finished ones newest first, at most 30, with a dim line counting the rest. A click on a result opens
 its page, Enter opens the top one's, and back returns to the results; the trail names the search by its
-words. Emptying the field or `clear` closes it; Esc only hands the keys back.
+words. Emptying the field or `clear` (shown while searching) closes the search; Esc only hands the keys back.
 
-`older done` (`h`, in the dock's mine and all row) opens the Done page on this week, a week starting
+`archive` (`h`, in the dock's mine and all row) opens the Archive page on this week, a week starting
 Monday 00:00 UTC: the view's tasks closed done or dropped, a dim line a day, newest first, each task on one
 dim line with when it closed (in `all`, its owner too), at most 50 with a dim line counting the rest. Its
 head names whose tasks and how many were done and dropped. `‹ prev` (`p`) and `next ›` (`l`) step a

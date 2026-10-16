@@ -106,10 +106,10 @@ Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pa
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead |
 | `f` | Forward to the place back left, while there is one |
-| `s` | In the dock: a Find field that searches the tasks the pane holds (see [Search](#search)); emptying it, or `clear`, closes it |
-| `h` | In the dock: `older done`, the Done page of this week's finished tasks (see [Older done](#older-done)) |
-| `p` | On the Done page: the week before, while the pane holds it |
-| `l` | On the Done page: the week after, up to this week |
+| `s` | In the dock: puts the cursor in the Find field, always shown, that searches the tasks the pane holds (see [Find](#find)); emptying it, or `clear`, closes the search |
+| `h` | In the dock: `archive`, the Archive page of this week's finished tasks (see [Archive](#archive)) |
+| `p` | On the Archive page: the week before, while the pane holds it |
+| `l` | On the Archive page: the week after, up to this week |
 | `✕`, or `ctrl+x x` | Minimizes the pane to a one-row strip; it never closes |
 
 A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to
@@ -285,9 +285,10 @@ brings the card you left to the middle of the dock, and the list keeps back and 
 it; `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed over 8 days ago says so on its page. Above
 the prompt ids are plain words and no page shows.
 
-### Search
+### Find
 
-`search` (`s`), in the dock's mine and all row, shows a Find field under it. As you type, the body lists the tasks
+The dock always shows a Find field under its buttons. `s` or a click puts the cursor in it; it never takes the keys
+by itself, so the pane's other keys keep working. As you type, the body lists the tasks
 the pane holds that every word matches, the matched words underlined:
 
 ```text
@@ -305,7 +306,7 @@ the pane holds that every word matches, the matched words underlined:
 | A finished result | One dim line with when it closed |
 | A click on a result | Opens its page; `‹ back` (`b`) returns to the results |
 | Enter | Opens the top result's page |
-| `clear`, or an empty field | Closes the search and shows the place before it |
+| `clear` (shown while searching), or an empty field | Closes the search and shows the place before it |
 
 The pane searches what it holds: every area's active tasks and those finished in the last 8 days, never older ones. The
 active matches come in plan order, then the finished ones, newest first. At most 30 show; a dim line counts the
@@ -313,9 +314,9 @@ rest (`4 more: add a word`), and when nothing matches, one dim line says so. The
 (`Search "etl the"`). Esc hands the keys back to the prompt and leaves the results drawn. Above the prompt no page
 shows, so there is no search.
 
-### Older done
+### Archive
 
-`older done` (`h`), in the dock's mine and all row, opens the Done page on this week (a week starts Monday 00:00
+`archive` (`h`), in the dock's mine and all row, opens the Archive page on this week (a week starts Monday 00:00
 UTC, as the register's week fields do): the view's tasks closed done or dropped, a day at a time, newest first, each
 on one dim line with when it closed:
 
@@ -343,9 +344,9 @@ Tue 10-13
 | `The pane holds tasks finished since Mon 10-05 14:00; teamrig list --status done,dropped lists older ones.` | Ends the oldest week the pane holds |
 
 The pane holds the tasks finished in the last 8 days, the days teamrig's own rotation keeps finished tasks in its
-working set, so the Done page reaches back to the week those days start in, never further; `teamrig list --status
+working set, so the Archive page reaches back to the week those days start in, never further; `teamrig list --status
 done,dropped` reads the register's whole history. A week with none says `Nothing finished this week.` The trail names
-the page by its week (`Done 10-12`). Above the prompt no page shows, so there is no Done page.
+the page by its week (`Done 10-12`). Above the prompt no page shows, so there is no Archive page.
 
 ## The Changes view
 
