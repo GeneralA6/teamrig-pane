@@ -6,6 +6,7 @@ import {
   canGoBack,
   canGoForward,
   currentPlace,
+  doneAt,
   forward,
   landing,
   leavingList,
@@ -27,6 +28,7 @@ const page = (id: string): Place => ({ kind: 'task', id })
 /** The list, then a page for each id, in order, the newest shown. */
 const through = (...ids: string[]): Nav => ids.reduce((nav, id) => pushed(nav, page(id)), AT_LIST)
 const search = (query: string): Place => ({ kind: 'search', query })
+const done = (week: string): Place => ({ kind: 'done', week })
 /** What a trail draws, as words: `…`, each crumb's id (`list`, `search`), the shown one in brackets, one ahead after a `+`. */
 function trailWords(nav: Nav): string[] {
   const { crumbs, isCutBefore, isCutAfter } = trail(nav)
@@ -170,6 +172,22 @@ describe('nav', () => {
     const onPage = pushed(searched(AT_LIST, 'feed'), page('T50'))
     expect(landing(onPage, back(onPage))).toEqual({ kind: 'top' })
     expect(landing(searched(AT_LIST, 'feed'), leftSearch(searched(AT_LIST, 'feed')))).toBe(null)
+  })
+
+  test('Older done pushes the Done page; a step to another week changes the week shown, so back returns to the list', async () => {
+    const opened = doneAt(AT_LIST, '2026-10-12')
+    expect(opened).toEqual({ places: [{ kind: 'list', row: null }, done('2026-10-12')], at: 1 })
+    expect(landing(AT_LIST, opened)).toEqual({ kind: 'top' })
+    const older = doneAt(opened, '2026-10-05')
+    expect(older).toEqual({ places: [{ kind: 'list', row: null }, done('2026-10-05')], at: 1 })
+    expect(landing(opened, older)).toEqual({ kind: 'top' })
+    expect(currentPlace(back(older))).toEqual({ kind: 'list', row: null })
+    // A finished task's page opens past it, and back returns to the week it was opened from.
+    const onPage = pushed(older, page('T4'))
+    expect(currentPlace(back(onPage))).toEqual(done('2026-10-05'))
+    expect(pushed(older, done('2026-10-05'))).toBe(older)
+    expect([placeLabel(done('2026-10-05')), ...trailWords(onPage)]).toEqual(['Done 10-05', 'list', 'done', '[T4]'])
+    expect([...placeIds(onPage)]).toEqual(['T4'])
   })
 
   test('the search places name no page', async () => {

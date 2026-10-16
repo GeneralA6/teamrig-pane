@@ -107,6 +107,9 @@ Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pa
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead |
 | `f` | Forward to the place back left, while there is one |
 | `s` | In the dock: a Find field that searches the tasks the pane holds (see [Search](#search)); emptying it, or `clear`, closes it |
+| `h` | In the dock: `older done`, the Done page of this week's finished tasks (see [Older done](#older-done)) |
+| `p` | On the Done page: the week before, while the pane holds it |
+| `l` | On the Done page: the week after, up to this week |
 | `✕`, or `ctrl+x x` | Minimizes the pane to a one-row strip; it never closes |
 
 A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to
@@ -309,6 +312,40 @@ active matches come in plan order, then the finished ones, newest first. At most
 rest (`4 more: add a word`), and when nothing matches, one dim line says so. The trail names a search by its words
 (`Search "etl the"`). Esc hands the keys back to the prompt and leaves the results drawn. Above the prompt no page
 shows, so there is no search.
+
+### Older done
+
+`older done` (`h`), in the dock's mine and all row, opens the Done page on this week (a week starts Monday 00:00
+UTC, as the register's week fields do): the view's tasks closed done or dropped, a day at a time, newest first, each
+on one dim line with when it closed:
+
+```text
+‹ back  forward ›
+Tasks › Done 10-12
+────────────────────────────────────────────────
+
+‹ prev  week of Mon 10-12  next ›
+
+Done · po · 1 done · 0 dropped
+
+Tue 10-13
+
+✓ T7  Fix the loader                       12:00
+```
+
+| Part | What it does |
+| --- | --- |
+| `‹ prev` (`p`), `next ›` (`l`) | The week before and the week after, dim where the pane holds none; a step changes the week in place, so `‹ back` returns to where the page was opened from |
+| `Done · po · 1 done · 0 dropped` | Whose tasks (in mine the area's, every owner's when the session has none; in all every owner's) and how many closed done and dropped that week |
+| A day | A dim line, `Tue 10-13`, then the tasks closed that day, newest first |
+| A task | `✓` done or `✗` dropped, its id and title, when it closed (in all, its owner too); a click opens its page, and back returns to the week |
+| `3 more this week: search finds them` | Past 50 rows, the rest counted |
+| `The pane holds tasks finished since Mon 10-05 14:00; teamrig list --status done,dropped lists older ones.` | Ends the oldest week the pane holds |
+
+The pane holds the tasks finished in the last 8 days, the days teamrig's own rotation keeps finished tasks in its
+working set, so the Done page reaches back to the week those days start in, never further; `teamrig list --status
+done,dropped` reads the register's whole history. A week with none says `Nothing finished this week.` The trail names
+the page by its week (`Done 10-12`). Above the prompt no page shows, so there is no Done page.
 
 ## The Changes view
 
