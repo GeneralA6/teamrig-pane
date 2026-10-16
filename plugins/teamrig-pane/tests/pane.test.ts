@@ -1092,3 +1092,177 @@ test('when the engine gives no version, a short line says the check failed, and 
   expect(await pane.find({ text: /older than|could not be started/ })).toBeUndefined()
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
 })
+
+/** The key of the press on `id` the drawing holds: one, in an open card or a page. */
+function gotoKey(node: unknown, id: string): string {
+  const keys = buttonKeys(node).filter(key => key.startsWith(`goto:${id}:`))
+  if (keys.length !== 1) throw new Error(`${keys.length} presses on ${id}`)
+  return keys[0] ?? ''
+}
+
+function typeOf(node: unknown): unknown {
+  return typeof node === 'object' && node !== null && 'type' in node ? node.type : null
+}
+
+/** A drawn element's number prop `name`; 0 when it has none. */
+function numberProp(props: object | null, name: string): number {
+  const value = props === null ? undefined : Object.entries(props).find(([key]) => key === name)?.[1]
+  return typeof value === 'number' ? value : 0
+}
+
+/**
+ * A drawn tree as the lines it reads as, unstyled and unwrapped: a Text's children run on, a row Box's children
+ * stand side by side (its columnGap between), a column Box's one under another (its gap blank lines between), a
+ * labelled Button is its label, paddingX indents. Trailing blanks are cut.
+ */
+function screenOf(node: unknown): string[] {
+  if (typeof node === 'string') return node.split('\n')
+  const props = propsOf(node)
+  if (typeOf(node) === 'Button' && props !== null && 'label' in props && typeof props.label === 'string') return [props.label]
+  const parts = childrenOf(node)
+    .filter(child => typeof child === 'string' || (typeof child === 'object' && child !== null))
+    .map(screenOf)
+  if (typeOf(node) !== 'Box') return parts.map(lines => lines.join('\n')).join('').split('\n')
+  const pad = ' '.repeat(numberProp(props, 'paddingX'))
+  if (props !== null && 'flexDirection' in props && props.flexDirection === 'row') {
+    const gap = ' '.repeat(numberProp(props, 'columnGap'))
+    const widths = parts.map(lines => Math.max(...lines.map(cells)))
+    const height = Math.max(0, ...parts.map(lines => lines.length))
+    const rows = Array.from({ length: height }, (_, i) => parts.map((lines, j) => (lines[i] ?? '').padEnd(widths[j] ?? 0)).join(gap))
+    return rows.map(row => `${pad}${row}`.trimEnd())
+  }
+  const blank = Array.from({ length: numberProp(props, 'gap') }, () => '')
+  return parts.flatMap((lines, i) => (i === 0 ? lines : [...blank, ...lines])).map(line => (line === '' ? '' : `${pad}${line}`.trimEnd()))
+}
+
+/** T52 in po's list, planned after T50, itself after T58: a chain of ids to follow. */
+const CHAIN = [
+  createLine('T52', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Draw the pages', taskKeys: { after: ['T50'] } }),
+  createLine('T50', { owner: 'etl', by: 'lead', at: NOW - HOUR, title: 'Load the feed', taskKeys: { after: ['T58'] } }),
+  createLine('T58', { owner: 'etl', by: 'lead', at: NOW - 72 * HOUR, title: 'Read the source' }),
+]
+
+test("a task id in an open card opens that task's page: its title and card alone, under back, forward and a trail", async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, CHAIN)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'next:T52' })
+  let drawn = await pane.drawn()
+  expect(keyedNode(drawn, 'page-head')).toBe(null)
+  const toT50 = gotoKey(drawn, 'T50')
+  expect(keyedProps(drawn, toT50)).toMatchObject({ plain: true })
+  expect(childrenOf(keyedNode(drawn, toT50))).toMatchObject([{ type: 'Text', props: { underline: true }, children: ['T50'] }])
+
+  await pane.press({ key: toT50 })
+  drawn = await pane.drawn()
+  // No status bar and no collapse on a page: the bar counts the list, and the page holds no card to collapse.
+  expect(buttonKeys(drawn)).toEqual(['tasks', 'changes', 'mine', 'all', 'back', 'crumb:0', gotoKey(drawn, 'T58')])
+  expect(keyedProps(drawn, 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
+  // Nowhere to go draws the step as dim words, no press.
+  expect(await pane.find({ type: 'Text', text: 'forward ›' })).toMatchObject({ props: { dimColor: true } })
+
+  await pane.press({ key: gotoKey(drawn, 'T58') })
+  expect(screenOf(await pane.drawn())).toEqual([
+    ' Tasks Changes',
+    ' mine all',
+    '',
+    ' ‹ back  forward ›',
+    ' Tasks › T50 › T58',
+    ` ${'─'.repeat(PANE_PROPS.bodyColumns - 2)}`,
+    '',
+    ' ○ T58  Read the source',
+    ' Status    open since Sat 10-10 by lead',
+    ' Plan      p3 scale · week 10-13',
+    ' What      see docs/x.md',
+    ' Who       asked by owner · added by lead · 10-10',
+    '           14:00 · owner etl',
+    ' Goal      G10.2',
+  ])
+})
+
+test('back, forward and the trail step through the places; the list keeps the head while a page lies ahead, and Tasks clears it', async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, CHAIN)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'next:T52' })
+  await pane.press({ key: gotoKey(await pane.drawn(), 'T50') })
+  await pane.press({ key: gotoKey(await pane.drawn(), 'T58') })
+
+  await pane.press({ key: 'back' })
+  let drawn = await pane.drawn()
+  expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed$/ })).toBeDefined()
+  expect(keyedProps(drawn, 'forward')).toMatchObject({ label: 'forward ›', hotkey: 'f' })
+  expect(keyedNode(drawn, 'crumb:2')).toMatchObject({ type: 'Button', children: [{ type: 'Text', props: { underline: true, dimColor: true }, children: ['T58'] }] })
+  expect(childrenOf(keyedNode(drawn, 'trail'))).toMatchObject([
+    { type: 'Button' },
+    { type: 'Text', props: { dimColor: true }, children: [' › '] },
+    { type: 'Text', props: { bold: true }, children: ['T50'] },
+    { type: 'Text', props: { dimColor: true }, children: [' › '] },
+    { type: 'Button' },
+  ])
+
+  await pane.press({ key: 'forward' })
+  expect(await pane.find({ type: 'Text', text: /^○ T58  Read the source$/ })).toBeDefined()
+  await pane.press({ key: 'crumb:1' })
+  expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed$/ })).toBeDefined()
+
+  // The Tasks crumb: the list, its bar and T52's card as they were, back dim and forward a press away.
+  await pane.press({ key: 'crumb:0' })
+  drawn = await pane.drawn()
+  expect(buttonKeys(drawn)).toEqual([
+    'tasks',
+    'changes',
+    'mine',
+    'all',
+    'collapse',
+    'forward',
+    'crumb:1',
+    'crumb:2',
+    'bar:not-started',
+    'count:not-started',
+    'next:T52',
+    gotoKey(drawn, 'T50'),
+  ])
+  expect(await pane.find({ type: 'Text', text: '‹ back' })).toMatchObject({ props: { dimColor: true } })
+  expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › T50 › T58'])
+
+  await pane.press({ key: 'forward' })
+  expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed$/ })).toBeDefined()
+  await pane.press({ key: 'tasks' })
+  drawn = await pane.drawn()
+  expect(keyedNode(drawn, 'page-head')).toBe(null)
+  expect(buttonKeys(drawn)).toContain('next:T52')
+})
+
+test('mine and all show the list alone; inline no page shows; a page whose task closed before today says so', async ($, on) => {
+  const { disk, clock } = await start(on)
+  disk.write(EVENTS, CHAIN)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'next:T52' })
+  await pane.press({ key: gotoKey(await pane.drawn(), 'T50') })
+  await pane.press({ key: 'all' })
+  expect(keyedNode(await pane.drawn(), 'page-head')).toBe(null)
+  expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed/ })).toBeDefined()
+  await pane.press({ key: 'mine' })
+  expect(keyedNode(await pane.drawn(), 'page-head')).toBe(null)
+
+  await pane.press({ key: gotoKey(await pane.drawn(), 'T50') })
+  await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
+  expect(keyedNode(await pane.drawn(), 'page-head')).toBe(null)
+  expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('goto:'))).toEqual([])
+  await pane.redraw(PANE_PROPS)
+  expect(keyedNode(await pane.drawn(), 'page-head')).not.toBe(null)
+
+  await pane.press({ key: gotoKey(await pane.drawn(), 'T58') })
+  disk.write(EVENTS, [...CHAIN, statusLine('T58', 'etl', NOW - 48 * HOUR, 'done')])
+  await clock.advance(3_000)
+  expect(await pane.find({ type: 'Text', text: /^T58 left the pane's tasks: it closed before\ntoday\.$/ })).toMatchObject({
+    children: [{ props: { dimColor: true } }, '\n', { props: { dimColor: true } }],
+  })
+  await pane.press({ key: 'back' })
+  // T50's page names T58 no more as a press: the snapshot no longer holds it.
+  expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('goto:'))).toEqual([])
+})

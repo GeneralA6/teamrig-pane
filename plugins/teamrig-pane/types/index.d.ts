@@ -150,6 +150,9 @@ export type Place = { readonly kind: 'list'; readonly row: string | null } | { r
 /** The places the person went through, oldest first (at most hooks/nav.ts NAV_PLACES), and the index of the one shown. */
 export type Nav = { readonly places: readonly Place[]; readonly at: number }
 
+/** What each page a place names read for its task when it opened (hooks/details.ts), by task id. */
+export type PageDetails = { readonly [id: string]: TaskDetail }
+
 /** `mine`: this session's area; `all`: every owner's active tasks. */
 export type ViewMode = 'mine' | 'all'
 
@@ -158,7 +161,7 @@ export type BarStatus = 'done-today' | 'verifying' | 'working' | 'waiting' | 'no
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes and the known repos are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places and the pages' details are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -170,6 +173,9 @@ declare module 'claude-code' {
       requirements: RequirementProblem[]
       /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
       filter: BarStatus | null
+      /** Where the tasks view is (hooks/nav.ts): the list, or a task's page, and the way back. */
+      nav: Shaped<Nav>
+      pages: Shaped<PageDetails>
     }
   }
 }
