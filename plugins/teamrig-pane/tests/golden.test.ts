@@ -3,6 +3,7 @@ import type { Snapshot, TaskRow } from '../types'
 import { priorityText, readMarks, readRegister, waitsText } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { findPlaces } from '../hooks/places'
+import { paneBlocks, type Block } from '../hooks/rows'
 import { registerPaths, skippedText, TaskRegisterSource } from '../hooks/source'
 import { GOLDEN_ROOT, GOLDEN_SESSION, goldenModule, underGoldenRoot, type GoldenRegister } from '../scripts/golden-format'
 import { MemoryFiles } from './fixtures'
@@ -42,6 +43,15 @@ function unreadIn(status: string): number | null {
   return count === undefined ? null : Number(count)
 }
 
+/** The words of the drawn row under `key`, its spans joined. */
+function rowText(blocks: readonly Block[], key: string): string | undefined {
+  return blocks
+    .flatMap(block => block.rows)
+    .find(row => row.key === key)
+    ?.spans.map(span => span.text)
+    .join('')
+}
+
 /** The golden files under GOLDEN_ROOT, with `changes` (by path under it) laid over them. */
 function goldenFiles(changes: Record<string, string> = {}): MemoryFiles {
   const files = new MemoryFiles()
@@ -76,6 +86,14 @@ describe('golden', () => {
     expect(tasks.get('T4')?.evidence).toBe('sha abc')
     expect(tasks.get('T2')?.priorityName).toBe('correctness')
     expect(tasks.get('T6')?.priorityName).toBe('icebox')
+  })
+
+  test('draws its rows from what teamrig wrote: a waiting task\'s typed reasons and note, an open one\'s unfinished after', async () => {
+    const blocks = paneBlocks(await paneSnapshot(goldenFiles()), 'mine')
+    expect(rowText(blocks, 'working:T1')).toBe('◐ T1  First task with ref')
+    expect(rowText(blocks, 'waiting-meta:T2')).toBe('      p2 · waiting since 13:41: decision owner, until Wed 01-09 12:00; waiting on beta')
+    expect(rowText(blocks, 'next:T3')).toBe('○ T3  Goals task renamed')
+    expect(rowText(blocks, 'next-meta:T3')).toBe('      p1 · due Tue 10-20 · after T1 · asked by lead')
   })
 
   test('finds the session area from the mark teamrig inbox read wrote for the session', async () => {
