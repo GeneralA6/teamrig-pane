@@ -1,5 +1,5 @@
 // The finished tasks the pane holds (source.ts: those done or dropped within HELD_DAYS, teamrig's own retention), a
-// week at a time: the Done page (done-rows.ts) shows one week, newest week first, its days newest first and inside a
+// week at a time: the Archive page (done-rows.ts) shows one week, newest week first, its days newest first and inside a
 // day the newest first. A week starts Monday 00:00 UTC, as the register's `week` fields do (`2026-10-12`). The newest
 // week is the one `now` falls in, the oldest the one HELD_DAYS before it: the paging stays inside them, the oldest
 // week cut where the pane stops holding. At most MAX_DONE_ROWS rows a week, with how many more there are. Pure.
@@ -7,7 +7,7 @@ import type { TaskRow } from '../types'
 import { dayWords } from './meta'
 import { newestFirst } from './view'
 
-/** Most rows the Done page lists for a week; past it a dim line counts the rest. */
+/** Most rows the Archive page lists for a week; past it a dim line counts the rest. */
 export const MAX_DONE_ROWS = 50
 /**
  * How many days back the pane holds finished tasks: teamrig's own RETAIN_DAYS (its compaction keeps a task finished
@@ -86,7 +86,7 @@ export type DoneWeek = {
 }
 
 /**
- * The finished tasks of `week` among `tasks`, those of `owner` alone (null: every owner's), as the Done page lists
+ * The finished tasks of `week` among `tasks`, those of `owner` alone (null: every owner's), as the Archive page lists
  * them. A week outside the held ones reads as the nearest held one.
  */
 export function doneWeek(tasks: readonly TaskRow[], owner: string | null, week: string, now: number): DoneWeek {

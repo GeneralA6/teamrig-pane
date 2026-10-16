@@ -18,7 +18,6 @@ import {
   pushed,
   reset,
   searched,
-  searching,
   trail,
   TRAIL_PLACES,
   wentTo,
@@ -134,15 +133,8 @@ describe('nav', () => {
     expect([placeLabel(search('')), placeLabel(search('feed etl'))]).toEqual(['Search', 'Search "feed etl"'])
   })
 
-  test('search shows a search with no query past the place shown; on a search it changes nothing', async () => {
-    const nav = searching(through('T52'))
-    expect(currentPlace(nav)).toEqual(search(''))
-    expect(trailWords(nav)).toEqual(['list', 'T52', '[search]'])
-    expect(searching(nav)).toBe(nav)
-  })
-
   test('typing changes the query of the search shown, no new place; elsewhere it pushes a search', async () => {
-    const typed = searched(searched(searching(AT_LIST), 'fe'), 'feed')
+    const typed = searched(searched(AT_LIST, 'fe'), 'feed')
     expect(typed).toEqual({ places: [{ kind: 'list', row: null }, search('feed')], at: 1 })
     expect(searched(through('T52'), 'feed')).toEqual({ places: [{ kind: 'list', row: null }, page('T52'), search('feed')], at: 2 })
   })
@@ -166,7 +158,7 @@ describe('nav', () => {
   })
 
   test('a search opens at its top, a step back to it from a page too; typing in it, or closing it, keeps the window', async () => {
-    const opened = searching(AT_LIST)
+    const opened = searched(AT_LIST, 'fe')
     expect(landing(AT_LIST, opened)).toEqual({ kind: 'top' })
     expect(landing(opened, searched(opened, 'feed'))).toBe(null)
     const onPage = pushed(searched(AT_LIST, 'feed'), page('T50'))
@@ -174,7 +166,7 @@ describe('nav', () => {
     expect(landing(searched(AT_LIST, 'feed'), leftSearch(searched(AT_LIST, 'feed')))).toBe(null)
   })
 
-  test('Older done pushes the Done page; a step to another week changes the week shown, so back returns to the list', async () => {
+  test('the archive pushes the Archive page; a step to another week changes the week shown, so back returns to the list', async () => {
     const opened = doneAt(AT_LIST, '2026-10-12')
     expect(opened).toEqual({ places: [{ kind: 'list', row: null }, done('2026-10-12')], at: 1 })
     expect(landing(AT_LIST, opened)).toEqual({ kind: 'top' })
@@ -186,7 +178,7 @@ describe('nav', () => {
     const onPage = pushed(older, page('T4'))
     expect(currentPlace(back(onPage))).toEqual(done('2026-10-05'))
     expect(pushed(older, done('2026-10-05'))).toBe(older)
-    expect([placeLabel(done('2026-10-05')), ...trailWords(onPage)]).toEqual(['Done 10-05', 'list', 'done', '[T4]'])
+    expect([placeLabel(done('2026-10-05')), ...trailWords(onPage)]).toEqual(['Archive 10-05', 'list', 'done', '[T4]'])
     expect([...placeIds(onPage)]).toEqual(['T4'])
   })
 

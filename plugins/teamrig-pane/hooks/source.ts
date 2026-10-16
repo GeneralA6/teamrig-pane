@@ -212,7 +212,7 @@ export class TaskRegisterSource {
   private readonly marks: WatchedFile<MarkLogRead>
   /**
    * The tasks a drawing can show, as the events last folded: the active ones and those finished within HELD_DAYS of
-   * the fold (done.ts isHeldFinished, teamrig's own retention), which Done today, the Done page and search read. Every
+   * the fold (done.ts isHeldFinished, teamrig's own retention), which Done today, the Archive page and search read. Every
    * draw reads the snapshot, so it grows with the live tasks and the last days' finished ones, never with the
    * register's history, on a register never rotated as on a rotated one (whose working set keeps those days whole).
    */
