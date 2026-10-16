@@ -166,6 +166,12 @@ export type Nav = { readonly places: readonly Place[]; readonly at: number }
  */
 export type FindField = { readonly round: number; readonly text: string }
 
+/**
+ * How many times the pane's focus ring landed on an element (the engine's ui.focus event, hooks/find-field.ts), and
+ * whether the last landing was on the Find field.
+ */
+export type RingLandings = { readonly count: number; readonly onField: boolean }
+
 /** What each page a place names read for its task when it opened (hooks/details.ts), by task id. */
 export type PageDetails = { readonly [id: string]: TaskDetail }
 
@@ -194,6 +200,8 @@ declare module 'claude-code' {
       pages: Shaped<PageDetails>
       /** The Find field's round and the text it holds as drawn (hooks/find-field.ts). */
       findField: FindField
+      /** The focus ring's landings in the pane (hooks/find-field.ts): the line under the Find field reads them. */
+      ring: RingLandings
     }
   }
 }

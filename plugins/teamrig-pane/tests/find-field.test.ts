@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { FindField, Nav } from '../types'
-import { FIND, FIRST_FIELD, fieldAfter, fieldKey, fieldText } from '../hooks/find-field'
+import type { FindField, Nav, RingLandings } from '../types'
+import { FIND, FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldKey, fieldText, isFieldKey, keysAt, keysHint, landedOn } from '../hooks/find-field'
 import { AT_LIST, pushed, searched } from '../hooks/nav'
 
 const page = (nav: Nav, id: string): Nav => pushed(nav, { kind: 'task', id })
@@ -37,5 +37,45 @@ describe('find field', () => {
     expect(fieldKey(FIRST_FIELD)).toBe(FIND)
     expect(fieldKey({ round: 1, text: '' })).toBe('find:1')
     expect(fieldKey({ round: 12, text: 'etl' })).toBe('find:12')
+  })
+})
+
+describe('where the keys go', () => {
+  test("the field's key in any round is the field's; the Find label's and every other key are not", () => {
+    expect([FIND, 'find:1', 'find:12'].map(isFieldKey)).toEqual([true, true, true])
+    expect(['find-key', 'finder', 'mine', ''].map(isFieldKey)).toEqual([false, false, false, false])
+  })
+
+  test("each landing counts, on the field or off it; one of the engine's own stops is off it", () => {
+    const onField = landedOn(NO_LANDINGS, 'find:3')
+    expect(onField).toEqual({ count: 1, onField: true })
+    expect(landedOn(onField, 'mine')).toEqual({ count: 2, onField: false })
+    expect(landedOn(onField, undefined)).toEqual({ count: 2, onField: false })
+  })
+
+  test('the memo records the landings only as the keys go, never again while they stay away', () => {
+    const lost = drawnWith(FIRST_MEMO, false, { count: 2, onField: true })
+    expect(lost).toEqual({ wasHeld: false, lostAt: 2 })
+    // A landing while still drawn without the keys (the click that hands them back) is not counted as let go.
+    expect(drawnWith(lost, false, { count: 3, onField: true })).toBe(lost)
+    const back = drawnWith(lost, true, { count: 3, onField: true })
+    expect(back).toEqual({ wasHeld: true, lostAt: 2 })
+    expect(drawnWith(back, true, { count: 4, onField: false })).toBe(back)
+  })
+
+  test("Claude's without the keys; the field's after a landing on it since they came; else the pane's", () => {
+    const memo = { wasHeld: true, lostAt: 2 }
+    const onField: RingLandings = { count: 3, onField: true }
+    expect(keysAt(false, onField, memo)).toBe('claude')
+    expect(keysAt(true, onField, memo)).toBe('search')
+    // The ring was on the field as the keys went; given back, the ring is clear.
+    expect(keysAt(true, { count: 2, onField: true }, memo)).toBe('pane')
+    expect(keysAt(true, { count: 3, onField: false }, memo)).toBe('pane')
+  })
+
+  test('the line names where the keys go and the key or click that moves them', () => {
+    expect(keysHint('search')).toBe('Typing searches · Enter: open · Esc: to Claude')
+    expect(keysHint('pane')).toBe('Keys on the pane · s: search · Esc: to Claude')
+    expect(keysHint('claude')).toBe('Keys go to Claude · click the field to search')
   })
 })

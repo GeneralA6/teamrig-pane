@@ -7,25 +7,26 @@
 // asked, the tasks planned first, its goals' roadmap items, evidence and links. A press on a task id in a card opens
 // that task's page (page.ts), the card with the body to itself, under back and forward (b, f) and a trail of the
 // last places (nav.ts), which the list keeps while a page lies ahead of it; a page opens at its top, and a return
-// to the list scrolls back to the card it left. `search` (s) shows a Find field: the tasks the pane holds that its
-// words match (search.ts), the matched words underlined, each result a press that opens its page, Enter the top
-// one's, back returning to the results; emptying the field or clear closes it. The close mark (✕,
-// ctrl+x x) minimizes it to a one-row strip instead of closing it; a press on the strip or /teamrig-pane
-// opens it again, and the size is kept for the next session (size.ts). A switch row, first in every
+// to the list scrolls back to the card it left. `Find` (s) moves the keys into the Find field, which shows the tasks
+// the pane holds that its words match (search.ts), the matched words underlined, each result a press that opens its
+// page, Enter the top one's, back returning to the results; emptying the field or clear closes it. A line under the
+// field says where the keys go (find-field.ts). The close mark (✕, ctrl+x x) minimizes it to a one-row strip
+// instead of closing it; a press on the strip or /teamrig-pane opens it again, and the size is kept for the next
+// session (size.ts). A switch row, first in every
 // state and width, the strip included, flips the body between the tasks and the Changes view: the
 // files changed in the git repos the session works in and their lines (changes.ts), counted as Δn on
 // the switch and in the tab title. Reads files and runs git (status, diff, grep; no model calls);
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Context, Register } from 'claude-code'
-import type { BarStatus, ExpandedTasks, FindField, Nav, PageDetails, PaneView, RequirementProblem, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, FindField, Nav, PageDetails, PaneView, RequirementProblem, RingLandings, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails } from './details'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
-import { dockLayout, failedDrawing, inlineLayout, type CardPart, type Drawn } from './layout'
+import { dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { NOTHING_EXPANDED, paneBlocks, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
@@ -57,7 +58,7 @@ import { doneBlocks, weekWords } from './done-rows'
 import { pageBlocks } from './page'
 import { searchTasks, topResult } from './search'
 import { searchBlocks } from './search-rows'
-import { FIRST_FIELD, fieldAfter, fieldKey } from './find-field'
+import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldKey, keysAt, keysHint, landedOn, type KeysAt } from './find-field'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -117,6 +118,8 @@ const NO_PAGES: PageDetails = {}
 const pages = atom({ plugin: 'teamrig-pane', key: 'pages' } as const, NO_PAGES, { shape: CARDS_SHAPE })
 /** The Find field's round (find-field.ts): the key it is drawn under and the text it starts with. */
 const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, FIRST_FIELD)
+/** The focus ring's landings in the pane (find-field.ts), counted by the ui.focus hook. */
+const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS)
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -339,6 +342,16 @@ export const register: Register = on => {
   // One Text per block (rows.ts, layout.ts), the unstyled spans plain strings: a few elements a
   // task. A task's block is a plain Button around its Text, so a press (or Enter on it) expands or
   // collapses the task. Docked, the root's gap spaces the blocks and its padding the frame.
+  // Each landing of the pane's focus ring the engine let through is counted, the line under the Find field reading
+  // where the keys go from it (find-field.ts). A failed count lets the ring move as it would have.
+  on('ui.focus', { requestId: PANE }, async ($, e, next) => {
+    const moved = await next(e)
+    if (moved.deny === undefined) await update($, ring, current => landedOn(current, e.element))
+    return moved
+  }).catch(($, e, next) => next(e))
+
+  /** Where the keys were as the pane last drew (find-field.ts): every drawing updates it, whatever it shows. */
+  let keysMemo = FIRST_MEMO
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Link, Input } = $.ui.resolve(e)
     const inline = e.props.placement === 'inline'
@@ -354,11 +367,14 @@ export const register: Register = on => {
     let at: Nav = AT_LIST
     /** The Find field's round (find-field.ts), drawn in the tasks view docked. */
     let field: FindField = FIRST_FIELD
+    let landings: RingLandings = NO_LANDINGS
     let body: Drawn[] = []
     /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
     let barLines: BarPiece[][] = []
     const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
     try {
+      landings = await read($, ring)
+      keysMemo = drawnWith(keysMemo, e.props.isFocused, landings)
       isMinimized = (await read($, size)) === 'minimized'
       current = await read($, view)
       changed = await read($, changes)
@@ -599,16 +615,32 @@ export const register: Register = on => {
         {place.kind === 'search' ? <Button label="clear" variant="secondary" onPress={() => void go($, leftSearch)} /> : null}
       </Box>
     )
-    // In the tasks view the Find row sits right under the switch, then the mode buttons, in the same block. The field
-    // comes before every element that shows or hides with the place (collapse, clear, a page's steps): the engine keeps
-    // the focus ring at an index among the pane's elements, so one shown or hidden before the field would move the ring
-    // off it as the person types (the first key opens a search, which hides collapse), and the next keys would press
-    // the pane's hotkeys or reach the prompt.
+    // Under the field, where the person's keys go now (find-field.ts): typed into the field, to the pane's hotkeys or to
+    // Claude's prompt, and the key or the click that moves them; bold while typing searches, wrapped in a narrow dock.
+    const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo)
+    const keysText = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys) }] }, columns)
+      .map(line => line.map(span => span.text).join(''))
+      .join('\n')
+    const keysLine = inline ? null : keys === 'search' ? (
+      <Text key="keys-hint" bold>
+        {keysText}
+      </Text>
+    ) : (
+      <Text key="keys-hint" dimColor>
+        {keysText}
+      </Text>
+    )
+    // In the tasks view the Find row and its line sit right under the switch, then the mode buttons, in the same block.
+    // The field comes before every element that shows or hides with the place (collapse, clear, a page's steps): the
+    // engine keeps the focus ring at an index among the pane's elements, so one shown or hidden before the field would
+    // move the ring off it as the person types (the first key opens a search, which hides collapse), and the next keys
+    // would press the pane's hotkeys or reach the prompt.
     const controls =
       current === 'tasks' ? (
         <Box key="controls" flexDirection="column">
           {switchRow}
           {findRow}
+          {keysLine}
           <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
             {buttons}
           </Box>
