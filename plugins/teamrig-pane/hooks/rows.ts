@@ -17,9 +17,10 @@ import { cells } from './width'
 
 /**
  * A run of text in one style. No `color` (absent or undefined, as a span picks it by a condition) draws in the theme's
- * text color. With `href` the text is a link to that address (a card's Links row), never split across lines.
+ * text color. With `href` the text is a link to that address (a card's Links row), never split across lines. With
+ * `task` the text is that task's id in an open card (ids.ts), which a press on opens as a page; never split either.
  */
-export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean; href?: string }
+export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean; href?: string; task?: string }
 /**
  * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
  * undefined as `single` passes it on, starts them at the edge); a `rule` row ends in a rule.

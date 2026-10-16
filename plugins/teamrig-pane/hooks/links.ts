@@ -1,6 +1,6 @@
 // The links an open task's card draws (card.ts): the GitHub issue a task came in from, then each web address
 // written in its ref, its latest note and its evidence, in that order, each once. Pure: what a press on one
-// opens is the surface's. Task ids in the text stay plain words.
+// opens is the surface's. A task id is no link here: card.ts makes each one the snapshot holds a press that opens that task's page (ids.ts).
 import type { TaskRow } from '../types'
 
 /** A card draws at most this many links; the rest stay in the text they are written in. */
@@ -18,7 +18,7 @@ const GITHUB_SOURCE = 'github'
  */
 const ISSUE_REF = /^gh:([a-z0-9][a-z0-9-]{0,38}\/[a-z0-9._-]{1,100})#([1-9]\d*)$/i
 /** A web address as written: `http://` or `https://`, up to the next space. */
-const WEB_ADDRESS = /https?:\/\/\S+/gi
+export const WEB_ADDRESS = /https?:\/\/\S+/gi
 /** What ends a sentence or closes a bracket or a quote around an address, cut from its end. */
 const TRAILING = /[.,;:)\]'"]+$/
 /** An address with something after its `//`. */

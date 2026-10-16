@@ -20,7 +20,7 @@ import { findPlaces, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails } from './details'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
-import { dockLayout, failedDrawing, inlineLayout, type Drawn } from './layout'
+import { dockLayout, failedDrawing, inlineLayout, type CardPart, type Drawn } from './layout'
 import { NOTHING_EXPANDED, paneBlocks, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
@@ -327,6 +327,21 @@ export const register: Register = on => {
         </Text>
       )
     }
+    /** A task id in a card: its text underlined, in its span's style. */
+    const drawId = (span: Span, key: string) => (
+      <Text key={key} underline color={span.color} bold={span.bold} dimColor={span.dim}>
+        {span.text}
+      </Text>
+    )
+    /** A card's lines with no task id as one Text; a line with one as a row of its pieces. */
+    const drawPart = (part: CardPart, wrap: Drawn['wrap']) => {
+      if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
+      return (
+        <Box key={part.key} flexDirection="row">
+          {part.pieces.map((piece, i) => (piece.kind === 'words' ? drawText(piece.spans, wrap, String(i)) : drawId(piece.span, String(i))))}
+        </Box>
+      )
+    }
     // A Button holds strings and Texts alone, so an open card (its links) draws under the task's Button, not in it.
     const drawBlock = (drawn: Drawn) => {
       const id = drawn.toggle
@@ -340,7 +355,7 @@ export const register: Register = on => {
       return (
         <Box key={`${drawn.key}-open`} flexDirection="column">
           {task}
-          {drawText(drawn.card, drawn.wrap, 'card')}
+          {drawn.card.map(part => drawPart(part, drawn.wrap))}
         </Box>
       )
     }

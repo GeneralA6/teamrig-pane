@@ -158,6 +158,24 @@ describe('card', () => {
     expect(textOf(cardOf(tasks, 'T1').find(row => row.key.endsWith(':what')) ?? { key: '', spans: [] })).toBe(`${GUIDE}What      see gh:acme/app#12`)
   })
 
+  test('each id the snapshot holds, in a reason, a note, the After row or the ask, is a span marked with its task; others stay words', async () => {
+    const tasks = rowsOf([
+      createLine('T6', { owner: 'etl', by: 'etl', at: NOW - DAY, source: 'etl' }),
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', ref: 'docs/x.md:3', goals: [], taskKeys: { after: ['T6', 'T99'] } }),
+      waitingLine('T1', 'po', NOW, [{ kind: 'task', id: 'T6' }], 'T99 gone, see https://example.com/T6'),
+    ])
+    const detail: TaskDetail = { ref: 'docs/x.md:3', quotes: [{ ref: 'docs/x.md:3', lines: ['ship T6 first'] }], goals: [] }
+    const rows = cardOf(tasks, 'T1', detail)
+    const ids = (row: string) => rows.find(each => each.key.endsWith(`:${row}`))?.spans.filter(span => span.task !== undefined)
+    expect(ids('status:1')).toEqual([{ text: 'T6', color: 'error', task: 'T6' }])
+    expect(ids('after')).toEqual([{ text: 'T6', task: 'T6' }])
+    expect(ids('what')).toEqual([{ text: 'T6', task: 'T6' }])
+    expect(textOf(rows.find(each => each.key.endsWith(':status:1')) ?? { key: '', spans: [] })).toBe(`${UNDER}on T6; T99 gone, see https://example.com/T6`)
+    expect(textOf(rows.find(each => each.key.endsWith(':after')) ?? { key: '', spans: [] })).toBe(`${GUIDE}After     T6 open, T99`)
+    // The card's own labels never hold one.
+    expect(rows.every(row => row.spans[0]?.task === undefined && row.spans[1]?.task === undefined)).toBe(true)
+  })
+
   test('a value wraps under the value column in a narrow pane, never past its width', async () => {
     const detail: TaskDetail = { ref: 'docs/x.md:9', quotes: [{ ref: 'docs/x.md:9', lines: ['the pane draws a card under the task title'] }], goals: [] }
     const tasks = rowsOf([createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', ref: 'docs/x.md:9', goals: [] })])

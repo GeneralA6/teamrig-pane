@@ -2,20 +2,28 @@
 // its rows word-wrapped to the body's columns here, so a wrapped line starts under its row's
 // `hang` (a task's title under its id, a card's value under its value column) rather than at the
 // pane's edge, and the root Box's gap spaces the blocks. Wrapping here instead of nesting a Box per row
-// keeps a block one element, the cost rows.ts explains; an open card is one more Text. A row can be cut
-// at a few lines, ending in `…`, and can carry an `end` drawn at its first line's right edge. A link is
-// never split: it starts a fresh line when that gives it more room, and one wider still is shortened to
-// its line, ending in `…`. Inline, above the prompt, each row is one truncated screen row and the rows
+// keeps a block one element, the cost rows.ts explains; an open card is one more Text, but for each line that
+// holds a task id, drawn as a row of its pieces so the id can be a press of its own. A row can be cut
+// at a few lines, ending in `…`, and can carry an `end` drawn at its first line's right edge. A link or a
+// task id is never split: it starts a fresh line when that gives it more room, and one wider still is
+// shortened to its line, ending in `…`. Inline, above the prompt, each row is one truncated screen row and the rows
 // are capped. Widths are display cells (width.ts), so CJK and emoji sequences wrap where the terminal
 // wraps them and a cut never lands inside one.
 import type { Block, Row, Span } from './rows'
 import { cells, graphemes } from './width'
 
+/** A piece of a card line that holds a task id: an id, the task it names, or the words between ids. */
+export type Piece = { kind: 'id'; span: Span; task: string } | { kind: 'words'; spans: Span[] }
+/**
+ * A run of a card's lines: a Text of the lines that hold no task id (`text`), or one line that holds one
+ * (`line`), its pieces drawn side by side.
+ */
+export type CardPart = { kind: 'text'; key: string; spans: Span[] } | { kind: 'line'; key: string; pieces: Piece[] }
 /**
  * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one. `card`,
- * set while that card is open, is the card's own Text, drawn under the Button and outside it.
+ * set while that card is open, is the card's own parts, drawn under the Button and outside it.
  */
-export type Drawn = { key: string; spans: Span[]; wrap: 'wrap' | 'truncate-end'; toggle: string | null; card?: Span[] }
+export type Drawn = { key: string; spans: Span[]; wrap: 'wrap' | 'truncate-end'; toggle: string | null; card?: CardPart[] }
 
 const RULE = '─'
 const BLANK_LINE: Span = { text: ' ' }
@@ -52,9 +60,9 @@ function shortened(text: string, room: number): string {
   return `${parts.slice(0, fitting(parts, Math.max(0, room - cells(ELLIPSIS)))).join('')}${ELLIPSIS}`
 }
 
-/** One style, and one link: two links side by side stay two. */
+/** One style, one link and one task id: two links, or two ids, side by side stay two. */
 function sameStyle(a: Span, b: Span): boolean {
-  return a.color === b.color && a.bold === b.bold && a.dim === b.dim && a.href === b.href
+  return a.color === b.color && a.bold === b.bold && a.dim === b.dim && a.href === b.href && a.task === b.task
 }
 
 /** Spans with each run of one style joined into one span, so a block draws as few elements as it can. */
@@ -105,8 +113,8 @@ function fill(spans: readonly Span[], rowHang: Span | undefined, columns: number
     put(hang)
   }
   for (const span of spans) {
-    // A link stays whole, so a press on any of it opens the one address: on a fresh line when that has more room, shortened when even that is too narrow.
-    if (span.href !== undefined) {
+    // A link or a task id stays whole, so a press on any of it opens the one address or page: on a fresh line when that has more room, shortened when even that is too narrow.
+    if (span.href !== undefined || span.task !== undefined) {
       if (column > start && cells(span.text) > columns - column) breakLine()
       put({ ...span, text: shortened(span.text, columns - column) })
       continue
@@ -189,10 +197,43 @@ function joinedLines(lines: readonly Span[][]): Span[] {
   return merged(lines.flatMap((line, i) => (i === 0 ? line : [NEW_LINE, ...line])))
 }
 
+/** A line's spans as pieces: each task id its own, each run of words between them one. */
+export function piecesOf(line: readonly Span[]): Piece[] {
+  const pieces: Piece[] = []
+  for (const span of line) {
+    const last = pieces[pieces.length - 1]
+    if (span.task !== undefined) pieces.push({ kind: 'id', span, task: span.task })
+    else if (last?.kind === 'words') last.spans.push(span)
+    else pieces.push({ kind: 'words', spans: [span] })
+  }
+  return pieces
+}
+
+/** Wrapped card lines as parts: each run of lines with no task id one Text, each line with one a row of its pieces. */
+export function cardParts(lines: readonly Span[][]): CardPart[] {
+  const parts: CardPart[] = []
+  let run: Span[][] = []
+  const key = () => `card:${parts.length}`
+  const endRun = () => {
+    if (run.length > 0) parts.push({ kind: 'text', key: key(), spans: joinedLines(run) })
+    run = []
+  }
+  for (const line of lines) {
+    if (!line.some(span => span.task !== undefined)) {
+      run.push(line)
+      continue
+    }
+    endRun()
+    parts.push({ kind: 'line', key: key(), pieces: piecesOf(line) })
+  }
+  endRun()
+  return parts
+}
+
 /**
  * Each block one Text of its rows wrapped to the body's own width (one column at least, for a body
  * resized below the pane's padding), a block that opens a section led by a blank line; an open card's
- * rows wrapped the same way into its own Text.
+ * rows wrapped the same way into its parts.
  */
 export function dockLayout(blocks: readonly Block[], bodyColumns: number): Drawn[] {
   const columns = Math.max(1, bodyColumns)
@@ -205,7 +246,7 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number): Drawn
       wrap: 'wrap',
       toggle: block.toggle ?? null,
     }
-    return block.card === undefined ? drawn : { ...drawn, card: joinedLines(wrapped(block.card)) }
+    return block.card === undefined ? drawn : { ...drawn, card: cardParts(wrapped(block.card)) }
   })
 }
 
@@ -217,7 +258,8 @@ export function failedDrawing(error: unknown): Drawn[] {
 
 /**
  * Each row one truncated screen row, at most `maxRows`, the last saying how many it left out and
- * where the whole list shows. A press on a task's first row still opens or closes its card, whose rows follow.
+ * where the whole list shows. A press on a task's first row still opens or closes its card, whose rows follow,
+ * their task ids drawn as the words they are: a page opens from the dock.
  */
 export function inlineLayout(blocks: readonly Block[], maxRows: number): Drawn[] {
   const rows = blocks.flatMap(block =>

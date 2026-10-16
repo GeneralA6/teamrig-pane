@@ -43,6 +43,7 @@ declare module 'claude-code' {
     readonly color?: ThemeKey | undefined
     readonly bold?: boolean | undefined
     readonly dimColor?: boolean | undefined
+    readonly underline?: boolean | undefined
     readonly wrap?: 'wrap' | 'truncate-end'
     readonly children?: Child
   }
