@@ -12,7 +12,7 @@ import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
 import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
 import { HELD_DAYS } from '../hooks/done'
-import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine, waitingLine } from './fixtures'
+import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine, waitingLine, verifyingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
@@ -325,6 +325,8 @@ describe('rows', () => {
   }
   /** Where a card value's further lines start: the guide, then blank up to the value column. */
   const CARD_UNDER = `    │ ${' '.repeat(LABEL_CELLS)}`
+  /** A card row's first line in the list: the guide, the label padded to the value column, the value. */
+  const cardLine = (label: string, value: string) => `    │ ${label.padEnd(LABEL_CELLS)}${value}`
   const cardText = (blocks: readonly Block[], key: string) => {
     const row = blocks.flatMap(b => b.card ?? []).find(r => r.key === key)
     return row ? textOf(row) : undefined
@@ -511,38 +513,46 @@ describe('rows', () => {
     expect(blockAt(blocks, 'waiting:T1')?.rows.map(r => r.key)).toEqual(['waiting:T1'])
     expect(rowAt(blocks, 'waiting:T1')?.maxLines).toBe(undefined)
     expect(blockAt(blocks, 'waiting:T1')?.card?.map(r => r.key)).toEqual([
+      'waiting-card:T1:description',
       'waiting-card:T1:status',
-      'waiting-card:T1:status:1',
-      'waiting-card:T1:plan',
-      'waiting-card:T1:what',
-      'waiting-card:T1:what:1',
-      'waiting-card:T1:who',
+      'waiting-card:T1:note',
+      'waiting-card:T1:priority',
+      'waiting-card:T1:week',
       'waiting-card:T1:goal',
       'waiting-card:T1:goal:1',
+      'waiting-card:T1:from',
+      'waiting-card:T1:added',
+      'waiting-card:T1:reference',
+      'waiting-card:T1:reference:1',
       'waiting-card:T1:evidence',
     ])
     expect(blockAt(blocks, 'waiting:T1')?.card?.map(textOf)).toEqual([
-      '    │ Status    waiting since 14:00 by po',
-      `${CARD_UNDER}needs owner`,
-      '    │ Plan      p3 · week 10-13',
-      '    │ What      2026-10-13 lead: ship the pane',
-      `${CARD_UNDER}see docs/x.md`,
-      '    │ Who       asked by owner · added by lead · 10-13 13:00',
-      '    │ Goal      G10.2',
+      cardLine('Description', '2026-10-13 lead: ship the pane'),
+      cardLine('Status', 'waiting since 14:00 by po'),
+      cardLine('Note', 'needs owner'),
+      cardLine('Priority', '3'),
+      cardLine('Week', 'Tue 10-13'),
+      cardLine('Goal', 'G10.2'),
       `${CARD_UNDER}G15`,
-      '    │ Evidence  abc123',
+      cardLine('From', 'owner'),
+      cardLine('Added', '13:00 by lead'),
+      cardLine('Reference', 'inbox/po.md'),
+      `${CARD_UNDER}docs/x.md`,
+      cardLine('Evidence', 'abc123'),
     ])
     expect(blockAt(blocks, 'next:T2')?.card?.map(textOf)).toEqual([
-      '    │ Status    open since 13:00 by po',
-      '    │ Plan      p3 · week 10-13',
-      '    │ What      see quote',
-      '    │ Who       asked by po · 10-13 13:00',
-      '    │ Goal      G10.2',
+      cardLine('Status', 'not started since 13:00 by po'),
+      cardLine('Priority', '3'),
+      cardLine('Week', 'Tue 10-13'),
+      cardLine('Goal', 'G10.2'),
+      cardLine('From', 'po'),
+      cardLine('Added', '13:00 by po'),
+      cardLine('Reference', 'quote'),
     ])
     expect(blocks.flatMap(b => b.rows).some(r => r.key.includes('-meta:'))).toBe(false)
   })
 
-  test('an open card names its priority as the team config does, each fact only when set; the meta line keeps the bare number', async () => {
+  test("an open card shows its priority as a number, never the team config's name for it, each fact only when set", async () => {
     const tasks = rowsOf(
       [
         createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, ref: null, week: null, goals: [], title: 'Bare' }),
@@ -553,20 +563,23 @@ describe('rows', () => {
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [], goals: [] }, T2: { ref: 'docs/x.md', quotes: [], goals: [] } })
     expect(blockAt(blocks, 'next:T1')?.card?.map(textOf)).toEqual([
-      '    │ Status    open since 13:00 by lead',
-      '    │ Plan      p2 correctness',
-      '    │ Who       asked by owner · added by lead · 10-13 13:00',
+      cardLine('Status', 'not started since 13:00 by lead'),
+      cardLine('Priority', '2'),
+      cardLine('From', 'owner'),
+      cardLine('Added', '13:00 by lead'),
     ])
     expect(blockAt(blocks, 'working:T2')?.card?.map(r => r.key)).toEqual([
       'working-card:T2:status',
-      'working-card:T2:status:1',
-      'working-card:T2:plan',
-      'working-card:T2:what',
-      'working-card:T2:who',
+      'working-card:T2:note',
+      'working-card:T2:priority',
+      'working-card:T2:week',
       'working-card:T2:goal',
+      'working-card:T2:from',
+      'working-card:T2:added',
+      'working-card:T2:reference',
     ])
-    expect(cardText(blocks, 'working-card:T2:plan')).toBe('    │ Plan      p7 polish · week 10-13')
-    expect(cardText(blocks, 'working-card:T2:status:1')).toBe(`${CARD_UNDER}halfway`)
+    expect(cardText(blocks, 'working-card:T2:priority')).toBe(cardLine('Priority', '7'))
+    expect(cardText(blocks, 'working-card:T2:note')).toBe(cardLine('Note', 'halfway'))
     const collapsed = paneBlocks(snapshotOf(tasks, 'po'), 'mine', {})
     expect(textAt(collapsed, 'next:T1')).toBe('○ T1  Bare')
     expect(textAt(collapsed, 'next-meta:T1')).toBe('      p2 · new · asked by owner')
@@ -581,7 +594,7 @@ describe('rows', () => {
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: 'old', quotes: [{ ref: 'old', lines: ['the old ask'] }], goals: [] } })
     expect(blocks.flatMap(b => b.card ?? []).some(r => r.spans.some(span => span.text === 'the old ask'))).toBe(false)
-    expect(cardText(blocks, 'next-card:T1:what')).toBe('    │ What      see new')
+    expect(cardText(blocks, 'next-card:T1:reference')).toBe(cardLine('Reference', 'new'))
   })
 
   test("a done-today row opens the same card, its title whole, in the list and in the bar's done filter", async () => {
@@ -593,13 +606,15 @@ describe('rows', () => {
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', open)
     expect(blockAt(blocks, 'done:T4')?.rows.map(r => [r.key, r.maxLines])).toEqual([['done:T4', undefined]])
     expect(blockAt(blocks, 'done:T4')?.card?.map(textOf)).toEqual([
-      '    │ Status    done since 14:00 by po',
-      `${CARD_UNDER}merged`,
-      '    │ Plan      p3 · week 10-13',
-      '    │ What      see docs/x.md',
-      '    │ Who       asked by po · 10-13 13:00',
-      '    │ Goal      G10.2',
-      '    │ Evidence  abc123',
+      cardLine('Status', 'done since 14:00 by po'),
+      cardLine('Note', 'merged'),
+      cardLine('Priority', '3'),
+      cardLine('Week', 'Tue 10-13'),
+      cardLine('Goal', 'G10.2'),
+      cardLine('From', 'po'),
+      cardLine('Added', '13:00 by po'),
+      cardLine('Reference', 'docs/x.md'),
+      cardLine('Evidence', 'abc123'),
     ])
     expect(blockAt(paneBlocks(snapshotOf(tasks, 'po'), 'mine', open, 'done-today'), 'done:T4')?.card?.[0]?.key).toBe('done-card:T4:status')
     expect(blockAt(paneBlocks(snapshotOf(tasks, 'po'), 'mine'), 'done:T4')?.card).toBe(undefined)
@@ -620,14 +635,14 @@ describe('rows', () => {
     expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => b.opensSection)).toEqual([false, true])
   })
 
-  test('open, a verifying task\'s card draws its note green', async () => {
+  test('open, a verifying task\'s card draws its proof green', async () => {
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Shipped' }),
-      statusLine('T1', 'po', NOW, 'verifying', 'health check passes', 'abc123'),
+      verifyingLine('T1', 'po', NOW, 'health check passes', null, 'abc123'),
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [], goals: [] } })
     expect(blocks.map(b => b.key)).toEqual(['header', 'verifying', 'verifying:T1'])
-    expect(blocks.flatMap(b => b.card ?? []).find(r => r.key === 'verifying-card:T1:status:1')?.spans[1]).toEqual({ text: 'health check passes', color: 'success' })
+    expect(blocks.flatMap(b => b.card ?? []).find(r => r.key === 'verifying-card:T1:proof')?.spans[2]).toEqual({ text: 'health check passes', color: 'success' })
   })
 
   test('the all view counts each owner\'s verifying tasks and lists them first, with what proves them', async () => {

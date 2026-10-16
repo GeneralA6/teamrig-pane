@@ -3,7 +3,7 @@ import type { Answer, FsEntry, FsStat, On, SessionVersion } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import { LABEL_CELLS } from '../hooks/card'
 import { cells } from '../hooks/width'
-import { HOUR, NOW, S1, bigRegister, createLine, iso, markLine, statusLine, updateLine } from './fixtures'
+import { HOUR, NOW, S1, bigRegister, createLine, iso, markLine, statusLine, updateLine, verifyingLine } from './fixtures'
 
 const HOME = '\\Homes\\tester'
 const EVENTS = '/Homes/tester/team-notes/tasks/events.jsonl'
@@ -80,9 +80,11 @@ const PANE_PROPS = {
 const WIDE = { ...PANE_PROPS, bodyColumns: 200 } as const
 
 /** An open card: its Status row first, its Who row further down. */
-const CARD = /^ {4}│ Status[\s\S]*│ Who/
+const CARD = /^ {4}│ (Description|Status) [\s\S]*│ Added /
 /** Where a card value's further lines start: the guide, then blank up to the value column. */
 const CARD_UNDER = `    │ ${' '.repeat(LABEL_CELLS)}`
+/** A card row's first line in the list: the guide, the label padded to the value column, the value. */
+const cardLine = (label: string, value: string) => `    │ ${label.padEnd(LABEL_CELLS)}${value}`
 
 /** Answers $.store beneath the plugin from a map the test reads: `kept` starts as what earlier sessions left. */
 function fakeStore(on: On, kept: Readonly<Record<string, unknown>>) {
@@ -616,12 +618,16 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
   expect(await pane.find({ type: 'Text', text: /^○ T1  Ship the task pane$/ })).toBeDefined()
   expect(await pane.find({ text: /new · asked by owner/ })).toBeUndefined()
   expect((await pane.find({ type: 'Text', text: CARD }))?.text.split('\n')).toEqual([
-    '    │ Status    open since 13:00 by lead',
-    '    │ Plan      p3 scale · week 10-13',
-    '    │ What      2026-10-13 12:40 lead: ship the pane with details',
+    cardLine('Description', '2026-10-13 12:40 lead: ship the pane with details'),
     `${CARD_UNDER}G10.1g Fix the formula with analytics`,
-    '    │ Who       asked by owner · added by lead · 10-13 13:00',
-    '    │ Goal      G10.1g',
+    cardLine('Status', 'not started since 13:00 by lead'),
+    cardLine('Priority', '3'),
+    cardLine('Week', 'Tue 10-13'),
+    cardLine('Goal', 'G10.1g'),
+    cardLine('From', 'owner'),
+    cardLine('Added', '13:00 by lead'),
+    cardLine('Reference', 'inbox/po.md'),
+    `${CARD_UNDER}docs/ROADMAP.md`,
   ])
   // The card sits under the task's button, the two in a column of their own: one Box more than collapsed.
   const drawn = await pane.drawn()
@@ -634,7 +640,7 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
   expect(countType(await pane.drawn(), 'Box')).toBe(boxes)
 })
 
-test("an open card names its priority as its team's config does, with its week, goals, status note and evidence", async ($, on) => {
+test("an open card shows its priority as a number, never the team config's name for it, with its week, goals, note and evidence", async ($, on) => {
   const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
   disk.write('/Homes/tester/.teamrig/teams/web/config.json', [JSON.stringify({ register: { priorities: [{ id: 2, name: 'correctness' }] } })])
@@ -650,41 +656,21 @@ test("an open card names its priority as its team's config does, with its week, 
 
   await pane.press({ key: 'web:T7' })
   expect((await pane.find({ type: 'Text', text: CARD }))?.text.split('\n')).toEqual([
-    '    │ Status    in progress since 13:30 by web',
-    `${CARD_UNDER}details drawn`,
-    '    │ Plan      p2 correctness · week 10-13',
-    '    │ What      see docs/x.md',
-    '    │ Who       asked by owner · added by lead · 10-13 13:00',
-    '    │ Goal      G10.2',
+    cardLine('Status', 'in progress since 13:30 by web'),
+    cardLine('Note', 'details drawn'),
+    cardLine('Priority', '2'),
+    cardLine('Week', 'Tue 10-13'),
+    cardLine('Goal', 'G10.2'),
     `${CARD_UNDER}G15`,
-    '    │ Evidence  abc1234',
+    cardLine('From', 'owner'),
+    cardLine('Added', '13:00 by lead'),
+    cardLine('Reference', 'docs/x.md'),
+    cardLine('Evidence', 'abc1234'),
   ])
+  expect(await pane.find({ text: /correctness/ })).toBeUndefined()
 })
 
-test("a team with no config file names an open card's priority by teamrig's defaults", async ($, on) => {
-  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
-  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
-  disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
-    createLine('T7', { owner: 'web', by: 'lead', at: NOW - HOUR, priority: 1, title: 'Ship the team register' }),
-  ])
-  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-  await pane.press({ key: 'all' })
-  await pane.press({ key: 'web:T7' })
-  expect(await pane.find({ text: /^ {4}│ Plan {6}p1 keep the lights on · week 10-13$/m })).toBeDefined()
-})
-
-test("with both folders named and no team to read, an open card's priority is named by teamrig's defaults", async ($, on) => {
-  // The default env names both folders, and no pointer file is above /work.
-  await start(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-  await pane.press({ key: 'all' })
-  await pane.press({ key: 'po:T1' })
-  expect(await pane.find({ text: /^ {4}│ Plan {6}p2 correctness · due Wed 10-14 · week 10-13$/m })).toBeDefined()
-})
-
-test('an open waiting card says why it waits, in red; collapse (c) closes every card', async ($, on) => {
+test('an open waiting card says since when it waits, its note on a row of its own; collapse (c) closes every card', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
@@ -694,25 +680,24 @@ test('an open waiting card says why it waits, in red; collapse (c) closes every 
 
   await pane.press({ key: 'security:T2' })
   await pane.press({ key: 'po:T1' })
-  expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {4}waiting since 14:00 by security\n {4}│ {11}needs owner paste\n/ })).toBeDefined()
-  expect((await pane.find({ type: 'Text', text: /^needs owner paste$/ }))?.props).toMatchObject({ color: 'error' })
+  expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {7}waiting since 14:00 by security\n {4}│ Note {9}needs owner paste\n/ })).toBeDefined()
   expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeUndefined()
   expect(countType(await pane.drawn(), 'Box')).toBe(7)
   const collapse = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'collapse')
   expect(collapse?.props).toMatchObject({ hotkey: 'c' })
 
   await pane.press({ key: 'collapse' })
-  expect(await pane.find({ text: /│ (Status|Who)/ })).toBeUndefined()
+  expect(await pane.find({ text: /│ (Status|From)/ })).toBeUndefined()
   expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeDefined()
   expect(await pane.find({ text: /collapse/ })).toBeUndefined()
   expect(countType(await pane.drawn(), 'Box')).toBe(5)
 })
 
-test('an open card draws each address its ref, note and evidence hold as one Link, the issue a GitHub task came from first', async ($, on) => {
+test('an open card draws each address its ref, note, proof and evidence hold as one Link, the issue a GitHub task came from first', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'github', at: NOW - HOUR, source: 'github', ref: 'gh:acme/app#12', title: 'Fix the sign-in' }),
-    statusLine('T1', 'po', NOW, 'verifying', 'review https://example.com/pr/7, then https://example.com/pr/7.', 'https://ci.example/run/9'),
+    verifyingLine('T1', 'po', NOW, 'run https://ci.example/run/9 passes', 'review https://example.com/pr/7, then https://example.com/pr/7.', 'https://ci.example/run/9'),
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
@@ -726,9 +711,10 @@ test('an open card draws each address its ref, note and evidence hold as one Lin
     ['https://ci.example/run/9', ['https://ci.example/run/9']],
   ])
   expect(countType(await pane.drawn(), 'Link')).toBe(3)
-  // A note's words stay plain text, the addresses it holds among them, green while verifying.
-  const note = await pane.find({ type: 'Text', text: /^review https:\/\/example\.com\/pr\/7, then https:\/\/example\.com\/pr\/7\.$/ })
-  expect(note?.props).toMatchObject({ color: 'success' })
+  // A note's and a proof's words stay plain text, the addresses they hold among them; the proof in green.
+  expect(await pane.find({ type: 'Text', text: /│ Note {9}review https:\/\/example\.com\/pr\/7, then/ })).toBeDefined()
+  const proof = await pane.find({ type: 'Text', text: /^run https:\/\/ci\.example\/run\/9 passes$/ })
+  expect(proof?.props).toMatchObject({ color: 'success' })
 })
 
 /** Open cards as an older pane's TaskDetail held them, without goals, kept under a tag that is not the cards'. */
@@ -748,7 +734,7 @@ test('after a hot reload, open cards kept under another tag read as none open, a
   expect(await pane.find({ text: /p2 · due Wed 10-14 · new · asked by owner/ })).toBeDefined()
   isOldValueStored = false
   await pane.press({ key: 'next:T1' })
-  expect(await pane.find({ text: /^ {4}│ Status {4}open since 13:00 by lead$/m })).toBeDefined()
+  expect(await pane.find({ text: /^ {4}│ Status {7}not started since 13:00 by lead$/m })).toBeDefined()
 })
 
 test('inline above the prompt, it shows a few rows and points to the side dock', async ($, on) => {
@@ -1173,12 +1159,14 @@ test("a task id in an open card opens that task's page: its title and card alone
     ` ${'─'.repeat(PANE_PROPS.bodyColumns - 2)}`,
     '',
     ' ○ T58  Read the source',
-    ' Status    open since Sat 10-10 by lead',
-    ' Plan      p3 scale · week 10-13',
-    ' What      see docs/x.md',
-    ' Who       asked by owner · added by lead · 10-10',
-    '           14:00 · owner etl',
-    ' Goal      G10.2',
+    ' Status       not started since Sat 10-10 by lead',
+    ' Priority     3',
+    ' Week         Tue 10-13',
+    ' Goal         G10.2',
+    ' From         owner',
+    ' Added        Sat 10-10 by lead',
+    ' Owner        etl',
+    ' Reference    docs/x.md',
   ])
 })
 

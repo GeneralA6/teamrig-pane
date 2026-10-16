@@ -1,13 +1,22 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow } from '../types'
-import { addressesIn, issueUrl, MAX_ADDRESS_CHARS, MAX_LINKS, taskLinks } from '../hooks/links'
+import { addressesIn, issueOf, issueUrl, MAX_ADDRESS_CHARS, MAX_LINKS, taskLinks } from '../hooks/links'
 
 /** The fields taskLinks reads, none set. */
-const BARE: Pick<TaskRow, 'source' | 'ref' | 'note' | 'evidence'> = { source: 'owner', ref: null, note: null, evidence: null }
+const BARE: Pick<TaskRow, 'source' | 'description' | 'ref' | 'note' | 'proof' | 'evidence'> = {
+  source: 'owner',
+  description: null,
+  ref: null,
+  note: null,
+  proof: null,
+  evidence: null,
+}
 
 describe('links', () => {
   test('a task teamrig opened from a GitHub issue links to that issue, its ref spelled as teamrig writes it', async () => {
     expect(issueUrl({ source: 'github', ref: 'gh:acme/app#12' })).toBe('https://github.com/acme/app/issues/12')
+    expect(issueOf({ source: 'github', ref: 'gh:acme/app#12' })).toEqual({ repo: 'acme/app', number: 12 })
+    expect(issueOf({ source: 'owner', ref: 'gh:acme/app#12' })).toBe(null)
     expect(issueUrl({ source: 'github', ref: ' gh:Acme-Co/app.js_2#7 ' })).toBe('https://github.com/Acme-Co/app.js_2/issues/7')
   })
 
@@ -38,15 +47,23 @@ describe('links', () => {
     expect(addressesIn(accented)).toEqual([])
   })
 
-  test("a task's links: its issue first, then the addresses in its ref, note and evidence, each once, at most MAX_LINKS", async () => {
+  test("a task's links: its issue first, then the addresses in its description, ref, note, proof and evidence, each once, at most MAX_LINKS", async () => {
     expect(taskLinks(BARE)).toEqual([])
     const task = {
       source: 'github',
+      description: 'the spec: https://example.com/spec',
       ref: 'gh:acme/app#12',
       note: 'review at https://example.com/pr/7, same as https://example.com/pr/7. issue https://github.com/acme/app/issues/12',
+      proof: 'the run at https://ci.example/run/8 passes',
       evidence: 'https://ci.example/run/9',
     }
-    expect(taskLinks(task)).toEqual(['https://github.com/acme/app/issues/12', 'https://example.com/pr/7', 'https://ci.example/run/9'])
+    expect(taskLinks(task)).toEqual([
+      'https://github.com/acme/app/issues/12',
+      'https://example.com/spec',
+      'https://example.com/pr/7',
+      'https://ci.example/run/8',
+      'https://ci.example/run/9',
+    ])
     expect(taskLinks({ ...BARE, ref: 'docs/x.md:3; https://example.com/spec', evidence: 'abc123' })).toEqual(['https://example.com/spec'])
     const many = Array.from({ length: MAX_LINKS + 2 }, (_, i) => `https://example.com/${i}`)
     expect(taskLinks({ ...BARE, note: many.join(' ') })).toEqual(many.slice(0, MAX_LINKS))

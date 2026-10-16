@@ -25,7 +25,7 @@ export type Flag = 'overdue' | 'new' | 'unseen'
 
 /** How a status reads in a sentence: `in progress since 11:55`. */
 export const STATUS_WORDS: Readonly<Record<TaskStatus, string>> = {
-  open: 'open',
+  open: 'not started',
   'in-progress': 'in progress',
   verifying: 'verifying',
   waiting: 'waiting',

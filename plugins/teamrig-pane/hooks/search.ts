@@ -1,7 +1,7 @@
 // The pane's search: the tasks it holds (the snapshot's: every area's active tasks and those finished in the last HELD_DAYS, done.ts) that a
 // query names. Each word of the query must match, case aside, a task's id whole (`T52`, or its number `52`) or the
-// start of a word in one of its fields: its title, owner, who asked (`source`), goals, week, note, evidence or ref.
-// A word that starts with a mark (`.md`, `/docs`) matches anywhere in a field. The active matches come in teamrig's
+// start of a word in one of its fields: its title, description, owner, who asked (`source`), goals, week, note,
+// proof, evidence or ref. A word that starts with a mark (`.md`, `/docs`) matches anywhere in a field. The active matches come in teamrig's
 // plan order, as the list orders them, then the finished ones, newest first; at most MAX_RESULTS are kept, with how
 // many more matched, and each keeps where its words matched so the drawing (search-rows.ts) underlines them. One
 // pass over the held tasks a query. Older weeks' finished tasks are not held, so not searched. Pure.
@@ -13,7 +13,7 @@ import { isActive, newestFirst } from './view'
 export const MAX_RESULTS = 30
 
 /** The fields a word can match the start of a word in, beside the id. */
-export const SEARCHED = ['title', 'owner', 'source', 'goals', 'week', 'note', 'evidence', 'ref'] as const
+export const SEARCHED = ['title', 'description', 'owner', 'source', 'goals', 'week', 'note', 'proof', 'evidence', 'ref'] as const
 export type SearchedField = (typeof SEARCHED)[number]
 
 /** Where a word matched in a field's text (fieldText): from `start` up to `end`, as string indexes. */
@@ -76,7 +76,7 @@ type Term = { word: string; pattern: RegExp }
 
 /** No marks in any field, each list its own to fill. */
 function noMarks(): Record<SearchedField, Mark[]> {
-  return { title: [], owner: [], source: [], goals: [], week: [], note: [], evidence: [], ref: [] }
+  return { title: [], description: [], owner: [], source: [], goals: [], week: [], note: [], proof: [], evidence: [], ref: [] }
 }
 
 /** The task as a hit when every term matches its id or one of its fields; null when one does not. */
