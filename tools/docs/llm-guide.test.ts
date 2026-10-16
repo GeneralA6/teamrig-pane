@@ -155,8 +155,8 @@ describe('the pane guide states the limits the code holds', () => {
   const limits: readonly (readonly [label: string, values: readonly number[]])[] = [
     ['One file read', [Number(captured('source.ts', /const MAX_READ_BYTES = (\d+) \* 1024 \* 1024\b/))]],
     ['Polls', [constant('live.ts', 'POLL_MS') / 1000, constant('live.ts', 'TICK_MS') / 1000]],
-    ['`asked of others`', [constant('view.ts', 'MAX_ASKED')]],
-    ['`finished today`', [constant('view.ts', 'MAX_FINISHED')]],
+    ['`Waiting`, asked of others', [constant('view.ts', 'MAX_ASKED')]],
+    ['`Done today`', [constant('view.ts', 'MAX_FINISHED')]],
     ['Above the prompt', [constant('register.tsx', 'INLINE_MAX_ROWS'), constant('status-bar.ts', 'INLINE_LIST_ROWS')]],
     ['Dock', [constant('register.tsx', 'DOCK_COLUMNS'), constant('command.ts', 'DOCK_MIN_COLUMNS')]],
     ['Changes, per repo', [constant('changes.ts', 'CHANGES_KEPT')]],

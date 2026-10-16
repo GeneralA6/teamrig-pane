@@ -5,7 +5,7 @@
 A Claude Code plugin that docks your session's tasks on the right of the conversation, and flips to
 the files you changed with one press. Part of [teamrig](https://github.com/GeneralA6/teamrig).
 
-![Claude Code with teamrig-pane docked beside the conversation: the session's active tasks in plan order, what a waiting task waits for, what it asked of others and what it finished today, then one press on Changes lists the files changed in its repo.](docs/images/hero.svg)
+![Claude Code with teamrig-pane docked beside the conversation: the session's tasks under Working on, Up next, Waiting and Done today, each with a dim line saying why it stands there, then one press on Changes lists the files changed in its repo.](docs/images/hero.svg)
 
 > **Pre-release.** The pane is built on Claude Code's function hooks, an early-access plugin surface
 > that may change between releases. Nothing is stable yet and there is no release.
@@ -48,10 +48,11 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
 ## What it shows
 
 - **Tasks:** a bar of how your work stands (done today, verifying, working, waiting, not
-  started; a click shows one status alone), then your active tasks in plan order, the verifying ones
-  first, what each waiting one waits for, what you asked of others, what you finished today and your unread
-  inbox lines. `/teamrig-pane all` shows every owner's tasks, and
-  `/teamrig-pane <session>` shows another session's, named by its id or its name.
+  started; a click shows one status alone), then your tasks under Verifying, Working on, Up next,
+  Waiting and Done today, each with a dim line saying why it stands there (what a waiting one waits for,
+  what an open one comes after); Waiting also holds what you asked of others, and the header counts your
+  unread inbox lines. `/teamrig-pane all` shows every owner's tasks, and `/teamrig-pane <session>`
+  shows another session's, named by its id or its name.
 - **Details:** click a task, or press Enter on it, to read its ask, quoted from the file its ref
   points at, then who asked and when, its goals and its status note.
 - **Changes:** the files changed in each git repo the session works in, each with its lines added and removed.

@@ -102,7 +102,7 @@ Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pa
 | `i` | mine: only the waiting tasks; again shows every task |
 | `n` | mine: only the open tasks (`not started`); again shows every task |
 | `c` | Collapses every expanded task (shown while one is expanded) |
-| Enter on a task, or a click on its `▸` | Expands it to `▾` with its details; again collapses it |
+| Enter on a task, or a click on it | Shows its details under it; again hides them |
 | `✕`, or `ctrl+x x` | Minimizes the pane to a one-row strip; it never closes |
 
 A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to
@@ -137,37 +137,51 @@ of these, the pane says:
 No area for this session yet: /rename the tab to its session's id or name, run `inbox read --session <id>`, or /teamrig-pane <session> to pin one.
 ```
 
-**mine** shows its status bar (below), then, under a header `web (pinned) · 3 active · inbox 2 unread`:
+**mine** shows its status bar (below), then a header counting the area's active tasks and unread inbox lines,
+`3 active · inbox 2 unread`, then its tasks in sections, each in teamrig's plan order (priority, then due, undated
+last, then id) under a bold heading with its count; an empty section is left out:
 
-1. the area's active tasks (open, in progress, verifying, waiting) in teamrig's plan order: priority, then due
-   (undated last), then id. The verifying tasks (the change landed, its proof is still to
-   come) lead under `verifying (n)`, because closing them comes first; the rest follow under
-   `other active (n)`. With none waiting, neither heading shows;
-2. `asked of others (n)`: active tasks the area asked of other sessions, the newest 8;
-3. `finished today (n)`: its tasks done or dropped today, the UTC day the status bar counts, the newest 6. Past
-   them a dim line says how many more, how many of those were dropped, and that `o` lists every one done today.
+1. `Verifying`: the change landed, its proof is still to come; these lead, because closing them comes first;
+2. `Working on`: in progress;
+3. `Up next`: open, not started;
+4. `Waiting`: the area's waiting tasks, then the active tasks it asked of other sessions, the newest 8, each
+   saying `on <owner>` (a dim line counts the rest, which **all** lists);
+5. `Done today`: its tasks done or dropped today, the UTC day the status bar counts, the newest 6, one dim line
+   each with the time it closed. Past them a dim line says how many more, how many of those were dropped, and
+   that `o` lists every one done today.
 
-`(pinned)` shows only for a pin. `inbox n unread` counts the lines in the area's inbox past its last
+The header names the area only for a pin (`web (pinned) · 3 active · inbox 2 unread`); the session's own area
+goes unnamed, as its tab names the session. `inbox n unread` counts the lines in the area's inbox past its last
 `teamrig inbox read`; it is missing when the area never ran one.
 
 **all** shows every owner's active tasks, grouped by owner, each heading with its counts
 (`api · 4 active · 1 waiting · 1 verifying`, a count with none left out), the verifying tasks first
 in each group; your own area is highlighted.
 
-A task line reads `▸ ◐ T12 p2 10-17 NEW Build the signup endpoint`:
+A task is two lines, its title and a dim meta line under it:
+
+```text
+◐ T12  Build the signup endpoint
+       p2 · due Sat 10-17 · in progress since 11:55
+```
 
 | Part | Meaning |
 | --- | --- |
-| `▸` / `▾` | Collapsed / expanded |
 | `○` `◐` `◑` `■` `✓` `✗` | open, in-progress, verifying, waiting, done, dropped (as `teamrig list` names them) |
-| `→api` | In `asked of others`: the task's owner |
-| `p2 10-17` | Priority and due date; an overdue date is red |
-| `NEW` | The owner has not touched it yet |
-| `NOT PICKED UP` | The owner has still not touched it 24 hours after it was assigned |
+| `T12`, the title | The id, bold, and the title, cut at two lines |
+| `p2` | Its priority |
+| `due Sat 10-17` | Its due date; `verify by` while verifying |
+| `in progress since 11:55` | Since when it stands at its status (a time today, else a day); a verifying task's note follows, what will prove it |
+| `waiting since 14:00: decision owner, on T5 ready; the copy first` | In red: what a waiting task waits for (a decision, an approval, a task or a time, as `teamrig list` words it), a cleared one `ready`, then its note. An old `blocked` line reads as waiting, with only its note |
+| `after T5, T6` | A task not started: the tasks planned before it that are still unfinished |
+| `on api` | In `Waiting`: a task asked of another session, and its owner |
+| `late 1d` | Past its due, in red |
+| `new` | The owner has not touched it yet |
+| `not picked up 2d` | The owner has still not touched it 24 hours after it was assigned, in red |
+| `asked by lead` | A task not started that another session asked for |
 
-Under a waiting task, what it waits for (a decision, an approval, a task or a time, as `teamrig list` words it), then its note, follow `↳` (`↳ decision owner · on T5; the copy first`); an old `blocked` line reads as waiting, with only its note; under a verifying task, `↳ proof:` and its note, what will
-prove it. Other messages: `Reading the register…` (the first moments,
-at most 3 seconds), `Nothing active.` (mine) and `No active tasks.` (all).
+A task done today is one dim line, `✓ T11  Signup API`, the time it closed at the right edge. Other messages:
+`Reading the register…` (the first moments, at most 3 seconds), `Nothing active.` (mine) and `No active tasks.` (all).
 
 ### The status bar
 

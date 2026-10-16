@@ -12,25 +12,32 @@ every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick mov
 labels on. No model calls, so no tokens. A switch over the list flips it to the session's git changes
 (Tasks and Changes, below).
 
-- **mine**: the session's area, under its status bar (Status bar, below). Shows active tasks in
-  teamrig's plan order (priority, then due with undated last, then id), each with its priority (`p2`)
-  and due, NEW / NOT PICKED UP (untouched after 24 h) / overdue flags and, under a waiting task, what
-  it waits for and its note. Verifying tasks lead, under `verifying (N)`: they are the nearest to
-  done, so closing them comes first, and the rest follow under `other active (M)`. With none verifying,
-  neither heading shows. Then what the area asked of others (the newest 8), what it finished today,
-  the UTC day the status bar counts (the newest 6 under `finished today (N)`, then a dim line saying
-  how many more, how many of those were dropped, and that `o` lists every one done today), and how
-  many of its inbox lines are unread.
+- **mine**: the session's area, under its status bar (Status bar, below) and a header counting its
+  active tasks and unread inbox lines (`3 active · inbox 1 unread`; a pin names the area first,
+  `web (pinned) · 3 active · …`). Its tasks follow in sections, each in teamrig's plan order (priority,
+  then due with undated last, then id) under a bold heading with its count, an empty one left out:
+  `Verifying` (the nearest to done, so closing them comes first), `Working on`, `Up next`, `Waiting`
+  (its own waiting tasks, then the newest 8 it asked of other sessions, each saying `on <owner>`) and
+  `Done today`, the UTC day the status bar counts (the newest 6, then a dim line saying how many more,
+  how many of those were dropped, and that `o` lists every one done today).
 - **all**: every owner's active tasks, each owner's heading with its counts, a count with none left
   out (`api · 4 active · 1 waiting · 1 verifying`), and the verifying tasks first in
   each group.
 
-A task's glyph is its status as `teamrig list` names it: `○` open, `◐` in progress, `◑` verifying,
-`■` waiting, `✓` done, `✗` dropped. A verifying task's change has landed and waits for what proves
-it works; under it, `↳ proof: <note>` says what that is. A waiting task waits on a decision, an
-approval, another task or a time (`teamrig set --status waiting --waits`); under it, `↳` says which, then
-its note (`↳ decision owner · until Fri 10-16 14:00; the copy first`). An old `blocked` line reads as
-waiting, with only its note.
+A task is two lines: its status mark, bold id and title (cut at two lines), then a dim meta line under
+the title. The mark is its status as `teamrig list` names it: `○` open, `◐` in progress, `◑` verifying,
+`■` waiting, `✓` done, `✗` dropped. The meta line reads `p2 · due Sat 10-17 · in progress since 11:55`:
+its priority, its due date (`verify by` while verifying), since when it stands at its status and why,
+then what needs a look. A verifying task's change has landed and waits for what proves it works: its
+note says what that is (`verifying since 09:10: tests pass on main`). A waiting task waits on a
+decision, an approval, another task or a time (`teamrig set --status waiting --waits`): in red, its line
+names each, a cleared one `ready`, then its note (`waiting since 14:00: decision owner, on T1 ready,
+until Fri 10-16 14:00; the copy first`). An old `blocked` line reads as waiting, with only its note. A
+task not started names the tasks planned before it that are still unfinished (`after T1, T2`). Then the
+flags: `late 1d` (red, past its due), `new` (its owner has not touched it yet), `not picked up 2d` (red,
+still untouched 24 hours after it was assigned) and `asked by lead` on a task not started that another
+session asked for. A task done today is one dim line, `✓ T11  Signup API`, the time it closed at the
+right edge.
 
 The area is taken from the session's newest `teamrig inbox read --session <id>` (its mark in
 `inbox-marks.jsonl` names the Claude Code session), or pinned with `/teamrig-pane <session>`. A tab
@@ -41,17 +48,17 @@ again (`auto`) or pins a session, named by its id or its name; a word that names
 and lists the team's sessions. In the pane, `m` and `a` switch views, and `o`, `v`, `w`, `i` and `n`
 show one status's tasks alone (Status bar, below).
 
-In the side dock the tasks sit a blank line apart, each wrapped title line starting under the task's
-id, and a ruled heading opens each section (verifying, other active, asked of others, finished
-today, each owner in `all`).
+In the side dock the tasks sit a blank line apart, each wrapped title and meta line starting under the
+title, and a blank line and a bold heading open each section (each owner in `all`).
 Lines are measured in display cells, per character as the reader sees it (`hooks/width.ts`): CJK,
 fullwidth forms and emoji take two cells, an emoji sequence (a ZWJ family, a skin tone, a flag) is one
 character, and a cut never lands inside one, so no line runs past the pane's edge. However narrow the
 dock is resized, its lines wrap to its own width, a wrapped line's indent cut to half the line.
 
 The register has no description field, so a task's details are built from what it does record. Click
-a task (`▸`), or focus the pane and press Enter on it, to expand it (`▾`). The details hang under
-its id on a `│` guide, a bare guide line between the quotes and the facts:
+a task, or focus the pane and press Enter on it, to show its details, its title and meta line whole
+above them; again hides them. The details hang under the task on a `│` guide, a bare guide line
+between the quotes and the facts:
 
 - the ask and what it serves, quoted as plain text from where its ref points (`file:N`, `N-M` up to
   3 lines, or `N,M`), then the roadmap item of each of its goals (`--goals G10.1g`, `S4`);
@@ -60,7 +67,7 @@ its id on a `│` guide, a bare guide line between the quotes and the facts:
 - its newest status note and evidence, with the status;
 - `see folder/file` for the files nothing was quoted from.
 
-A task's list line never grows: these facts show only in its details.
+A task's two lines never grow: these facts show only in its details.
 
 Boards, agendas and docs are rewritten and their line numbers drift, so a line is quoted only while
 something still ties it to the task: an inbox line by its date (inboxes are append-only; one dated
