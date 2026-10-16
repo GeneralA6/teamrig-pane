@@ -4,7 +4,7 @@
 
 ## Guide
 
-- [teamrig-pane guide](https://github.com/GeneralA6/teamrig-pane/blob/main/plugins/teamrig-pane/skills/teamrig-pane-guide/SKILL.md): start here: requirements, install, the /teamrig-pane command, keys, the Tasks view, its status bar and a task's card, the Changes view, how it relates to teamrig
+- [teamrig-pane guide](https://github.com/GeneralA6/teamrig-pane/blob/main/plugins/teamrig-pane/skills/teamrig-pane-guide/SKILL.md): start here: requirements, install, the /teamrig-pane command, keys, the Tasks view, its status bar, a task's card and its page with back and forward, the Changes view, how it relates to teamrig
 - [Reference](https://github.com/GeneralA6/teamrig-pane/blob/main/plugins/teamrig-pane/skills/teamrig-pane-guide/reference.md): where it finds the register, its settings, each WARN line with its fix, its limits
 
 ## Design

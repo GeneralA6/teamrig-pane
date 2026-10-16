@@ -103,6 +103,9 @@ Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pa
 | `n` | mine: only the open tasks (`not started`); again shows every task |
 | `c` | Closes every open card (shown while one is open) |
 | Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
+| A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
+| `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead |
+| `f` | Forward to the place back left, while there is one |
 | `✕`, or `ctrl+x x` | Minimizes the pane to a one-row strip; it never closes |
 
 A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to
@@ -242,11 +245,41 @@ it has a value:
 | `Links` | Up to 5 links: the GitHub issue a task teamrig opened from one came from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its ref, its newest note and its evidence, once each |
 
 There is no row for a parent, sub-tasks or history: the register keeps none of them for a task. A link never
-splits; one wider than its line is shortened with `…` and still opens its whole address. Task ids in a note stay
-plain words.
+splits; one wider than its line is shortened with `…` and still opens its whole address. Each task id the pane
+holds, in any row, is underlined and opens that task's page; one inside a web address stays part of it.
 
 A line is quoted only while something still ties it to the task (an inbox line by its date, another line when it
 is a goal's roadmap item or names the task id), because boards and docs are rewritten and line numbers drift.
+
+### A task's page
+
+A click on a task id in a card opens that task's page: its title whole and its card, the body to itself, under
+back and forward and a trail of the last places:
+
+```text
+‹ back  forward ›
+Tasks › T50 › T58
+────────────────────────────────────────────────
+
+○ T58  Read the source
+Status    open since Sat 10-10 by lead
+Plan      p3 scale · week 10-13
+What      see docs/x.md
+Who       asked by owner · added by lead · 10-10
+          14:00 · owner etl
+Goal      G10.2
+```
+
+| Part | What it does |
+| --- | --- |
+| `‹ back`, `forward ›` | Step through the places, as a browser's back and forward do (`b`, `f`); dim words when there is nowhere to go |
+| The trail | The last 4 places: the one shown bold, those ahead of it dim, the others a click away; `…` where places were left out |
+| A task id on the page | Opens that task's page next; a click from an older place drops the places ahead of it |
+
+The pane keeps 20 places, the oldest dropped first. A page opens at its top and has no status bar. Back to the list
+brings the card you left to the middle of the dock, and the list keeps back and forward while a page lies ahead of
+it; `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed before today says so on its page. Above
+the prompt ids are plain words and no page shows.
 
 ## The Changes view
 
