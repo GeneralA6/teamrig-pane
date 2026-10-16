@@ -110,6 +110,27 @@ declare module 'claude-code' {
   export type Timer = { cancel(): void }
   export type CommandSpec = { readonly name: string; readonly description: string; readonly argumentHint?: string }
   export type PaneOpen = { readonly id: string; readonly title?: string; readonly columns?: number }
+  /**
+   * What `$.ui.scroll` brings into view: an element of this plugin's by `key`, a render instance by `requestId`, or
+   * the `start` or `end` of the site `in` names (a pane's id); `block` is where it lands, `nearest` when left out.
+   */
+  export type UiScrollArgs = {
+    readonly to: { readonly key: string } | { readonly requestId: string } | 'start' | 'end'
+    readonly in?: string
+    readonly block?: 'start' | 'center' | 'end' | 'nearest'
+  }
+  /** `{}` once the window moved, or why it did not. */
+  export type UiScrollResult = { readonly deny?: string }
+  /** A site's window asked to move: which pane, the first row it is to show, by how many rows, and who moves it. */
+  export type UiScrollInput = {
+    readonly component: 'Pane' | 'AbovePrompt'
+    readonly requestId: string
+    readonly offset: number
+    readonly by: number
+    readonly bodyRows: number
+    readonly contentRows: number
+    readonly origin: { readonly kind: 'person' } | { readonly kind: 'plugin'; readonly name: string }
+  }
 
   /** What the plugin asks the engine for; each is an event a test (or another plugin) can answer beneath it. */
   export interface Context {
@@ -120,7 +141,11 @@ declare module 'claude-code' {
     readonly clock: { now(): Promise<number>; every(ms: number, fn: () => void): Timer }
     readonly store: { get(key: string): Promise<unknown>; set(key: string, value: unknown): Promise<void>; delete(key: string): Promise<void> }
     readonly process: { run(argv: readonly string[], init?: ProcessInit): Promise<ProcessResult> }
-    readonly ui: { open(pane: PaneOpen): Promise<{ isPlaced: boolean }>; resolve(request: RenderRequest): Components }
+    readonly ui: {
+      open(pane: PaneOpen): Promise<{ isPlaced: boolean }>
+      resolve(request: RenderRequest): Components
+      scroll(args: UiScrollArgs): Promise<UiScrollResult>
+    }
   }
 
   /** Where the fullscreen layout would draw a command's pane: the dock needs the fullscreen layout and enough columns. */
@@ -171,6 +196,7 @@ declare module 'claude-code' {
     'ui.open': { filter: { readonly id: string }; e: PaneOpen; result: Answer<{ isPlaced: boolean }> }
     'ui.close': { filter: { readonly id: string }; e: { readonly id: string; readonly origin: PaneCloseOrigin }; result: { readonly deny?: string } }
     'ui.render': { filter: { readonly component: string; readonly requestId: string }; e: RenderRequest; result: JSX.Element }
+    'ui.scroll': { filter: { readonly requestId: string }; e: UiScrollInput; result: UiScrollResult }
     'fs.stat': { filter: never; e: { readonly path: string }; result: Answer<FsStat> }
     'fs.exists': { filter: never; e: { readonly path: string }; result: Answer<boolean> }
     'fs.read': { filter: never; e: { readonly path: string }; result: Answer<string> }

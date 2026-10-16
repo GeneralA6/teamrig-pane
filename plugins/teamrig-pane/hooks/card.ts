@@ -4,8 +4,10 @@
 // quoted from the ref (details.ts), then the files it only names. Who: who asked, who added it, when; the owner
 // when the list is another area's. After: the tasks planned first, with their status. Goal: each goal's roadmap
 // item. Evidence. Links (links.ts). The register's fold keeps no parent, sub-tasks or history, so the card has
-// no row for them. Pure: rows of spans that layout.ts wraps, each value's lines under the value column, and
-// register.tsx draws, a link as a link and a task id the snapshot holds (ids.ts) underlined.
+// no row for them. In the list each line starts with a guide under the task's title; on a task's page (page.ts)
+// the card has the body to itself and starts at its edge. Pure: rows of spans that layout.ts wraps, each value's
+// lines under the value column, and register.tsx draws, a link as a link and a task id the snapshot holds (ids.ts)
+// underlined, a press on it opening that task's page.
 import type { ThemeKey } from 'claude-code'
 import type { TaskDetail, TaskRow, TaskStatus } from '../types'
 import { priorityText, type WaitContext } from './core/read/index'
@@ -16,12 +18,10 @@ import { dueLabel, lateWords, STATUS_WORDS, waitingWords, whenWords } from './me
 import type { Row, Span } from './rows'
 import { shortDue, shortTime } from './view'
 
-/** Starts each card line: the guide that ties the card to its task's title. */
+/** Starts each card line in the list: the guide that ties the card to its task's title. */
 const GUIDE: Span = { text: '    │ ', dim: true }
 /** The label column, in cells: the longest label (`Evidence`) and the gap before the value. */
 export const LABEL_CELLS = 10
-/** Starts a value's further lines, and each line a value wraps onto: the guide, then blank up to the value column. */
-const VALUE_HANG: Span = { text: `${GUIDE.text}${' '.repeat(LABEL_CELLS)}`, dim: true }
 /** Between the parts of one value line. */
 const SEPARATOR: Span = { text: ' · ', dim: true }
 /** A status note's color: why a waiting task waits, what proves a verifying one; others draw in the text color. */
@@ -105,29 +105,35 @@ function linkLines(task: TaskRow): Lines {
 
 /**
  * A labelled row, its value's first line beside the dim label, each further line its own row under the value
- * column, and every wrapped line hanging there too. Each id `isKnown` holds in a value's words is a span of its
- * own (ids.ts); a link's address is left whole. No lines, no row.
+ * column, and every wrapped line hanging there too (`hang`: the lead, then blank up to the value column). Each id
+ * `isKnown` holds in a value's words is a span of its own (ids.ts); a link's address is left whole. No lines, no row.
  */
-function labelled(key: string, label: string, lines: Lines, isKnown: (id: string) => boolean): Row[] {
+function labelled(key: string, label: string, lines: Lines, isKnown: (id: string) => boolean, lead: Span | null): Row[] {
+  const hang: Span = { text: `${lead?.text ?? ''}${' '.repeat(LABEL_CELLS)}`, dim: true }
+  const first = [...(lead === null ? [] : [lead]), { text: label.padEnd(LABEL_CELLS), dim: true }]
   return lines.map((spans, i) => {
     const value = spans.flatMap(span => (span.href === undefined ? idSpans(span, isKnown) : [span]))
-    return {
-      key: i === 0 ? key : `${key}:${i}`,
-      spans: i === 0 ? [GUIDE, { text: label.padEnd(LABEL_CELLS), dim: true }, ...value] : [VALUE_HANG, ...value],
-      hang: VALUE_HANG,
-    }
+    return { key: i === 0 ? key : `${key}:${i}`, spans: i === 0 ? [...first, ...value] : [hang, ...value], hang }
   })
 }
 
 /**
  * The card's rows, keyed `<section>-card:<id>:<row>`. `detail` is what was read when it opened (details.ts),
  * `context` the snapshot's (meta.ts contextOf), `viewer` the area whose list it is (null in the all view). An id
- * in its words is a span of its own, marked with its task, when the snapshot holds that task.
+ * in its words is a span of its own, marked with its task, when the snapshot holds that task. `lead` starts each
+ * line: the guide under the task's title in the list, none on a task's page.
  */
-export function cardRows(section: string, task: TaskRow, detail: TaskDetail, context: WaitContext, viewer: string | null): Row[] {
+export function cardRows(
+  section: string,
+  task: TaskRow,
+  detail: TaskDetail,
+  context: WaitContext,
+  viewer: string | null,
+  lead: Span | null = GUIDE,
+): Row[] {
   const key = (row: string) => `${section}-card:${task.id}:${row}`
   const isKnown = (id: string) => context.statusOf(id) !== undefined
-  const field = (row: string, label: string, lines: Lines) => labelled(key(row), label, lines, isKnown)
+  const field = (row: string, label: string, lines: Lines) => labelled(key(row), label, lines, isKnown, lead)
   return [
     ...field('status', 'Status', statusLines(task, context)),
     ...field('plan', 'Plan', planLines(task, context.now)),

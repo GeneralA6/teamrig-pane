@@ -4,7 +4,10 @@
 // those asked of another session) and Done today (the UTC day, as the bar counts it), each task a row with a
 // dim meta line (meta.ts), and its unread inbox lines; `all` shows every owner's active tasks. A press on a task row opens its card in
 // place of the meta line (card.ts): its status and note, plan, the ask quoted where its refs still point, who
-// asked, the tasks planned first, its goals' roadmap items, evidence and links. The close mark (✕,
+// asked, the tasks planned first, its goals' roadmap items, evidence and links. A press on a task id in a card opens
+// that task's page (page.ts), the card with the body to itself, under back and forward (b, f) and a trail of the
+// last places (nav.ts), which the list keeps while a page lies ahead of it; a page opens at its top, and a return
+// to the list scrolls back to the card it left. The close mark (✕,
 // ctrl+x x) minimizes it to a one-row strip instead of closing it; a press on the strip or /teamrig-pane
 // opens it again, and the size is kept for the next session (size.ts). A switch row, first in every
 // state and width, the strip included, flips the body between the tasks and the Changes view: the
@@ -12,8 +15,8 @@
 // the switch and in the tab title. Reads files and runs git (status, diff, grep; no model calls);
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
-import type { Register } from 'claude-code'
-import type { BarStatus, ExpandedTasks, PaneView, RequirementProblem, Snapshot, TaskDetail, ViewMode } from '../types'
+import type { Context, Register } from 'claude-code'
+import type { BarStatus, ExpandedTasks, Nav, PageDetails, PaneView, RequirementProblem, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
@@ -27,6 +30,24 @@ import { PaneSizer, SIZE_KEY } from './size'
 import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
 import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from './changes'
 import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
+import {
+  AT_LIST,
+  back,
+  canGoBack,
+  canGoForward,
+  currentPlace,
+  forward,
+  landing,
+  leavingList,
+  pagesKept,
+  placeLabel,
+  pushed,
+  reset,
+  trail,
+  type Landing,
+  wentTo,
+} from './nav'
+import { pageBlocks } from './page'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -35,6 +56,8 @@ const DOCK_COLUMNS = 58
 const PAD_COLUMNS = 1
 /** Most rows an inline pane (above the prompt) shows, its last one saying what it left out. */
 const INLINE_MAX_ROWS = 6
+/** Between two crumbs of a page's trail. */
+const TRAIL_SEPARATOR = ' › '
 /** What the close hook answers the person's close with: the engine logs it as why the pane stayed. */
 const MINIMIZED = `minimized to its strip: a press on it, or /${COMMAND}, opens it again`
 /** How long one git run may take before it is killed and the repo shows the failure. */
@@ -71,10 +94,42 @@ const NOTHING_MISSING: RequirementProblem[] = []
 const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, NOTHING_MISSING)
 /** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
 const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
+/** The places are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when Place or Nav changes shape. */
+const NAV_SHAPE = 'nav-v1'
+const nav = atom({ plugin: 'teamrig-pane', key: 'nav' } as const, AT_LIST, { shape: NAV_SHAPE })
+const NO_PAGES: PageDetails = {}
+/** The pages' details, kept under CARDS_SHAPE as the open cards are: both hold TaskDetail. */
+const pages = atom({ plugin: 'teamrig-pane', key: 'pages' } as const, NO_PAGES, { shape: CARDS_SHAPE })
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
   return Object.fromEntries(Object.entries(current).filter(([key]) => key !== id))
+}
+
+/**
+ * Moves the tasks view by `step` (nav.ts), keeping only the details of the pages a place still names. A page opens
+ * at its top, and a step from a page back to the list brings the element the page was opened from to the middle of
+ * the window; a refused or failed scroll (an engine without `$.ui.scroll` among them) leaves the window where it is.
+ */
+async function go($: Context, step: (current: Nav) => Nav): Promise<void> {
+  const before = await read($, nav)
+  const next = step(before)
+  if (next === before) return
+  await update($, nav, () => next)
+  await update($, pages, current => pagesKept(current, next))
+  const to = landing(before, next)
+  if (to !== null) await scrollTo($, to).catch(() => undefined)
+}
+
+/** Moves the pane's window to the top, or brings the element a landing names to its middle. */
+async function scrollTo($: Context, to: Landing): Promise<void> {
+  await $.ui.scroll(to.kind === 'top' ? { to: 'start', in: PANE } : { to: { key: to.key }, in: PANE, block: 'center' })
+}
+
+/** The mine or all view, the list shown alone: the rows a page left from belong to the other list. */
+async function showMode($: Context, shown: ViewMode): Promise<void> {
+  await update($, mode, () => shown)
+  await go($, current => reset(current, false))
 }
 
 
@@ -90,6 +145,14 @@ export const register: Register = on => {
   let tracked: LiveChanges | null = null
   /** The tab title last asked for: `Tasks · Δn` (changes-rows.ts paneTitle). */
   let title = paneTitle(EMPTY_CHANGES)
+  /**
+   * What a task's refs and goals point at, for its card or its page. A failed read still opens it, its refs named
+   * unquoted and its goals by id: the register's own fields are the rest of the card.
+   */
+  const detailOf = async (task: TaskRow): Promise<TaskDetail> => {
+    const unquoted: TaskDetail = { ref: task.ref, quotes: [], goals: [] }
+    return details === null ? unquoted : details.load(task).catch(() => unquoted)
+  }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -193,7 +256,7 @@ export const register: Register = on => {
       if (!found.ok) return { text: found.problem }
       await live?.pin(found.id)
     }
-    if (command.kind === 'mode') await update($, mode, () => command.mode)
+    if (command.kind === 'mode') await showMode($, command.mode)
     if (command.kind === 'auto') await live?.pin(null)
     await sizer?.set('open')
     await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
@@ -255,9 +318,12 @@ export const register: Register = on => {
     let snap = EMPTY_SNAPSHOT
     let shown: ViewMode = 'mine'
     let open: ExpandedTasks = NOTHING_EXPANDED
+    /** Where the tasks view is; the list in the Changes view and inline, where a page never shows. */
+    let at: Nav = AT_LIST
     let body: Drawn[] = []
     /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
     let barLines: BarPiece[][] = []
+    const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
     try {
       isMinimized = (await read($, size)) === 'minimized'
       current = await read($, view)
@@ -267,11 +333,14 @@ export const register: Register = on => {
         shown = await read($, mode)
         open = await read($, expanded)
         const missing = await read($, requirements)
-        const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
-        const bar = current === 'tasks' && shown === 'mine' ? statusBar(snap, await read($, barFilter), columns) : null
+        if (current === 'tasks' && !inline) at = await read($, nav)
+        const place = currentPlace(at)
+        // A page has no status bar: the bar counts the list, and a press on it filters the list.
+        const bar = current === 'tasks' && shown === 'mine' && place.kind === 'list' ? statusBar(snap, await read($, barFilter), columns) : null
         // With no bar there is nothing to filter by, and the list shows every task.
-        const viewBlocks =
-          current === 'tasks' ? paneBlocks(snap, shown, open, bar?.filter ?? null) : changesBlocks(changed, isGitMissing(missing))
+        const tasksBlocks =
+          place.kind === 'task' ? pageBlocks(snap, shown, place.id, await read($, pages)) : paneBlocks(snap, shown, open, bar?.filter ?? null)
+        const viewBlocks = current === 'tasks' ? tasksBlocks : changesBlocks(changed, isGitMissing(missing))
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
@@ -283,8 +352,7 @@ export const register: Register = on => {
       body = failedDrawing(error)
     }
 
-    // Opening a card reads what the task's refs and goals point at, once. A failed read still opens it, its
-    // refs named unquoted and its goals by id: the register's own fields are the rest of the card.
+    // Opening a card reads what the task's refs and goals point at, once (detailOf).
     const toggle = async (id: string) => {
       if (open[id] !== undefined) {
         await update($, expanded, current => collapse(current, id))
@@ -292,9 +360,17 @@ export const register: Register = on => {
       }
       const task = snap.tasks.find(t => t.id === id)
       if (task === undefined) return
-      const unquoted: TaskDetail = { ref: task.ref, quotes: [], goals: [] }
-      const detail = details === null ? unquoted : await details.load(task).catch(() => unquoted)
+      const detail = await detailOf(task)
       await update($, expanded, current => ({ ...current, [id]: detail }))
+    }
+    // A press on a task id opens its page, read as a card's is; from the list, the list remembers `from`, the
+    // element the press was in, to scroll back to.
+    const openPage = async (id: string, from: string) => {
+      const task = snap.tasks.find(t => t.id === id)
+      if (task === undefined) return
+      const detail = await detailOf(task)
+      await update($, pages, current => ({ ...current, [id]: detail }))
+      await go($, current => pushed(leavingList(current, from), { kind: 'task', id }))
     }
 
     const isPlain = (span: Span) => span.color === undefined && span.bold !== true && span.dim !== true && span.href === undefined
@@ -333,29 +409,44 @@ export const register: Register = on => {
         {span.text}
       </Text>
     )
-    /** A card's lines with no task id as one Text; a line with one as a row of its pieces. */
-    const drawPart = (part: CardPart, wrap: Drawn['wrap']) => {
+    /**
+     * A card's lines with no task id as one Text; a line with one as a row of its pieces, each id a press that opens
+     * its page, keyed `goto:<id>:` and where it is drawn (`from`, the card's element).
+     */
+    const drawPart = (part: CardPart, wrap: Drawn['wrap'], from: string) => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
       return (
         <Box key={part.key} flexDirection="row">
-          {part.pieces.map((piece, i) => (piece.kind === 'words' ? drawText(piece.spans, wrap, String(i)) : drawId(piece.span, String(i))))}
+          {part.pieces.map((piece, i) =>
+            piece.kind === 'words' ? (
+              drawText(piece.spans, wrap, String(i))
+            ) : (
+              <Button key={`goto:${piece.task}:${from}:${part.key}:${i}`} plain onPress={() => void openPage(piece.task, from)}>
+                {drawId(piece.span, 'id')}
+              </Button>
+            ),
+          )}
         </Box>
       )
     }
-    // A Button holds strings and Texts alone, so an open card (its links) draws under the task's Button, not in it.
+    // A Button holds strings and Texts alone, so an open card (its links, its ids) draws under the task's Button, not
+    // in it. A page's title is no press: its card is always open.
     const drawBlock = (drawn: Drawn) => {
       const id = drawn.toggle
-      if (id === null) return drawText(drawn.spans, drawn.wrap, drawn.key)
-      const task = (
-        <Button key={drawn.key} plain onPress={() => void toggle(id)}>
-          {drawText(drawn.spans, drawn.wrap)}
-        </Button>
-      )
-      if (drawn.card === undefined) return task
+      const head =
+        id === null ? (
+          drawText(drawn.spans, drawn.wrap, drawn.key)
+        ) : (
+          <Button key={drawn.key} plain onPress={() => void toggle(id)}>
+            {drawText(drawn.spans, drawn.wrap)}
+          </Button>
+        )
+      if (drawn.card === undefined) return head
+      const from = `${drawn.key}-open`
       return (
-        <Box key={`${drawn.key}-open`} flexDirection="column">
-          {task}
-          {drawn.card.map(part => drawPart(part, drawn.wrap))}
+        <Box key={from} flexDirection="column">
+          {head}
+          {drawn.card.map(part => drawPart(part, drawn.wrap, from))}
         </Box>
       )
     }
@@ -363,9 +454,11 @@ export const register: Register = on => {
     // The switch: first in every state, so the other view is always one press (or t / d) away, its
     // buttons wrapping under each other in a dock too narrow for both. Minimized, it is the whole
     // pane, one row, and a press on either button opens the pane in full on that view.
+    // The Tasks button shows the list, from a page too, scrolled back to where the page was opened from.
     const switchTo = async (target: PaneView) => {
       await update($, view, () => target)
       await sizer?.set('open')
+      if (target === 'tasks') await go($, current => reset(current, true))
       if (target === 'changes') await tracked?.refresh()
     }
     const switchRow = (
@@ -398,16 +491,18 @@ export const register: Register = on => {
         label="mine"
         hotkey="m"
         variant={shown === 'mine' ? 'primary' : 'secondary'}
-        onPress={() => void update($, mode, () => 'mine')}
+        onPress={() => void showMode($, 'mine')}
       />,
       <Button
         label="all"
         hotkey="a"
         variant={shown === 'all' ? 'primary' : 'secondary'}
-        onPress={() => void update($, mode, () => 'all')}
+        onPress={() => void showMode($, 'all')}
       />,
     ]
-    if (Object.keys(open).length > 0)
+    const place = currentPlace(at)
+    // A page shows no list, so no card in it to collapse.
+    if (Object.keys(open).length > 0 && place.kind === 'list')
       buttons.push(
         <Button label="collapse" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />,
       )
@@ -452,9 +547,52 @@ export const register: Register = on => {
           ))}
         </Box>
       )
+    // A page, and the list while a page lies ahead of it (back led there), leads with back and forward (b, f; dim
+    // when there is nowhere to go), then the trail of the last places, each one a press away but the one shown
+    // (bold), those ahead of it dim, then a rule.
+    const step = (key: string, label: string, hotkey: string, isOpen: boolean, to: (current: Nav) => Nav) =>
+      isOpen ? (
+        <Button key={key} label={label} hotkey={hotkey} variant="secondary" onPress={() => void go($, to)} />
+      ) : (
+        <Text key={key} dimColor>
+          {label}
+        </Text>
+      )
+    const { crumbs, isCutBefore, isCutAfter } = trail(at)
+    const crumbRow = crumbs.flatMap((crumb, i) => {
+      const label = placeLabel(crumb.place)
+      const drawn = crumb.isShown ? (
+        <Text key={`crumb:${crumb.index}`} bold>
+          {label}
+        </Text>
+      ) : (
+        <Button key={`crumb:${crumb.index}`} plain onPress={() => void go($, current => wentTo(current, crumb.index))}>
+          <Text underline dimColor={crumb.isAhead}>
+            {label}
+          </Text>
+        </Button>
+      )
+      return i === 0 ? [drawn] : [<Text key={`after:${crumb.index - 1}`} dimColor>{TRAIL_SEPARATOR}</Text>, drawn]
+    })
+    const pageHead =
+      place.kind === 'task' || canGoForward(at) ? (
+        <Box key="page-head" flexDirection="column">
+          <Box flexDirection="row" columnGap={2}>
+            {step('back', '‹ back', 'b', canGoBack(at), back)}
+            {step('forward', 'forward ›', 'f', canGoForward(at), forward)}
+          </Box>
+          <Box key="trail" flexDirection="row" flexWrap="wrap">
+            {isCutBefore ? <Text key="cut-before" dimColor>{`…${TRAIL_SEPARATOR}`}</Text> : null}
+            {crumbRow}
+            {isCutAfter ? <Text key="cut-after" dimColor>{`${TRAIL_SEPARATOR}…`}</Text> : null}
+          </Box>
+          <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
+        </Box>
+      ) : null
     return (
       <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={inline ? 0 : 1}>
         {controls}
+        {pageHead}
         {statusRows}
         {body.map(drawBlock)}
       </Box>

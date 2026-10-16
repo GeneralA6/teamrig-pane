@@ -75,6 +75,16 @@ function indentOf(task: TaskRow): Span {
   return { text: ' '.repeat(cells(`${GLYPH[task.status]} ${task.id}${TITLE_GAP}`)) }
 }
 
+/** `◐ T12  title`, keyed `key`: its status mark in its color, its id bold, a wrapped line under the title; cut at `maxLines` when set. */
+export function titleRow(key: string, task: TaskRow, maxLines?: number): Row {
+  return {
+    key,
+    spans: [{ text: GLYPH[task.status], color: GLYPH_COLOR[task.status] }, { text: ` ${task.id}`, bold: true }, { text: `${TITLE_GAP}${task.title}` }],
+    hang: indentOf(task),
+    maxLines,
+  }
+}
+
 /**
  * `◐ T12  title`, the title cut at TITLE_LINES lines, and under it one dim meta line (meta.ts) cut at META_LINES;
  * with its card open, the title shows whole and the card (card.ts) takes the meta line's place. `context` is the
@@ -85,12 +95,7 @@ function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, cont
   const detail = expanded[task.id]
   const indent = indentOf(task)
   const key = `${section}:${task.id}`
-  const title: Row = {
-    key,
-    spans: [{ text: GLYPH[task.status], color: GLYPH_COLOR[task.status] }, { text: ` ${task.id}`, bold: true }, { text: `${TITLE_GAP}${task.title}` }],
-    hang: indent,
-    maxLines: detail === undefined ? TITLE_LINES : undefined,
-  }
+  const title = titleRow(key, task, detail === undefined ? TITLE_LINES : undefined)
   if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: cardRows(section, task, detail, context, viewer) }
   const meta: Row = { key: `${section}-meta:${task.id}`, spans: [indent, ...metaSpans(task, context, viewer)], hang: indent, maxLines: META_LINES }
   return { key, toggle: task.id, rows: [title, meta] }
@@ -222,7 +227,20 @@ export function paneBlocks(
   expanded: ExpandedTasks = NOTHING_EXPANDED,
   filter: BarStatus | null = null,
 ): Block[] {
-  if (snap.now === 0 && snap.problem === null) return [single('reading', [{ text: 'Reading the register…', dim: true }])]
-  const problem = snap.problem === null ? [] : [single('problem', [{ text: `WARN ${snap.problem}`, color: 'warning' }], { text: '  ' })]
-  return [...problem, ...(mode === 'mine' ? mineBlocks(snap, expanded, filter) : allBlocks(snap, expanded))]
+  const reading = readingBlock(snap)
+  if (reading !== null) return [reading]
+  return [...problemBlocks(snap), ...(mode === 'mine' ? mineBlocks(snap, expanded, filter) : allBlocks(snap, expanded))]
+}
+
+/**
+ * `Reading the register…`, the whole of a tasks body while the snapshot was never read (`now` 0: the pane's first
+ * moments, or a hot reload's until its first poll); null once it was, or when the read failed.
+ */
+export function readingBlock(snap: Snapshot): Block | null {
+  return snap.now === 0 && snap.problem === null ? single('reading', [{ text: 'Reading the register…', dim: true }]) : null
+}
+
+/** The register's problem, when it has one, leading a tasks body: what failed to read, the last good tasks drawn under it. */
+export function problemBlocks(snap: Snapshot): Block[] {
+  return snap.problem === null ? [] : [single('problem', [{ text: `WARN ${snap.problem}`, color: 'warning' }], { text: '  ' })]
 }

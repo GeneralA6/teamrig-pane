@@ -1,9 +1,10 @@
 // Where the tasks view is, and the way back to where it was: the places the person went through, kept as a
 // browser keeps its history. The list comes first; a press on a task id in a card (card.ts) opens that task's
 // page, back and forward step along the places, and a crumb of the trail goes straight to its own. A jump from
-// anywhere but the newest place drops the places ahead of it. Ids only, at most NAV_PLACES places, the oldest
-// dropped first: what a page shows is read from the snapshot each time it draws. Pure: register.tsx keeps it
-// in $.state and draws it.
+// anywhere but the newest place drops the places ahead of it; a page opens at its top, and a return from a page to
+// the list scrolls back to the element the page was opened from. Ids only, at most NAV_PLACES places, the oldest dropped first: what a page
+// shows is read from the snapshot each time it draws (page.ts), and only the pages a place names keep the details
+// read for them. Pure: register.tsx keeps it in $.state and draws it.
 import type { Nav, Place } from '../types'
 
 /** Most places kept; past it the oldest go first. */
@@ -76,6 +77,31 @@ export function reset(nav: Nav, keepRow: boolean): Nav {
 /** The task ids the places name: the pages whose details are worth keeping. */
 export function placeIds(nav: Nav): Set<string> {
   return new Set(nav.places.flatMap(place => (place.kind === 'task' ? [place.id] : [])))
+}
+
+/** What each page read for its task, `byId`, less the pages no place of `nav` names any more. */
+export function pagesKept<T>(byId: Readonly<Record<string, T>>, nav: Nav): Record<string, T> {
+  const ids = placeIds(nav)
+  return Object.fromEntries(Object.entries(byId).filter(([id]) => ids.has(id)))
+}
+
+/** Where the pane's window goes after a step: a page's top, or the element of the list keyed `key`. */
+export type Landing = { kind: 'top' } | { kind: 'row'; key: string }
+
+/**
+ * Where a step from `before` to `next` leaves the window: a page opens at its top, and a step from a page back to the
+ * list lands on the element the list remembers it was left from. Null for any other step, and when the list
+ * remembers none: the window stays where it is.
+ */
+export function landing(before: Nav, next: Nav): Landing | null {
+  const to = currentPlace(next)
+  if (to.kind === 'task') return { kind: 'top' }
+  return currentPlace(before).kind === 'task' && to.row !== null ? { kind: 'row', key: to.row } : null
+}
+
+/** A crumb's words: `Tasks` for the list, a page's task id. */
+export function placeLabel(place: Place): string {
+  return place.kind === 'list' ? 'Tasks' : place.id
 }
 
 /** A crumb of the trail: its place, the index a press goes to, and whether it is the place shown or one ahead of it. */

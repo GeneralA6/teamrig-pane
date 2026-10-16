@@ -7,9 +7,12 @@ import {
   canGoForward,
   currentPlace,
   forward,
+  landing,
   leavingList,
   NAV_PLACES,
+  pagesKept,
   placeIds,
+  placeLabel,
   pushed,
   reset,
   trail,
@@ -102,6 +105,26 @@ describe('nav', () => {
   test('names the ids of the pages it holds', async () => {
     expect([...placeIds(through('T52', 'T50', 'T52'))].sort()).toEqual(['T50', 'T52'])
     expect(placeIds(AT_LIST).size).toBe(0)
+  })
+
+  test('keeps the details of the pages a place still names, and drops the rest', async () => {
+    const nav = pushed(back(through('T52', 'T50')), page('T9'))
+    expect(pagesKept({ T52: 1, T50: 2, T9: 3 }, nav)).toEqual({ T52: 1, T9: 3 })
+    expect(pagesKept({ T52: 1 }, AT_LIST)).toEqual({})
+  })
+
+  test('a page opens at its top; a step from a page to the list lands on the element it was left from; no other step moves the window', async () => {
+    const nav = pushed(leavingList(AT_LIST, 'next:T52-open'), page('T52'))
+    expect(landing(nav, back(nav))).toEqual({ kind: 'row', key: 'next:T52-open' })
+    expect(landing(nav, wentTo(nav, 0))).toEqual({ kind: 'row', key: 'next:T52-open' })
+    expect(landing(back(nav), nav)).toEqual({ kind: 'top' })
+    expect(landing(through('T52', 'T50'), back(through('T52', 'T50')))).toEqual({ kind: 'top' })
+    expect(landing(through('T52'), back(through('T52')))).toBe(null)
+    expect(landing(back(nav), reset(back(nav), true))).toBe(null)
+  })
+
+  test('a crumb names the list Tasks and a page by its task id', async () => {
+    expect([placeLabel({ kind: 'list', row: 'x' }), placeLabel(page('T58'))]).toEqual(['Tasks', 'T58'])
   })
 
   test(`the trail draws at most ${TRAIL_PLACES} places, the newest, a cut marked`, async () => {
