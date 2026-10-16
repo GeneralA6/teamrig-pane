@@ -68,6 +68,18 @@ export function dueWords(task: TaskRow, now: number): string | null {
   return task.due.trim().length > 10 ? `${day} ${new Date(at).toISOString().slice(11, 16)}` : day
 }
 
+/** `due today 18:00`, or `verify by …` while verifying: when the task is due; null with no due. */
+export function dueLabel(task: TaskRow, now: number): string | null {
+  const due = dueWords(task, now)
+  return due === null ? null : `${task.status === 'verifying' ? 'verify by' : 'due'} ${due}`
+}
+
+/** `late 1d` while an active task is past its due (flagsOf); null otherwise. */
+export function lateWords(task: TaskRow, now: number): string | null {
+  const deadline = dueTime(task)
+  return deadline !== undefined && flagsOf(task, now).includes('overdue') ? `late ${ageWords(now - deadline)}` : null
+}
+
 /**
  * What a reason is judged ready by: the snapshot's clock and its tasks' statuses. The snapshot holds the active
  * tasks and those finished today (source.ts), so one it lacks finished earlier and reads finished, as in teamrig.
@@ -105,8 +117,8 @@ export function metaParts(task: TaskRow, context: WaitContext, viewer: string | 
   const parts: Span[] = []
   if (others) parts.push({ text: `on ${task.owner}` })
   parts.push({ text: priorityText(task.priority) })
-  const due = dueWords(task, now)
-  if (due !== null) parts.push({ text: `${task.status === 'verifying' ? 'verify by' : 'due'} ${due}` })
+  const due = dueLabel(task, now)
+  if (due !== null) parts.push({ text: due })
   if (SAYS_SINCE.has(task.status)) {
     // Why a waiting task waits, what proves a verifying one; an in-progress note is the card's.
     const why = task.status === 'waiting' ? waitingWords(task, context) : task.status === 'verifying' ? task.note : null
@@ -116,9 +128,9 @@ export function metaParts(task: TaskRow, context: WaitContext, viewer: string | 
   // A plan dependency holds a task only until it starts, and only while one of its tasks is unfinished.
   const first = task.status === 'open' ? unfinishedAfter(task.after, context) : []
   if (first.length > 0) parts.push({ text: `after ${first.join(', ')}` })
+  const late = lateWords(task, now)
+  if (late !== null) parts.push({ text: late, color: 'error' })
   const flags = flagsOf(task, now)
-  const deadline = dueTime(task)
-  if (flags.includes('overdue') && deadline !== undefined) parts.push({ text: `late ${ageWords(now - deadline)}`, color: 'error' })
   if (flags.includes('new') && !others) parts.push({ text: 'new', color: 'suggestion' })
   if (flags.includes('unseen')) parts.push({ text: `not picked up ${ageWords(now - Date.parse(task.assignedAt))}`, color: 'error' })
   if (task.status === 'open' && task.source !== task.owner && task.source !== viewer) parts.push({ text: `asked by ${task.source}` })
