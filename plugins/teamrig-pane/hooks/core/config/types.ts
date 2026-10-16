@@ -5,7 +5,7 @@ import type { TaskStatus } from '../register/model.ts';
 export const CONFIG_VERSION = 3;
 
 export interface RolesConfig {
-  /** Owns priorities, team rules and the owner's decision queue; may re-prioritize and reassign tasks. */
+  /** Owns priorities, team rules and the owner's decision queue; may re-prioritize and reassign tasks; hands the work itself to others (`leadBoundary`). */
   readonly lead: string;
   /** Owns deploy coordination and fleet health, when the team has that role. */
   readonly coordinatorOwner?: string;
@@ -25,6 +25,11 @@ export interface RegisterCheckConfig {
   /** A session's in-progress task below its own open top-priority task this long is a PRIORITY-SKIP. */
   readonly prioritySkipAfterHours: number;
   readonly weekLengthDays: number;
+  /**
+   * The files `check` scans for `stopgap T<id>` tags besides every skill: paths relative to the team's project
+   * folder, or absolute; a path ending in `.md` is one file, any other a folder whose `.md` files are read.
+   */
+  readonly stopgapFiles: readonly string[];
 }
 
 export interface RegisterConfig {
@@ -38,6 +43,8 @@ export interface RegisterConfig {
   readonly maxText: number;
   /** Extra regular expressions, matched case-insensitively, that refuse secret-looking text on top of the built-in shapes in `core/secret-patterns.ts`. */
   readonly secretPatterns: readonly string[];
+  /** Whether `add` needs `--description`, what the task is and why in plain words, and `update` refuses to clear one. */
+  readonly requireDescription: boolean;
   readonly requireEvidenceOnDone: boolean;
   readonly requireSkillOnDone: boolean;
   /** Statuses that cannot be set without a note. */
@@ -47,7 +54,24 @@ export interface RegisterConfig {
    * after the first `teamrig compact`. Off, only `teamrig compact` archives it.
    */
   readonly autoArchive: boolean;
+  /** Whether `set --status verifying` needs `--proof`, what will prove the shipped change works. */
+  readonly requireProofOnVerifying: boolean;
+  /** What `set --status in-progress` does while a task it needs is still verifying. */
+  readonly verifyGate: VerifyGate;
+  /** A session holding more verifying tasks than this is a PILE-UP in `check`; 0 turns the flag off. */
+  readonly maxVerifying: number;
   readonly check: RegisterCheckConfig;
+}
+
+export const VERIFY_GATES = ['refuse', 'warn'] as const;
+/**
+ * Starting a task while one it needs (`--after`, or `--waits task:`) is verifying: `refuse` it, or `warn` and
+ * start it. Either way the verifying task's owner gets one inbox line a day about it.
+ */
+export type VerifyGate = (typeof VERIFY_GATES)[number];
+
+export function isVerifyGate(value: unknown): value is VerifyGate {
+  return VERIFY_GATES.some((gate) => gate === value);
 }
 
 export interface SkillsConfig {
@@ -67,8 +91,22 @@ export interface LockConfig {
 }
 
 export interface PushGuardConfig {
-  /** Branches a push to which needs the human's confirmation; force-push and deletion are refused. */
+  /** Branches the push guard watches: a push to one goes as `pushToProtected` says; force-push, mirror and deletion are refused. */
   readonly protectedBranches: readonly string[];
+  /** What a normal push to a protected branch does. */
+  readonly pushToProtected: PushToProtected;
+}
+
+/**
+ * A normal push to a protected branch: `ask` the human, or `allow` it with a note. Neither changes a refusal, a
+ * `--force-with-lease` push, or a command the guard cannot read, which still asks.
+ */
+export type PushToProtected = 'ask' | 'allow';
+
+export const PUSH_TO_PROTECTED: readonly PushToProtected[] = ['ask', 'allow'];
+
+export function isPushToProtected(value: unknown): value is PushToProtected {
+  return PUSH_TO_PROTECTED.some((choice) => choice === value);
 }
 
 export const COMMIT_GATES = ['off', 'warn', 'refuse'] as const;
@@ -80,6 +118,58 @@ export function isCommitGate(value: unknown): value is CommitGate {
 }
 
 /** The small-commits rule: one logical change per commit, and a reason line on any commit over the bounds. */
+export interface MessagesConfig {
+  /** The longest message one session may send another. */
+  readonly maxLines: number;
+  /**
+   * Minutes a session may sit idle before a message to it counts as a cold wake: its first call then
+   * re-reads its whole context at full price. A send to a session idle this long is held once; 0 never holds.
+   */
+  readonly coldAfterMinutes: number;
+}
+
+/** How teamrig keeps the lead leading (T320): its own edits, tests and code searches are nudged and shown, never blocked. */
+export interface LeadBoundaryConfig {
+  /** Off: the lead's own work is neither nudged nor shown. */
+  readonly enabled: boolean;
+  /**
+   * The lead's own files and folders beyond the team's teamrig folder and Claude Code's memory folders, which
+   * always count: editing or searching them is its job. `~` is the user's home, `*` one folder name.
+   */
+  readonly ownPaths: readonly string[];
+  /** The turn's code search that brings the lead one nudge, and from which the owner's turn-end line counts searches; 0 never. */
+  readonly searchNudgeAt: number;
+}
+
+/** Loop discipline inside a turn. */
+export interface LoopsConfig {
+  /**
+   * After this many single-tool calls in a row in one turn, the session gets one line asking it to batch
+   * independent steps into one message; 0 never asks.
+   */
+  readonly chainNudgeAt: number;
+}
+
+/** What `teamrig test` prints of a failed run. */
+export interface TestsConfig {
+  /** The most characters of failing tests it prints, all of them together; the rest stays in the log. */
+  readonly maxFailureChars: number;
+}
+
+/** Which GitHub issues `teamrig gh sync` reads into the register. It only reads GitHub, never writes to it. */
+export interface GithubConfig {
+  /** The repositories it reads, as `owner/name` in lowercase; empty turns the import off. */
+  readonly repos: readonly string[];
+  /** The session each GitHub login (lowercase) owns imported issues as; an issue with no listed assignee goes to its repository's session. */
+  readonly owners: Readonly<Record<string, string>>;
+  /** The session each repository's (lowercase) issues go to when none of their assignees is in `owners`; else the lead. */
+  readonly sessions: Readonly<Record<string, string>>;
+  /** How many days back closed issues are read, to finish the tasks they were imported as. */
+  readonly closedDays: number;
+  /** How often the hooks start a sync on their own, in minutes, once for the whole team; 0 leaves it to `gh sync --yes`. */
+  readonly everyMinutes: number;
+}
+
 export interface CommitsConfig {
   /** Changed non-test lines (added + deleted) a commit may carry without a reason line. */
   readonly maxLines: number;
@@ -161,6 +251,11 @@ export interface BudgetConfig {
   readonly enabled: boolean;
   /** The weekly limit in weighted tokens (W). Unset: derived from the status line's weekly %. */
   readonly weeklyLimitW?: number;
+  /**
+   * What one W of a subagent's transcript costs against the weekly limit, in W of a main session. The meter
+   * multiplies each subagent call's W by it, so every W (and `weeklyLimitW`) is in main-session W. 1: alike.
+   */
+  readonly subagentWeight: number;
   /** Unset: the reset time the status line reports. */
   readonly reset?: BudgetReset;
   /** Use the week up to this share of the weekly limit. */
@@ -205,17 +300,67 @@ export interface AlertsConfig {
 }
 
 /**
- * Context refresh: when a session finishes a task (`set <id> --status done`) with its context at or over
- * `contextTokens`, or after the lead asked for it, the session writes a handover and the user types /clear.
+ * Context refresh: at any turn end with the session's context at or over `contextTokens`, at a task end
+ * (`set <id> --status done`) with `everyTasks` tasks finished since its context was last fresh, or after the lead
+ * asked for it, the session writes a handover; then teamrig starts it fresh on its own (`autoRestart`), or
+ * the user types /clear.
  */
 export interface RefreshConfig {
   readonly enabled: boolean;
   /** The context size, in tokens, that asks for a refresh. Absolute, since a hook cannot see the window size. */
   readonly contextTokens: number;
-  /** Title the tab `<name>: type /clear` once the session's handover is written and it waits for /clear. */
+  /**
+   * Also refresh once this many tasks were finished since the context was last fresh (a /clear, a new
+   * process or a compaction), when the context is at least `everyTasksMinTokens`; 0 turns it off.
+   */
+  readonly everyTasks: number;
+  /** The smallest context the task count refreshes at: under it a fresh start saves little. */
+  readonly everyTasksMinTokens: number;
+  /** Title the tab once the session's handover is written: `<name>: restarting`, or `<name>: type /clear`. */
   readonly tabTitle: boolean;
+  /**
+   * Once the handover is written and the turn has ended, start the session fresh, which reads the handover:
+   * the plugin's mod runs /clear in its tab; where no mod claims the ask, end its Claude Code process and start
+   * it again, in the same tab when `teamrig open` started it, else in a new tab. A prompt typed before then
+   * keeps the context. Off: the user types /clear.
+   */
+  readonly autoRestart: boolean;
+  /** How long after the turn's end the automatic restart waits, so the user can still type to keep the context. */
+  readonly restartDelaySeconds: number;
+  /**
+   * A program (its path, then its arguments) run after an automatic restart ended a session, given Claude
+   * Code's SessionEnd hook input (reason `clear`) on stdin: for a SessionEnd hook the end skipped, since on
+   * Windows a process is ended without running them. Empty: none.
+   */
+  readonly endCommand: readonly string[];
   /** The handover folder; a relative one is resolved against the team's folder. Unset: `<team folder>/handover`. */
   readonly handoverDir?: string;
+}
+
+/**
+ * Who may hire a session onto the team (`teamrig hire`): `off` nobody; `owner` the lead, once the owner
+ * approved (`--approved-by`, kept with the hire); `lead` the lead, within the caps.
+ */
+export const HIRING_POLICIES = ['off', 'owner', 'lead'] as const;
+export type HiringPolicy = (typeof HIRING_POLICIES)[number];
+
+export function isHiringPolicy(value: unknown): value is HiringPolicy {
+  return HIRING_POLICIES.some((policy) => policy === value);
+}
+
+/** Hiring temporary sessions: who decides, and the caps every hire stays within. */
+export interface HiringConfig {
+  readonly policy: HiringPolicy;
+  /** Hired sessions on the team at once. */
+  readonly maxSessions: number;
+  /** A hire's daily budget, in % of the week, unless the hire names its own. */
+  readonly dailyPct: number;
+  /** The most all hired sessions' daily budgets may add up to. */
+  readonly maxDailyPct: number;
+  /** Hours a hired session may hold no open task before it is due to retire. */
+  readonly idleHours: number;
+  /** Days from a hire to its review date, unless the hire names one. */
+  readonly reviewDays: number;
 }
 
 /**
@@ -251,6 +396,16 @@ export interface LaunchConfig {
   readonly effort?: EffortLevel;
 }
 
+/** Character budgets for the text Claude Code puts in every call's context; `doctor` flags a file over its budget. */
+export interface ContextFilesConfig {
+  /** The CLAUDE.md files a session loads: the user's, and the project folder's and each parent's. */
+  readonly maxClaudeMdChars: number;
+  /** The project's memory index (`MEMORY.md`). */
+  readonly maxMemoryIndexChars: number;
+  /** The skill listing: one `name: description` line per skill. */
+  readonly maxSkillListingChars: number;
+}
+
 export interface PathsConfig {
   readonly state?: string;
   readonly inbox?: string;
@@ -283,17 +438,23 @@ export interface KitConfig {
   readonly roles: RolesConfig;
   /** Decision areas only the human owner can approve; silence never counts as consent for them. */
   readonly ownerGates: readonly string[];
-  readonly messages: { readonly maxLines: number };
+  readonly messages: MessagesConfig;
   readonly register: RegisterConfig;
   readonly skills: SkillsConfig;
+  readonly contextFiles: ContextFilesConfig;
   readonly lock: LockConfig;
   readonly pushGuard: PushGuardConfig;
   readonly commits: CommitsConfig;
   readonly coordinator: CoordinatorConfig;
   readonly budget: BudgetConfig;
+  readonly leadBoundary: LeadBoundaryConfig;
+  readonly loops: LoopsConfig;
+  readonly tests: TestsConfig;
+  readonly github: GithubConfig;
   readonly alerts: AlertsConfig;
   readonly tabStatus: { readonly enabled: boolean };
   readonly refresh: RefreshConfig;
+  readonly hiring: HiringConfig;
   /** How `teamrig open` starts a session in a new terminal tab. */
   readonly open: OpenConfig;
   /** Each session's Claude Code model and effort, by id; the lead's unset keys take `DEFAULT_LEAD_LAUNCH`. */

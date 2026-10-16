@@ -3,13 +3,19 @@ import type {
   AlertsConfig,
   BudgetConfig,
   CommitsConfig,
+  ContextFilesConfig,
+  GithubConfig,
+  HiringConfig,
   LaunchConfig,
   LockConfig,
+  LeadBoundaryConfig,
+  LoopsConfig,
   OpenConfig,
   PushGuardConfig,
   RefreshConfig,
   RegisterConfig,
   SkillsConfig,
+  TestsConfig,
 } from './types.ts';
 
 /** Defaults for every key except the roster (`sessions`, `roles.lead`), which each team supplies. */
@@ -21,7 +27,13 @@ export const DEFAULT_OWNER_GATES: readonly string[] = [
   'resource changes',
 ];
 
-export const DEFAULT_MESSAGES = { maxLines: 10 } as const;
+export const DEFAULT_MESSAGES = { maxLines: 10, coldAfterMinutes: 60 } as const;
+
+/**
+ * The most characters a task's description holds, beside `maxTitle` and `maxText` (the note, ref, evidence and
+ * proof): a fixed limit, not a config key, so a GitHub issue body cut to it reads the same on every team.
+ */
+export const MAX_DESCRIPTION = 2_000;
 
 export const DEFAULT_REGISTER: RegisterConfig = {
   ownerSource: 'owner',
@@ -35,11 +47,15 @@ export const DEFAULT_REGISTER: RegisterConfig = {
   maxTitle: 140,
   maxText: 300,
   secretPatterns: [],
+  requireDescription: true,
   requireEvidenceOnDone: true,
   requireSkillOnDone: true,
   requireNoteOn: ['waiting', 'verifying', 'done', 'dropped'],
   autoArchive: true,
-  check: { staleAfterHours: 72, notPickedUpAfterHours: 24, prioritySkipAfterHours: 24, weekLengthDays: 7 },
+  requireProofOnVerifying: true,
+  verifyGate: 'refuse',
+  maxVerifying: 5,
+  check: { staleAfterHours: 72, notPickedUpAfterHours: 24, prioritySkipAfterHours: 24, weekLengthDays: 7, stopgapFiles: ['CLAUDE.md', '.claude/rules'] },
 };
 
 export const DEFAULT_SKILLS: SkillsConfig = {
@@ -50,9 +66,12 @@ export const DEFAULT_SKILLS: SkillsConfig = {
   forbidFrontmatter: ['allowed-tools'],
 };
 
+/** Measured on a working team (10-15): 23k of CLAUDE.md, 15k of memory index and 4.6k of skill listing were re-read every call. */
+export const DEFAULT_CONTEXT_FILES: ContextFilesConfig = { maxClaudeMdChars: 12_000, maxMemoryIndexChars: 6_000, maxSkillListingChars: 4_000 };
+
 export const DEFAULT_LOCK: LockConfig = { ttlMs: 30_000, pollMs: 50, waitMs: 20_000 };
 
-export const DEFAULT_PUSH_GUARD: PushGuardConfig = { protectedBranches: ['main', 'master'] };
+export const DEFAULT_PUSH_GUARD: PushGuardConfig = { protectedBranches: ['main', 'master'], pushToProtected: 'ask' };
 
 /** Tests: a test folder, `*.test.*` and `*.spec.*` files, and pytest's `test_*.py`. `warn` only adds to a push the guard already asks about. */
 export const DEFAULT_COMMITS: CommitsConfig = {
@@ -70,6 +89,7 @@ export const DEFAULT_COMMITS: CommitsConfig = {
  */
 export const DEFAULT_BUDGET: BudgetConfig = {
   enabled: false,
+  subagentWeight: 1,
   targetPct: 99.5,
   reservePct: 0.5,
   paceEndHoursBeforeReset: 1,
@@ -87,10 +107,40 @@ export const DEFAULT_SESSION_SHARE = 1;
 
 export const DEFAULT_ALERTS: AlertsConfig = { persistentFailureHours: 24 };
 
-/** 250k suits a 1M-token window; on a 200k window Claude Code compacts first, so a team there sets about 150k. */
-export const DEFAULT_REFRESH: RefreshConfig = { enabled: true, contextTokens: 250_000, tabTitle: true };
+export const DEFAULT_LOOPS: LoopsConfig = { chainNudgeAt: 6 };
+export const DEFAULT_LEAD_BOUNDARY: LeadBoundaryConfig = { enabled: true, ownPaths: [], searchNudgeAt: 3 };
+
+/** About a screenful: two or three failing tests with their errors and first stack frames. */
+export const DEFAULT_TESTS: TestsConfig = { maxFailureChars: 4000 };
+
+/**
+ * Off until a team lists a repository; two weeks of closed issues covers a sync missed over a holiday. Every 15
+ * minutes a new issue reaches its session within a working block, at two gh calls per repository each time.
+ */
+export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {}, closedDays: 14, everyMinutes: 15 };
+
+/**
+ * Claude Code compacts a 200k window at about 167k, so 120k refreshes before that; every 3 tasks catches a
+ * session that grows slowly, from 80k up. Measured over 8 days of 12 sessions: about 9 refreshes a day in all.
+ */
+export const DEFAULT_REFRESH: RefreshConfig = {
+  enabled: true,
+  contextTokens: 120_000,
+  everyTasks: 3,
+  everyTasksMinTokens: 80_000,
+  tabTitle: true,
+  autoRestart: true,
+  restartDelaySeconds: 15,
+  endCommand: [],
+};
 
 export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto' };
+
+/**
+ * A hire spends the week's budget, so it waits for the owner's yes: at most two hires at 1% of the week a day
+ * each, 3% in all, reviewed after a week and due to retire after 4 hours with no open task.
+ */
+export const DEFAULT_HIRING: HiringConfig = { policy: 'owner', maxSessions: 2, dailyPct: 1, maxDailyPct: 3, idleHours: 4, reviewDays: 7 };
 
 /**
  * The lead's model and effort for each key its `launch` entry leaves unset: Opus (Claude Code's `opus`
