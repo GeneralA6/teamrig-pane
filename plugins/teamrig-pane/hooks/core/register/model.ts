@@ -3,7 +3,7 @@ import { ID_PATTERN } from '../core/ids.ts';
 
 /**
  * Task states. The first four are active: the task still needs its owner. `verifying` is a change that has
- * shipped and waits for what proves it (a test run, a night's flow, a number), named in its status note.
+ * shipped and waits for what proves it (a test run, a night's flow, a number), named by its `--proof`.
  * `waiting` cannot go on until each of its typed reasons clears (waits.ts).
  */
 export const TASK_STATUSES = ['open', 'in-progress', 'verifying', 'waiting', 'done', 'dropped'] as const;
@@ -27,6 +27,13 @@ export function isTaskStatus(value: unknown): value is TaskStatus {
 
 /** Session and area names: the shared id rule, as they name inbox files and folders. */
 export const SESSION_NAME = ID_PATTERN;
+
+/**
+ * The source of a task imported from a GitHub issue: only `teamrig gh sync` writes one (github/sync.ts),
+ * and a session cannot give it to a task (policy.ts). Kept here, with the register's other names, so the
+ * read side (views.ts, and the pane's copy of it) needs no write policy.
+ */
+export const GITHUB_SOURCE = 'github';
 
 /** A priority as the CLI prints and takes it: `p1`, the most urgent, `p2` and so on. */
 export function priorityText(priority: number): string {

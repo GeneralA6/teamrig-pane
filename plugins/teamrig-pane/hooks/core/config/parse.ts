@@ -6,7 +6,12 @@ import {
   DEFAULT_ALERTS,
   DEFAULT_BUDGET,
   DEFAULT_COMMITS,
+  DEFAULT_CONTEXT_FILES,
+  DEFAULT_GITHUB,
+  DEFAULT_HIRING,
   DEFAULT_LOCK,
+  DEFAULT_LEAD_BOUNDARY,
+  DEFAULT_LOOPS,
   DEFAULT_MESSAGES,
   DEFAULT_OPEN,
   DEFAULT_OWNER_GATES,
@@ -15,29 +20,41 @@ import {
   DEFAULT_REGISTER,
   DEFAULT_SESSION_SHARE,
   DEFAULT_SKILLS,
+  DEFAULT_TESTS,
 } from './defaults.ts';
 import { isEffort, isModel } from './launch.ts';
 import { CONFIG_LIMITS } from './limits.ts';
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
 import {
   ESCALATIONS,
+  HIRING_POLICIES,
   isCommitGate,
   isEffortLevel,
   isEscalation,
+  isHiringPolicy,
   isOverAction,
+  isPushToProtected,
   isTerminalChoice,
+  isVerifyGate,
   isWeekday,
   OVER_ACTIONS,
+  PUSH_TO_PROTECTED,
   TERMINALS,
+  type ContextFilesConfig,
+  VERIFY_GATES,
   WEEKDAYS,
   type BudgetConfig,
   type BudgetLiftConfig,
   type BudgetReset,
   type CommitsConfig,
+  type GithubConfig,
+  type HiringConfig,
+  type LeadBoundaryConfig,
   type KitConfig,
   type LaunchConfig,
   type OpenConfig,
   type PathsConfig,
+  type PushToProtected,
   type QuietHours,
   type RefreshConfig,
   type RegisterConfig,
@@ -57,6 +74,13 @@ const isSessionName: Check<string> = (name) =>
   SESSION_NAME.test(name) ? undefined : 'expected a lowercase name: a letter, then letters, digits or -, at most 32';
 
 const isUtcTime: Check<string> = (time) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? undefined : 'expected a UTC time as HH:MM');
+
+/** A repository as GitHub names it: an owner login, a slash, then letters, digits, `.`, `_` or `-`. */
+const isRepoName: Check<string> = (repo) =>
+  /^[a-z0-9][a-z0-9-]{0,38}\/[a-z0-9._-]{1,100}$/i.test(repo) ? undefined : 'expected a GitHub repository as owner/name';
+
+/** A GitHub login: letters, digits or -, starting with a letter or digit, at most 39 characters. */
+const GITHUB_LOGIN = /^[a-z0-9][a-z0-9-]{0,38}$/i;
 
 const BRANCH_NAME: Check<string> = (name) => (/^[^\s~^:?*[\\]+$/.test(name) ? undefined : 'not a valid branch name');
 
@@ -192,9 +216,13 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
       shortLine(CONFIG_LIMITS.ownerGates.maxLength),
       CONFIG_LIMITS.ownerGates.maxItems,
     ),
-    messages: { maxLines: read.integer(messages, 'maxLines', 'messages', DEFAULT_MESSAGES.maxLines, CONFIG_LIMITS.maxLines) },
+    messages: {
+      maxLines: read.integer(messages, 'maxLines', 'messages', DEFAULT_MESSAGES.maxLines, CONFIG_LIMITS.maxLines),
+      coldAfterMinutes: read.integer(messages, 'coldAfterMinutes', 'messages', DEFAULT_MESSAGES.coldAfterMinutes, CONFIG_LIMITS.coldAfterMinutes),
+    },
     register: parseRegister(read, read.section(raw, 'register', '')),
     skills: parseSkills(read, read.section(raw, 'skills', '')),
+    contextFiles: parseContextFiles(read, read.section(raw, 'contextFiles', '')),
     lock: {
       ttlMs: read.integer(lock, 'ttlMs', 'lock', DEFAULT_LOCK.ttlMs, { min: 1_000 }),
       pollMs: read.integer(lock, 'pollMs', 'lock', DEFAULT_LOCK.pollMs, { min: 10 }),
@@ -209,22 +237,119 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
         shortLine(CONFIG_LIMITS.protectedBranches.maxLength, BRANCH_NAME),
         CONFIG_LIMITS.protectedBranches.maxItems,
       ),
+      pushToProtected: parsePushToProtected(read, pushGuard),
     },
     commits: parseCommits(read, read.section(raw, 'commits', '')),
     coordinator: {
       schedule: heavyCutoffUtc === undefined ? {} : { heavyCutoffUtc },
     },
     budget: parseBudget(read, read.section(raw, 'budget', ''), sessions),
+    leadBoundary: parseLeadBoundary(read, read.section(raw, 'leadBoundary', '')),
+    loops: {
+      chainNudgeAt: read.integer(read.section(raw, 'loops', ''), 'chainNudgeAt', 'loops', DEFAULT_LOOPS.chainNudgeAt, CONFIG_LIMITS.chainNudgeAt),
+    },
+    tests: {
+      maxFailureChars: read.integer(read.section(raw, 'tests', ''), 'maxFailureChars', 'tests', DEFAULT_TESTS.maxFailureChars, CONFIG_LIMITS.maxFailureChars),
+    },
+    github: parseGithub(read, read.section(raw, 'github', ''), sessions),
     alerts: {
       persistentFailureHours: read.integer(alerts, 'persistentFailureHours', 'alerts', DEFAULT_ALERTS.persistentFailureHours, CONFIG_LIMITS.persistentFailureHours),
     },
     tabStatus: { enabled: read.boolean(tabStatus, 'enabled', 'tabStatus', false) },
     refresh: parseRefresh(read, read.section(raw, 'refresh', '')),
+    hiring: parseHiring(read, read.section(raw, 'hiring', '')),
     open: parseOpen(read, read.section(raw, 'open', '')),
     launch,
     paths: parsePaths(read, read.section(raw, 'paths', '')),
   };
   return { config, issues: read.issues };
+}
+
+/** `leadBoundary`: the lead's own paths are single lines; the search threshold is bounded like the chain nudge. */
+function parseLeadBoundary(read: ConfigReader, raw: JsonRecord): LeadBoundaryConfig {
+  return {
+    enabled: read.boolean(raw, 'enabled', 'leadBoundary', DEFAULT_LEAD_BOUNDARY.enabled),
+    ownPaths: read.stringList(raw, 'ownPaths', 'leadBoundary', DEFAULT_LEAD_BOUNDARY.ownPaths, shortLine(CONFIG_LIMITS.leadOwnPaths.maxLength), CONFIG_LIMITS.leadOwnPaths.maxItems),
+    searchNudgeAt: read.integer(raw, 'searchNudgeAt', 'leadBoundary', DEFAULT_LEAD_BOUNDARY.searchNudgeAt, CONFIG_LIMITS.searchNudgeAt),
+  };
+}
+
+/**
+ * `github`: the repositories `gh sync` reads and who owns their issues. Repositories and logins are
+ * kept in lowercase, as GitHub matches them, so an imported task's ref stays the same however the
+ * config spells them; a repository listed twice is reported and read once.
+ */
+function parseGithub(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): GithubConfig {
+  const { maxItems, maxLength } = CONFIG_LIMITS.githubRepos;
+  const repos: string[] = [];
+  for (const repo of read.stringList(raw, 'repos', 'github', DEFAULT_GITHUB.repos, shortLine(maxLength, isRepoName), maxItems)) {
+    const key = repo.toLowerCase();
+    if (repos.includes(key)) {
+      read.report('github.repos', `${describe(repo)} is listed twice`);
+      continue;
+    }
+    repos.push(key);
+  }
+  return {
+    repos,
+    owners: readGithubOwners(read, read.section(raw, 'owners', 'github'), sessions),
+    sessions: readGithubSessions(read, read.section(raw, 'sessions', 'github'), repos, sessions),
+    closedDays: read.integer(raw, 'closedDays', 'github', DEFAULT_GITHUB.closedDays, CONFIG_LIMITS.closedDays),
+    everyMinutes: read.integer(raw, 'everyMinutes', 'github', DEFAULT_GITHUB.everyMinutes, CONFIG_LIMITS.githubEveryMinutes),
+  };
+}
+
+/**
+ * `github.sessions`: the session each repository's issues go to; a repository not in `github.repos` or a
+ * session not on the team is reported and left out. Keys are kept in lowercase, as `repos` are.
+ */
+function readGithubSessions(read: ConfigReader, raw: JsonRecord, repos: readonly string[], team: readonly string[]): Record<string, string> {
+  const owned: Record<string, string> = {};
+  for (const repo of Object.keys(raw)) {
+    const path = `github.sessions.${repo}`;
+    const key = repo.toLowerCase();
+    if (!repos.includes(key)) {
+      read.report(path, 'is not one of github.repos');
+      continue;
+    }
+    const session = read.optionalString(raw, repo, 'github.sessions', isSessionName);
+    if (session === undefined) {
+      continue;
+    }
+    if (!team.includes(session)) {
+      read.report(path, `${describe(session)} is not one of the sessions`);
+    } else if (owned[key] !== undefined) {
+      read.report(path, 'is listed twice');
+    } else {
+      owned[key] = session;
+    }
+  }
+  return owned;
+}
+
+/** `github.owners`: a session for each GitHub login; a wrong login or a session not on the team is reported and left out. */
+function readGithubOwners(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): Record<string, string> {
+  const owners: Record<string, string> = {};
+  for (const login of Object.keys(raw)) {
+    const path = `github.owners.${login}`;
+    if (!GITHUB_LOGIN.test(login)) {
+      read.report(path, 'expected a GitHub login: letters, digits or -, at most 39 characters');
+      continue;
+    }
+    const session = read.optionalString(raw, login, 'github.owners', isSessionName);
+    const key = login.toLowerCase();
+    if (session === undefined) {
+      continue;
+    }
+    if (!sessions.includes(session)) {
+      read.report(path, `${describe(session)} is not one of the sessions`);
+    } else if (owners[key] !== undefined) {
+      read.report(path, 'is listed twice');
+    } else {
+      owners[key] = session;
+    }
+  }
+  return owners;
 }
 
 /** Config version 1's name for `register.priorities`; the v1-to-v2 migration renames it, so a current file never holds it. */
@@ -252,6 +377,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
   return {
     enabled: read.boolean(raw, 'enabled', path, defaults.enabled),
     ...(weeklyLimitW === undefined ? {} : { weeklyLimitW }),
+    subagentWeight: read.number(raw, 'subagentWeight', path, defaults.subagentWeight, CONFIG_LIMITS.subagentWeight),
     ...(reset === undefined ? {} : { reset }),
     targetPct,
     reservePct,
@@ -370,12 +496,14 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
     read.report(`${path}.priorities`, 'uses a priority id more than once');
   }
   const goalPattern = read.optionalString(raw, 'goalPattern', path, isValidRegex);
+  const verifyGate = read.string(raw, 'verifyGate', path, defaults.verifyGate, oneOf(VERIFY_GATES));
   const register: RegisterConfig = {
     ownerSource: read.string(raw, 'ownerSource', path, defaults.ownerSource, isSessionName),
     priorities: priorities.length === 0 ? defaults.priorities : priorities,
     maxTitle: read.integer(raw, 'maxTitle', path, defaults.maxTitle, { min: 20, max: 1_000 }),
     maxText: read.integer(raw, 'maxText', path, defaults.maxText, { min: 20, max: 5_000 }),
     secretPatterns: read.stringList(raw, 'secretPatterns', path, defaults.secretPatterns, isValidRegex),
+    requireDescription: read.boolean(raw, 'requireDescription', path, defaults.requireDescription),
     requireEvidenceOnDone: read.boolean(raw, 'requireEvidenceOnDone', path, defaults.requireEvidenceOnDone),
     requireSkillOnDone: read.boolean(raw, 'requireSkillOnDone', path, defaults.requireSkillOnDone),
     requireNoteOn: read.list(
@@ -387,11 +515,22 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
       CONFIG_LIMITS.requireNoteOn.maxItems,
     ),
     autoArchive: read.boolean(raw, 'autoArchive', path, defaults.autoArchive),
+    requireProofOnVerifying: read.boolean(raw, 'requireProofOnVerifying', path, defaults.requireProofOnVerifying),
+    verifyGate: isVerifyGate(verifyGate) ? verifyGate : defaults.verifyGate,
+    maxVerifying: read.integer(raw, 'maxVerifying', path, defaults.maxVerifying, CONFIG_LIMITS.maxVerifying),
     check: {
       staleAfterHours: read.integer(check, 'staleAfterHours', `${path}.check`, defaults.check.staleAfterHours, { min: 1 }),
       notPickedUpAfterHours: read.integer(check, 'notPickedUpAfterHours', `${path}.check`, defaults.check.notPickedUpAfterHours, { min: 1 }),
       prioritySkipAfterHours: read.integer(check, 'prioritySkipAfterHours', `${path}.check`, defaults.check.prioritySkipAfterHours, { min: 1 }),
       weekLengthDays: read.integer(check, 'weekLengthDays', `${path}.check`, defaults.check.weekLengthDays, { min: 1, max: 31 }),
+      stopgapFiles: read.stringList(
+        check,
+        'stopgapFiles',
+        `${path}.check`,
+        defaults.check.stopgapFiles,
+        shortLine(CONFIG_LIMITS.stopgapFiles.maxLength, (value) => (value.trim() === '' ? 'expected a path' : undefined)),
+        CONFIG_LIMITS.stopgapFiles.maxItems,
+      ),
     },
   };
   return goalPattern === undefined ? register : { ...register, goalPattern };
@@ -420,6 +559,16 @@ function parseStatus(read: ConfigReader, value: unknown, path: string): TaskStat
   return undefined;
 }
 
+function parseContextFiles(read: ConfigReader, raw: JsonRecord): ContextFilesConfig {
+  const path = 'contextFiles';
+  const defaults = DEFAULT_CONTEXT_FILES;
+  return {
+    maxClaudeMdChars: read.integer(raw, 'maxClaudeMdChars', path, defaults.maxClaudeMdChars, CONFIG_LIMITS.claudeMdChars),
+    maxMemoryIndexChars: read.integer(raw, 'maxMemoryIndexChars', path, defaults.maxMemoryIndexChars, CONFIG_LIMITS.memoryIndexChars),
+    maxSkillListingChars: read.integer(raw, 'maxSkillListingChars', path, defaults.maxSkillListingChars, CONFIG_LIMITS.skillListingChars),
+  };
+}
+
 function parseSkills(read: ConfigReader, raw: JsonRecord): SkillsConfig {
   const path = 'skills';
   const defaults = DEFAULT_SKILLS;
@@ -446,6 +595,12 @@ function parseOpen(read: ConfigReader, raw: JsonRecord): OpenConfig {
   return { terminal: isTerminalChoice(terminal) ? terminal : DEFAULT_OPEN.terminal };
 }
 
+function parsePushToProtected(read: ConfigReader, raw: JsonRecord): PushToProtected {
+  const fallback = DEFAULT_PUSH_GUARD.pushToProtected;
+  const value = read.string(raw, 'pushToProtected', 'pushGuard', fallback, oneOf(PUSH_TO_PROTECTED));
+  return isPushToProtected(value) ? value : fallback;
+}
+
 function parseCommits(read: ConfigReader, raw: JsonRecord): CommitsConfig {
   const path = 'commits';
   const defaults = DEFAULT_COMMITS;
@@ -468,6 +623,12 @@ function parseCommits(read: ConfigReader, raw: JsonRecord): CommitsConfig {
 
 /** From a 200k window's compaction point up to far past any window today. */
 const REFRESH_TOKENS = { min: 10_000, max: 10_000_000 } as const;
+/** 0 turns the task count off. */
+const REFRESH_TASKS = { min: 0, max: 100 } as const;
+/** Long enough to read the notice and type, short enough that the fresh start is not missed. */
+const RESTART_DELAY_SECONDS = { min: 5, max: 600 } as const;
+/** A program and its arguments. */
+const END_COMMAND_MAX_ITEMS = 16;
 
 function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
   const path = 'refresh';
@@ -476,8 +637,34 @@ function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
   return {
     enabled: read.boolean(raw, 'enabled', path, defaults.enabled),
     contextTokens: read.integer(raw, 'contextTokens', path, defaults.contextTokens, REFRESH_TOKENS),
+    everyTasks: read.integer(raw, 'everyTasks', path, defaults.everyTasks, REFRESH_TASKS),
+    everyTasksMinTokens: read.integer(raw, 'everyTasksMinTokens', path, defaults.everyTasksMinTokens, REFRESH_TOKENS),
     tabTitle: read.boolean(raw, 'tabTitle', path, defaults.tabTitle),
+    autoRestart: read.boolean(raw, 'autoRestart', path, defaults.autoRestart),
+    restartDelaySeconds: read.integer(raw, 'restartDelaySeconds', path, defaults.restartDelaySeconds, RESTART_DELAY_SECONDS),
+    endCommand: read.stringList(raw, 'endCommand', path, defaults.endCommand, undefined, END_COMMAND_MAX_ITEMS),
     ...(handoverDir === undefined ? {} : { handoverDir }),
+  };
+}
+
+/** `hiring`: a hire's own daily budget cannot pass what all hires may add up to. */
+function parseHiring(read: ConfigReader, raw: JsonRecord): HiringConfig {
+  const path = 'hiring';
+  const defaults = DEFAULT_HIRING;
+  const policy = read.string(raw, 'policy', path, defaults.policy, oneOf(HIRING_POLICIES));
+  const maxDailyPct = read.number(raw, 'maxDailyPct', path, defaults.maxDailyPct, CONFIG_LIMITS.hiringMaxDailyPct);
+  let dailyPct = read.number(raw, 'dailyPct', path, defaults.dailyPct, CONFIG_LIMITS.hiringDailyPct);
+  if (dailyPct > maxDailyPct) {
+    read.report(`${path}.dailyPct`, `expected at most hiring.maxDailyPct (${maxDailyPct}), got ${dailyPct}`);
+    dailyPct = Math.min(defaults.dailyPct, maxDailyPct);
+  }
+  return {
+    policy: isHiringPolicy(policy) ? policy : defaults.policy,
+    maxSessions: read.integer(raw, 'maxSessions', path, defaults.maxSessions, CONFIG_LIMITS.hiringMaxSessions),
+    dailyPct,
+    maxDailyPct,
+    idleHours: read.integer(raw, 'idleHours', path, defaults.idleHours, CONFIG_LIMITS.hiringIdleHours),
+    reviewDays: read.integer(raw, 'reviewDays', path, defaults.reviewDays, CONFIG_LIMITS.hiringReviewDays),
   };
 }
 

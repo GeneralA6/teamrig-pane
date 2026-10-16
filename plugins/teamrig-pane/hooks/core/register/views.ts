@@ -2,8 +2,9 @@
 import { formatUtcMinute, parseUtcDeadline, shortUtc } from '../core/time.ts';
 import type { RegisterEvent } from './events.ts';
 import { taskNumber, type Task } from './fold.ts';
-import { ACTIVE_STATUSES, priorityText, type TaskStatus } from './model.ts';
+import { ACTIVE_STATUSES, GITHUB_SOURCE, priorityText, type TaskStatus } from './model.ts';
 import { waitsText, type WaitContext } from './waits.ts';
+import { proofOf, proofText } from './verify.ts';
 
 export interface ListFilter {
   readonly owner?: string;
@@ -72,6 +73,26 @@ function rowHead(task: Task, team: string | undefined): string[] {
   return parts;
 }
 
+/** How long a proof runs in the one-line verify queue before it is cut. */
+const SUMMARY_PROOF_CHARS = 60;
+
+/** `VERIFY 2: T1 (proof: ...), T3 (proof: ...)`: a verify queue in one line, each proof cut short; undefined when empty. */
+export function formatVerifySummary(queue: readonly Task[]): string | undefined {
+  const named = queue.map((task) => `${task.id} (proof: ${cut(proofText(task), SUMMARY_PROOF_CHARS)})`);
+  return queue.length === 0 ? undefined : `VERIFY ${queue.length}: ${named.join(', ')}`;
+}
+
+/** A row of `verify`: `T1 since 01-07 10:00, verify by 01-09 | <title> (proof: ...)`. */
+export function formatVerifyRow(task: Task): string {
+  const by = task.due === null ? 'no verify-by date' : `verify by ${shortUtc(task.due)}`;
+  return `${task.id} since ${shortUtc(formatUtcMinute(new Date(task.statusAt)))}, ${by} | ${task.title} (proof: ${proofText(task)})`;
+}
+
+/** The Stop hook's line once a verifying task's verify-by day has come. */
+export function formatVerifyByLine(task: Task): string {
+  return `VERIFY ${task.id} was to be verified by ${shortUtc(task.due ?? '')} (proof: ${proofText(task)}): done with the proof, or back to in-progress`;
+}
+
 /** `text` cut to `max` characters, counted in code points so a character is never split, ending in `…` when cut. */
 export function cut(text: string, max: number): string {
   const chars = [...text];
@@ -81,16 +102,25 @@ export function cut(text: string, max: number): string {
 /**
  * The short row of `list` and `check`: `T12 in-progress, p2, owner alpha, due 01-15 | <title cut to titleChars>`,
  * and what a waiting task waits for: `(waiting: decision owner · on T5 ready)`. It keeps what orders and assigns
- * the work and leaves the week, source, goals and status note to `show`. `context` marks the ready reasons.
+ * the work, and the issue of a task imported from GitHub (`from gh:acme/web#7`) so it can be found there; it leaves
+ * the week, other sources, goals and status note to `show`. `context` marks the ready reasons.
  */
 export function formatShortTask(task: Task, titleChars: number, team?: string, context?: WaitContext): string {
   const waits = task.status === 'waiting' && task.waits.length > 0 ? ` (waiting: ${waitsText(task.waits, context)})` : '';
-  return `${rowHead(task, team).join(', ')} | ${cut(task.title, titleChars)}${waits}`;
+  const issue = issueOf(task);
+  const head = issue === undefined ? rowHead(task, team) : [...rowHead(task, team), `from ${issue}`];
+  return `${head.join(', ')} | ${cut(task.title, titleChars)}${waits}`;
+}
+
+/** The GitHub issue a task was imported from, as its ref (`gh:acme/web#7`); undefined for any other task. */
+function issueOf(task: Task): string | undefined {
+  return task.source === GITHUB_SOURCE && task.ref !== null ? task.ref : undefined;
 }
 
 /**
  * One line that names each field, so a newcomer can read it:
- * `T12 in-progress, p2, owner alpha, due 01-15, week 01-13, from lead, goals G1 | title`.
+ * `T12 in-progress, p2, owner alpha, due 01-15, week 01-13, from lead, goals G1 | title`; a task imported from
+ * GitHub is `from` its issue (`from gh:acme/web#7`).
  * With `team`, the id reads `<team>/T12`; `context` marks a waiting task's ready reasons.
  */
 export function formatTask(task: Task, team?: string, context?: WaitContext): string {
@@ -98,7 +128,7 @@ export function formatTask(task: Task, team?: string, context?: WaitContext): st
   if (task.week !== null) {
     parts.push(`week ${shortUtc(task.week)}`);
   }
-  parts.push(`from ${task.source}`);
+  parts.push(`from ${issueOf(task) ?? task.source}`);
   if (task.goals.length > 0) {
     parts.push(`goals ${task.goals.join(',')}`);
   }
@@ -114,13 +144,23 @@ function statusNote(task: Task, context: WaitContext | undefined): string {
     const parts = [task.waits.length > 0 ? waitsText(task.waits, context) : null, task.note].filter((part) => part !== null);
     return parts.length === 0 ? '' : ` (waiting: ${parts.join('; ')})`;
   }
-  return task.status === 'verifying' && task.note !== null ? ` (proof: ${task.note})` : '';
+  const proof = task.status === 'verifying' ? proofOf(task) : null;
+  return proof === null ? '' : ` (proof: ${proof})`;
 }
 
-/** One field of an update, as `show` prints it: a priority reads `p2`, a list joins with commas. */
+/** How much of a description an update line in `show`'s history quotes. */
+const HISTORY_DESCRIPTION_CHARS = 80;
+
+/**
+ * One field of an update, as `show` prints it: a priority reads `p2`, a list joins with commas, and a description is
+ * quoted on one line, cut to HISTORY_DESCRIPTION_CHARS (`none` when cleared): `show` prints the whole one above.
+ */
 function changeText(name: string, value: unknown): string {
   if (name === 'priority' && typeof value === 'number') {
     return priorityText(value);
+  }
+  if (name === 'description') {
+    return typeof value === 'string' ? JSON.stringify(cut(value.replace(/\s+/g, ' '), HISTORY_DESCRIPTION_CHARS)) : 'none';
   }
   return Array.isArray(value) ? value.join(',') : String(value);
 }
@@ -149,6 +189,7 @@ export function formatEvent(event: RegisterEvent): string {
     case 'status':
       return [
         `${head} ${event.status}${event.waits === undefined ? '' : ` waits="${waitsText(event.waits)}"`}${note}`,
+        event.proof === undefined ? undefined : `proof="${event.proof}"`,
         event.evidence === null ? undefined : `evidence=${event.evidence}`,
         event.skill === null ? undefined : `skill=${event.skill}`,
       ]
@@ -156,19 +197,29 @@ export function formatEvent(event: RegisterEvent): string {
         .join(' ');
     case 'update': {
       const fields = Object.entries(event.changes).map(([name, value]) => `${name}=${changeText(name, value)}`);
-      return `${head} ${fields.join(' ')}${note}`;
+      return `${[head, ...fields].join(' ')}${note}`;
     }
   }
 }
 
-/** `show`: the task line, its status details, then its history; `context` marks a waiting task's ready reasons. */
+/**
+ * `show`: the task line, its description (what and why, its later lines indented two spaces), its status details,
+ * then its history; `context` marks a waiting task's ready reasons.
+ */
 export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], context?: WaitContext): string {
   const lines = [formatTask(task, undefined, context)];
+  if (task.description !== null) {
+    const [first = '', ...rest] = task.description.split('\n');
+    lines.push(`description: ${first}`, ...rest.map((line) => (line.trim() === '' ? '' : `  ${line}`)));
+  }
   if (task.ref !== null) {
     lines.push(`ref: ${task.ref}`);
   }
   if (task.note !== null) {
     lines.push(`note: ${task.note}`);
+  }
+  if (task.proof !== null) {
+    lines.push(`proof: ${task.proof}`);
   }
   if (task.evidence !== null) {
     lines.push(`evidence: ${task.evidence}`);
@@ -178,4 +229,10 @@ export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], c
   }
   lines.push('history:', ...events.filter((event) => event.id === task.id).map((event) => `  ${formatEvent(event)}`));
   return lines.join('\n');
+}
+
+/** The inbox line a task's new owner gets, under the giver's name: `T5 is yours (p2, due 2030-01-10): Show the signup errors`. */
+export function assignedNotice(task: Pick<Task, 'id' | 'priority' | 'due' | 'title'>): string {
+  const due = task.due === null ? '' : `, due ${task.due}`;
+  return `${task.id} is yours (${priorityText(task.priority)}${due}): ${task.title}`;
 }
