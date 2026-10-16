@@ -1,12 +1,16 @@
 /**
  * The README's hero: Claude Code in its fullscreen layout, drawn as an animated SVG. Beside the conversation the pane
- * docks the session's tasks, each with its status, priority and due date, what blocks one, what the session asked of
- * others and what it finished today. Then the switch flips the pane to the files changed in the session's repo, and
- * back. One 14 s CSS loop and no script, so GitHub shows it in an <img>. With motion turned off it is a still of the
- * tasks. The window is dark in either theme, as a terminal is; the caption under it follows the reader's theme.
+ * docks the session's tasks in its sections: Working on, Up next, Waiting (the session's own waiting task, then the one
+ * it asked of another session) and Done today. A task is its status mark, its id and its title over a dim line of plain
+ * words: its priority, its due day, since when it has stood at its status, what it waits on or comes after, and `new`.
+ * A task done today is one dim line with the time it closed. Then the switch flips the pane to the files changed in the
+ * session's repo, and back. One 14 s CSS loop and no script, so GitHub shows it in an <img>. With motion turned off it
+ * is a still of the tasks. The window is dark in either theme, as a terminal is; the caption under it follows the
+ * reader's theme.
  *
- * The rows follow the pane's own formats (hooks/rows.ts, hooks/changes-rows.ts). Its status glyphs, the row marker
- * and the waiting note's arrow are drawn as shapes, so no font has to carry them.
+ * The rows follow the pane's own formats (hooks/rows.ts, hooks/meta.ts, hooks/changes-rows.ts). A task's parts sit on
+ * the pane's column grid, so its meta line starts under its title in any monospace font. The status marks are drawn
+ * as shapes, so no font has to carry them.
  */
 import { escapeXml, MONO_FONTS, renderSvg } from './svg.ts';
 import { themeStyle } from './theme.ts';
@@ -39,35 +43,66 @@ export const PALETTE = {
 } as const;
 const C = PALETTE;
 
-export type Status = 'open' | 'in-progress' | 'waiting' | 'done';
-
-/** The status colours the pane gives a task's glyph and id (an open task keeps the text colour). */
-export const STATUS_COLOR: Readonly<Record<Status, string>> = { open: C.fg, 'in-progress': C.amber, waiting: C.red, done: C.green };
-
-export interface PaneTask {
+/** What every task in the list has: its id, its title and its priority, and for some a due day or another owner. */
+interface TaskBase {
   readonly id: string;
-  readonly status: Status;
-  readonly priority: string;
   readonly title: string;
+  readonly priority: string;
+  /** Its due day, as the meta line words it: `Thu 10-22`. */
   readonly due?: string;
-  /** Added since the session last looked: the pane flags it NEW. */
-  readonly isNew?: boolean;
-  /** For a task asked of others: who owns it. */
+  /** The area that owns it, when the session asked it of another session: the meta line opens `on api`. */
   readonly owner?: string;
-  /** A waiting task's note, drawn under it. */
-  readonly note?: string;
 }
 
-/** The session's area, the inbox lines it has not read, and its tasks: active in plan order, asked of others, finished today. */
+/**
+ * A task in the list, by its status. An open one may come after a task not finished yet, and is `new` while its owner
+ * has not touched it. One in progress or waiting says since when (a time today, UTC); a waiting one says why it waits,
+ * in teamrig's words (`on T13`).
+ */
+export type PaneTask =
+  | (TaskBase & { readonly status: 'open'; readonly after?: string; readonly isNew?: boolean })
+  | (TaskBase & { readonly status: 'in-progress'; readonly since: string })
+  | (TaskBase & { readonly status: 'waiting'; readonly since: string; readonly waits: string });
+
+/** A task done today: its id, its title and the time it closed (today, UTC). */
+export interface DoneTask {
+  readonly id: string;
+  readonly title: string;
+  readonly at: string;
+}
+
+export type Status = PaneTask['status'] | 'done';
+
+/** The status colours the pane gives a task's mark (an open task's keeps the text colour). */
+export const STATUS_COLOR: Readonly<Record<Status, string>> = { open: C.fg, 'in-progress': C.amber, waiting: C.red, done: C.green };
+
+/** A section of the list: its name, drawn bold over its tasks. */
+export interface Section {
+  readonly name: string;
+  readonly tasks: readonly PaneTask[];
+}
+
+/** The session's area, which its tab names; the pane's header leaves the session's own area unnamed. */
 export const AREA = 'web';
+/** The inbox lines the session has not read. */
 export const UNREAD = 1;
-export const ACTIVE: readonly PaneTask[] = [
-  { id: 'T12', status: 'in-progress', priority: 'p1', due: '10-16', title: 'Signup form' },
-  { id: 'T14', status: 'open', priority: 'p2', isNew: true, title: 'Form tests' },
-  { id: 'T15', status: 'waiting', priority: 'p2', title: 'Email check', note: 'waits on the mail key' },
+/**
+ * The session's sections, in the pane's order. Verifying, which would lead them with its heading in green, has no task
+ * here, and the pane draws an empty section not at all. Waiting holds the session's own waiting task, then the one it
+ * asked of api.
+ */
+export const SECTIONS: readonly Section[] = [
+  { name: 'Working on', tasks: [{ id: 'T12', status: 'in-progress', priority: 'p1', title: 'Signup form', since: '11:55' }] },
+  { name: 'Up next', tasks: [{ id: 'T14', status: 'open', priority: 'p2', title: 'Form tests', after: 'T12', isNew: true }] },
+  {
+    name: 'Waiting',
+    tasks: [
+      { id: 'T9', status: 'waiting', priority: 'p2', title: 'Email check', since: '10:20', waits: 'on T13' },
+      { id: 'T13', status: 'open', priority: 'p2', title: 'Mail key', owner: 'api', due: 'Thu 10-22' },
+    ],
+  },
 ];
-export const ASKED: readonly PaneTask[] = [{ id: 'T13', status: 'open', priority: 'p2', owner: 'api', title: 'Mail key' }];
-export const FINISHED: readonly PaneTask[] = [{ id: 'T11', status: 'done', priority: 'p1', title: 'Signup API' }];
+export const DONE_TODAY: readonly DoneTask[] = [{ id: 'T11', title: 'Signup API', at: '09:40' }];
 
 /** The Changes view: the session's repo, its branch, and git's two-letter code and path for each changed file. */
 export const REPO = { name: 'web', branch: 'signup' } as const;
@@ -79,19 +114,28 @@ export const CHANGED: readonly { readonly code: string; readonly path: string; r
 
 export const CAPTIONS = { tasks: "Your tasks: what's next, what's waiting, what's done", changes: 'One press on Changes: the files changed in your repo' } as const;
 
-const STORY =
-  `Claude Code in its fullscreen layout. Beside the conversation, teamrig-pane docks the session's tasks: ` +
-  `${ACTIVE.map((task) => `${task.id} ${task.title}, ${task.status.replace('-', ' ')}`).join('; ')}. ` +
-  `Under them, what the session asked of others and what it finished today. ` +
-  `One press on Changes flips the pane to the ${CHANGED.length} files changed in the session's repo, and back.`;
-
-/** The monospace advance of the pane's 14px text, which measured lines are forced to with textLength. */
+/** The monospace advance of the pane's 14px text: a column's width, which measured lines are forced to with textLength. */
 export const PANE_CHAR = 8.4;
-const PANE_X = 604;
-const GLYPH_X = 620;
-const TEXT_X = 632;
+/** Where the pane's body starts, its first column. */
+export const PANE_X = 604;
 const RULE_END = 924;
+/** The body's width in columns, to where its rules end: every row of the list fits in it, so none would wrap in the pane. */
+export const PANE_COLUMNS = Math.floor((RULE_END - PANE_X) / PANE_CHAR);
+/** Before a task's id: its status mark and a space. */
+const MARK_COLUMNS = 2;
+/** Between a task's id and its title (rows.ts TITLE_GAP). */
+const TITLE_GAP = 2;
+/** The baseline of a view's header, the Tasks view's and the Changes view's alike. */
+const HEADER_Y = 128;
+/** The Changes view's rows, from baseline to baseline. */
 const ROW = 26;
+/** The Tasks view's rows, from baseline to baseline: one line of a task, such as its title to its meta line. */
+const LINE = 16;
+/**
+ * The blank row the pane leaves between two blocks (a header, a heading, a task), drawn this many pixels high, and
+ * twice that above a section's heading, where the pane leaves a second one: so all the sections fit the window.
+ */
+const BLANK = 2;
 
 interface Span {
   readonly text: string;
@@ -102,10 +146,53 @@ interface Span {
 interface LineOptions {
   /** Forces the line to PANE_CHAR a character, so a rule can start where it ends. */
   readonly measured?: boolean;
-  readonly anchor?: 'middle';
+  /** `middle` centres the line on x (a button's label); `end` ends it at x (the time a task closed, at the body's right edge). */
+  readonly anchor?: 'middle' | 'end';
 }
 
 const span = (text: string, color: string, extra: Omit<Span, 'text' | 'color'> = {}): Span => ({ text, color, ...extra });
+
+/** Column `n` of the pane's body: where a part of a row starts, on the grid the terminal draws it on. */
+const column = (n: number): number => PANE_X + n * PANE_CHAR;
+
+/** The column a task's title starts at, and its meta line under it: past its status mark, its id and a gap. */
+const titleColumn = (id: string): number => MARK_COLUMNS + id.length + TITLE_GAP;
+
+/**
+ * The meta line's parts, in meta.ts's order: whose it is when another area owns it, its priority, its due day, since
+ * when it has stood at its status (red while it waits, with why), the task it comes after, and `new` in the blue the
+ * pane gives a suggestion. Dim, as rows.ts draws a part with no colour of its own.
+ */
+function metaParts(task: PaneTask): Span[] {
+  return [
+    ...(task.owner === undefined ? [] : [span(`on ${task.owner}`, C.muted)]),
+    span(task.priority, C.muted),
+    ...(task.due === undefined ? [] : [span(`due ${task.due}`, C.muted)]),
+    ...statusParts(task),
+  ];
+}
+
+/** The meta line's parts that depend on a task's status. */
+function statusParts(task: PaneTask): Span[] {
+  switch (task.status) {
+    case 'open':
+      return [...(task.after === undefined ? [] : [span(`after ${task.after}`, C.muted)]), ...(task.isNew === true ? [span('new', C.blue)] : [])];
+    case 'in-progress':
+      return [span(`in progress since ${task.since}`, C.muted)];
+    case 'waiting':
+      return [span(`waiting since ${task.since}: ${task.waits}`, C.red)];
+  }
+}
+
+/** A task for the text alternative: `T12 Signup form (p1, in progress since 11:55)`. */
+const told = (task: PaneTask): string => `${task.id} ${task.title} (${metaParts(task).map((part) => part.text).join(', ')})`;
+
+const STORY =
+  `Claude Code in its fullscreen layout. Beside the conversation, teamrig-pane docks the session's tasks in sections, ` +
+  `each task over a dim line of plain words. ` +
+  SECTIONS.map(({ name, tasks }) => `${name}: ${tasks.map(told).join('; ')}. `).join('') +
+  `Done today: ${DONE_TODAY.map((task) => `${task.id} ${task.title}, done at ${task.at}`).join('; ')}. ` +
+  `One press on Changes flips the pane to the ${CHANGED.length} files changed in the session's repo, and back.`;
 
 /** One line of window text. Every word sits in a coloured tspan, so the theme's text colour never reaches the window. */
 function line(x: number, y: number, size: string, spans: readonly Span[], { measured = false, anchor }: LineOptions = {}): string {
@@ -128,47 +215,46 @@ function ruled(x: number, y: number, spans: readonly Span[]): string[] {
   return [line(x, y, 'pane', spans, { measured: true }), `<path d="M${from.toFixed(1)} ${y - 4.5}H${RULE_END}" stroke="${C.border}"/>`];
 }
 
-/** A status glyph, centred on (x, y): a ring, a half-filled ring, a square or a tick. */
-function glyph(status: Status, x: number, y: number, color: string): string {
+/** A status mark, centred on its row's first column: a ring, a ring half filled, a square or a tick. */
+function glyph(status: Status, y: number): string {
+  const color = STATUS_COLOR[status];
   const shape = {
-    open: `<circle cx="${x}" cy="${y}" r="4.5" fill="none" stroke="${color}" stroke-width="1.5"/>`,
-    'in-progress': `<circle cx="${x}" cy="${y}" r="4.5" fill="none" stroke="${color}" stroke-width="1.5"/><path d="M${x} ${y - 4.5}a4.5 4.5 0 0 0 0 9z" fill="${color}"/>`,
-    waiting: `<rect x="${x - 4.5}" y="${y - 4.5}" width="9" height="9" fill="${color}"/>`,
-    done: `<path d="M${x - 4.5} ${y}l3 3.2l6-6.7" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
+    open: `<circle r="4.5" fill="none" stroke="${color}" stroke-width="1.5"/>`,
+    'in-progress': `<circle r="4.5" fill="none" stroke="${color}" stroke-width="1.5"/><path d="M0 -4.5a4.5 4.5 0 0 0 0 9z" fill="${color}"/>`,
+    waiting: `<rect x="-4.5" y="-4.5" width="9" height="9" fill="${color}"/>`,
+    done: `<path d="M-4.5 0l3 3.2l6-6.7" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
   }[status];
-  return `<g data-glyph="${status}">${shape}</g>`;
+  return `<g data-glyph="${status}" transform="translate(${column(0) + PANE_CHAR / 2} ${y - 5})">${shape}</g>`;
 }
 
-/** `▸ ◐ T12 →api p1 10-16 NEW title`, as rows.ts lays a task out; a finished task is dim throughout. */
-function taskRow(task: PaneTask, y: number, finished: boolean): string[] {
-  const color = finished ? C.muted : STATUS_COLOR[task.status];
-  const spans = [span(task.id, color, { bold: !finished })];
-  if (finished) {
-    spans.push(span(` ${task.title}`, C.muted));
-  } else {
-    if (task.owner !== undefined) spans.push(span(` →${task.owner}`, C.blue));
-    spans.push(span(` ${task.priority}${task.due === undefined ? '' : ` ${task.due}`}`, C.muted));
-    if (task.isNew === true) spans.push(span(' NEW', C.blue));
-    spans.push(span(` ${task.title}`, C.fg));
-  }
+/**
+ * `◐ T12  Signup form`, the id bold and the mark in its status colour, over the dim meta line `p1 · in progress since
+ * 11:55` that starts under the title, its parts between dim dots: a task as rows.ts taskBlock draws it.
+ */
+function taskRows(task: PaneTask, y: number): string[] {
+  const at = column(titleColumn(task.id));
+  const meta = metaParts(task).flatMap((part, i) => (i === 0 ? [part] : [span(' · ', C.muted), part]));
   return [
-    `<path d="M${PANE_X} ${y - 9.5}l5.5 4.5l-5.5 4.5z" fill="${C.muted}"/>`,
-    glyph(task.status, GLYPH_X, y - 5, color),
-    line(TEXT_X, y, 'pane', spans),
+    glyph(task.status, y),
+    line(column(MARK_COLUMNS), y, 'pane', [span(task.id, C.fg, { bold: true })]),
+    line(at, y, 'pane', [span(task.title, C.fg)]),
+    line(at, y + LINE, 'pane', meta),
   ];
 }
 
-/** `↳ note`, under a waiting task's id, in the waiting colour. */
-function noteRow(note: string, y: number): string[] {
+/** `✓ T11  Signup API`, dim but for its green tick, and the time it closed dim at the right edge: rows.ts doneBlock. */
+function doneRow(task: DoneTask, y: number): string[] {
   return [
-    `<path d="M${TEXT_X + 1} ${y - 11}v6h8m-3-3l3 3l-3 3" fill="none" stroke="${C.red}" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>`,
-    line(TEXT_X + 16, y, 'pane', [span(note, C.red)]),
+    glyph('done', y),
+    line(column(MARK_COLUMNS), y, 'pane', [span(task.id, C.muted)]),
+    line(column(titleColumn(task.id)), y, 'pane', [span(task.title, C.muted)]),
+    line(column(PANE_COLUMNS), y, 'pane', [span(task.at, C.muted)], { anchor: 'end' }),
   ];
 }
 
-/** `── label ───────`: a ruled heading that opens a section. */
-function heading(label: string, y: number): string[] {
-  return [`<path d="M${PANE_X} ${y - 4.5}h14" stroke="${C.border}"/>`, ...ruled(PANE_X + 20, y, [span(label, C.muted)])];
+/** `Working on (1)`: a section's name in bold and how many tasks it holds, dim, as rows.ts sectionHeading draws it. */
+function sectionHeading(name: string, count: number, y: number): string {
+  return line(PANE_X, y, 'pane', [span(name, C.fg, { bold: true }), span(` (${count})`, C.muted)]);
 }
 
 /** The switch that leads the pane: Tasks and `Changes Δn`, the shown view's button filled. */
@@ -187,37 +273,31 @@ function switchRow(shown: 'tasks' | 'changes'): string[] {
   });
 }
 
-/** The pane's Tasks view: the area's header, its active tasks, then the sections that have tasks. */
+/**
+ * The pane's Tasks view: the header, which counts the session's own active tasks and names no area, then each
+ * section's heading over its tasks, Done today last.
+ */
 function tasksView(): string[] {
-  const out = [
-    ...switchRow('tasks'),
-    ...ruled(PANE_X, 128, [
-      span(AREA, C.fg, { bold: true }),
-      span(` · ${ACTIVE.length} active`, C.muted),
-      span(` · inbox ${UNREAD} unread`, C.amber),
-    ]),
-  ];
-  let y = 160;
-  const rows = (tasks: readonly PaneTask[], finished: boolean): void => {
+  const active = SECTIONS.flatMap((section) => section.tasks).filter((task) => task.owner === undefined).length;
+  const out = [...switchRow('tasks'), ...ruled(PANE_X, HEADER_Y, [span(`${active} active`, C.muted), span(` · inbox ${UNREAD} unread`, C.amber)])];
+  let y = HEADER_Y;
+  const heading = (name: string, count: number): void => {
+    y += LINE + 2 * BLANK;
+    out.push(sectionHeading(name, count, y));
+  };
+  for (const { name, tasks } of SECTIONS) {
+    heading(name, tasks.length);
     for (const task of tasks) {
-      out.push(...taskRow(task, y, finished));
-      if (task.note !== undefined) {
-        y += 24;
-        out.push(...noteRow(task.note, y));
-      }
-      y += ROW;
+      y += LINE + BLANK;
+      out.push(...taskRows(task, y));
+      y += LINE;
     }
-  };
-  const section = (label: string): void => {
-    y += 8;
-    out.push(...heading(label, y));
-    y += ROW;
-  };
-  rows(ACTIVE, false);
-  section(`asked of others (${ASKED.length})`);
-  rows(ASKED, false);
-  section(`finished today (${FINISHED.length})`);
-  rows(FINISHED, true);
+  }
+  heading('Done today', DONE_TODAY.length);
+  for (const task of DONE_TODAY) {
+    y += LINE + BLANK;
+    out.push(...doneRow(task, y));
+  }
   return out;
 }
 
@@ -226,7 +306,7 @@ function changesView(): string[] {
   const out = [
     `<rect x="586" y="62" width="356" height="320" fill="${C.panel}"/>`,
     ...switchRow('changes'),
-    ...ruled(PANE_X, 128, [span(REPO.name, C.fg, { bold: true }), span(` · ${REPO.branch}`, C.muted), span(` · ${CHANGED.length} changed`, C.muted)]),
+    ...ruled(PANE_X, HEADER_Y, [span(REPO.name, C.fg, { bold: true }), span(` · ${REPO.branch}`, C.muted), span(` · ${CHANGED.length} changed`, C.muted)]),
   ];
   CHANGED.forEach(({ code, path, added, removed }, i) => {
     const y = 160 + i * ROW;
@@ -248,7 +328,7 @@ function conversation(): string[] {
     line(28, 122, 'line', [span('T11 is done: the signup API passes its tests.', C.fg)]),
     line(28, 146, 'line', [span('Next, T12: the signup form.', C.fg)]),
     ...[400, 350, 380].map((width, i) => `<rect x="28" y="${162 + i * 16}" width="${width}" height="8" rx="4" fill="${C.faint}" fill-opacity="0.5"/>`),
-    line(28, 236, 'line', [span('T15 waits on the mail key; api has T13 for it.', C.fg)]),
+    line(28, 236, 'line', [span('T9 waits on the mail key; api has T13 for it.', C.fg)]),
     `<rect x="28.5" y="338.5" width="531" height="45" rx="9" fill="${C.bg}" stroke="${C.border}"/>`,
     line(44, 367, 'line', [span('>', C.muted)]),
     `<rect x="62" y="352" width="8" height="18" fill="${C.fg}"/>`,
