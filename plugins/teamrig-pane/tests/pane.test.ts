@@ -588,13 +588,13 @@ test('the settings file in the kit home names the folders, ~/ under the home fol
   expect(await pane.find({ text: /WARN/ })).toBeUndefined()
 })
 
-test('draws each collapsed task as one Text: no Box beyond the root, the controls and their two button rows', async ($, on) => {
+test('draws each collapsed task as one Text: no Box beyond the root, the controls, their two button rows and the find row', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   await pane.press({ key: 'all' })
-  expect(countType(await pane.drawn(), 'Box')).toBe(4)
+  expect(countType(await pane.drawn(), 'Box')).toBe(5)
 })
 
 test('pressing a task opens its card in place of its meta line, the ask quoted from the inbox and the roadmap; pressing again closes it', async ($, on) => {
@@ -697,7 +697,7 @@ test('an open waiting card says why it waits, in red; collapse (c) closes every 
   expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {4}waiting since 14:00 by security\n {4}│ {11}needs owner paste\n/ })).toBeDefined()
   expect((await pane.find({ type: 'Text', text: /^needs owner paste$/ }))?.props).toMatchObject({ color: 'error' })
   expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeUndefined()
-  expect(countType(await pane.drawn(), 'Box')).toBe(6)
+  expect(countType(await pane.drawn(), 'Box')).toBe(7)
   const collapse = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'collapse')
   expect(collapse?.props).toMatchObject({ hotkey: 'c' })
 
@@ -705,7 +705,7 @@ test('an open waiting card says why it waits, in red; collapse (c) closes every 
   expect(await pane.find({ text: /│ (Status|Who)/ })).toBeUndefined()
   expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeDefined()
   expect(await pane.find({ text: /collapse/ })).toBeUndefined()
-  expect(countType(await pane.drawn(), 'Box')).toBe(4)
+  expect(countType(await pane.drawn(), 'Box')).toBe(5)
 })
 
 test('an open card draws each address its ref, note and evidence hold as one Link, the issue a GitHub task came from first', async ($, on) => {
@@ -784,7 +784,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^WARN the pane could not draw: .*state store unavailable/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'mine', 'all', 'search', 'older-done'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'mine', 'all', 'archive', 'find-key'])
 
   isStateDown = false
   await pane.redraw(PANE_PROPS)
@@ -1157,7 +1157,7 @@ test("a task id in an open card opens that task's page: its title and card alone
   await pane.press({ key: toT50 })
   drawn = await pane.drawn()
   // No status bar and no collapse on a page: the bar counts the list, and the page holds no card to collapse.
-  expect(buttonKeys(drawn)).toEqual(['tasks', 'changes', 'mine', 'all', 'search', 'older-done', 'back', 'crumb:0', gotoKey(drawn, 'T58')])
+  expect(buttonKeys(drawn)).toEqual(['tasks', 'changes', 'mine', 'all', 'archive', 'find-key', 'back', 'crumb:0', gotoKey(drawn, 'T58')])
   expect(keyedProps(drawn, 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
   // Nowhere to go draws the step as dim words, no press.
   expect(await pane.find({ type: 'Text', text: 'forward ›' })).toMatchObject({ props: { dimColor: true } })
@@ -1165,7 +1165,8 @@ test("a task id in an open card opens that task's page: its title and card alone
   await pane.press({ key: gotoKey(drawn, 'T58') })
   expect(screenOf(await pane.drawn())).toEqual([
     ' Tasks Changes',
-    ' mine all search older done',
+    ' mine all archive',
+    ' Find',
     '',
     ' ‹ back  forward ›',
     ' Tasks › T50 › T58',
@@ -1216,9 +1217,9 @@ test('back, forward and the trail step through the places; the list keeps the he
     'changes',
     'mine',
     'all',
-    'search',
-    'older-done',
+    'archive',
     'collapse',
+    'find-key',
     'forward',
     'crumb:1',
     'crumb:2',
@@ -1269,18 +1270,20 @@ test('mine and all show the list alone; inline no page shows; a page whose task 
   expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('goto:'))).toEqual([])
 })
 
-test('search (s) shows a Find field; each change draws the matches, Enter opens the top one, back returns, clear or an empty field closes it', async ($, on) => {
+test('the dock always draws the Find field, s moving the focus into it; each change draws the matches, Enter opens the top one, back returns, clear or an empty field closes the search', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, CHAIN)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  expect(keyedProps(await pane.drawn(), 'search')).toMatchObject({ label: 'search', hotkey: 's', variant: 'secondary' })
-
-  await pane.press({ key: 'search' })
   let drawn = await pane.drawn()
-  expect(keyedProps(drawn, 'search')).toMatchObject({ variant: 'primary' })
-  expect(keyedProps(drawn, 'find')).toMatchObject({ label: 'Find', value: '', autoFocus: true })
-  expect(await pane.find({ type: 'Text', text: /^Type words to find a task by its id/ })).toBeDefined()
+  // On the list, empty, under the buttons; it never takes the focus by itself, so the pane's hotkeys stay live.
+  expect(keyedProps(drawn, 'find')).toMatchObject({ placeholder: 'id, title, owner, note…', value: '', submitLabel: 'open' })
+  expect('autoFocus' in (keyedProps(drawn, 'find') ?? {})).toBe(false)
+  expect(keyedProps(drawn, 'find-key')).toMatchObject({ label: 'Find', plain: true, hotkey: 's' })
+  expect(buttonKeys(drawn)).not.toContain('clear')
+  expect(buttonKeys(drawn)).toContain('next:T52')
+  // s reaches the Find label; the cursor move ($.ui.focus) needs a pane holding the keys, which the harness has none of.
+  expect(await pane.press({ key: 'find-key' })).toMatchObject({ element: 'find-key' })
 
   await pane.input({ key: 'find', text: 'etl the', kind: 'change' })
   drawn = await pane.drawn()
@@ -1288,8 +1291,8 @@ test('search (s) shows a Find field; each change draws the matches, Enter opens 
   // The active matches in plan order, each a press with a dim line of whose it is; the Find field draws no words.
   expect(screenOf(drawn)).toEqual([
     ' Tasks Changes',
-    ' mine all search older done',
-    '  clear',
+    ' mine all archive',
+    ' Find  clear',
     '',
     ' ○ T50  Load the feed\n       on etl',
     '',
@@ -1317,7 +1320,8 @@ test('search (s) shows a Find field; each change draws the matches, Enter opens 
   drawn = await pane.drawn()
   expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed$/ })).toBeDefined()
   expect(keyedNode(drawn, 'page-head')).not.toBe(null)
-  expect(keyedNode(drawn, 'find')).toBe(null)
+  // A page keeps the field, empty: typing there opens a search past the page.
+  expect(keyedProps(drawn, 'find')).toMatchObject({ value: '' })
 
   await pane.press({ key: 'back' })
   drawn = await pane.drawn()
@@ -1329,19 +1333,25 @@ test('search (s) shows a Find field; each change draws the matches, Enter opens 
 
   await pane.press({ key: 'clear' })
   drawn = await pane.drawn()
-  expect(keyedNode(drawn, 'find')).toBe(null)
+  expect(keyedProps(drawn, 'find')).toMatchObject({ value: '' })
+  expect(buttonKeys(drawn)).not.toContain('clear')
   expect(buttonKeys(drawn)).toContain('next:T52')
 
-  await pane.press({ key: 'search' })
   await pane.input({ key: 'find', text: 'nothing-here', kind: 'change' })
   expect(await pane.find({ type: 'Text', text: /^Nothing matches./ })).toBeDefined()
   await pane.input({ key: 'find', text: '', kind: 'change' })
   drawn = await pane.drawn()
-  expect(keyedNode(drawn, 'find')).toBe(null)
+  expect(keyedProps(drawn, 'find')).toMatchObject({ value: '' })
   expect(buttonKeys(drawn)).toContain('next:T52')
+
+  // Inline, where no page shows, there is no field.
+  await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
+  drawn = await pane.drawn()
+  expect(keyedNode(drawn, 'find')).toBe(null)
+  expect(buttonKeys(drawn)).not.toContain('find-key')
 })
 
-test('older done (h) opens the Done page at the week of now; prev (p) and next (l) step weeks; a row opens its page; back returns', async ($, on) => {
+test('archive (h) opens the Archive page at the week of now; prev (p) and next (l) step weeks; a row opens its page; back returns', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, [
     ...CHAIN,
@@ -1352,26 +1362,27 @@ test('older done (h) opens the Done page at the week of now; prev (p) and next (
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  expect(keyedProps(await pane.drawn(), 'older-done')).toMatchObject({ label: 'older done', hotkey: 'h', variant: 'secondary' })
+  expect(keyedProps(await pane.drawn(), 'archive')).toMatchObject({ label: 'archive', hotkey: 'h', variant: 'secondary' })
 
-  await pane.press({ key: 'older-done' })
+  await pane.press({ key: 'archive' })
   let drawn = await pane.drawn()
-  expect(keyedProps(drawn, 'older-done')).toMatchObject({ variant: 'primary' })
+  expect(keyedProps(drawn, 'archive')).toMatchObject({ variant: 'primary' })
   expect(keyedProps(drawn, 'prev')).toMatchObject({ label: '‹ prev', hotkey: 'p' })
   // The newest week has no next: dim words, no press.
   expect(buttonKeys(drawn)).not.toContain('next')
   expect(await pane.find({ type: 'Text', text: /^next ›$/ })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(drawn)).toEqual([
     ' Tasks Changes',
-    ' mine all search older done',
+    ' mine all archive',
+    ' Find',
     '',
     ' ‹ back  forward ›',
-    ' Tasks › Done 10-12',
+    ' Tasks › Archive 10-12',
     ` ${'─'.repeat(48)}`,
     '',
     ' ‹ prev  week of Mon 10-12  next ›',
     '',
-    ' Done · po · 1 done · 0 dropped',
+    ' Archive · po · 1 done · 0 dropped',
     '',
     ' Tue 10-13',
     '',
@@ -1399,12 +1410,12 @@ test('older done (h) opens the Done page at the week of now; prev (p) and next (
   // A step changes the week in place: back returns to the list.
   await pane.press({ key: 'back' })
   drawn = await pane.drawn()
-  // The list keeps the head while the places ahead stay, the Done page and T9's (forward returns to them).
-  expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › Done 10-12 › T9'])
+  // The list keeps the head while the places ahead stay, the Archive page and T9's (forward returns to them).
+  expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › Archive 10-12 › T9'])
   expect(keyedNode(drawn, 'week-steps')).toBe(null)
   expect(buttonKeys(drawn)).toContain('next:T52')
 
-  // Inline, where no page shows, there is no older done.
+  // Inline, where no page shows, there is no archive.
   await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
-  expect(buttonKeys(await pane.drawn())).not.toContain('older-done')
+  expect(buttonKeys(await pane.drawn())).not.toContain('archive')
 })

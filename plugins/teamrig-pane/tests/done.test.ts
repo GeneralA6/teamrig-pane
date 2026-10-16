@@ -111,7 +111,7 @@ const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox
 describe('doneBlocks', () => {
   test("mine: the area's head and counts, each day dim, each row opening its page with when it closed", () => {
     expect(linesOf(doneBlocks(SNAP, 'mine', '2026-10-12'))).toEqual([
-      'Done · po · 1 done · 1 dropped',
+      'Archive · po · 1 done · 1 dropped',
       'Tue 10-13',
       '>T1 ✓ T1  Task T1 | 13:00',
       'Mon 10-12',
@@ -130,7 +130,7 @@ describe('doneBlocks', () => {
   })
 
   test('an empty week says so; past the cap a dim line counts the rest', () => {
-    expect(linesOf(doneBlocks({ ...SNAP, area: 'web' }, 'mine', '2026-10-12'))).toEqual(['Done · web · 0 done · 0 dropped', 'Nothing finished this week.'])
+    expect(linesOf(doneBlocks({ ...SNAP, area: 'web' }, 'mine', '2026-10-12'))).toEqual(['Archive · web · 0 done · 0 dropped', 'Nothing finished this week.'])
     const many = rowsOf(Array.from({ length: MAX_DONE_ROWS + 2 }, (_, i) => finished(`T${i + 1}`, 'po', MONDAY + i * 60_000)).flat())
     expect(linesOf(doneBlocks({ ...SNAP, tasks: many }, 'mine', '2026-10-12')).at(-1)).toBe('2 more this week: search finds them')
   })

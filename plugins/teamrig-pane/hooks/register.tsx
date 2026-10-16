@@ -48,7 +48,6 @@ import {
   pushed,
   reset,
   searched,
-  searching,
   trail,
   type Landing,
   wentTo,
@@ -60,6 +59,8 @@ import { searchTasks, topResult } from './search'
 import { searchBlocks } from './search-rows'
 
 const PANE = 'teamrig-pane'
+/** The Find field's key: `s: Find` moves the focus ring to it, and a result's page opened by Enter returns to it. */
+const FIND = 'find'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
 const DOCK_COLUMNS = 58
 /** Columns of space between the pane's frame and its text, each side. */
@@ -70,7 +71,7 @@ const INLINE_MAX_ROWS = 6
 const TRAIL_SEPARATOR = ' › '
 const BACK_LABEL = '‹ back'
 const FORWARD_LABEL = 'forward ›'
-/** The Done page's steps to the week before and the week after the one it shows. */
+/** The Archive page's steps to the week before and the week after the one it shows. */
 const PREV_LABEL = '‹ prev'
 const NEXT_LABEL = 'next ›'
 /** What the close hook answers the person's close with: the engine logs it as why the pane stayed. */
@@ -139,6 +140,11 @@ async function go($: Context, step: (current: Nav) => Nav): Promise<void> {
 /** Moves the pane's window to the top, or brings the element a landing names to its middle. */
 async function scrollTo($: Context, to: Landing): Promise<void> {
   await $.ui.scroll(to.kind === 'top' ? { to: 'start', in: PANE } : { to: { key: to.key }, in: PANE, block: 'center' })
+}
+
+/** Moves the pane's focus ring into the Find field; refused while the pane does not hold the keys, which leaves it where it was. */
+async function focusFind($: Context): Promise<void> {
+  await $.ui.focus({ requestId: PANE, key: FIND }).catch(() => undefined)
 }
 
 /** The mine or all view, the list shown alone: the rows a page left from belong to the other list. */
@@ -396,7 +402,7 @@ export const register: Register = on => {
     // Enter in the Find field opens the top result's page, the first active match, else the newest finished one.
     const openTop = async (query: string) => {
       const top = topResult(searchTasks(snap.tasks, query))
-      if (top !== null) await openPage(top.id, 'find')
+      if (top !== null) await openPage(top.id, FIND)
     }
 
     const isPlain = (span: Span) =>
@@ -538,22 +544,13 @@ export const register: Register = on => {
       />,
     ]
     const place = currentPlace(at)
-    // Search draws only in the dock, where a result's page can open: inline, the places are never read.
+    // The archive opens the Archive page (done-rows.ts) at the week of now, in the dock alone, where a page can show:
+    // inline, the places are never read.
     if (!inline)
       buttons.push(
         <Button
-          label="search"
-          hotkey="s"
-          variant={place.kind === 'search' ? 'primary' : 'secondary'}
-          onPress={() => void go($, searching)}
-        />,
-      )
-    // Older done opens the Done page (done-rows.ts) at the week of now, in the dock alone, as search does.
-    if (!inline)
-      buttons.push(
-        <Button
-          key="older-done"
-          label="older done"
+          key="archive"
+          label="archive"
           hotkey="h"
           variant={place.kind === 'done' ? 'primary' : 'secondary'}
           onPress={() => void go($, current => doneAt(current, weekOf(snap.now)))}
@@ -565,25 +562,25 @@ export const register: Register = on => {
         <Button label="collapse" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />,
       )
 
-    // A search's Find field, under the buttons: each change shows the results for its words, Enter opens the top one's
-    // page, and an empty field or clear closes the search. It takes the focus when the pane takes the keyboard; Esc
-    // hands the keys back and leaves the results drawn.
-    const findRow =
-      place.kind === 'search' ? (
-        <Box key="find-row" flexDirection="row" flexWrap="wrap" columnGap={1}>
-          <Input
-            key="find"
-            label="Find"
-            placeholder="id, title, owner, note…"
-            value={place.query}
-            submitLabel="open"
-            autoFocus
-            onInput={value => void go($, current => searched(current, value))}
-            onSubmit={value => void openTop(value)}
-          />
-          <Button label="clear" variant="secondary" onPress={() => void go($, leftSearch)} />
-        </Box>
-      ) : null
+    // The Find field, under the buttons in the dock whatever it shows: the first change opens a search (a place, so back
+    // from a result's page returns to it), each change shows the results for its words, Enter opens the top one's page,
+    // and an empty field or clear closes the search. It holds the query of the search shown, else nothing. `s: Find`
+    // before it moves the focus ring into it; the field never takes the focus by itself, as it would then hold every
+    // key the pane's hotkeys answer. Esc hands the keys back and leaves the results drawn.
+    const findRow = inline ? null : (
+      <Box key="find-row" flexDirection="row" flexWrap="wrap" columnGap={1}>
+        <Button key="find-key" label="Find" plain hotkey="s" onPress={() => void focusFind($)} />
+        <Input
+          key={FIND}
+          placeholder="id, title, owner, note…"
+          value={place.kind === 'search' ? place.query : ''}
+          submitLabel="open"
+          onInput={value => void go($, current => searched(current, value))}
+          onSubmit={value => void openTop(value)}
+        />
+        {place.kind === 'search' ? <Button label="clear" variant="secondary" onPress={() => void go($, leftSearch)} /> : null}
+      </Box>
+    )
     // In the tasks view the mode buttons sit right under the switch, in the same block.
     const controls =
       current === 'tasks' ? (
@@ -660,7 +657,7 @@ export const register: Register = on => {
       )
       return i === 0 ? [drawn] : [<Text key={`after:${crumb.index - 1}`} dimColor>{TRAIL_SEPARATOR}</Text>, drawn]
     })
-    // The Done page's week between its steps to the week before and after (p, l), each dim where the pane holds no
+    // The Archive page's week between its steps to the week before and after (p, l), each dim where the pane holds no
     // older or newer week. A step changes the page's week in place, so back returns to where the page was opened from.
     const stepTo = (week: string) => () => void go($, current => doneAt(current, week))
     const steps = place.kind === 'done' ? weekSteps(place.week, snap.now) : null
