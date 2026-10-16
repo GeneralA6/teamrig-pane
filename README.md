@@ -55,7 +55,8 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
   shows another session's, named by its id or its name.
 - **Details:** click a task, or press Enter on it, to open its card in place of its dim line: its
   status and note, its plan, its ask quoted from the file its ref points at, who asked and when, the
-  tasks it comes after, its goals, its evidence and its links. `c` closes every card.
+  tasks it comes after, its goals, its evidence and its links. `c` closes every card. A click on a task
+  id in a card opens that task's page, with back and forward (`b`, `f`) and a trail of where you went.
 - **Changes:** the files changed in each git repo the session works in, each with its lines added and removed.
   Press the switch, or `t` and `d` while the pane holds the keyboard.
 

@@ -58,6 +58,8 @@ const PAD_COLUMNS = 1
 const INLINE_MAX_ROWS = 6
 /** Between two crumbs of a page's trail. */
 const TRAIL_SEPARATOR = ' › '
+const BACK_LABEL = '‹ back'
+const FORWARD_LABEL = 'forward ›'
 /** What the close hook answers the person's close with: the engine logs it as why the pane stayed. */
 const MINIMIZED = `minimized to its strip: a press on it, or /${COMMAND}, opens it again`
 /** How long one git run may take before it is killed and the repo shows the failure. */
@@ -549,15 +551,23 @@ export const register: Register = on => {
       )
     // A page, and the list while a page lies ahead of it (back led there), leads with back and forward (b, f; dim
     // when there is nowhere to go), then the trail of the last places, each one a press away but the one shown
-    // (bold), those ahead of it dim, then a rule.
-    const step = (key: string, label: string, hotkey: string, isOpen: boolean, to: (current: Nav) => Nav) =>
-      isOpen ? (
-        <Button key={key} label={label} hotkey={hotkey} variant="secondary" onPress={() => void go($, to)} />
-      ) : (
-        <Text key={key} dimColor>
-          {label}
-        </Text>
-      )
+    // (bold), those ahead of it dim, then a rule. Each key is written out on its Button, where the guide's key check
+    // (tools/docs/llm-guide.test.ts) reads them.
+    const nowhere = (key: string, label: string) => (
+      <Text key={key} dimColor>
+        {label}
+      </Text>
+    )
+    const backStep = canGoBack(at) ? (
+      <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void go($, back)} />
+    ) : (
+      nowhere('back', BACK_LABEL)
+    )
+    const forwardStep = canGoForward(at) ? (
+      <Button key="forward" label={FORWARD_LABEL} hotkey="f" variant="secondary" onPress={() => void go($, forward)} />
+    ) : (
+      nowhere('forward', FORWARD_LABEL)
+    )
     const { crumbs, isCutBefore, isCutAfter } = trail(at)
     const crumbRow = crumbs.flatMap((crumb, i) => {
       const label = placeLabel(crumb.place)
@@ -578,8 +588,8 @@ export const register: Register = on => {
       place.kind === 'task' || canGoForward(at) ? (
         <Box key="page-head" flexDirection="column">
           <Box flexDirection="row" columnGap={2}>
-            {step('back', '‹ back', 'b', canGoBack(at), back)}
-            {step('forward', 'forward ›', 'f', canGoForward(at), forward)}
+            {backStep}
+            {forwardStep}
           </Box>
           <Box key="trail" flexDirection="row" flexWrap="wrap">
             {isCutBefore ? <Text key="cut-before" dimColor>{`…${TRAIL_SEPARATOR}`}</Text> : null}

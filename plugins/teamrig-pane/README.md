@@ -46,7 +46,7 @@ teamrig binds by its Claude Code title (`/rename web`) gets the same mark, so th
 `/teamrig-pane [mine | all | auto | <session>]` opens the pane, switches the view, follows the inbox read
 again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
 and lists the team's sessions. In the pane, `m` and `a` switch views, and `o`, `v`, `w`, `i` and `n`
-show one status's tasks alone (Status bar, below).
+show one status's tasks alone (Status bar, below); on a task's page `b` and `f` go back and forward.
 
 In the side dock the tasks sit a blank line apart, each wrapped title and meta line starting under the
 title, and a blank line and a bold heading open each section (each owner in `all`).
@@ -75,9 +75,20 @@ the value column, and shows only when it has a value:
 - **Links:** up to 5 addresses, each a link: the GitHub issue a task teamrig opened from one came
   from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its ref, its newest
   note and its evidence, once each. A link never splits; one wider than its line is shortened with
-  `…` and still opens its whole address. Task ids stay plain words.
+  `…` and still opens its whole address. Each task id the pane holds is underlined and opens that
+  task's page (below); one inside a web address stays part of it.
 
 The card has no row for a parent, sub-tasks or history: the register keeps none of them for a task.
+
+A click on a task id in a card (in its `After` row, or written in a note) opens that task's page: its
+title whole and its card, the body to itself. Over it, `‹ back` and `forward ›` (`b`, `f`; dim words when
+there is nowhere to go) step through the places you went, as a browser does, and a trail under them names
+the last 4 (`Tasks › T50 › T58`): the one shown bold, those ahead of it dim, the rest a click away, `…` where
+places were left out. The pane keeps 20 places, the oldest dropped first, and a click from an older place
+drops those ahead of it. A page opens at its top and has no status bar; back to the list brings the card
+you left to the middle of the dock, and the list keeps back and forward while a page lies ahead of it.
+`Tasks` (`t`), `mine` and `all` show the list alone. A task that closed before today says so on its
+page. Above the prompt ids are plain words and no page shows.
 
 Boards, agendas and docs are rewritten and their line numbers drift, so a line is quoted only while
 something still ties it to the task: an inbox line by its date (inboxes are append-only; one dated

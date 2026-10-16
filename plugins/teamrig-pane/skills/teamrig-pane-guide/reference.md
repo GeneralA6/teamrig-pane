@@ -86,6 +86,7 @@ the next poll.
 | One git run | 10 seconds; a line count that takes longer is left out |
 | Quoted ref | 3 lines, 320 characters a line |
 | Card links | 5 a card; an address over 2048 characters, once percent-encoded, is left out |
+| Pages | 20 places kept, the oldest dropped first; the trail names the last 4 |
 
 The pane never writes the register, the inboxes or any repo. It keeps only its size and the pins in the
 plugin's own store.
