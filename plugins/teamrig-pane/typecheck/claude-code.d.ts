@@ -148,6 +148,21 @@ declare module 'claude-code' {
     readonly contentRows: number
     readonly origin: { readonly kind: 'person' } | { readonly kind: 'plugin'; readonly name: string }
   }
+  /** What `$.ui.focus` moves the focus ring onto: an element this plugin drew, by `key`, in the site `requestId` names (a pane's id). */
+  export type UiFocusArgs = { readonly requestId: string; readonly key: string }
+  /** `{}` once the ring moved, or why it did not: a site that does not hold the keys, or holds them on another plugin's element. */
+  export type UiFocusResult = { readonly deny?: string }
+  /**
+   * A site's focus ring about to move: which site, the `element` taking it and the `plugin` that drew it (both absent
+   * for one of the engine's own stops), and who moves it: the person, or a plugin's `$.ui.focus` or `autoFocus`.
+   */
+  export type UiFocusInput = {
+    readonly component: 'Pane' | 'AbovePrompt'
+    readonly requestId: string
+    readonly plugin?: string
+    readonly element?: string
+    readonly origin: { readonly kind: 'person' } | { readonly kind: 'plugin'; readonly name: string }
+  }
 
   /** What the plugin asks the engine for; each is an event a test (or another plugin) can answer beneath it. */
   export interface Context {
@@ -162,6 +177,7 @@ declare module 'claude-code' {
       open(pane: PaneOpen): Promise<{ isPlaced: boolean }>
       resolve(request: RenderRequest): Components
       scroll(args: UiScrollArgs): Promise<UiScrollResult>
+      focus(args: UiFocusArgs): Promise<UiFocusResult>
     }
   }
 
@@ -214,6 +230,7 @@ declare module 'claude-code' {
     'ui.close': { filter: { readonly id: string }; e: { readonly id: string; readonly origin: PaneCloseOrigin }; result: { readonly deny?: string } }
     'ui.render': { filter: { readonly component: string; readonly requestId: string }; e: RenderRequest; result: JSX.Element }
     'ui.scroll': { filter: { readonly requestId: string }; e: UiScrollInput; result: UiScrollResult }
+    'ui.focus': { filter: { readonly requestId: string }; e: UiFocusInput; result: UiFocusResult }
     'fs.stat': { filter: never; e: { readonly path: string }; result: Answer<FsStat> }
     'fs.exists': { filter: never; e: { readonly path: string }; result: Answer<boolean> }
     'fs.read': { filter: never; e: { readonly path: string }; result: Answer<string> }
