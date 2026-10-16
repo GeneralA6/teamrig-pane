@@ -57,9 +57,9 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
   status and note, its plan, its ask quoted from the file its ref points at, who asked and when, the
   tasks it comes after, its goals, its evidence and its links. `c` closes every card. A click on a task
   id in a card opens that task's page, with back and forward (`b`, `f`) and a trail of where you went.
-- **Search:** `s` shows a Find field that lists, as you type, the tasks the pane holds whose id, title,
+- **Find:** the dock always shows a Find field (`s` or a click puts the cursor in it) that lists, as you type, the tasks the pane holds whose id, title,
   owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.
-- **Older done:** `h` lists the tasks finished this week, a day at a time; `p` and `l` step a week back
+- **Archive:** `h` lists the tasks finished this week, a day at a time; `p` and `l` step a week back
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.
 - **Changes:** the files changed in each git repo the session works in, each with its lines added and removed.
   Press the switch, or `t` and `d` while the pane holds the keyboard.
