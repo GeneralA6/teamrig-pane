@@ -24,7 +24,7 @@ labels on. No model calls, so no tokens. A switch over the list flips it to the 
   out (`api · 4 active · 1 waiting · 1 verifying`), and the verifying tasks first in
   each group.
 
-A task is two lines: its status mark, bold id and title (cut at two lines), then a dim meta line under
+A task is two lines: its status mark, bold id and title (cut at two lines, whole while its card is open), then a dim meta line under
 the title. The mark is its status as `teamrig list` names it: `○` open, `◐` in progress, `◑` verifying,
 `■` waiting, `✓` done, `✗` dropped. The meta line reads `p2 · due Sat 10-17 · in progress since 11:55`:
 its priority, its due date (`verify by` while verifying), since when it stands at its status and why,
@@ -55,27 +55,36 @@ fullwidth forms and emoji take two cells, an emoji sequence (a ZWJ family, a ski
 character, and a cut never lands inside one, so no line runs past the pane's edge. However narrow the
 dock is resized, its lines wrap to its own width, a wrapped line's indent cut to half the line.
 
-The register has no description field, so a task's details are built from what it does record. Click
-a task, or focus the pane and press Enter on it, to show its details, its title and meta line whole
-above them; again hides them. The details hang under the task on a `│` guide, a bare guide line
-between the quotes and the facts:
+The register has no description field, so a task's card is built from what it does record. Click a
+task, or focus the pane and press Enter on it, to open its card: its title shows whole and the card
+takes its meta line's place; again closes it, and `c` closes every card. A done-today row opens the
+same card. Each row of the card hangs on a dim `│` guide, a dim label, then its value, wrapped under
+the value column, and shows only when it has a value:
 
-- the ask and what it serves, quoted as plain text from where its ref points (`file:N`, `N-M` up to
-  3 lines, or `N,M`), then the roadmap item of each of its goals (`--goals G10.1g`, `S4`);
-- who asked, who added it if someone else did, when, its priority as the team config names it
-  (`p2 correctness`), its week and its goals;
-- its newest status note and evidence, with the status;
-- `see folder/file` for the files nothing was quoted from.
+- **Status:** since when, and who set it when that was the task's newest change, then why a waiting task
+  waits (in red) or its status note (green while verifying);
+- **Plan:** its priority as the team config names it (`p2 correctness`), its due (`late` in red) and
+  its week;
+- **What:** the ask, quoted as plain text from where its ref points (`file:N`, `N-M` up to 3 lines,
+  or `N,M`), then `see folder/file` for the files nothing was quoted from;
+- **Who:** who asked, who added it if someone else did, and when; the owner, for a task asked of
+  another session;
+- **After:** the tasks planned before it, each with its status;
+- **Goal:** the roadmap item of each of its goals (`--goals G10.1g`, `S4`), else the bare id;
+- **Evidence:** its evidence;
+- **Links:** up to 5 addresses, each a link: the GitHub issue a task teamrig opened from one came
+  from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its ref, its newest
+  note and its evidence, once each. A link never splits; one wider than its line is shortened with
+  `…` and still opens its whole address. Task ids stay plain words.
 
-A task's two lines never grow: these facts show only in its details.
+The card has no row for a parent, sub-tasks or history: the register keeps none of them for a task.
 
 Boards, agendas and docs are rewritten and their line numbers drift, so a line is quoted only while
 something still ties it to the task: an inbox line by its date (inboxes are append-only; one dated
 more than a day after the task was created is dropped), and any other line when it is a roadmap item
 of one of the task's goals, sits inside one, or names the task's id. A goal's own item is found by
 its id in the goals document (`TEAMRIG_PANE_GOALS_DOC`, a path from the workspace root; unset, no goal items are quoted), so it never drifts. A task with no goals whose refs point
-at boards shows only its `see` line.
-Press the row again to collapse it, or `c` to collapse every task.
+at boards may quote nothing, its What row then only its `see` line.
 
 The pane docks on the right only in the fullscreen layout (`"tui": "fullscreen"`) with the terminal at
 least 110 columns wide; anywhere else it sits above the prompt, and `/teamrig-pane` says which condition
@@ -162,7 +171,7 @@ or what is wrong.
 
 The switch, `[Tasks] [Changes Δ3]`, leads the pane in every state: open, in a dock however narrow (its
 two buttons wrap under each other rather than clip), above the prompt, and as the minimized strip. While
-the pane holds the keyboard, `t` presses Tasks and `d` Changes (`c` already collapses tasks).
+the pane holds the keyboard, `t` presses Tasks and `d` Changes (`c` already closes the cards).
 
 Changes lists the files changed in the git repos the session works in: the repo of the session's folder,
 and the repo of each file the session or one of its agents writes (Edit, Write, NotebookEdit; a file a
