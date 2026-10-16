@@ -101,8 +101,8 @@ Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pa
 | `w` | mine: only the tasks in progress (`working`); again shows every task |
 | `i` | mine: only the waiting tasks; again shows every task |
 | `n` | mine: only the open tasks (`not started`); again shows every task |
-| `c` | Collapses every expanded task (shown while one is expanded) |
-| Enter on a task, or a click on it | Shows its details under it; again hides them |
+| `c` | Closes every open card (shown while one is open) |
+| Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
 | `✕`, or `ctrl+x x` | Minimizes the pane to a one-row strip; it never closes |
 
 A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to
@@ -168,7 +168,7 @@ A task is two lines, its title and a dim meta line under it:
 | Part | Meaning |
 | --- | --- |
 | `○` `◐` `◑` `■` `✓` `✗` | open, in-progress, verifying, waiting, done, dropped (as `teamrig list` names them) |
-| `T12`, the title | The id, bold, and the title, cut at two lines |
+| `T12`, the title | The id, bold, and the title, cut at two lines; whole while its card is open |
 | `p2` | Its priority |
 | `due Sat 10-17` | Its due date; `verify by` while verifying |
 | `in progress since 11:55` | Since when it stands at its status (a time today, else a day); a verifying task's note follows, what will prove it |
@@ -211,17 +211,39 @@ to verify.`, `Nothing in progress.`, `Nothing left to start.` for the others).
 The filter belongs to the pane: it holds while you switch to **all** (which it does not filter) or to Changes, and
 is never kept across a reload: a new session, `/reload-plugins` or a restart shows every task again.
 
-### A task's details
+### A task's card
 
-The register has no description field, so the details are built from what teamrig recorded:
+A press on a task (Enter, or a click) opens its card: the title shows whole and the card takes the meta line's
+place; another press closes it, and `c` closes every card. A done-today row opens the same card. The register has
+no description field, so the card is built from what teamrig recorded, one labelled row per fact, each only when
+it has a value:
 
-- the ask, quoted from where the task's `--ref` points (`file:N`, `file:N-M` up to 3 lines, or `file:N,M`),
-  then the roadmap item of each of its `--goals` from the goals document (see
-  [reference.md](reference.md#where-the-register-is));
-- who asked, who added it if someone else did, when, its priority as the team config names it, its week and
-  goals;
-- its newest status note and evidence;
-- `see <file>` for each referenced file nothing was quoted from.
+```text
+◐ T12  Build the signup endpoint
+    │ Status    in progress since 11:55 by api
+    │ Plan      p2 correctness · due Sat 10-17 · week 10-13
+    │ What      2026-10-13 lead: the signup endpoint, email first
+    │ Who       asked by lead · 10-13 09:00
+    │ After     T5 done
+    │ Goal      G10.2 Accounts
+    │ Evidence  abc1234
+    │ Links     https://github.com/acme/app/pull/7
+```
+
+| Row | What it holds |
+| --- | --- |
+| `Status` | Since when, and who set it when that was the task's newest change; then why a waiting task waits, in red, or its status note, green while verifying |
+| `Plan` | Its priority as the team config names it, its due (`late` in red) and its week |
+| `What` | The ask, quoted from where its `--ref` points (`file:N`, `file:N-M` up to 3 lines, or `file:N,M`); `see <file>` for each referenced file nothing was quoted from |
+| `Who` | Who asked, who added it if someone else did, and when; the owner, for a task asked of another session |
+| `After` | The tasks planned before it (`--after`), each with its status |
+| `Goal` | The roadmap item of each of its `--goals` from the goals document (see [reference.md](reference.md#where-the-register-is)), else the bare id |
+| `Evidence` | Its evidence |
+| `Links` | Up to 5 links: the GitHub issue a task teamrig opened from one came from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its ref, its newest note and its evidence, once each |
+
+There is no row for a parent, sub-tasks or history: the register keeps none of them for a task. A link never
+splits; one wider than its line is shortened with `…` and still opens its whole address. Task ids in a note stay
+plain words.
 
 A line is quoted only while something still ties it to the task (an inbox line by its date, another line when it
 is a goal's roadmap item or names the task id), because boards and docs are rewritten and line numbers drift.

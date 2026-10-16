@@ -85,6 +85,7 @@ the next poll.
 | Changes, outside any repo | the newest 20 files |
 | One git run | 10 seconds; a line count that takes longer is left out |
 | Quoted ref | 3 lines, 320 characters a line |
+| Card links | 5 a card; an address over 2048 characters, once percent-encoded, is left out |
 
 The pane never writes the register, the inboxes or any repo. It keeps only its size and the pins in the
 plugin's own store.

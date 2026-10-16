@@ -53,8 +53,9 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
   what an open one comes after); Waiting also holds what you asked of others, and the header counts your
   unread inbox lines. `/teamrig-pane all` shows every owner's tasks, and `/teamrig-pane <session>`
   shows another session's, named by its id or its name.
-- **Details:** click a task, or press Enter on it, to read its ask, quoted from the file its ref
-  points at, then who asked and when, its goals and its status note.
+- **Details:** click a task, or press Enter on it, to open its card in place of its dim line: its
+  status and note, its plan, its ask quoted from the file its ref points at, who asked and when, the
+  tasks it comes after, its goals, its evidence and its links. `c` closes every card.
 - **Changes:** the files changed in each git repo the session works in, each with its lines added and removed.
   Press the switch, or `t` and `d` while the pane holds the keyboard.
 

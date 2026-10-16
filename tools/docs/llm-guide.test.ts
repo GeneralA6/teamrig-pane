@@ -163,6 +163,7 @@ describe('the pane guide states the limits the code holds', () => {
     ['Changes, outside any repo', [constant('changes.ts', 'OUTSIDE_KEPT')]],
     ['One git run', [constant('register.tsx', 'GIT_TIMEOUT_MS') / 1000]],
     ['Quoted ref', [constant('details.ts', 'MAX_QUOTED_LINES'), constant('details.ts', 'MAX_QUOTE_CHARS')]],
+    ['Card links', [constant('links.ts', 'MAX_LINKS'), constant('links.ts', 'MAX_ADDRESS_CHARS')]],
   ];
 
   for (const [label, values] of limits) {
