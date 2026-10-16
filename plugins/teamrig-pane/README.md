@@ -99,16 +99,22 @@ you left to the middle of the dock, and the list keeps back and forward while a 
 `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed over 8 days ago says so on
 its page. Above the prompt ids are plain words and no page shows.
 
-The dock always shows a Find field under its buttons; `s` or a click puts the cursor in it, and it never takes
-the keys by itself, so the pane's other keys keep working. Each word typed must match, case aside,
-a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
+The dock always shows a Find field under its Tasks and Changes switch; `s` or a click puts the cursor in it, and
+it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
+aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
 evidence or ref (one that starts with a mark, `.md`, matches anywhere), and the body lists the matches as
 you type, the matched words underlined: an active task as its title and a dim line of whose it is and the
 fields matched, a finished one on one dim line with when it closed. It searches what the pane holds, every
 area's active tasks and those finished in the last 8 days, never older ones: the active ones in plan order, then
 the finished ones newest first, at most 30, with a dim line counting the rest. A click on a result opens
 its page, Enter opens the top one's, and back returns to the results; the trail names the search by its
-words. Emptying the field or `clear` (shown while searching) closes the search; Esc only hands the keys back.
+words. Emptying the field or `clear` (shown while searching) closes the search, the cursor staying in the field;
+Enter moves the cursor onto the page's `‹ back`, so `b`, `f` and `s` work there. Esc only hands the keys back.
+A line under the field says where the keys go: `Typing searches` (bold) while they type into it,
+`Keys on the pane` while the pane's keys answer (`s` moves them into the field), and `Keys go to Claude` while
+Claude's prompt has them (a click on the field gives them back, the query kept). A Claude dialog, such as a
+permission prompt, takes the keys, clicks and wheel scroll from the pane until it is answered: that is Claude
+Code's rule, not the pane's.
 
 `archive` (`h`, in the dock's mine and all row) opens the Archive page on this week, a week starting
 Monday 00:00 UTC: the view's tasks closed done or dropped, a dim line a day, newest first, each task on one

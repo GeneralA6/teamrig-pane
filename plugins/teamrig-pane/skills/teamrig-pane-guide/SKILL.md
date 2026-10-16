@@ -88,7 +88,9 @@ variables or the settings file), the word is taken as the session id, and a word
 
 ## Keys
 
-Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pane.
+Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pane. In the dock, the line under the
+Find field says where they go now (see [Find](#find)). A Claude dialog, such as a permission prompt, takes the
+keys, clicks and wheel scroll from the pane until it is answered: Claude Code's rule, not the pane's.
 
 | Key | What it does |
 | --- | --- |
@@ -106,7 +108,7 @@ Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pa
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead |
 | `f` | Forward to the place back left, while there is one |
-| `s` | In the dock: puts the cursor in the Find field, always shown, that searches the tasks the pane holds (see [Find](#find)); emptying it, or `clear`, closes the search |
+| `s` | In the dock: puts the cursor in the Find field, always shown under the switch, that searches the tasks the pane holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
 | `h` | In the dock: `archive`, the Archive page of this week's finished tasks (see [Archive](#archive)) |
 | `p` | On the Archive page: the week before, while the pane holds it |
 | `l` | On the Archive page: the week after, up to this week |
@@ -301,8 +303,8 @@ the prompt ids are plain words and no page shows.
 
 ### Find
 
-The dock always shows a Find field under its buttons. `s` or a click puts the cursor in it; it never takes the keys
-by itself, so the pane's other keys keep working. As you type, the body lists the tasks
+The dock always shows a Find field under its Tasks and Changes switch. `s` or a click puts the cursor in it; it
+never takes the keys by itself, so the pane's other keys keep working. As you type, the body lists the tasks
 the pane holds that every word matches, the matched words underlined:
 
 ```text
@@ -319,14 +321,25 @@ the pane holds that every word matches, the matched words underlined:
 | An active result | Its title row, then a dim line of whose it is and the other fields a word matched in |
 | A finished result | One dim line with when it closed |
 | A click on a result | Opens its page; `‹ back` (`b`) returns to the results |
-| Enter | Opens the top result's page |
-| `clear` (shown while searching), or an empty field | Closes the search and shows the place before it |
+| Enter | Opens the top result's page and moves the cursor onto its `‹ back`, so `b`, `f` and `s` work there |
+| `clear` (shown while searching), or an empty field | Closes the search and shows the place before it; `clear` keeps the cursor in the field |
 
 The pane searches what it holds: every area's active tasks and those finished in the last 8 days, never older ones. The
 active matches come in plan order, then the finished ones, newest first. At most 30 show; a dim line counts the
 rest (`4 more: add a word`), and when nothing matches, one dim line says so. The trail names a search by its words
 (`Search "etl the"`). Esc hands the keys back to the prompt and leaves the results drawn. Above the prompt no page
 shows, so there is no search.
+
+A line under the field says where your keys go now:
+
+| The line | Where the keys go |
+| --- | --- |
+| `Typing searches · Enter: open · Esc: to Claude` (bold) | Into the field: each key changes the search |
+| `Keys on the pane · s: search · Esc: to Claude` | To the pane's keys; `s` moves them into the field |
+| `Keys go to Claude · click the field to search` | To Claude's prompt; a click on the field gives them back to it, the query kept |
+
+The keys go to Claude's prompt on Esc, a click outside the pane, a Claude dialog, or a key the pane does not use
+pressed while the cursor is on one of its buttons.
 
 ### Archive
 
