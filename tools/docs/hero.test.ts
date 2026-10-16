@@ -2,20 +2,20 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { contrast, mix } from './colour.ts';
 import {
-  ACTIVE,
   AREA,
-  ASKED,
   CAPTIONS,
   CHANGED,
-  FINISHED,
+  DONE_TODAY,
   HERO_CLOCK,
   HERO_STEPS,
   PALETTE,
   PANE_CHAR,
+  PANE_COLUMNS,
+  PANE_X,
   REPO,
   renderHero,
+  SECTIONS,
   STATUS_COLOR,
-  UNREAD,
 } from './hero.ts';
 import { animationsIn, ascending, keyframesIn, mediaIn, rulesIn, valueOf } from './stylesheet.ts';
 import { themeStyle, TOKENS } from './theme.ts';
@@ -50,6 +50,64 @@ const shown = (element: XmlElement | undefined): [number | undefined, number | u
   return [stops[1], stops[4]];
 };
 
+const number = (element: XmlElement, name: string): number => Number(element.attributes.get(name) ?? Number.NaN);
+/** A text's spans: their words, their fill, and whether they are bold. */
+const spansIn = (element: XmlElement | undefined): (readonly [string, string | undefined, boolean])[] =>
+  (element?.children ?? [])
+    .filter((node): node is XmlElement => typeof node !== 'string')
+    .map((node): readonly [string, string | undefined, boolean] => [textOf(node), node.attributes.get('fill'), node.attributes.get('font-weight') === '600']);
+/** The Tasks view's text that reads `words`. */
+const taskText = (words: string): XmlElement | undefined =>
+  places.find((place) => inPart(place, 'tasks') && place.element.name === 'text' && textOf(place.element) === words)?.element;
+
+/** The pane's character for each status mark the picture draws as a shape (rows.ts GLYPH). */
+const MARKS = new Map([
+  ['open', '○'],
+  ['in-progress', '◐'],
+  ['waiting', '■'],
+  ['done', '✓'],
+]);
+const STATUS_COLORS = new Map<string, string>(Object.entries(STATUS_COLOR));
+
+/** Something drawn in the Tasks view, set in the pane's columns: a text, or a status mark as the pane's character. */
+interface Cell {
+  readonly y: number;
+  readonly column: number;
+  readonly text: string;
+}
+
+/**
+ * Every text of the Tasks view at the column it starts in (an end-anchored one ending at its x) on its baseline, and
+ * every status mark at the column it is centred on, on the baseline of its row. The switch's labels are left out: they
+ * sit centred on their buttons, not on the pane's grid.
+ */
+const cells: Cell[] = places
+  .filter((place) => inPart(place, 'tasks'))
+  .flatMap(({ element }): Cell[] => {
+    const status = element.attributes.get('data-glyph');
+    if (status !== undefined) {
+      const [, x = '', y = ''] = /^translate\(([\d.]+) ([\d.]+)\)$/.exec(element.attributes.get('transform') ?? '') ?? [];
+      return [{ y: Number(y) + 5, column: (Number(x) - PANE_X) / PANE_CHAR - 0.5, text: MARKS.get(status) ?? '?' }];
+    }
+    const anchor = element.attributes.get('text-anchor');
+    if (element.name !== 'text' || anchor === 'middle') return [];
+    const text = textOf(element);
+    return [{ y: number(element, 'y'), column: (number(element, 'x') - PANE_X) / PANE_CHAR - (anchor === 'end' ? text.length : 0), text }];
+  });
+
+/** The Tasks view as the terminal's rows, top to bottom: each cell's characters in their columns, spaces between. */
+const paneRows: { readonly y: number; readonly text: string }[] = [...new Set(cells.map((cell) => cell.y))]
+  .sort((a, b) => a - b)
+  .map((y) => {
+    const chars: string[] = [];
+    for (const cell of cells.filter((each) => each.y === y)) {
+      [...cell.text].forEach((char, i) => {
+        chars[Math.round(cell.column) + i] = char;
+      });
+    }
+    return { y, text: Array.from({ length: chars.length }, (_, i) => chars[i] ?? ' ').join('') };
+  });
+
 describe('renderHero', () => {
   it('draws the same bytes every time, as well-formed XML', () => {
     assert.equal(renderHero(), svg);
@@ -59,8 +117,15 @@ describe('renderHero', () => {
   it('names the picture for screen readers: role, aria-label and a matching title', () => {
     const label = root.attributes.get('aria-label') ?? '';
     assert.equal(root.attributes.get('role'), 'img');
-    assert.match(label, /^Claude Code in its fullscreen layout\. Beside the conversation, teamrig-pane docks the session's tasks: /);
-    assert.match(label, /T12 Signup form, in progress; T14 Form tests, open; T15 Email check, waiting\./);
+    assert.match(label, /^Claude Code in its fullscreen layout\. Beside the conversation, teamrig-pane docks the session's tasks in sections, /);
+    assert.ok(
+      label.includes(
+        'Working on: T12 Signup form (p1, in progress since 11:55). Up next: T14 Form tests (p2, after T12, new). ' +
+          'Waiting: T9 Email check (p2, waiting since 10:20: on T13); T13 Mail key (on api, p2, due Thu 10-22). ' +
+          'Done today: T11 Signup API, done at 09:40.',
+      ),
+      label,
+    );
     assert.match(label, /flips the pane to the 3 files changed in the session's repo, and back\.$/);
     assert.equal(textOf(places.find((place) => place.element.name === 'title')?.element ?? ''), label);
   });
@@ -114,42 +179,128 @@ describe('renderHero', () => {
     );
   });
 
-  it("draws the tasks as the pane does: the area's header, active tasks in plan order, then each section", () => {
-    const words = texts('tasks');
-    assert.deepEqual(words.slice(2), [
-      `${AREA} · ${ACTIVE.length} active · inbox ${UNREAD} unread`,
-      'T12 p1 10-16 Signup form',
-      'T14 p2 NEW Form tests',
-      'T15 p2 Email check',
-      'waits on the mail key',
-      `asked of others (${ASKED.length})`,
-      'T13 →api p2 Mail key',
-      `finished today (${FINISHED.length})`,
-      'T11 Signup API',
-    ]);
-    const glyphs = places.filter((place) => inPart(place, 'tasks') && place.element.attributes.has('data-glyph'));
+  it("draws the tasks as the pane's rows: a header naming no area, then Working on, Up next, Waiting and Done today", () => {
     assert.deepEqual(
-      glyphs.map((place) => place.element.attributes.get('data-glyph')),
-      [...ACTIVE, ...ASKED, ...FINISHED].map((task) => task.status),
+      paneRows.map((row) => row.text),
+      [
+        '3 active · inbox 1 unread',
+        'Working on (1)',
+        '◐ T12  Signup form',
+        '       p1 · in progress since 11:55',
+        'Up next (1)',
+        '○ T14  Form tests',
+        '       p2 · after T12 · new',
+        'Waiting (2)',
+        '■ T9  Email check',
+        '      p2 · waiting since 10:20: on T13',
+        '○ T13  Mail key',
+        '       on api · p2 · due Thu 10-22',
+        'Done today (1)',
+        '✓ T11  Signup API                09:40',
+      ],
     );
+    assert.deepEqual(
+      SECTIONS.map((section) => section.name),
+      ['Working on', 'Up next', 'Waiting'],
+    );
+    assert.equal(DONE_TODAY.length, 1);
   });
 
-  it('colours each active glyph and id by its status, and dims a finished task throughout', () => {
-    const glyphColor = (status: string): string[] =>
-      places
-        .filter((place) => inPart(place, 'tasks') && place.element.attributes.get('data-glyph') === status)
-        .flatMap((place) => placesIn(place.element).flatMap((inner) => [inner.element.attributes.get('fill'), inner.element.attributes.get('stroke')]))
+  it("sets every part on the pane's column grid, within its columns, and nothing over anything else", () => {
+    assert.equal(PANE_COLUMNS, 38);
+    for (const cell of cells) assert.ok(Math.abs(cell.column - Math.round(cell.column)) < 1e-9, `${cell.text}: column ${cell.column}`);
+    for (const row of paneRows) assert.ok(row.text.length <= PANE_COLUMNS, `${row.text.length} columns: ${row.text}`);
+    for (const row of paneRows) {
+      const spans = cells.filter((cell) => cell.y === row.y).map((cell) => [Math.round(cell.column), Math.round(cell.column) + cell.text.length] as const);
+      for (const [i, [from, to]] of spans.entries()) {
+        for (const [other, next] of spans.slice(i + 1)) assert.ok(to <= other || next <= from, row.text);
+      }
+    }
+  });
+
+  it('spaces the rows a line apart at least, a heading further from what is above it than a task, and keeps them inside the pane', () => {
+    const above = paneRows.slice(1).map((row, i) => ({ text: row.text, gap: row.y - (paneRows[i]?.y ?? 0) }));
+    const gaps = (pattern: RegExp): number[] => above.filter((row) => pattern.test(row.text)).map((row) => row.gap);
+    const headings = gaps(/^\S.* \(\d+\)$/);
+    const titles = gaps(/^[○◐■✓] /);
+    const metas = gaps(/^ /);
+    assert.deepEqual([headings.length, titles.length, metas.length], [4, 5, 4]);
+    assert.ok(Math.min(...metas) >= 16, metas.join(' '));
+    assert.ok(Math.min(...titles) > Math.max(...metas), titles.join(' '));
+    assert.ok(Math.min(...headings) > Math.max(...titles), headings.join(' '));
+    const pane = places.find((place) => inPart(place, 'pane') && place.element.name === 'rect')?.element;
+    const bottom = pane === undefined ? Number.NaN : number(pane, 'y') + number(pane, 'height');
+    assert.ok((paneRows.at(-1)?.y ?? Infinity) + 16 <= bottom, `last row at ${paneRows.at(-1)?.y}, pane ends at ${bottom}`);
+  });
+
+  it("colours each mark by its status, keeps each id bold in the text colour, and dims the meta line but where it needs a look", () => {
+    const marks = places.filter((place) => inPart(place, 'tasks') && place.element.attributes.has('data-glyph')).map((place) => place.element);
+    assert.deepEqual(
+      marks.map((mark) => mark.attributes.get('data-glyph')),
+      [...SECTIONS.flatMap((section) => section.tasks.map((task) => task.status)), ...DONE_TODAY.map(() => 'done')],
+    );
+    for (const mark of marks) {
+      const status = mark.attributes.get('data-glyph') ?? '';
+      const colours = placesIn(mark)
+        .flatMap((inner) => [inner.element.attributes.get('fill'), inner.element.attributes.get('stroke')])
         .filter((color): color is string => color !== undefined && color !== 'none');
-    for (const task of ACTIVE) assert.ok(glyphColor(task.status).every((color) => color === STATUS_COLOR[task.status]), task.id);
-    assert.ok(glyphColor('done').every((color) => color === PALETTE.muted));
-    const finished = places.find((place) => place.element.name === 'text' && textOf(place.element) === 'T11 Signup API');
-    const fills = (finished?.element.children ?? []).filter((node): node is XmlElement => typeof node !== 'string').map((node) => node.attributes.get('fill'));
-    assert.deepEqual([...new Set(fills)], [PALETTE.muted]);
+      assert.deepEqual([...new Set(colours)], [STATUS_COLORS.get(status)], status);
+    }
+    assert.deepEqual(
+      [STATUS_COLOR.open, STATUS_COLOR['in-progress'], STATUS_COLOR.waiting, STATUS_COLOR.done],
+      [PALETTE.fg, PALETTE.amber, PALETTE.red, PALETTE.green],
+    );
+    assert.deepEqual(spansIn(taskText('T12')), [['T12', PALETTE.fg, true]]);
+    assert.deepEqual(spansIn(taskText('Signup form')), [['Signup form', PALETTE.fg, false]]);
+    assert.deepEqual(spansIn(taskText('p1 · in progress since 11:55')), [
+      ['p1', PALETTE.muted, false],
+      [' · ', PALETTE.muted, false],
+      ['in progress since 11:55', PALETTE.muted, false],
+    ]);
+    assert.deepEqual(spansIn(taskText('p2 · after T12 · new')), [
+      ['p2', PALETTE.muted, false],
+      [' · ', PALETTE.muted, false],
+      ['after T12', PALETTE.muted, false],
+      [' · ', PALETTE.muted, false],
+      ['new', PALETTE.blue, false],
+    ]);
+    assert.deepEqual(spansIn(taskText('p2 · waiting since 10:20: on T13')), [
+      ['p2', PALETTE.muted, false],
+      [' · ', PALETTE.muted, false],
+      ['waiting since 10:20: on T13', PALETTE.red, false],
+    ]);
+    assert.deepEqual(spansIn(taskText('on api · p2 · due Thu 10-22')).map(([words, fill]) => [words, fill]), [
+      ['on api', PALETTE.muted],
+      [' · ', PALETTE.muted],
+      ['p2', PALETTE.muted],
+      [' · ', PALETTE.muted],
+      ['due Thu 10-22', PALETTE.muted],
+    ]);
+  });
+
+  it('draws a task done today dim on one line, its tick green and the time it closed at the right edge', () => {
+    for (const words of ['T11', 'Signup API', '09:40']) assert.deepEqual(spansIn(taskText(words)), [[words, PALETTE.muted, false]], words);
+    assert.equal(taskText('09:40')?.attributes.get('text-anchor'), 'end');
+    assert.equal(Number(taskText('09:40')?.attributes.get('x')), PANE_X + PANE_COLUMNS * PANE_CHAR);
+  });
+
+  it("heads the list with the session's active count and its unread inbox, naming no area, and each section with its name and count", () => {
+    assert.deepEqual(spansIn(taskText('3 active · inbox 1 unread')), [
+      ['3 active', PALETTE.muted, false],
+      [' · inbox 1 unread', PALETTE.amber, false],
+    ]);
+    assert.equal(texts('window').filter((words) => words === AREA).length, 1, 'only the tab names the area');
+    for (const [name, count] of [['Working on', 1], ['Up next', 1], ['Waiting', 2], ['Done today', 1]] as const) {
+      assert.deepEqual(spansIn(taskText(`${name} (${count})`)), [
+        [name, PALETTE.fg, true],
+        [` (${count})`, PALETTE.muted, false],
+      ]);
+    }
   });
 
   it('starts each rule a gap after its measured line', () => {
     const measured = places.filter((place) => place.element.attributes.has('textLength'));
-    assert.equal(measured.length, 4);
+    assert.equal(measured.length, 2);
     for (const place of measured) {
       const words = textOf(place.element);
       const length = words.length * PANE_CHAR;
@@ -222,7 +373,7 @@ describe('renderHero', () => {
     assert.ok(contrast(PALETTE.fg, mix(PALETTE.lead, PALETTE.panel, 0.2)) >= 4.5);
   });
 
-  it('draws no pictographs (emoji), and draws the status glyphs, marker and note arrow as shapes, not characters', () => {
+  it('draws no pictographs (emoji), and draws the status marks as shapes, not characters', () => {
     assert.doesNotMatch(svg, /\p{Extended_Pictographic}/u);
     assert.doesNotMatch(svg, /[○◐■✓✗▸▾↳│─]/u);
   });
