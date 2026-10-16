@@ -106,7 +106,8 @@ declare module 'claude-code' {
     options?: { readonly shape: string },
   ): Atom<Unshaped<PluginState[P][K]>>
   export function read<T>($: Context, atom: Atom<T>): Promise<T>
-  export function update<T>($: Context, atom: Atom<T>, change: (current: T) => T): Promise<void>
+  /** Reads, applies `change`, writes, and tries again on a miss; resolves to the value written. */
+  export function update<T>($: Context, atom: Atom<T>, change: (current: T) => T): Promise<T>
 
   export type FsStat = { readonly kind: 'file' | 'dir'; readonly size: number; readonly mtimeMs: number; readonly isLink: boolean }
   export type FsEntry = FsStat & { readonly name: string }
