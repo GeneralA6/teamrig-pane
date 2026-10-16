@@ -479,6 +479,14 @@ function fieldIndex(node: unknown): number {
   return focusables(node).findIndex(element => element.type === 'Input')
 }
 
+/** The Find field as drawn: the key of its round (find-field.ts) and the text it holds as drawn; null where none is drawn. */
+function drawnField(node: unknown): { key: string; value: unknown } | null {
+  const field = focusables(node).find(element => element.type === 'Input')
+  if (field === undefined) return null
+  const props = keyedProps(node, field.key)
+  return { key: field.key, value: props !== null && 'value' in props ? props.value : undefined }
+}
+
 function keyedProps(node: unknown, key: string): object | null {
   return propsOf(keyedNode(node, key))
 }
@@ -1291,7 +1299,8 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
 
   await pane.input({ key: 'find', text: 'etl the', kind: 'change' })
   drawn = await pane.drawn()
-  expect(keyedProps(drawn, 'find')).toMatchObject({ value: 'etl the' })
+  // Typing never draws the field again: the same key, the same empty text, so the engine keeps every key typed in it.
+  expect(drawnField(drawn)).toEqual({ key: 'find', value: '' })
   // The active matches in plan order, each a press with a dim line of whose it is; the Find field draws no words.
   expect(screenOf(drawn)).toEqual([
     ' Tasks Changes',
@@ -1324,29 +1333,38 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   drawn = await pane.drawn()
   expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed$/ })).toBeDefined()
   expect(keyedNode(drawn, 'page-head')).not.toBe(null)
-  // A page keeps the field, empty: typing there opens a search past the page.
-  expect(keyedProps(drawn, 'find')).toMatchObject({ value: '' })
+  // A page draws a fresh field, empty: typing there opens a search past the page.
+  expect(drawnField(drawn)).toEqual({ key: 'find:1', value: '' })
 
   await pane.press({ key: 'back' })
   drawn = await pane.drawn()
-  expect(keyedProps(drawn, 'find')).toMatchObject({ value: 'etl the' })
+  // Back on the search, a fresh field holding its words.
+  expect(drawnField(drawn)).toEqual({ key: 'find:2', value: 'etl the' })
   expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › Search "etl the" › T50'])
   await pane.press({ key: 'search:T58' })
   expect(await pane.find({ type: 'Text', text: /^○ T58  Read the source$/ })).toBeDefined()
   await pane.press({ key: 'back' })
+  expect(drawnField(await pane.drawn())).toEqual({ key: 'find:4', value: 'etl the' })
 
   await pane.press({ key: 'clear' })
   drawn = await pane.drawn()
-  expect(keyedProps(drawn, 'find')).toMatchObject({ value: '' })
+  expect(drawnField(drawn)).toEqual({ key: 'find:5', value: '' })
   expect(buttonKeys(drawn)).not.toContain('clear')
   expect(buttonKeys(drawn)).toContain('next:T52')
 
-  await pane.input({ key: 'find', text: 'nothing-here', kind: 'change' })
+  await pane.input({ key: 'find:5', text: 'nothing-here', kind: 'change' })
   expect(await pane.find({ type: 'Text', text: /^Nothing matches./ })).toBeDefined()
-  await pane.input({ key: 'find', text: '', kind: 'change' })
+  await pane.input({ key: 'find:5', text: '', kind: 'change' })
   drawn = await pane.drawn()
-  expect(keyedProps(drawn, 'find')).toMatchObject({ value: '' })
+  expect(drawnField(drawn)).toEqual({ key: 'find:5', value: '' })
   expect(buttonKeys(drawn)).toContain('next:T52')
+
+  // mine or all from a search shows the list alone, under a fresh, empty field.
+  await pane.input({ key: 'find:5', text: 'etl', kind: 'change' })
+  await pane.press({ key: 'all' })
+  drawn = await pane.drawn()
+  expect(drawnField(drawn)).toEqual({ key: 'find:6', value: '' })
+  expect(buttonKeys(drawn)).not.toContain('clear')
 
   // Inline, where no page shows, there is no field.
   await pane.redraw({ ...PANE_PROPS, placement: 'inline' })

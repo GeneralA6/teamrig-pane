@@ -18,7 +18,7 @@
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Context, Register } from 'claude-code'
-import type { BarStatus, ExpandedTasks, Nav, PageDetails, PaneView, RequirementProblem, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, FindField, Nav, PageDetails, PaneView, RequirementProblem, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
@@ -57,10 +57,9 @@ import { doneBlocks, weekWords } from './done-rows'
 import { pageBlocks } from './page'
 import { searchTasks, topResult } from './search'
 import { searchBlocks } from './search-rows'
+import { FIRST_FIELD, fieldAfter, fieldKey } from './find-field'
 
 const PANE = 'teamrig-pane'
-/** The Find field's key: `s: Find` moves the focus ring to it, and a result's page opened by Enter returns to it. */
-const FIND = 'find'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
 const DOCK_COLUMNS = 58
 /** Columns of space between the pane's frame and its text, each side. */
@@ -116,22 +115,33 @@ const nav = atom({ plugin: 'teamrig-pane', key: 'nav' } as const, AT_LIST, { sha
 const NO_PAGES: PageDetails = {}
 /** The pages' details, kept under CARDS_SHAPE as the open cards are: both hold TaskDetail. */
 const pages = atom({ plugin: 'teamrig-pane', key: 'pages' } as const, NO_PAGES, { shape: CARDS_SHAPE })
+/** The Find field's round (find-field.ts): the key it is drawn under and the text it starts with. */
+const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, FIRST_FIELD)
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
   return Object.fromEntries(Object.entries(current).filter(([key]) => key !== id))
 }
 
+/** Who moves the tasks view: the person typing in the Find field, or any other step. */
+type StepOrigin = 'typing' | 'step'
+
 /**
- * Moves the tasks view by `step` (nav.ts), keeping only the details of the pages a place still names. A page opens
+ * Moves the tasks view by `step` (nav.ts), keeping only the details of the pages a place still names. A step other
+ * than typing that changes what the Find field should hold starts a new round of it (find-field.ts). A page opens
  * at its top, and a step from a page back to the list brings the element the page was opened from to the middle of
  * the window; a refused or failed scroll (an engine without `$.ui.scroll` among them) leaves the window where it is.
  */
-async function go($: Context, step: (current: Nav) => Nav): Promise<void> {
-  const before = await read($, nav)
-  const next = step(before)
-  if (next === before) return
-  await update($, nav, () => next)
+async function go($: Context, step: (current: Nav) => Nav, origin: StepOrigin = 'step'): Promise<void> {
+  // The step runs on the places as last written, so a step written while this one runs is never lost.
+  const seen: { before: Nav | null } = { before: null }
+  const next = await update($, nav, current => {
+    seen.before = current
+    return step(current)
+  })
+  const before = seen.before
+  if (before === null || next === before) return
+  if (origin === 'step') await update($, findField, field => fieldAfter(field, before, next))
   await update($, pages, current => pagesKept(current, next))
   const to = landing(before, next)
   if (to !== null) await scrollTo($, to).catch(() => undefined)
@@ -144,7 +154,8 @@ async function scrollTo($: Context, to: Landing): Promise<void> {
 
 /** Moves the pane's focus ring into the Find field; refused while the pane does not hold the keys, which leaves it where it was. */
 async function focusFind($: Context): Promise<void> {
-  await $.ui.focus({ requestId: PANE, key: FIND }).catch(() => undefined)
+  const field = await read($, findField)
+  await $.ui.focus({ requestId: PANE, key: fieldKey(field) }).catch(() => undefined)
 }
 
 /** The mine or all view, the list shown alone: the rows a page left from belong to the other list. */
@@ -341,6 +352,8 @@ export const register: Register = on => {
     let open: ExpandedTasks = NOTHING_EXPANDED
     /** Where the tasks view is; the list in the Changes view and inline, where a page never shows. */
     let at: Nav = AT_LIST
+    /** The Find field's round (find-field.ts), drawn in the tasks view docked. */
+    let field: FindField = FIRST_FIELD
     let body: Drawn[] = []
     /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
     let barLines: BarPiece[][] = []
@@ -354,7 +367,10 @@ export const register: Register = on => {
         shown = await read($, mode)
         open = await read($, expanded)
         const missing = await read($, requirements)
-        if (current === 'tasks' && !inline) at = await read($, nav)
+        if (current === 'tasks' && !inline) {
+          at = await read($, nav)
+          field = await read($, findField)
+        }
         const place = currentPlace(at)
         // A page has no status bar: the bar counts the list, and a press on it filters the list.
         const bar = current === 'tasks' && shown === 'mine' && place.kind === 'list' ? statusBar(snap, await read($, barFilter), columns) : null
@@ -402,7 +418,7 @@ export const register: Register = on => {
     // Enter in the Find field opens the top result's page, the first active match, else the newest finished one.
     const openTop = async (query: string) => {
       const top = topResult(searchTasks(snap.tasks, query))
-      if (top !== null) await openPage(top.id, FIND)
+      if (top !== null) await openPage(top.id, fieldKey(field))
     }
 
     const isPlain = (span: Span) =>
@@ -564,18 +580,20 @@ export const register: Register = on => {
 
     // The Find field, under the switch in the dock whatever it shows: the first change opens a search (a place, so back
     // from a result's page returns to it), each change shows the results for its words, Enter opens the top one's page,
-    // and an empty field or clear closes the search. It holds the query of the search shown, else nothing. `s: Find`
-    // before it moves the focus ring into it; the field never takes the focus by itself, as it would then hold every
-    // key the pane's hotkeys answer. Esc hands the keys back and leaves the results drawn.
+    // and an empty field or clear closes the search. It is drawn under its round's key, holding what the round started
+    // with (find-field.ts): the query of the search shown, else nothing; never the person's typing, which the engine
+    // would drop on each redraw. `s: Find` before it moves the focus ring into it; the field never takes the focus by
+    // itself, as it would then hold every key the pane's hotkeys answer. Esc hands the keys back and leaves the results
+    // drawn.
     const findRow = inline ? null : (
       <Box key="find-row" flexDirection="row" flexWrap="wrap" columnGap={1}>
         <Button key="find-key" label="Find" plain hotkey="s" onPress={() => void focusFind($)} />
         <Input
-          key={FIND}
+          key={fieldKey(field)}
           placeholder="id, title, owner, note…"
-          value={place.kind === 'search' ? place.query : ''}
+          value={field.text}
           submitLabel="open"
-          onInput={value => void go($, current => searched(current, value))}
+          onInput={value => void go($, current => searched(current, value), 'typing')}
           onSubmit={value => void openTop(value)}
         />
         {place.kind === 'search' ? <Button label="clear" variant="secondary" onPress={() => void go($, leftSearch)} /> : null}
