@@ -3,7 +3,7 @@
 // each test file in the engine with this kit.
 
 declare module 'claude-code/testing' {
-  import type { On, RenderRequest, PaneProps, SessionStart, CommandRun, ToolCall, ToolName, ToolResult } from 'claude-code'
+  import type { On, RenderRequest, PaneProps, SessionStart, CommandRun, ToolCall, ToolName, ToolResult, UiFocusInput, UiFocusResult } from 'claude-code'
 
   export interface Matchers {
     toBe(expected: unknown): void
@@ -46,7 +46,11 @@ declare module 'claude-code/testing' {
   export interface TestEngine {
     readonly session: { start(e: SessionStart): Promise<void> }
     readonly command: { run(e: CommandRun): Promise<{ readonly text?: string }> }
-    readonly ui: { mount(request: RenderRequest): Promise<MountedPane> }
+    readonly ui: {
+      mount(request: RenderRequest): Promise<MountedPane>
+      /** Raises `ui.focus` as the engine does when the ring moves: through the plugin's hooks, then the test's own beneath them. */
+      focus(e: UiFocusInput): Promise<UiFocusResult>
+    }
     readonly tool: { call<T extends ToolName>(input: ToolCall<T>): Promise<ToolResult> }
   }
   /** The engine's clock under test: `advance` runs the timers due, `settle` lets pending work finish. */
