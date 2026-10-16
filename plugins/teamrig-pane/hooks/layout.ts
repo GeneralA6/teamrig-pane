@@ -20,10 +20,11 @@ export type Piece = { kind: 'id'; span: Span; task: string } | { kind: 'words'; 
  */
 export type CardPart = { kind: 'text'; key: string; spans: Span[] } | { kind: 'line'; key: string; pieces: Piece[] }
 /**
- * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one. `card`,
- * set while that card is open, is the card's own parts, drawn under the Button and outside it.
+ * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, or its
+ * page when `opens` does (a search result). `card`, set while that card is open, is the card's own parts, drawn
+ * under the Button and outside it.
  */
-export type Drawn = { key: string; spans: Span[]; wrap: 'wrap' | 'truncate-end'; toggle: string | null; card?: CardPart[] }
+export type Drawn = { key: string; spans: Span[]; wrap: 'wrap' | 'truncate-end'; toggle: string | null; opens?: string; card?: CardPart[] }
 
 const RULE = '─'
 const BLANK_LINE: Span = { text: ' ' }
@@ -62,7 +63,7 @@ function shortened(text: string, room: number): string {
 
 /** One style, one link and one task id: two links, or two ids, side by side stay two. */
 function sameStyle(a: Span, b: Span): boolean {
-  return a.color === b.color && a.bold === b.bold && a.dim === b.dim && a.href === b.href && a.task === b.task
+  return a.color === b.color && a.bold === b.bold && a.dim === b.dim && a.underline === b.underline && a.href === b.href && a.task === b.task
 }
 
 /** Spans with each run of one style joined into one span, so a block draws as few elements as it can. */
@@ -245,6 +246,7 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number): Drawn
       spans: joinedLines(block.opensSection === true ? [[BLANK_LINE], ...lines] : lines),
       wrap: 'wrap',
       toggle: block.toggle ?? null,
+      ...(block.opens === undefined ? {} : { opens: block.opens }),
     }
     return block.card === undefined ? drawn : { ...drawn, card: cardParts(wrapped(block.card)) }
   })

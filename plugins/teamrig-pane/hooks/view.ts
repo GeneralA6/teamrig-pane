@@ -46,7 +46,8 @@ function verifyingFirst(a: TaskRow, b: TaskRow): number {
   return Number(isVerifying(b)) - Number(isVerifying(a)) || byPlanOrder(a, b)
 }
 
-function newestFirst(a: TaskRow, b: TaskRow): number {
+/** Newest status change first: the order Done today, and a search's finished matches, list in. */
+export function newestFirst(a: TaskRow, b: TaskRow): number {
   return Date.parse(b.statusAt) - Date.parse(a.statusAt)
 }
 

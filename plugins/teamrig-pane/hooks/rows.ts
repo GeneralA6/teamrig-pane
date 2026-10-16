@@ -19,8 +19,9 @@ import { cells } from './width'
  * A run of text in one style. No `color` (absent or undefined, as a span picks it by a condition) draws in the theme's
  * text color. With `href` the text is a link to that address (a card's Links row), never split across lines. With
  * `task` the text is that task's id in an open card (ids.ts), which a press on opens as a page; never split either.
+ * `underline` marks the words a search matched (search-rows.ts).
  */
-export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean; href?: string; task?: string }
+export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean; underline?: boolean; href?: string; task?: string }
 /**
  * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
  * undefined as `single` passes it on, starts them at the edge); a `rule` row ends in a rule.
@@ -37,19 +38,20 @@ export type Row = {
 }
 /**
  * What draws as one element. `toggle` names the task a press on it opens or closes the card of; `card` holds
- * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press;
+ * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press; `opens` names
+ * the task a press on it opens the page of (a search result, search-rows.ts);
  * `opensSection` leads it with a blank line, past the gap every block has.
  */
-export type Block = { key: string; rows: Row[]; toggle?: string; card?: Row[]; opensSection?: boolean }
+export type Block = { key: string; rows: Row[]; toggle?: string; opens?: string; card?: Row[]; opensSection?: boolean }
 
 export const NOTHING_EXPANDED: ExpandedTasks = {}
 /** Between a task's id and its title. */
-const TITLE_GAP = '  '
+export const TITLE_GAP = '  '
 /** A task's title and its meta line are cut at this many lines each; with its card open, the title shows whole. */
-const TITLE_LINES = 2
-const META_LINES = 2
+export const TITLE_LINES = 2
+export const META_LINES = 2
 /** Between the parts of a meta line. */
-const SEPARATOR: Span = { text: ' · ', dim: true }
+export const SEPARATOR: Span = { text: ' · ', dim: true }
 
 /** By the task's status: `◑` is shipped work being verified, the other half of `◐` working. */
 export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', waiting: '■', done: '✓', dropped: '✗' }
@@ -71,7 +73,7 @@ function metaSpans(task: TaskRow, context: WaitContext, viewer: string | null): 
 }
 
 /** Where a task's wrapped title and its meta line start: under the title, past its status mark and id. */
-function indentOf(task: TaskRow): Span {
+export function indentOf(task: TaskRow): Span {
   return { text: ' '.repeat(cells(`${GLYPH[task.status]} ${task.id}${TITLE_GAP}`)) }
 }
 
