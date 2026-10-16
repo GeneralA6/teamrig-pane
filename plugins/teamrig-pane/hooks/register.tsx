@@ -155,10 +155,24 @@ async function scrollTo($: Context, to: Landing): Promise<void> {
   await $.ui.scroll(to.kind === 'top' ? { to: 'start', in: PANE } : { to: { key: to.key }, in: PANE, block: 'center' })
 }
 
-/** Moves the pane's focus ring into the Find field; refused while the pane does not hold the keys, which leaves it where it was. */
+/** Moves the pane's focus ring onto the element keyed `key`; refused while the pane does not hold the keys, which leaves it where it was. */
+async function focusOn($: Context, key: string): Promise<void> {
+  await $.ui.focus({ requestId: PANE, key }).catch(() => undefined)
+}
+
+/** Moves the pane's focus ring into the Find field, as its round draws it now. */
 async function focusFind($: Context): Promise<void> {
-  const field = await read($, findField)
-  await $.ui.focus({ requestId: PANE, key: fieldKey(field) }).catch(() => undefined)
+  await focusOn($, fieldKey(await read($, findField)))
+}
+
+/**
+ * Closes the search from its clear button and moves the ring back into the field, a new round's: the button is
+ * hidden as the search closes, and the ring left at its index would sit on the next element, so the next keys would
+ * press the pane's hotkeys rather than type a new search.
+ */
+async function clearSearch($: Context): Promise<void> {
+  await go($, leftSearch)
+  await focusFind($)
 }
 
 /** The mine or all view, the list shown alone: the rows a page left from belong to the other list. */
@@ -431,10 +445,14 @@ export const register: Register = on => {
       await update($, pages, current => ({ ...current, [id]: detail }))
       await go($, current => pushed(leavingList(current, from), { kind: 'task', id }))
     }
-    // Enter in the Find field opens the top result's page, the first active match, else the newest finished one.
+    // Enter in the Find field opens the top result's page, the first active match, else the newest finished one, and
+    // moves the ring onto the page's back step: left in the field, a new round's and empty, it would type the next
+    // keys into a new search, so b, f and s would never answer.
     const openTop = async (query: string) => {
       const top = topResult(searchTasks(snap.tasks, query))
-      if (top !== null) await openPage(top.id, fieldKey(field))
+      if (top === null) return
+      await openPage(top.id, fieldKey(field))
+      await focusOn($, 'back')
     }
 
     const isPlain = (span: Span) =>
@@ -598,9 +616,9 @@ export const register: Register = on => {
     // from a result's page returns to it), each change shows the results for its words, Enter opens the top one's page,
     // and an empty field or clear closes the search. It is drawn under its round's key, holding what the round started
     // with (find-field.ts): the query of the search shown, else nothing; never the person's typing, which the engine
-    // would drop on each redraw. `s: Find` before it moves the focus ring into it; the field never takes the focus by
-    // itself, as it would then hold every key the pane's hotkeys answer. Esc hands the keys back and leaves the results
-    // drawn.
+    // would drop on each redraw. `s: Find` before it moves the focus ring into it, and clear moves it back in; the
+    // field never takes the focus by itself, as it would then hold every key the pane's hotkeys answer. Esc hands the
+    // keys back and leaves the results drawn.
     const findRow = inline ? null : (
       <Box key="find-row" flexDirection="row" flexWrap="wrap" columnGap={1}>
         <Button key="find-key" label="Find" plain hotkey="s" onPress={() => void focusFind($)} />
@@ -612,7 +630,7 @@ export const register: Register = on => {
           onInput={value => void go($, current => searched(current, value), 'typing')}
           onSubmit={value => void openTop(value)}
         />
-        {place.kind === 'search' ? <Button label="clear" variant="secondary" onPress={() => void go($, leftSearch)} /> : null}
+        {place.kind === 'search' ? <Button label="clear" variant="secondary" onPress={() => void clearSearch($)} /> : null}
       </Box>
     )
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to the pane's hotkeys or to

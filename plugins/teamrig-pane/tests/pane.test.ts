@@ -1295,8 +1295,8 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   expect(keyedProps(drawn, 'find-key')).toMatchObject({ label: 'Find', plain: true, hotkey: 's' })
   expect(buttonKeys(drawn)).not.toContain('clear')
   expect(buttonKeys(drawn)).toContain('next:T52')
-  // s reaches the Find label; its cursor move ($.ui.focus) has nothing beneath to answer it here, so it is refused (the
-  // test of the line under the field answers it).
+  // s reaches the Find label. Its move of the ring into the field ($.ui.focus), as Enter's and clear's below, is refused
+  // here: the kit answers no plugin's own move, so the test of the line under the field raises those landings itself.
   expect(await pane.press({ key: 'find-key' })).toMatchObject({ element: 'find-key' })
 
   await pane.input({ key: 'find', text: 'etl the', kind: 'change' })
@@ -1427,15 +1427,18 @@ test("the line under the Find field says where the keys go: to Claude's prompt, 
   const CLAUDE = { text: 'Keys go to Claude · click the field to search', bold: false }
   const ON_PANE = { text: 'Keys on the pane · s: search · Esc: to Claude', bold: false }
   const SEARCH = { text: 'Typing searches · Enter: open · Esc: to Claude', bold: true }
+  // The pane's own $.ui.focus, which the engine raises as ui.focus with this origin; the kit answers no plugin's own
+  // move, so the test raises its landing as the engine would.
+  const PLUGIN: UiFocusInput['origin'] = { kind: 'plugin', name: 'teamrig-pane' }
   // The pane without the keys: they go to Claude's prompt.
   expect(await keysLine()).toEqual(CLAUDE)
   // Given the keys, the ring on nothing: the pane's hotkeys answer.
   await pane.redraw(HELD)
   expect(await keysLine()).toEqual(ON_PANE)
 
-  // s moves the ring into the field ($.ui.focus, which the kit raises only from a test): typing searches, and still
-  // does once typed.
-  expect(await land('find', { kind: 'plugin', name: 'teamrig-pane' })).toEqual({})
+  // s moves the ring into the field: typing searches, and still does once typed.
+  await pane.press({ key: 'find-key' })
+  expect(await land('find', PLUGIN)).toEqual({})
   expect(await keysLine()).toEqual(SEARCH)
   await pane.input({ key: 'find', text: 'etl', kind: 'change' })
   expect(await keysLine()).toEqual(SEARCH)
@@ -1461,6 +1464,19 @@ test("the line under the Find field says where the keys go: to Claude's prompt, 
   expect(await land('find')).toEqual({})
   expect(await keysLine()).toEqual(CLAUDE)
   await pane.redraw(HELD)
+  expect(await keysLine()).toEqual(SEARCH)
+
+  // Enter opens the top result's page and moves the ring onto its back step: the pane's keys, so b, f and s answer
+  // rather than typing a new search into the page's fresh field.
+  await pane.input({ key: 'find', text: 'etl' })
+  expect(drawnField(await pane.drawn())).toEqual({ key: 'find:1', value: '' })
+  expect(await land('back', PLUGIN)).toEqual({})
+  expect(await keysLine()).toEqual(ON_PANE)
+  // Back on the search, clear moves the ring back into the field, a new round's: typing searches.
+  await pane.press({ key: 'back' })
+  await pane.press({ key: 'clear' })
+  expect(drawnField(await pane.drawn())).toEqual({ key: 'find:3', value: '' })
+  expect(await land('find:3', PLUGIN)).toEqual({})
   expect(await keysLine()).toEqual(SEARCH)
 
   // Inline, where no field is drawn, no line either.
