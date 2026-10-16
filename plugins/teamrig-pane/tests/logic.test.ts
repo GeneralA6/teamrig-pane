@@ -11,6 +11,7 @@ import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
 import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
+import { HELD_DAYS } from '../hooks/done'
 import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
@@ -1014,7 +1015,7 @@ describe('source', () => {
     expect(await unread()).toBe(1)
   })
 
-  test('a snapshot holds only the tasks a drawing can show: active, or finished today (the UTC day of now)', async () => {
+  test('a snapshot holds only the tasks a drawing can show: active, or finished within HELD_DAYS of now', async () => {
     const files = new MemoryFiles()
     files.write(PATHS.events, [
       createLine('T1', { owner: 'po', by: 'po', at: NOW - 3 * DAY }),
@@ -1027,10 +1028,12 @@ describe('source', () => {
       createLine('T5', { owner: 'po', by: 'po', at: NOW - 3 * DAY }),
       createLine('T6', { owner: 'po', by: 'po', at: NOW - 3 * DAY }),
       statusLine('T6', 'po', Date.UTC(2026, 9, 13) - 60_000, 'done'),
+      createLine('T7', { owner: 'po', by: 'po', at: NOW - 10 * DAY }),
+      statusLine('T7', 'po', NOW - HELD_DAYS * DAY - 60_000, 'done'),
     ].join('\n'))
     const snap = await new TaskRegisterSource(files, PATHS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
-    // T6, done a minute before midnight, is within a day of now but not today: no drawing shows it.
-    expect(snap?.tasks.map(task => task.id)).toEqual(['T1', 'T3', 'T4', 'T5'])
+    // T2 and T6 finished days ago, within HELD_DAYS: the Done page and search show them. T7 finished a minute before.
+    expect(snap?.tasks.map(task => task.id)).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'T6'])
 
     const big = new MemoryFiles()
     big.write(PATHS.events, bigRegister(20_000).join('\n'))

@@ -4,6 +4,7 @@
 // line asks for another word; when nothing matches, one dim line says so. A press on a result opens its page
 // (`opens`). Pure: blocks of rows (rows.ts) that layout.ts wraps.
 import type { Snapshot } from '../types'
+import { HELD_DAYS } from './done'
 import { whenWords } from './meta'
 import { GLYPH, GLYPH_COLOR, indentOf, META_LINES, problemBlocks, readingBlock, SEPARATOR, single, TITLE_GAP, TITLE_LINES } from './rows'
 import type { Block, Row, Span } from './rows'
@@ -25,7 +26,7 @@ const ELLIPSIS = '…'
 /** What an empty Find field shows. */
 export const SEARCH_HINT = 'Type words to find a task by its id, title, owner, who asked, goals, week, note, evidence or ref.'
 /** What a query no held task matches shows. */
-export const NOTHING_FOUND = 'Nothing matches. The pane searches the active tasks and those finished today.'
+export const NOTHING_FOUND = `Nothing matches. The pane searches the active tasks and those finished in the last ${HELD_DAYS} days.`
 
 /** `text` as spans in `style`, the `marks` runs underlined. */
 export function markedSpans(text: string, marks: readonly Mark[], style: Omit<Span, 'text'>): Span[] {

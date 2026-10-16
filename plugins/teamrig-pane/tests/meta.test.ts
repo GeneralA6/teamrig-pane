@@ -104,7 +104,7 @@ describe('meta line', () => {
     )
     if (first === undefined || waiting === undefined) throw new Error('no tasks')
     expect(textOf(waiting, 'po', NOW, [first, waiting])).toEqual(['p3', 'waiting since 14:00: decision owner, on T1, until Fri 10-16 14:00; the copy first'])
-    // T1 finished before today, so the snapshot lacks it, and the time has come: both read ready; a decision never does.
+    // T1 finished over HELD_DAYS ago, so the snapshot lacks it, and the time has come: both read ready; a decision never does.
     const later = Date.UTC(2026, 9, 16, 14, 0)
     expect(textOf(waiting, 'po', later, [waiting])).toEqual([
       'p3',

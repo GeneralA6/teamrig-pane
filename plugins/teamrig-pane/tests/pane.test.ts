@@ -1237,7 +1237,7 @@ test('back, forward and the trail step through the places; the list keeps the he
   expect(buttonKeys(drawn)).toContain('next:T52')
 })
 
-test('mine and all show the list alone; inline no page shows; a page whose task closed before today says so', async ($, on) => {
+test('mine and all show the list alone; inline no page shows; a page whose task closed over 8 days ago says so', async ($, on) => {
   const { disk, clock } = await start(on)
   disk.write(EVENTS, CHAIN)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
@@ -1258,9 +1258,9 @@ test('mine and all show the list alone; inline no page shows; a page whose task 
   expect(keyedNode(await pane.drawn(), 'page-head')).not.toBe(null)
 
   await pane.press({ key: gotoKey(await pane.drawn(), 'T58') })
-  disk.write(EVENTS, [...CHAIN, statusLine('T58', 'etl', NOW - 48 * HOUR, 'done')])
+  disk.write(EVENTS, [...CHAIN, statusLine('T58', 'etl', NOW - 9 * 24 * HOUR, 'done')])
   await clock.advance(3_000)
-  expect(await pane.find({ type: 'Text', text: /^T58 left the pane's tasks: it closed before\ntoday\.$/ })).toMatchObject({
+  expect(await pane.find({ type: 'Text', text: /^T58 left the pane's tasks: it closed over 8[ \n]days[ \n]ago\.$/ })).toMatchObject({
     children: [{ props: { dimColor: true } }, '\n', { props: { dimColor: true } }],
   })
   await pane.press({ key: 'back' })

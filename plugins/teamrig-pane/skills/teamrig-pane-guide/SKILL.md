@@ -279,7 +279,7 @@ Goal      G10.2
 
 The pane keeps 20 places, the oldest dropped first. A page opens at its top and has no status bar. Back to the list
 brings the card you left to the middle of the dock, and the list keeps back and forward while a page lies ahead of
-it; `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed before today says so on its page. Above
+it; `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed over 8 days ago says so on its page. Above
 the prompt ids are plain words and no page shows.
 
 ### Search
@@ -304,7 +304,7 @@ the pane holds that every word matches, the matched words underlined:
 | Enter | Opens the top result's page |
 | `clear`, or an empty field | Closes the search and shows the place before it |
 
-The pane searches what it holds: every area's active tasks and those finished today, never an older week's. The
+The pane searches what it holds: every area's active tasks and those finished in the last 8 days, never older ones. The
 active matches come in plan order, then the finished ones, newest first. At most 30 show; a dim line counts the
 rest (`4 more: add a word`), and when nothing matches, one dim line says so. The trail names a search by its words
 (`Search "etl the"`). Esc hands the keys back to the prompt and leaves the results drawn. Above the prompt no page

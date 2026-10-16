@@ -83,7 +83,7 @@ export function lateWords(task: TaskRow, now: number): string | null {
 
 /**
  * What a reason is judged ready by: the snapshot's clock and its tasks' statuses. The snapshot holds the active
- * tasks and those finished today (source.ts), so one it lacks finished earlier and reads finished, as in teamrig.
+ * tasks and those finished within HELD_DAYS (source.ts), so one it lacks finished earlier and reads finished, as in teamrig.
  */
 export function contextOf(tasks: readonly TaskRow[], now: number): WaitContext {
   return waitContext(new Map(tasks.map(task => [task.id, task])), new Date(now))

@@ -66,7 +66,7 @@ export type AreaSource = 'pinned' | 'inbox-read'
 
 /** Everything a drawing needs, rebuilt when a register file changes. */
 export type Snapshot = {
-  /** The tasks a drawing can show: the active ones and those finished today, the UTC day of the fold (hooks/status-bar.ts isFinishedOn). */
+  /** The tasks a drawing can show: the active ones and those finished within HELD_DAYS of the fold (hooks/done.ts isHeldFinished). */
   tasks: TaskRow[]
   area: string | null
   areaSource: AreaSource | null

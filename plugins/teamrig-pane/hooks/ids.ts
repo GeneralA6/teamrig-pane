@@ -1,6 +1,6 @@
 // The task ids in an open card's words (card.ts): each id the snapshot holds becomes a span of its own, marked
 // with the task it names, which register.tsx draws underlined and a press on opens as that task's page. An id
-// the snapshot does not hold (a task finished before today, or one never made) stays in the words, as written,
+// the snapshot does not hold (a task finished over HELD_DAYS ago, done.ts, or one never made) stays in the words, as written,
 // and so does one inside a web address (links.ts draws those). teamrig spells an id `T` and a number from 1 (its
 // register's TASK_ID), a word of its own: `T6,`, `(T6)` and `T6-T9` hold ids; `T06`, `T6a`, `AT6` and `T6_x`
 // none. Pure.
