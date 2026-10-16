@@ -138,14 +138,14 @@ describe('details', () => {
     expect(anchoredLines(ROADMAP, [40], g01g)).toBeNull()
   })
 
-  test('finds a goal item by its id, wherever it sits', async () => {
-    expect(goalItem(ROADMAP, 'G10.1g')).toEqual({ number: 3, text: 'G10.1g Release checklist: CONFIRMED (dashboards study).' })
-    expect(goalItem(ROADMAP, 'S4')).toEqual({ number: 13, text: 'S4 Caching — release speed upgrades, after S3.' })
+  test('finds a goal item by its id, wherever it sits, as plain words', async () => {
+    expect(goalItem(ROADMAP, 'G10.1g')).toBe('G10.1g Release checklist: CONFIRMED (dashboards study).')
+    expect(goalItem(ROADMAP, 'S4')).toBe('S4 Caching — release speed upgrades, after S3.')
     expect(goalItem(ROADMAP, 'G10.1')).toBeNull()
     expect(goalItem(ROADMAP, 'G19')).toBeNull()
   })
 
-  test('loads the quotable parts of a ref, then the items of goals they did not quote', async () => {
+  test('loads the quotable parts of a ref, then the items of the goals they did not quote', async () => {
     const files = new MemoryFiles()
     files.write('C:/w/docs/R.md', ROADMAP)
     files.write('R/inbox/po.md', ['- 2026-10-12 lead: first', '- 2026-10-13 dashboards: pin the Docker digest'].join('\n'))
@@ -156,8 +156,10 @@ describe('details', () => {
       quotes: [
         { ref: 'docs/R.md:5', lines: ['Fix design: analytics leads with dashboards → owner decision.'] },
         { ref: '~/team-notes/board/inbox/po.md:2', lines: ['2026-10-13 dashboards: pin the Docker digest'] },
-        { ref: 'docs/R.md:3', lines: ['G10.1g Release checklist: CONFIRMED (dashboards study).'] },
-        { ref: 'docs/R.md:13', lines: ['S4 Caching — release speed upgrades, after S3.'] },
+      ],
+      goals: [
+        { goal: 'G10.1g', text: 'G10.1g Release checklist: CONFIRMED (dashboards study).' },
+        { goal: 'S4', text: 'S4 Caching — release speed upgrades, after S3.' },
       ],
     })
   })
@@ -167,7 +169,8 @@ describe('details', () => {
     files.write('C:/w/docs/R.md', ROADMAP)
     const pointed = await new TaskDetails(files, PLACES).load(taskWith('docs/R.md:3', ['G10.1g']))
     expect(pointed.quotes).toEqual([{ ref: 'docs/R.md:3', lines: ['G10.1g Release checklist: CONFIRMED (dashboards study).'] }])
+    expect(pointed.goals).toEqual([])
     const noDoc = await new TaskDetails(files, { ...PLACES, goalsDoc: null }).load(taskWith('board/po.md:6', ['G10.1g']))
-    expect(noDoc.quotes).toEqual([])
+    expect([noDoc.quotes, noDoc.goals]).toEqual([[], []])
   })
 })

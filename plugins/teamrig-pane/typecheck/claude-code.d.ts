@@ -55,9 +55,20 @@ declare module 'claude-code' {
     readonly onPress: () => void
     readonly children?: Child
   }
+  /** A link to `href`, drawn inline in a Text: its children (or `label`) as the text a press opens the address from. */
+  export type LinkProps = {
+    readonly href: string
+    readonly label?: string
+    readonly children?: Child
+  }
   export type Component<P> = (props: P) => JSX.Element
   /** The components a render hook draws with, resolved for the surface the request came from. */
-  export type Components = { readonly Box: Component<BoxProps>; readonly Text: Component<TextProps>; readonly Button: Component<ButtonProps> }
+  export type Components = {
+    readonly Box: Component<BoxProps>
+    readonly Text: Component<TextProps>
+    readonly Button: Component<ButtonProps>
+    readonly Link: Component<LinkProps>
+  }
 
   /** A value kept under a shape tag: read under another tag, it reads as absent. */
   export type Shaped<T> = { readonly shape: string; readonly value: T }

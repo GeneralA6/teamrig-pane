@@ -78,13 +78,19 @@ export type Snapshot = {
   now: number
 }
 
-/** Lines quoted for a task (hooks/details.ts): from one part of its ref, or a goal's roadmap item; `ref` names where. */
+/** Lines quoted for a task (hooks/details.ts) from one part of its ref; `ref` names that part. */
 export type RefQuote = { ref: string; lines: string[] }
 
-/** What an expanded task shows beyond its row: the quotes, read for the ref the task had then. */
-export type TaskDetail = { ref: string | null; quotes: RefQuote[] }
+/** A goal's roadmap item (hooks/details.ts): the goal id and the item's text as plain words, which starts with the id. */
+export type GoalItem = { goal: string; text: string }
 
-/** The tasks the person expanded, by id; a task absent is collapsed. */
+/**
+ * What an open task's card (hooks/card.ts) reads beyond the register: the quotes, read for the ref the task had then,
+ * and the roadmap items of its goals that no quote already holds.
+ */
+export type TaskDetail = { ref: string | null; quotes: RefQuote[]; goals: GoalItem[] }
+
+/** The tasks whose card the person opened, by id; a task absent shows its meta line. */
 export type ExpandedTasks = { readonly [id: string]: TaskDetail }
 
 /** `open`: the pane in full; `minimized`: its one-row strip (hooks/size.ts), what the person's close (✕) does. */
@@ -142,11 +148,11 @@ export type BarStatus = 'done-today' | 'verifying' | 'working' | 'waiting' | 'no
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the changes and the known repos are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes and the known repos are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
-      expanded: ExpandedTasks
+      expanded: Shaped<ExpandedTasks>
       size: PaneSize
       view: PaneView
       changes: Shaped<ChangesSnapshot>

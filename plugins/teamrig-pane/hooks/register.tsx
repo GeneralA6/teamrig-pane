@@ -2,9 +2,9 @@
 // of the fullscreen UI. `mine` shows the session's area: a status bar of its tasks (status-bar.ts),
 // then its tasks in sections (rows.ts): Verifying, Working on, Up next, Waiting (its waiting tasks, then
 // those asked of another session) and Done today (the UTC day, as the bar counts it), each task a row with a
-// dim meta line (meta.ts), and its unread inbox lines; `all` shows every owner's active tasks. A press on a task row expands it: the ask and its goals' roadmap items
-// quoted where its refs still point, who asked and when, its priority, week and goals, its status
-// note and evidence, and the files it names. The close mark (✕,
+// dim meta line (meta.ts), and its unread inbox lines; `all` shows every owner's active tasks. A press on a task row opens its card in
+// place of the meta line (card.ts): its status and note, plan, the ask quoted where its refs still point, who
+// asked, the tasks planned first, its goals' roadmap items, evidence and links. The close mark (✕,
 // ctrl+x x) minimizes it to a one-row strip instead of closing it; a press on the strip or /teamrig-pane
 // opens it again, and the size is kept for the next session (size.ts). A switch row, first in every
 // state and width, the strip included, flips the body between the tasks and the Changes view: the
@@ -51,7 +51,9 @@ const EMPTY_SNAPSHOT: Snapshot = { tasks: [], area: null, areaSource: null, unre
 const SNAPSHOT_SHAPE = 'register-v4'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
-const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, NOTHING_EXPANDED)
+/** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */
+const CARDS_SHAPE = 'cards-v1'
+const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, NOTHING_EXPANDED, { shape: CARDS_SHAPE })
 const size = atom({ plugin: 'teamrig-pane', key: 'size' } as const, 'open')
 const view = atom({ plugin: 'teamrig-pane', key: 'view' } as const, 'tasks')
 /** The changes are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when ChangesSnapshot changes shape. */
@@ -70,7 +72,7 @@ const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as con
 /** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
 const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
 
-/** The expanded tasks less one. */
+/** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
   return Object.fromEntries(Object.entries(current).filter(([key]) => key !== id))
 }
@@ -80,7 +82,7 @@ export const register: Register = on => {
   let live: LiveRegister | null = null
   /** The team `/teamrig-pane <session>` looks its word up in; set when the session starts, null with no team. */
   let team: TeamLookup | null = null
-  /** Reads what an expanded task's refs point at; set when the session starts. */
+  /** Reads what an open card's refs and goals point at; set when the session starts. */
   let details: TaskDetails | null = null
   /** Draws and keeps the pane's size; set when the session starts. */
   let sizer: PaneSizer | null = null
@@ -243,7 +245,7 @@ export const register: Register = on => {
   // task. A task's block is a plain Button around its Text, so a press (or Enter on it) expands or
   // collapses the task. Docked, the root's gap spaces the blocks and its padding the frame.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Box, Text, Button, Link } = $.ui.resolve(e)
     const inline = e.props.placement === 'inline'
     // A read or a layout that throws draws one error line under the buttons: unguarded, the engine
     // would skip this hook and draw the pane with no tasks and no word of why.
@@ -281,8 +283,8 @@ export const register: Register = on => {
       body = failedDrawing(error)
     }
 
-    // Opening reads what the task's refs point at, once. A failed read still opens it, its refs named
-    // unquoted: the register's own fields are the rest of the details.
+    // Opening a card reads what the task's refs and goals point at, once. A failed read still opens it, its
+    // refs named unquoted and its goals by id: the register's own fields are the rest of the card.
     const toggle = async (id: string) => {
       if (open[id] !== undefined) {
         await update($, expanded, current => collapse(current, id))
@@ -290,38 +292,56 @@ export const register: Register = on => {
       }
       const task = snap.tasks.find(t => t.id === id)
       if (task === undefined) return
-      const unquoted: TaskDetail = { ref: task.ref, quotes: [] }
+      const unquoted: TaskDetail = { ref: task.ref, quotes: [], goals: [] }
       const detail = details === null ? unquoted : await details.load(task).catch(() => unquoted)
       await update($, expanded, current => ({ ...current, [id]: detail }))
     }
 
-    const isPlain = (span: Span) => span.color === undefined && span.bold !== true && span.dim !== true
+    const isPlain = (span: Span) => span.color === undefined && span.bold !== true && span.dim !== true && span.href === undefined
     const styled = (span: Span, key?: string) => (
       <Text key={key} color={span.color} bold={span.bold} dimColor={span.dim}>
         {span.text}
       </Text>
     )
-    const drawText = (drawn: Drawn, key?: string) => {
-      const [first, ...rest] = drawn.spans
-      if (first !== undefined && rest.length === 0)
+    /** A span in a Text: a plain string, a link, or a styled Text. */
+    const inSpan = (span: Span, key: string) => {
+      if (span.href !== undefined)
         return (
-          <Text key={key} wrap={drawn.wrap} color={first.color} bold={first.bold} dimColor={first.dim}>
+          <Link key={key} href={span.href}>
+            {span.text}
+          </Link>
+        )
+      return isPlain(span) ? span.text : styled(span, key)
+    }
+    const drawText = (spans: readonly Span[], wrap: Drawn['wrap'], key?: string) => {
+      const [first, ...rest] = spans
+      if (first !== undefined && rest.length === 0 && first.href === undefined)
+        return (
+          <Text key={key} wrap={wrap} color={first.color} bold={first.bold} dimColor={first.dim}>
             {first.text}
           </Text>
         )
       return (
-        <Text key={key} wrap={drawn.wrap}>
-          {drawn.spans.map((span, index) => (isPlain(span) ? span.text : styled(span, String(index))))}
+        <Text key={key} wrap={wrap}>
+          {spans.map((span, index) => inSpan(span, String(index)))}
         </Text>
       )
     }
+    // A Button holds strings and Texts alone, so an open card (its links) draws under the task's Button, not in it.
     const drawBlock = (drawn: Drawn) => {
       const id = drawn.toggle
-      if (id === null) return drawText(drawn, drawn.key)
-      return (
+      if (id === null) return drawText(drawn.spans, drawn.wrap, drawn.key)
+      const task = (
         <Button key={drawn.key} plain onPress={() => void toggle(id)}>
-          {drawText(drawn)}
+          {drawText(drawn.spans, drawn.wrap)}
         </Button>
+      )
+      if (drawn.card === undefined) return task
+      return (
+        <Box key={`${drawn.key}-open`} flexDirection="column">
+          {task}
+          {drawText(drawn.card, drawn.wrap, 'card')}
+        </Box>
       )
     }
 
