@@ -140,6 +140,16 @@ export type RequirementProblem =
 /** What the pane's body shows, picked with the switch over it: the register's tasks, or the session's git changes (hooks/changes.ts). */
 export type PaneView = 'tasks' | 'changes'
 
+/**
+ * A place the tasks view shows (hooks/nav.ts): the list, remembering the key of the element a page was opened from
+ * (null when none) so a return scrolls back to it, or a task's page by its id. Later places (a search, a week of
+ * finished tasks) join as kinds of their own.
+ */
+export type Place = { readonly kind: 'list'; readonly row: string | null } | { readonly kind: 'task'; readonly id: string }
+
+/** The places the person went through, oldest first (at most hooks/nav.ts NAV_PLACES), and the index of the one shown. */
+export type Nav = { readonly places: readonly Place[]; readonly at: number }
+
 /** `mine`: this session's area; `all`: every owner's active tasks. */
 export type ViewMode = 'mine' | 'all'
 
