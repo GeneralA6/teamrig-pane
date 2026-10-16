@@ -62,6 +62,22 @@ declare module 'claude-code' {
     readonly label?: string
     readonly children?: Child
   }
+  /**
+   * A one-line text field: `key` its address, `label` drawn before it, `placeholder` dim while it is empty, `value`
+   * the text it holds when drawn. With `autoFocus` the focus ring starts on it when the pane takes the keyboard; while
+   * it has focus every printable key reaches it alone (no hotkey fires) and Esc hands them back. `onInput` runs on
+   * each change of its text, `onSubmit` on Enter, `submitLabel` naming what Enter does.
+   */
+  export type InputProps = {
+    readonly key: string
+    readonly label?: string
+    readonly placeholder?: string
+    readonly value?: string
+    readonly submitLabel?: string
+    readonly autoFocus?: true
+    readonly onInput?: (value: string) => void
+    readonly onSubmit: (value: string) => void
+  }
   export type Component<P> = (props: P) => JSX.Element
   /** The components a render hook draws with, resolved for the surface the request came from. */
   export type Components = {
@@ -69,6 +85,7 @@ declare module 'claude-code' {
     readonly Text: Component<TextProps>
     readonly Button: Component<ButtonProps>
     readonly Link: Component<LinkProps>
+    readonly Input: Component<InputProps>
   }
 
   /** A value kept under a shape tag: read under another tag, it reads as absent. */

@@ -7,7 +7,9 @@
 // asked, the tasks planned first, its goals' roadmap items, evidence and links. A press on a task id in a card opens
 // that task's page (page.ts), the card with the body to itself, under back and forward (b, f) and a trail of the
 // last places (nav.ts), which the list keeps while a page lies ahead of it; a page opens at its top, and a return
-// to the list scrolls back to the card it left. The close mark (✕,
+// to the list scrolls back to the card it left. `search` (s) shows a Find field: the tasks the pane holds that its
+// words match (search.ts), the matched words underlined, each result a press that opens its page, Enter the top
+// one's, back returning to the results; emptying the field or clear closes it. The close mark (✕,
 // ctrl+x x) minimizes it to a one-row strip instead of closing it; a press on the strip or /teamrig-pane
 // opens it again, and the size is kept for the next session (size.ts). A switch row, first in every
 // state and width, the strip included, flips the body between the tasks and the Changes view: the
@@ -39,15 +41,20 @@ import {
   forward,
   landing,
   leavingList,
+  leftSearch,
   pagesKept,
   placeLabel,
   pushed,
   reset,
+  searched,
+  searching,
   trail,
   type Landing,
   wentTo,
 } from './nav'
 import { pageBlocks } from './page'
+import { searchTasks, topResult } from './search'
+import { searchBlocks } from './search-rows'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -97,7 +104,7 @@ const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as con
 /** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
 const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
 /** The places are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when Place or Nav changes shape. */
-const NAV_SHAPE = 'nav-v1'
+const NAV_SHAPE = 'nav-v2'
 const nav = atom({ plugin: 'teamrig-pane', key: 'nav' } as const, AT_LIST, { shape: NAV_SHAPE })
 const NO_PAGES: PageDetails = {}
 /** The pages' details, kept under CARDS_SHAPE as the open cards are: both hold TaskDetail. */
@@ -310,7 +317,7 @@ export const register: Register = on => {
   // task. A task's block is a plain Button around its Text, so a press (or Enter on it) expands or
   // collapses the task. Docked, the root's gap spaces the blocks and its padding the frame.
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Link } = $.ui.resolve(e)
+    const { Box, Text, Button, Link, Input } = $.ui.resolve(e)
     const inline = e.props.placement === 'inline'
     // A read or a layout that throws draws one error line under the buttons: unguarded, the engine
     // would skip this hook and draw the pane with no tasks and no word of why.
@@ -341,7 +348,11 @@ export const register: Register = on => {
         const bar = current === 'tasks' && shown === 'mine' && place.kind === 'list' ? statusBar(snap, await read($, barFilter), columns) : null
         // With no bar there is nothing to filter by, and the list shows every task.
         const tasksBlocks =
-          place.kind === 'task' ? pageBlocks(snap, shown, place.id, await read($, pages)) : paneBlocks(snap, shown, open, bar?.filter ?? null)
+          place.kind === 'task'
+            ? pageBlocks(snap, shown, place.id, await read($, pages))
+            : place.kind === 'search'
+              ? searchBlocks(snap, place.query)
+              : paneBlocks(snap, shown, open, bar?.filter ?? null)
         const viewBlocks = current === 'tasks' ? tasksBlocks : changesBlocks(changed, isGitMissing(missing))
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
@@ -374,10 +385,16 @@ export const register: Register = on => {
       await update($, pages, current => ({ ...current, [id]: detail }))
       await go($, current => pushed(leavingList(current, from), { kind: 'task', id }))
     }
+    // Enter in the Find field opens the top result's page, the first active match, else the newest finished one.
+    const openTop = async (query: string) => {
+      const top = topResult(searchTasks(snap.tasks, query))
+      if (top !== null) await openPage(top.id, 'find')
+    }
 
-    const isPlain = (span: Span) => span.color === undefined && span.bold !== true && span.dim !== true && span.href === undefined
+    const isPlain = (span: Span) =>
+      span.color === undefined && span.bold !== true && span.dim !== true && span.underline !== true && span.href === undefined
     const styled = (span: Span, key?: string) => (
-      <Text key={key} color={span.color} bold={span.bold} dimColor={span.dim}>
+      <Text key={key} color={span.color} bold={span.bold} dimColor={span.dim} underline={span.underline}>
         {span.text}
       </Text>
     )
@@ -395,7 +412,7 @@ export const register: Register = on => {
       const [first, ...rest] = spans
       if (first !== undefined && rest.length === 0 && first.href === undefined)
         return (
-          <Text key={key} wrap={wrap} color={first.color} bold={first.bold} dimColor={first.dim}>
+          <Text key={key} wrap={wrap} color={first.color} bold={first.bold} dimColor={first.dim} underline={first.underline}>
             {first.text}
           </Text>
         )
@@ -431,18 +448,28 @@ export const register: Register = on => {
         </Box>
       )
     }
-    // A Button holds strings and Texts alone, so an open card (its links, its ids) draws under the task's Button, not
-    // in it. A page's title is no press: its card is always open.
-    const drawBlock = (drawn: Drawn) => {
+    // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), else
+    // words alone.
+    const headOf = (drawn: Drawn) => {
       const id = drawn.toggle
-      const head =
-        id === null ? (
-          drawText(drawn.spans, drawn.wrap, drawn.key)
-        ) : (
-          <Button key={drawn.key} plain onPress={() => void toggle(id)}>
+      const opens = drawn.opens
+      if (opens !== undefined)
+        return (
+          <Button key={drawn.key} plain onPress={() => void openPage(opens, drawn.key)}>
             {drawText(drawn.spans, drawn.wrap)}
           </Button>
         )
+      if (id === null) return drawText(drawn.spans, drawn.wrap, drawn.key)
+      return (
+        <Button key={drawn.key} plain onPress={() => void toggle(id)}>
+          {drawText(drawn.spans, drawn.wrap)}
+        </Button>
+      )
+    }
+    // A Button holds strings and Texts alone, so an open card (its links, its ids) draws under the task's Button, not
+    // in it. A page's title is no press: its card is always open.
+    const drawBlock = (drawn: Drawn) => {
+      const head = headOf(drawn)
       if (drawn.card === undefined) return head
       const from = `${drawn.key}-open`
       return (
@@ -503,12 +530,41 @@ export const register: Register = on => {
       />,
     ]
     const place = currentPlace(at)
+    // Search draws only in the dock, where a result's page can open: inline, the places are never read.
+    if (!inline)
+      buttons.push(
+        <Button
+          label="search"
+          hotkey="s"
+          variant={place.kind === 'search' ? 'primary' : 'secondary'}
+          onPress={() => void go($, searching)}
+        />,
+      )
     // A page shows no list, so no card in it to collapse.
     if (Object.keys(open).length > 0 && place.kind === 'list')
       buttons.push(
         <Button label="collapse" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />,
       )
 
+    // A search's Find field, under the buttons: each change shows the results for its words, Enter opens the top one's
+    // page, and an empty field or clear closes the search. It takes the focus when the pane takes the keyboard; Esc
+    // hands the keys back and leaves the results drawn.
+    const findRow =
+      place.kind === 'search' ? (
+        <Box key="find-row" flexDirection="row" flexWrap="wrap" columnGap={1}>
+          <Input
+            key="find"
+            label="Find"
+            placeholder="id, title, owner, note…"
+            value={place.query}
+            submitLabel="open"
+            autoFocus
+            onInput={value => void go($, current => searched(current, value))}
+            onSubmit={value => void openTop(value)}
+          />
+          <Button label="clear" variant="secondary" onPress={() => void go($, leftSearch)} />
+        </Box>
+      ) : null
     // In the tasks view the mode buttons sit right under the switch, in the same block.
     const controls =
       current === 'tasks' ? (
@@ -517,6 +573,7 @@ export const register: Register = on => {
           <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
             {buttons}
           </Box>
+          {findRow}
         </Box>
       ) : (
         switchRow

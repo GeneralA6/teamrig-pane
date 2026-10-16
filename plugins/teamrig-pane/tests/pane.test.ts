@@ -784,7 +784,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^WARN the pane could not draw: .*state store unavailable/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'mine', 'all'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'mine', 'all', 'search'])
 
   isStateDown = false
   await pane.redraw(PANE_PROPS)
@@ -1157,7 +1157,7 @@ test("a task id in an open card opens that task's page: its title and card alone
   await pane.press({ key: toT50 })
   drawn = await pane.drawn()
   // No status bar and no collapse on a page: the bar counts the list, and the page holds no card to collapse.
-  expect(buttonKeys(drawn)).toEqual(['tasks', 'changes', 'mine', 'all', 'back', 'crumb:0', gotoKey(drawn, 'T58')])
+  expect(buttonKeys(drawn)).toEqual(['tasks', 'changes', 'mine', 'all', 'search', 'back', 'crumb:0', gotoKey(drawn, 'T58')])
   expect(keyedProps(drawn, 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
   // Nowhere to go draws the step as dim words, no press.
   expect(await pane.find({ type: 'Text', text: 'forward ›' })).toMatchObject({ props: { dimColor: true } })
@@ -1165,7 +1165,7 @@ test("a task id in an open card opens that task's page: its title and card alone
   await pane.press({ key: gotoKey(drawn, 'T58') })
   expect(screenOf(await pane.drawn())).toEqual([
     ' Tasks Changes',
-    ' mine all',
+    ' mine all search',
     '',
     ' ‹ back  forward ›',
     ' Tasks › T50 › T58',
@@ -1216,6 +1216,7 @@ test('back, forward and the trail step through the places; the list keeps the he
     'changes',
     'mine',
     'all',
+    'search',
     'collapse',
     'forward',
     'crumb:1',
@@ -1265,4 +1266,76 @@ test('mine and all show the list alone; inline no page shows; a page whose task 
   await pane.press({ key: 'back' })
   // T50's page names T58 no more as a press: the snapshot no longer holds it.
   expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('goto:'))).toEqual([])
+})
+
+test('search (s) shows a Find field; each change draws the matches, Enter opens the top one, back returns, clear or an empty field closes it', async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, CHAIN)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  expect(keyedProps(await pane.drawn(), 'search')).toMatchObject({ label: 'search', hotkey: 's', variant: 'secondary' })
+
+  await pane.press({ key: 'search' })
+  let drawn = await pane.drawn()
+  expect(keyedProps(drawn, 'search')).toMatchObject({ variant: 'primary' })
+  expect(keyedProps(drawn, 'find')).toMatchObject({ label: 'Find', value: '', autoFocus: true })
+  expect(await pane.find({ type: 'Text', text: /^Type words to find a task by its id/ })).toBeDefined()
+
+  await pane.input({ key: 'find', text: 'etl the', kind: 'change' })
+  drawn = await pane.drawn()
+  expect(keyedProps(drawn, 'find')).toMatchObject({ value: 'etl the' })
+  // The active matches in plan order, each a press with a dim line of whose it is; the Find field draws no words.
+  expect(screenOf(drawn)).toEqual([
+    ' Tasks Changes',
+    ' mine all search',
+    '  clear',
+    '',
+    ' ○ T50  Load the feed\n       on etl',
+    '',
+    ' ○ T58  Read the source\n       on etl',
+  ])
+  // The words that matched underlined: `the` in the title, `etl` in the dim line of whose it is.
+  expect(childrenOf(keyedNode(drawn, 'search:T50'))).toEqual([
+    {
+      type: 'Text',
+      props: { wrap: 'wrap' },
+      children: [
+        '○ ',
+        { type: 'Text', props: { bold: true }, children: ['T50'] },
+        '  Load ',
+        { type: 'Text', props: { underline: true }, children: ['the'] },
+        ' feed\n       ',
+        { type: 'Text', props: { dimColor: true }, children: ['on '] },
+        { type: 'Text', props: { dimColor: true, underline: true }, children: ['etl'] },
+      ],
+    },
+  ])
+
+  // Enter: the top result's page.
+  await pane.input({ key: 'find', text: 'etl the' })
+  drawn = await pane.drawn()
+  expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed$/ })).toBeDefined()
+  expect(keyedNode(drawn, 'page-head')).not.toBe(null)
+  expect(keyedNode(drawn, 'find')).toBe(null)
+
+  await pane.press({ key: 'back' })
+  drawn = await pane.drawn()
+  expect(keyedProps(drawn, 'find')).toMatchObject({ value: 'etl the' })
+  expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › Search "etl the" › T50'])
+  await pane.press({ key: 'search:T58' })
+  expect(await pane.find({ type: 'Text', text: /^○ T58  Read the source$/ })).toBeDefined()
+  await pane.press({ key: 'back' })
+
+  await pane.press({ key: 'clear' })
+  drawn = await pane.drawn()
+  expect(keyedNode(drawn, 'find')).toBe(null)
+  expect(buttonKeys(drawn)).toContain('next:T52')
+
+  await pane.press({ key: 'search' })
+  await pane.input({ key: 'find', text: 'nothing-here', kind: 'change' })
+  expect(await pane.find({ type: 'Text', text: /^Nothing matches./ })).toBeDefined()
+  await pane.input({ key: 'find', text: '', kind: 'change' })
+  drawn = await pane.drawn()
+  expect(keyedNode(drawn, 'find')).toBe(null)
+  expect(buttonKeys(drawn)).toContain('next:T52')
 })

@@ -9,12 +9,15 @@ import {
   forward,
   landing,
   leavingList,
+  leftSearch,
   NAV_PLACES,
   pagesKept,
   placeIds,
   placeLabel,
   pushed,
   reset,
+  searched,
+  searching,
   trail,
   TRAIL_PLACES,
   wentTo,
@@ -23,11 +26,12 @@ import {
 const page = (id: string): Place => ({ kind: 'task', id })
 /** The list, then a page for each id, in order, the newest shown. */
 const through = (...ids: string[]): Nav => ids.reduce((nav, id) => pushed(nav, page(id)), AT_LIST)
-/** What a trail draws, as words: `…`, each crumb's id (`list`), the shown one in brackets, one ahead after a `+`. */
+const search = (query: string): Place => ({ kind: 'search', query })
+/** What a trail draws, as words: `…`, each crumb's id (`list`, `search`), the shown one in brackets, one ahead after a `+`. */
 function trailWords(nav: Nav): string[] {
   const { crumbs, isCutBefore, isCutAfter } = trail(nav)
   const words = crumbs.map(({ place, isShown, isAhead }) => {
-    const name = place.kind === 'list' ? 'list' : place.id
+    const name = place.kind === 'task' ? place.id : place.kind
     return isShown ? `[${name}]` : isAhead ? `+${name}` : name
   })
   return [...(isCutBefore ? ['…'] : []), ...words, ...(isCutAfter ? ['…'] : [])]
@@ -123,8 +127,53 @@ describe('nav', () => {
     expect(landing(back(nav), reset(back(nav), true))).toBe(null)
   })
 
-  test('a crumb names the list Tasks and a page by its task id', async () => {
+  test('a crumb names the list Tasks, a page by its task id, and a search by its query', async () => {
     expect([placeLabel({ kind: 'list', row: 'x' }), placeLabel(page('T58'))]).toEqual(['Tasks', 'T58'])
+    expect([placeLabel(search('')), placeLabel(search('feed etl'))]).toEqual(['Search', 'Search "feed etl"'])
+  })
+
+  test('search shows a search with no query past the place shown; on a search it changes nothing', async () => {
+    const nav = searching(through('T52'))
+    expect(currentPlace(nav)).toEqual(search(''))
+    expect(trailWords(nav)).toEqual(['list', 'T52', '[search]'])
+    expect(searching(nav)).toBe(nav)
+  })
+
+  test('typing changes the query of the search shown, no new place; elsewhere it pushes a search', async () => {
+    const typed = searched(searched(searching(AT_LIST), 'fe'), 'feed')
+    expect(typed).toEqual({ places: [{ kind: 'list', row: null }, search('feed')], at: 1 })
+    expect(searched(through('T52'), 'feed')).toEqual({ places: [{ kind: 'list', row: null }, page('T52'), search('feed')], at: 2 })
+  })
+
+  test('back from a result page returns to the search with its query; the same search pushed again changes nothing', async () => {
+    const nav = pushed(searched(AT_LIST, 'feed'), page('T50'))
+    const results = back(nav)
+    expect(currentPlace(results)).toEqual(search('feed'))
+    expect(pushed(results, search('feed'))).toBe(results)
+    expect(pushed(results, search('load'))).toEqual({ places: [{ kind: 'list', row: null }, search('feed'), search('load')], at: 2 })
+  })
+
+  test('an empty query, or clear, closes the search: it and the places ahead dropped, the place before it shown', async () => {
+    const nav = searched(through('T52'), 'feed')
+    expect(searched(nav, '')).toEqual(through('T52'))
+    expect(leftSearch(nav)).toEqual(through('T52'))
+    expect(leftSearch(back(pushed(nav, page('T50'))))).toEqual(through('T52'))
+    expect(leftSearch({ places: [search('feed')], at: 0 })).toBe(AT_LIST)
+    expect(leftSearch(through('T52'))).toEqual(through('T52'))
+    expect(searched(through('T52'), '')).toEqual(through('T52'))
+  })
+
+  test('a search opens at its top, a step back to it from a page too; typing in it, or closing it, keeps the window', async () => {
+    const opened = searching(AT_LIST)
+    expect(landing(AT_LIST, opened)).toEqual({ kind: 'top' })
+    expect(landing(opened, searched(opened, 'feed'))).toBe(null)
+    const onPage = pushed(searched(AT_LIST, 'feed'), page('T50'))
+    expect(landing(onPage, back(onPage))).toEqual({ kind: 'top' })
+    expect(landing(searched(AT_LIST, 'feed'), leftSearch(searched(AT_LIST, 'feed')))).toBe(null)
+  })
+
+  test('the search places name no page', async () => {
+    expect([...placeIds(pushed(searched(AT_LIST, 'feed'), page('T50')))]).toEqual(['T50'])
   })
 
   test(`the trail draws at most ${TRAIL_PLACES} places, the newest, a cut marked`, async () => {

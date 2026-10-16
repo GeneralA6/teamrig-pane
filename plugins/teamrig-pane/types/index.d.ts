@@ -142,10 +142,14 @@ export type PaneView = 'tasks' | 'changes'
 
 /**
  * A place the tasks view shows (hooks/nav.ts): the list, remembering the key of the element a page was opened from
- * (null when none) so a return scrolls back to it, or a task's page by its id. Later places (a search, a week of
- * finished tasks) join as kinds of their own.
+ * (null when none) so a return scrolls back to it, a task's page by its id, or a search (hooks/search.ts) by its
+ * query, the words its Find field holds ('' before any is typed). Later places (a week of finished tasks) join as
+ * kinds of their own.
  */
-export type Place = { readonly kind: 'list'; readonly row: string | null } | { readonly kind: 'task'; readonly id: string }
+export type Place =
+  | { readonly kind: 'list'; readonly row: string | null }
+  | { readonly kind: 'task'; readonly id: string }
+  | { readonly kind: 'search'; readonly query: string }
 
 /** The places the person went through, oldest first (at most hooks/nav.ts NAV_PLACES), and the index of the one shown. */
 export type Nav = { readonly places: readonly Place[]; readonly at: number }
@@ -173,7 +177,7 @@ declare module 'claude-code' {
       requirements: RequirementProblem[]
       /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
       filter: BarStatus | null
-      /** Where the tasks view is (hooks/nav.ts): the list, or a task's page, and the way back. */
+      /** Where the tasks view is (hooks/nav.ts): the list, a task's page or a search with its query, and the way back. */
       nav: Shaped<Nav>
       pages: Shaped<PageDetails>
     }
