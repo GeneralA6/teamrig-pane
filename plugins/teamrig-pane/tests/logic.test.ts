@@ -336,7 +336,7 @@ describe('rows', () => {
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
     expect(blocks.map(b => b.key)).toEqual(['header', 'next', 'next:T1', 'waiting', 'waiting:T2', 'done', 'done:T3'])
-    expect(textAt(blocks, 'header')).toBe('po · 2 active · inbox 2 unread')
+    expect(textAt(blocks, 'header')).toBe('2 active · inbox 2 unread')
     expect(rowAt(blocks, 'header')?.rule).toBe(true)
     expect(rowAt(blocks, 'next:T1')?.spans).toEqual([{ text: '○' }, { text: ' T1', bold: true }, { text: '  Ship it' }])
     expect(rowAt(blocks, 'next:T1')?.hang).toEqual({ text: '      ' })
@@ -397,6 +397,17 @@ describe('rows', () => {
     expect(textAt(blocks, 'next-meta:T5')).toBe('      p3 · after T1')
   })
 
+  test('the header leaves the session\'s own area unnamed, its tab names it, and names a pinned one', async () => {
+    const tasks = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po' }))
+    expect(rowAt(paneBlocks(snapshotOf(tasks, 'po'), 'mine'), 'header')?.spans).toEqual([
+      { text: '1 active', dim: true },
+      { text: ' · inbox 2 unread', color: 'warning' },
+    ])
+    const pinned = paneBlocks({ ...snapshotOf(tasks, 'po'), areaSource: 'pinned' }, 'mine')
+    expect(rowAt(pinned, 'header')?.spans.slice(0, 2)).toEqual([{ text: 'po', bold: true }, { text: ' (pinned) · ', dim: true }])
+    expect(textAt(pinned, 'header')).toBe('po (pinned) · 1 active · inbox 2 unread')
+  })
+
   test('the more line names the key only when a done task is among the cut ones', async () => {
     expect(doneMoreText(3, 0)).toBe("3 more: press o to list today's done")
     expect(doneMoreText(3, 1)).toBe("3 more (1 dropped): press o to list today's done")
@@ -431,7 +442,7 @@ describe('rows', () => {
       'done',
       'done:T5',
     ])
-    expect(textAt(blocks, 'header')).toBe('po · 4 active · inbox 2 unread')
+    expect(textAt(blocks, 'header')).toBe('4 active · inbox 2 unread')
     expect(rowAt(blocks, 'verifying')?.spans).toEqual([{ text: 'Verifying', color: 'success', bold: true }, { text: ' (1)', dim: true }])
     expect(textAt(blocks, 'verifying:T3')).toBe('◑ T3  Shipped')
     expect(rowAt(blocks, 'verifying:T3')?.spans[0]).toEqual({ text: '◑', color: 'success' })

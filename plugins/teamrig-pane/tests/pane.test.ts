@@ -376,7 +376,7 @@ test('lines teamrig skips are counted as teamrig counts them, and every task and
   expect(await pane.find({ text: /^WARN events\.jsonl: 1 unreadable line\(s\), 1 line\(s\) from a newer teamrig, 1 event\(s\) naming no task$/ })).toBeDefined()
   expect(await pane.find({ text: /Ship the task pane v2/ })).toBeDefined()
   expect(await pane.find({ text: /Second task/ })).toBeDefined()
-  expect(await pane.find({ text: /po · 2 active/ })).toBeDefined()
+  expect(await pane.find({ text: /^2 active · inbox/ })).toBeDefined()
 })
 
 test('missing register, marks and inbox files draw an empty register with no problem, and fill in as they appear', async ($, on) => {
@@ -412,7 +412,7 @@ test('a register of 20,000 events loads and draws in well under a second, and a 
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   const loaded = performance.now()
-  expect(await pane.find({ text: /po · 408 active/ })).toBeDefined()
+  expect(await pane.find({ text: /^408 active/ })).toBeDefined()
   await pane.redraw({ ...PANE_PROPS, bodyColumns: 40 })
   const redrawn = performance.now()
   await pane.press({ key: 'all' })
