@@ -1289,7 +1289,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   let drawn = await pane.drawn()
-  // On the list, empty, under the buttons; it never takes the focus by itself, so the pane's hotkeys stay live.
+  // On the list, empty, under the switch; it never takes the focus by itself, so the pane's hotkeys stay live.
   expect(keyedProps(drawn, 'find')).toMatchObject({ placeholder: 'id, title, owner, note…', value: '', submitLabel: 'open' })
   expect('autoFocus' in (keyedProps(drawn, 'find') ?? {})).toBe(false)
   expect(keyedProps(drawn, 'find-key')).toMatchObject({ label: 'Find', plain: true, hotkey: 's' })
