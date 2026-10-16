@@ -169,10 +169,9 @@ function sectionHeading(key: string, name: Span, count: string): Block {
 }
 
 /**
- * A section of tasks: its heading counting all `total`, its blocks, and a dim line saying how many it left out and
- * where they show. An empty section draws nothing.
+ * A section of tasks: its heading counting all `total`, its blocks, and a dim line naming how many the cap left out
+ * and where they show (`moreText`). An empty section draws nothing.
  */
-/** A section: its heading with the total, its rows, and a dim line naming how many the cap left out (`moreText`). */
 function section(key: string, name: Span, total: number, blocks: Block[], moreText = (left: number) => `${left} more`): Block[] {
   if (total === 0) return []
   const left = total - blocks.length
