@@ -159,6 +159,13 @@ export type Place =
 /** The places the person went through, oldest first (at most hooks/nav.ts NAV_PLACES), and the index of the one shown. */
 export type Nav = { readonly places: readonly Place[]; readonly at: number }
 
+/**
+ * The Find field's round (hooks/find-field.ts): the field is drawn under a key naming `round`, holding `text` as drawn,
+ * what it should hold when the round started (the query of the search shown, else ''). Typing never starts a round;
+ * a step that changes what the field should hold does.
+ */
+export type FindField = { readonly round: number; readonly text: string }
+
 /** What each page a place names read for its task when it opened (hooks/details.ts), by task id. */
 export type PageDetails = { readonly [id: string]: TaskDetail }
 
@@ -185,6 +192,8 @@ declare module 'claude-code' {
       /** Where the tasks view is (hooks/nav.ts): the list, a task's page, a search with its query or the Done page with its week, and the way back. */
       nav: Shaped<Nav>
       pages: Shaped<PageDetails>
+      /** The Find field's round and the text it holds as drawn (hooks/find-field.ts). */
+      findField: FindField
     }
   }
 }
