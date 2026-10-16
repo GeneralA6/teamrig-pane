@@ -50,9 +50,9 @@ describe('page', () => {
     expect(rowsIn(pageBlocks(SNAP, 'all', 'T58', { T58: detail })).map(textOf)).toContain('Who       asked by owner · added by lead · 10-13 13:00')
   })
 
-  test('a task the snapshot no longer holds says it closed before today, one dim line', async () => {
+  test('a task the snapshot no longer holds says it closed over 8 days ago, one dim line', async () => {
     expect(pageBlocks(SNAP, 'mine', 'T9', {})).toEqual([
-      { key: 'page:T9', rows: [{ key: 'page:T9', spans: [{ text: "T9 left the pane's tasks: it closed before today.", dim: true }], hang: undefined }] },
+      { key: 'page:T9', rows: [{ key: 'page:T9', spans: [{ text: "T9 left the pane's tasks: it closed over 8 days ago.", dim: true }], hang: undefined }] },
     ])
   })
 

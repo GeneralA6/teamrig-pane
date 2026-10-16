@@ -1,4 +1,4 @@
-// The pane's search: the tasks it holds (the snapshot's: every area's active tasks and those finished today) that a
+// The pane's search: the tasks it holds (the snapshot's: every area's active tasks and those finished in the last HELD_DAYS, done.ts) that a
 // query names. Each word of the query must match, case aside, a task's id whole (`T52`, or its number `52`) or the
 // start of a word in one of its fields: its title, owner, who asked (`source`), goals, week, note, evidence or ref.
 // A word that starts with a mark (`.md`, `/docs`) matches anywhere in a field. The active matches come in teamrig's

@@ -88,15 +88,15 @@ the last 4 (`Tasks › T50 › T58`): the one shown bold, those ahead of it dim,
 places were left out. The pane keeps 20 places, the oldest dropped first, and a click from an older place
 drops those ahead of it. A page opens at its top and has no status bar; back to the list brings the card
 you left to the middle of the dock, and the list keeps back and forward while a page lies ahead of it.
-`Tasks` (`t`), `mine` and `all` show the list alone. A task that closed before today says so on its
-page. Above the prompt ids are plain words and no page shows.
+`Tasks` (`t`), `mine` and `all` show the list alone. A task that closed over 8 days ago says so on
+its page. Above the prompt ids are plain words and no page shows.
 
 `search` (`s`, in the dock's mine and all row) shows a Find field. Each word typed must match, case aside,
 a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
 evidence or ref (one that starts with a mark, `.md`, matches anywhere), and the body lists the matches as
 you type, the matched words underlined: an active task as its title and a dim line of whose it is and the
 fields matched, a finished one on one dim line with when it closed. It searches what the pane holds, every
-area's active tasks and those finished today, never an older week's: the active ones in plan order, then
+area's active tasks and those finished in the last 8 days, never older ones: the active ones in plan order, then
 the finished ones newest first, at most 30, with a dim line counting the rest. A click on a result opens
 its page, Enter opens the top one's, and back returns to the results; the trail names the search by its
 words. Emptying the field or `clear` closes it; Esc only hands the keys back.
@@ -253,8 +253,9 @@ is append-only, about 310 bytes an event in a working register, so `events.jsonl
 13,500 events unless it is rotated. A file over it is named with its size (`events.jsonl is 4.12 MiB, over the 4 MiB a pane can
 read at once`) from its stamp, never read, and the last good tasks stay drawn; a pane started then has
 none to draw. Under it, the whole register is re-read and refolded only when a file moved, and the
-snapshot every draw reads keeps only the tasks a view can show (active, or finished today), so
-drawing grows with the live tasks, never with the register's history. Through the engine's test
+snapshot every draw reads keeps only the tasks a view can show (active, or finished in the last 8 days,
+the days teamrig's own rotation keeps finished tasks in its working set), so drawing grows with the live
+tasks and the last days' finished ones, never with the register's history. Through the engine's test
 harness, 20,000 of its shorter events (3.4 MiB, 4,082 tasks, 409 kept) load and draw in 185-200 ms,
 a redraw takes 43-48 ms and a switch to `all` 36-40 ms (three runs, 2026-10-15); a poll with nothing
 new reads nothing.

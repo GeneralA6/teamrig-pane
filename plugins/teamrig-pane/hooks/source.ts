@@ -25,8 +25,8 @@ import {
   type SnapshotRead,
 } from './core/read/index'
 import { lineHash } from './line-hash'
+import { isHeldFinished } from './done'
 import { rowOf } from './log'
-import { isFinishedOn, utcDay } from './status-bar'
 import { isActive } from './view'
 
 export type FileStamp = { mtimeMs: number; size: number }
@@ -211,9 +211,10 @@ export class TaskRegisterSource {
   private readonly register: LayoutRegister
   private readonly marks: WatchedFile<MarkLogRead>
   /**
-   * The tasks a drawing can show, as the events last folded: the active ones and those finished on the UTC
-   * day of the fold (status-bar.ts isFinishedOn). Every draw reads the snapshot, so it grows with the live
-   * tasks, never with the register's history; a finished task leaves the views at UTC midnight between folds (view.ts).
+   * The tasks a drawing can show, as the events last folded: the active ones and those finished within HELD_DAYS of
+   * the fold (done.ts isHeldFinished, teamrig's own retention), which Done today, the Done page and search read. Every
+   * draw reads the snapshot, so it grows with the live tasks and the last days' finished ones, never with the
+   * register's history, on a register never rotated as on a rotated one (whose working set keeps those days whole).
    */
   private tasks: TaskRow[] = []
   private inbox: WatchedFile<string[]> | null = null
@@ -237,7 +238,7 @@ export class TaskRegisterSource {
     if (registerChanged) {
       this.tasks = [...this.register.current.state.tasks.values()]
         .map(task => rowOf(task, this.priorities))
-        .filter(task => isActive(task) || isFinishedOn(task, utcDay(now)))
+        .filter(task => isActive(task) || isHeldFinished(task, now))
         .sort((a, b) => taskNumber(a.id) - taskNumber(b.id))
     }
     const marksChanged = await this.marks.refresh()
