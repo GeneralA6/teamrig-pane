@@ -1,5 +1,5 @@
 // The plugin through the engine: env, clock, store, session id and fs answered beneath it.
-import type { Answer, FsEntry, FsStat, On, SessionVersion } from 'claude-code'
+import type { Answer, FsEntry, FsStat, On, SessionVersion, UiFocusInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import { LABEL_CELLS } from '../hooks/card'
 import { cells } from '../hooks/width'
@@ -1176,6 +1176,7 @@ test("a task id in an open card opens that task's page: its title and card alone
   expect(screenOf(await pane.drawn())).toEqual([
     ' Tasks Changes',
     ' Find',
+    ' Keys go to Claude · click the field to search',
     ' mine all archive',
     '',
     ' ‹ back  forward ›',
@@ -1294,7 +1295,8 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   expect(keyedProps(drawn, 'find-key')).toMatchObject({ label: 'Find', plain: true, hotkey: 's' })
   expect(buttonKeys(drawn)).not.toContain('clear')
   expect(buttonKeys(drawn)).toContain('next:T52')
-  // s reaches the Find label; the cursor move ($.ui.focus) needs a pane holding the keys, which the harness has none of.
+  // s reaches the Find label; its cursor move ($.ui.focus) has nothing beneath to answer it here, so it is refused (the
+  // test of the line under the field answers it).
   expect(await pane.press({ key: 'find-key' })).toMatchObject({ element: 'find-key' })
 
   await pane.input({ key: 'find', text: 'etl the', kind: 'change' })
@@ -1305,6 +1307,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   expect(screenOf(drawn)).toEqual([
     ' Tasks Changes',
     ' Find  clear',
+    ' Keys go to Claude · click the field to search',
     ' mine all archive',
     '',
     ' ○ T50  Load the feed\n       on etl',
@@ -1401,6 +1404,70 @@ test('the Find field keeps its index among the focusable elements on the list, w
   expect(indexes).toEqual([3, 3, 3, 3, 3])
 })
 
+test("the line under the Find field says where the keys go: to Claude's prompt, to the pane, or typed into the search", async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, CHAIN)
+  // Beneath the plugin, the engine moves the focus ring, or keeps it while `refusal` is set.
+  let refusal: string | null = null
+  on('ui.focus', async () => (refusal === null ? {} : { deny: refusal }))
+  const HELD = { ...PANE_PROPS, isFocused: true } as const
+  /** The ring landing on the element keyed `element`: the person's Tab, arrow or click, or the plugin's own `$.ui.focus`. */
+  const land = (element: string, origin: UiFocusInput['origin'] = { kind: 'person' }) =>
+    $.ui.focus({ component: 'Pane', requestId: 'teamrig-pane', plugin: 'teamrig-pane', element, origin })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  /** The line under the Find field as drawn: its text, and whether it is bold (typing searches) or dim; null where none is. */
+  const keysLine = async () => {
+    const found = await pane.find({ type: 'Text', text: /^(Typing searches|Keys on the pane|Keys go to Claude) · / })
+    if (found === undefined) return null
+    // Drawn one way or the other, never both.
+    expect(found.props['bold'] === true).toBe(found.props['dimColor'] !== true)
+    return { text: found.text, bold: found.props['bold'] === true }
+  }
+  const CLAUDE = { text: 'Keys go to Claude · click the field to search', bold: false }
+  const ON_PANE = { text: 'Keys on the pane · s: search · Esc: to Claude', bold: false }
+  const SEARCH = { text: 'Typing searches · Enter: open · Esc: to Claude', bold: true }
+  // The pane without the keys: they go to Claude's prompt.
+  expect(await keysLine()).toEqual(CLAUDE)
+  // Given the keys, the ring on nothing: the pane's hotkeys answer.
+  await pane.redraw(HELD)
+  expect(await keysLine()).toEqual(ON_PANE)
+
+  // s moves the ring into the field ($.ui.focus, which the kit raises only from a test): typing searches, and still
+  // does once typed.
+  expect(await land('find', { kind: 'plugin', name: 'teamrig-pane' })).toEqual({})
+  expect(await keysLine()).toEqual(SEARCH)
+  await pane.input({ key: 'find', text: 'etl', kind: 'change' })
+  expect(await keysLine()).toEqual(SEARCH)
+  // Tab on to a button: the pane's keys; back into the field: typing again.
+  expect(await land('mine')).toEqual({})
+  expect(await keysLine()).toEqual(ON_PANE)
+  expect(await land('find')).toEqual({})
+  expect(await keysLine()).toEqual(SEARCH)
+  // A move the engine refused leaves the ring, and the line, where they were.
+  refusal = 'the pane does not hold the keys'
+  expect(await land('mine')).toEqual({ deny: refusal })
+  expect(await keysLine()).toEqual(SEARCH)
+  refusal = null
+
+  // Esc, a click outside, a dialog or the prompt taking a key: the keys go to Claude, and the ring is cleared.
+  await pane.redraw(PANE_PROPS)
+  expect(await keysLine()).toEqual(CLAUDE)
+  // Given back by a click on the pane's text, the ring on nothing: the field no longer holds the keys.
+  await pane.redraw(HELD)
+  expect(await keysLine()).toEqual(ON_PANE)
+  // A click on the field lands the ring as it hands the pane the keys: typing searches again.
+  await pane.redraw(PANE_PROPS)
+  expect(await land('find')).toEqual({})
+  expect(await keysLine()).toEqual(CLAUDE)
+  await pane.redraw(HELD)
+  expect(await keysLine()).toEqual(SEARCH)
+
+  // Inline, where no field is drawn, no line either.
+  await pane.redraw({ ...HELD, placement: 'inline' })
+  expect(await keysLine()).toBe(null)
+})
+
 test('archive (h) opens the Archive page at the week of now; prev (p) and next (l) step weeks; a row opens its page; back returns', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, [
@@ -1424,6 +1491,7 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   expect(screenOf(drawn)).toEqual([
     ' Tasks Changes',
     ' Find',
+    ' Keys go to Claude · click the field to search',
     ' mine all archive',
     '',
     ' ‹ back  forward ›',
