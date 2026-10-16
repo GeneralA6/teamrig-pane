@@ -1,20 +1,29 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { TaskRow } from '../types'
+import type { TaskRow, WaitRow } from '../types'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { ageWords, dayWords, dueWords, flagsOf, metaParts, metaText, NOT_PICKED_UP_MS, STATUS_WORDS, whenWords } from '../hooks/meta'
-import { HOUR, NOW, createLine, iso, statusLine } from './fixtures'
+import { ageWords, contextOf, dayWords, dueWords, flagsOf, metaParts, metaText, NOT_PICKED_UP_MS, STATUS_WORDS, waitingWords, whenWords } from '../hooks/meta'
+import { HOUR, NOW, createLine, iso, statusLine, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
 /** NOW is Tuesday 2026-10-13 14:00 UTC. */
+function tasksOf(...lines: string[]): TaskRow[] {
+  return [...readRegister(lines.join('\n')).state.tasks.values()].map(row => rowOf(row, []))
+}
+
 function taskOf(...lines: string[]): TaskRow {
-  const [task] = [...readRegister(lines.join('\n')).state.tasks.values()].map(row => rowOf(row, []))
+  const [task] = tasksOf(...lines)
   if (task === undefined) throw new Error('no task')
   return task
 }
 
-const textOf = (task: TaskRow, viewer: string | null, now = NOW) => metaParts(task, now, viewer).map(part => part.text)
+/** The clock at NOW over a snapshot of no tasks: every task reason reads ready. */
+const AT_NOW = contextOf([], NOW)
+
+/** The meta line's words at `now`, the snapshot holding `tasks`. */
+const textOf = (task: TaskRow, viewer: string | null, now = NOW, tasks: readonly TaskRow[] = []) =>
+  metaParts(task, contextOf(tasks, now), viewer).map(part => part.text)
 
 describe('meta words', () => {
   test('a day is its UTC weekday and month-day; a time today is its hour, an older one its day', async () => {
@@ -75,15 +84,49 @@ describe('meta line', () => {
       statusLine('T1', 'po', NOW - 2 * HOUR, 'in-progress', 'halfway'),
     )
     expect(textOf(task, 'po')).toEqual(['p2', 'due Mon 10-12', 'in progress since 12:00', 'late 14h'])
-    expect(metaParts(task, NOW, 'po').map(part => part.color)).toEqual([undefined, undefined, undefined, 'error'])
+    expect(metaParts(task, AT_NOW, 'po').map(part => part.color)).toEqual([undefined, undefined, undefined, 'error'])
   })
 
   test('waiting: since when and why, in red; one waiting since an earlier day names the day', async () => {
     const task = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - 2 * DAY }), statusLine('T1', 'po', NOW - DAY, 'waiting', 'waits on T58'))
     expect(textOf(task, 'po')).toEqual(['p3', 'waiting since Mon 10-12: waits on T58'])
-    expect(metaParts(task, NOW, 'po')[1]?.color).toBe('error')
+    expect(metaParts(task, AT_NOW, 'po')[1]?.color).toBe('error')
     const bare = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY }), statusLine('T1', 'po', NOW, 'waiting'))
     expect(textOf(bare, 'po')).toEqual(['p3', 'waiting since 14:00'])
+  })
+
+  test('waiting on reasons: each in teamrig\'s words between commas, a cleared one ready, then the note', async () => {
+    const reasons: readonly WaitRow[] = [{ kind: 'decision', who: 'owner' }, { kind: 'task', id: 'T1' }, { kind: 'time', at: '2026-10-16 14:00' }]
+    const [first, waiting] = tasksOf(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po' }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po' }),
+      waitingLine('T2', 'po', NOW, reasons, 'the copy first'),
+    )
+    if (first === undefined || waiting === undefined) throw new Error('no tasks')
+    expect(textOf(waiting, 'po', NOW, [first, waiting])).toEqual(['p3', 'waiting since 14:00: decision owner, on T1, until Fri 10-16 14:00; the copy first'])
+    // T1 finished before today, so the snapshot lacks it, and the time has come: both read ready; a decision never does.
+    const later = Date.UTC(2026, 9, 16, 14, 0)
+    expect(textOf(waiting, 'po', later, [waiting])).toEqual([
+      'p3',
+      'waiting since Tue 10-13: decision owner, on T1 ready, until Fri 10-16 14:00 ready; the copy first',
+    ])
+    const approval = taskOf(createLine('T3', { owner: 'po', by: 'po', at: NOW - DAY }), waitingLine('T3', 'po', NOW, [{ kind: 'approval', who: 'lead' }]))
+    expect(waitingWords(approval, AT_NOW)).toBe('approval lead')
+  })
+
+  test('a task not yet started names the tasks it comes after that are unfinished; once started, none', async () => {
+    const after = { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', taskKeys: { after: ['T1', 'T2'] } }
+    const [one, two, three] = tasksOf(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po' }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po' }),
+      createLine('T3', after),
+    )
+    if (one === undefined || two === undefined || three === undefined) throw new Error('no tasks')
+    expect(textOf(three, 'po', NOW, [one, two, three])).toEqual(['p3', 'after T1, T2'])
+    expect(textOf(three, 'po', NOW, [two, three])).toEqual(['p3', 'after T2'])
+    expect(textOf(three, 'po', NOW, [three])).toEqual(['p3'])
+    const started = taskOf(createLine('T3', after), statusLine('T3', 'po', NOW, 'in-progress'))
+    expect(textOf(started, 'po', NOW, [one, two, started])).toEqual(['p3', 'in progress since 14:00'])
   })
 
   test('verifying: verify by its due, since when and what proves it', async () => {
@@ -97,7 +140,7 @@ describe('meta line', () => {
   test('an open task someone else asked for is new to its owner and names who asked, then reads not picked up', async () => {
     const task = taskOf(createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'lead' }))
     expect(textOf(task, 'po')).toEqual(['p3', 'new', 'asked by lead'])
-    expect(metaParts(task, NOW, 'po')[1]?.color).toBe('suggestion')
+    expect(metaParts(task, AT_NOW, 'po')[1]?.color).toBe('suggestion')
     expect(textOf(task, 'po', NOW + 2 * DAY)).toEqual(['p3', 'not picked up 2d', 'asked by lead'])
     const own = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po' }))
     expect(textOf(own, 'po')).toEqual(['p3'])
@@ -112,6 +155,6 @@ describe('meta line', () => {
 
   test('the words alone are the all view\'s, joined as the row draws them', async () => {
     const task = taskOf(createLine('T1', { owner: 'etl', by: 'po', at: NOW - HOUR, source: 'po', due: '2026-10-13 18:00' }))
-    expect(metaText(task, NOW)).toBe('p3 · due today 18:00 · new · asked by po')
+    expect(metaText(task, AT_NOW)).toBe('p3 · due today 18:00 · new · asked by po')
   })
 })
