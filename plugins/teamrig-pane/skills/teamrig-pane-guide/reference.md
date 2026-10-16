@@ -12,7 +12,6 @@ By default the pane reads the register where teamrig keeps it for the session's 
 | team | `$TEAMRIG_TEAM`, else the `team` in the nearest `.teamrig.json` up from the session's folder |
 | tasks folder (`events.jsonl`, `inbox-marks.jsonl`) | `<kit home>/teams/<team>/state`, or the team config's `paths.state` |
 | inbox folder (one `<area>.md` per area) | `<tasks folder>/inbox`, or the team config's `paths.inbox` |
-| priority names (`p2 correctness`) | the team config's `register.priorities`, else teamrig's defaults |
 
 The team config is `<kit home>/teams/<team>/config.json`, read with teamrig's own reader. A relative
 `paths.state` or `paths.inbox` is taken from the team's folder.

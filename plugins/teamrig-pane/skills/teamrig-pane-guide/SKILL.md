@@ -221,32 +221,43 @@ is never kept across a reload: a new session, `/reload-plugins` or a restart sho
 ### A task's card
 
 A press on a task (Enter, or a click) opens its card: the title shows whole and the card takes the meta line's
-place; another press closes it, and `c` closes every card. A done-today row opens the same card. The register has
-no description field, so the card is built from what teamrig recorded, one labelled row per fact, each only when
-it has a value:
+place; another press closes it, and `c` closes every card. A done-today row opens the same card. The card shows
+what teamrig recorded for the task, one labelled row per fact in a task tracker's words, each only when it has a
+value:
 
 ```text
 ◐ T12  Build the signup endpoint
-    │ Status    in progress since 11:55 by api
-    │ Plan      p2 correctness · due Sat 10-17 · week 10-13
-    │ What      2026-10-13 lead: the signup endpoint, email first
-    │ Who       asked by lead · 10-13 09:00
-    │ After     T5 done
-    │ Goal      G10.2 Accounts
-    │ Evidence  abc1234
-    │ Links     https://github.com/acme/app/pull/7
+    │ Description  The signup endpoint, email first
+    │ Status       in progress since 11:55 by api
+    │ Priority     2
+    │ Due          Sat 10-17
+    │ Week         Tue 10-13
+    │ After        T5 (done)
+    │ Goal         G10.2 Accounts
+    │ From         lead
+    │ Added        Tue 10-13 by lead
+    │ Reference    inbox/api.md
+    │ Evidence     abc1234
+    │ Links        https://github.com/acme/app/pull/7
 ```
 
 | Row | What it holds |
 | --- | --- |
-| `Status` | Since when, and who set it when that was the task's newest change; then why a waiting task waits, in red, or its status note, green while verifying |
-| `Plan` | Its priority as the team config names it, its due (`late` in red) and its week |
-| `What` | The ask, quoted from where its `--ref` points (`file:N`, `file:N-M` up to 3 lines, or `file:N,M`); `see <file>` for each referenced file nothing was quoted from |
-| `Who` | Who asked, who added it if someone else did, and when; the owner, for a task asked of another session |
+| `Description` | What the task is and why, as written with it (`teamrig add --description`, or the body of the GitHub issue it came from); for a task written before teamrig kept one, the ask quoted from where its `--ref` points (`file:N`, `file:N-M` up to 3 lines, or `file:N,M`) |
+| `Status` | `not started`, `in progress`, `waiting`, `verifying`, `done` or `dropped`, since when, and who set it when that was the task's newest change; then why a waiting task waits, in red |
+| `Note` | Its newest status note |
+| `Proof` | What proves a verifying task (`teamrig set --proof`), in green |
+| `Priority` | Its priority, a number |
+| `Due` | Its due date, `late 2d` in red once past it; `Verify by` while it is verifying |
+| `Week` | Its planning week, by its first day |
 | `After` | The tasks planned before it (`--after`), each with its status |
 | `Goal` | The roadmap item of each of its `--goals` from the goals document (see [reference.md](reference.md#where-the-register-is)), else the bare id |
+| `From` | Who asked, or `GitHub issue #12` for a task teamrig opened from one |
+| `Added` | When it was written and by whom |
+| `Owner` | Its owner, in another area's list |
+| `Reference` | Where its ask is written: each file by its folder and name (`inbox/po.md`), other words as written |
 | `Evidence` | Its evidence |
-| `Links` | Up to 5 links: the GitHub issue a task teamrig opened from one came from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its ref, its newest note and its evidence, once each |
+| `Links` | Up to 5 links: the GitHub issue a task teamrig opened from one came from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its description, ref, newest note, proof and evidence, once each |
 
 There is no row for a parent, sub-tasks or history: the register keeps none of them for a task. A link never
 splits; one wider than its line is shortened with `…` and still opens its whole address. Each task id the pane
@@ -266,12 +277,15 @@ Tasks › T50 › T58
 ────────────────────────────────────────────────
 
 ○ T58  Read the source
-Status    open since Sat 10-10 by lead
-Plan      p3 scale · week 10-13
-What      see docs/x.md
-Who       asked by owner · added by lead · 10-10
-          14:00 · owner etl
-Goal      G10.2
+Description  Read the source nightly
+Status       not started since Sat 10-10 by lead
+Priority     3
+Week         Tue 10-13
+Goal         G10.2
+From         owner
+Added        Sat 10-10 by lead
+Owner        etl
+Reference    docs/x.md
 ```
 
 | Part | What it does |
