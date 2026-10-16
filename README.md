@@ -54,8 +54,8 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
   unread inbox lines. `/teamrig-pane all` shows every owner's tasks, and `/teamrig-pane <session>`
   shows another session's, named by its id or its name.
 - **Details:** click a task, or press Enter on it, to open its card in place of its dim line: its
-  status and note, its plan, its ask quoted from the file its ref points at, who asked and when, the
-  tasks it comes after, its goals, its evidence and its links. `c` closes every card. A click on a task
+  description, status, note and proof, its priority, due date and week, the tasks it comes after, its
+  goals, who asked, when it was added and by whom, where its ask is written, its evidence and its links. `c` closes every card. A click on a task
   id in a card opens that task's page, with back and forward (`b`, `f`) and a trail of where you went.
 - **Find:** the dock always shows a Find field (`s` or a click puts the cursor in it) that lists, as you type, the tasks the pane holds whose id, title,
   owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.

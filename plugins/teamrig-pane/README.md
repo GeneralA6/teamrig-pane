@@ -57,26 +57,33 @@ fullwidth forms and emoji take two cells, an emoji sequence (a ZWJ family, a ski
 character, and a cut never lands inside one, so no line runs past the pane's edge. However narrow the
 dock is resized, its lines wrap to its own width, a wrapped line's indent cut to half the line.
 
-The register has no description field, so a task's card is built from what it does record. Click a
+A task's card shows what the register records for it, in the words a task tracker uses. Click a
 task, or focus the pane and press Enter on it, to open its card: its title shows whole and the card
 takes its meta line's place; again closes it, and `c` closes every card. A done-today row opens the
 same card. Each row of the card hangs on a dim `│` guide, a dim label, then its value, wrapped under
 the value column, and shows only when it has a value:
 
-- **Status:** since when, and who set it when that was the task's newest change, then why a waiting task
-  waits (in red) or its status note (green while verifying);
-- **Plan:** its priority as the team config names it (`p2 correctness`), its due (`late` in red) and
-  its week;
-- **What:** the ask, quoted as plain text from where its ref points (`file:N`, `N-M` up to 3 lines,
-  or `N,M`), then `see folder/file` for the files nothing was quoted from;
-- **Who:** who asked, who added it if someone else did, and when; the owner, for a task asked of
-  another session;
-- **After:** the tasks planned before it, each with its status;
+- **Description:** what the task is and why, as written with it (`teamrig add --description`, or the
+  body of the GitHub issue it came from); a task written before teamrig kept one shows the ask quoted as
+  plain text from where its ref points (`file:N`, `N-M` up to 3 lines, or `N,M`);
+- **Status:** `not started`, `in progress`, `waiting`, `verifying`, `done` or `dropped`, since when,
+  and who set it when that was the task's newest change, then why a waiting task waits, in red;
+- **Note:** its newest status note;
+- **Proof:** what proves a verifying task, in green;
+- **Priority:** its number;
+- **Due:** its due date, `late 2d` in red once past it; **Verify by** while it is verifying;
+- **Week:** its planning week, by its first day;
+- **After:** the tasks planned before it, each with its status (`T5 (done)`);
 - **Goal:** the roadmap item of each of its goals (`--goals G10.1g`, `S4`), else the bare id;
+- **From:** who asked, or `GitHub issue #12` for a task teamrig opened from one;
+- **Added:** when it was written and by whom;
+- **Owner:** its owner, in another area's list;
+- **Reference:** where its ask is written: each file by its folder and name (`inbox/po.md`), other
+  words as written;
 - **Evidence:** its evidence;
 - **Links:** up to 5 addresses, each a link: the GitHub issue a task teamrig opened from one came
-  from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its ref, its newest
-  note and its evidence, once each. A link never splits; one wider than its line is shortened with
+  from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its description, its ref,
+  its newest note, its proof and its evidence, once each. A link never splits; one wider than its line is shortened with
   `…` and still opens its whole address. Each task id the pane holds is underlined and opens that
   task's page (below); one inside a web address stays part of it.
 
@@ -116,8 +123,8 @@ Boards, agendas and docs are rewritten and their line numbers drift, so a line i
 something still ties it to the task: an inbox line by its date (inboxes are append-only; one dated
 more than a day after the task was created is dropped), and any other line when it is a roadmap item
 of one of the task's goals, sits inside one, or names the task's id. A goal's own item is found by
-its id in the goals document (`TEAMRIG_PANE_GOALS_DOC`, a path from the workspace root; unset, no goal items are quoted), so it never drifts. A task with no goals whose refs point
-at boards may quote nothing, its What row then only its `see` line.
+its id in the goals document (`TEAMRIG_PANE_GOALS_DOC`, a path from the workspace root; unset, no goal items are quoted), so it never drifts. A task with no description, no goals
+and refs that point at boards may quote nothing: its card then has no Description row, only its Reference.
 
 The pane docks on the right only in the fullscreen layout (`"tui": "fullscreen"`) with the terminal at
 least 110 columns wide; anywhere else it sits above the prompt, and `/teamrig-pane` says which condition
