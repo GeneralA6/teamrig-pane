@@ -5,8 +5,8 @@ import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
 import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
-import { dockLayout, failedDrawing, inlineLayout, merged, wrapRow, type Drawn } from '../hooks/layout'
-import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, doneMoreText, paneBlocks, type Block, type Row } from '../hooks/rows'
+import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, wrapRow, type Drawn } from '../hooks/layout'
+import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, doneMoreText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
@@ -718,12 +718,56 @@ describe('layout', () => {
     const [drawn] = dockLayout([block], 24)
     expect([drawn?.key, drawn?.toggle, drawn === undefined ? '' : textOf(drawn)]).toEqual(['next:T1', 'T1', '○ T1  Ship it'])
     expect(drawn?.card).toEqual([
-      { text: '  │ ', dim: true },
-      { text: 'open since 13:00\n' },
-      { text: '  │ ', dim: true },
-      { text: 'https://a.example', href: 'https://a.example' },
+      {
+        kind: 'text',
+        key: 'card:0',
+        spans: [
+          { text: '  │ ', dim: true },
+          { text: 'open since 13:00\n' },
+          { text: '  │ ', dim: true },
+          { text: 'https://a.example', href: 'https://a.example' },
+        ],
+      },
     ])
     expect(dockLayout([{ key: block.key, toggle: 'T1', rows: block.rows }], 24)[0]?.card).toBe(undefined)
+  })
+
+  test('docked, a card line that holds a task id is a part of its own, its pieces the words and each id; the lines around it stay Texts', async () => {
+    const guide: Span = { text: '  │ ', dim: true }
+    const block: Block = {
+      key: 'next:T1',
+      toggle: 'T1',
+      rows: [{ key: 'next:T1', spans: [{ text: '○ T1  Ship it' }] }],
+      card: [
+        { key: 's', spans: [guide, { text: 'open since 13:00' }] },
+        { key: 'a', spans: [guide, { text: 'After ' }, { text: 'T5', task: 'T5' }, { text: ' done, ' }, { text: 'T6', task: 'T6' }] },
+        { key: 'w', spans: [guide, { text: 'asked by owner' }] },
+        { key: 'x', spans: [guide, { text: 'G1' }] },
+      ],
+    }
+    expect(dockLayout([block], 40)[0]?.card).toEqual([
+      { kind: 'text', key: 'card:0', spans: [guide, { text: 'open since 13:00' }] },
+      {
+        kind: 'line',
+        key: 'card:1',
+        pieces: [
+          { kind: 'words', spans: [guide, { text: 'After ' }] },
+          { kind: 'id', span: { text: 'T5', task: 'T5' }, task: 'T5' },
+          { kind: 'words', spans: [{ text: ' done, ' }] },
+          { kind: 'id', span: { text: 'T6', task: 'T6' }, task: 'T6' },
+        ],
+      },
+      { kind: 'text', key: 'card:2', spans: [guide, { text: 'asked by owner\n' }, guide, { text: 'G1' }] },
+    ])
+    expect(cardParts([])).toEqual([])
+    expect(piecesOf([{ text: 'T5', task: 'T5' }, { text: 'T5', task: 'T5' }])).toHaveLength(2)
+  })
+
+  test('a task id is never split or merged: it moves to a fresh line whole, two side by side stay two, words beside one stay apart', async () => {
+    const id: Span = { text: 'T123', task: 'T123' }
+    expect(wrapRow({ key: 'r', spans: [{ text: 'after ' }, id], hang: { text: '  ' } }, 8)).toEqual([[{ text: 'after' }], [{ text: '  ' }, id]])
+    expect(merged([{ text: 'on ' }, id, { text: ' x' }])).toEqual([{ text: 'on ' }, id, { text: ' x' }])
+    expect(merged([{ text: 'T1', task: 'T1' }, { text: 'T2', task: 'T2' }])).toHaveLength(2)
   })
 
   test('docked, a block is one wrapped text that keeps its toggle, a section opening on a blank line', async () => {
