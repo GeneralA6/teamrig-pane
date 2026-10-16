@@ -1,21 +1,25 @@
 // The pane's body as blocks of rows of styled spans: pure data from a snapshot. A block is what
-// draws as one element (layout.ts): a task with its meta line and details under it, a header, a
-// section heading. The terminal lays out and paints a pane's whole tree, its scroll only a window over it,
-// and an inline pane's frame grows to fit the tree in the live area redrawn on every keystroke: the
-// tree's size is what the pane costs, so a block is one Text (its unstyled spans plain strings, a
-// task's inside the Button that expands it), never a box per row, and inline the rows are capped.
+// draws as one element (layout.ts): a task with its meta line under it, a header, a section heading.
+// The terminal lays out and paints a pane's whole tree, its scroll only a window over it, and an inline
+// pane's frame grows to fit the tree in the live area redrawn on every keystroke: the tree's size is what
+// the pane costs, so a block is one Text (its unstyled spans plain strings, a task's inside the Button that
+// opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
+// its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
-import type { BarStatus, ExpandedTasks, Snapshot, TaskDetail, TaskRow, TaskStatus, ViewMode } from '../types'
-import { priorityText, type WaitContext } from './core/read/index'
+import type { BarStatus, ExpandedTasks, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { WaitContext } from './core/read/index'
+import { cardRows } from './card'
 import { COMMAND } from './command'
-import { refLabel, refParts } from './details'
 import { contextOf, metaParts, whenWords } from './meta'
 import { BAR_LOOK } from './status-bar'
-import { areaView, ownerGroups, shortDue, shortTime, statusLines } from './view'
+import { areaView, ownerGroups, statusLines } from './view'
 import { cells } from './width'
 
-/** A run of text in one style. No `color` (absent or undefined, as a span picks it by a condition) draws in the theme's text color. */
-export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean }
+/**
+ * A run of text in one style. No `color` (absent or undefined, as a span picks it by a condition) draws in the theme's
+ * text color. With `href` the text is a link to that address (a card's Links row), never split across lines.
+ */
+export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean; href?: string }
 /**
  * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
  * undefined as `single` passes it on, starts them at the edge); a `rule` row ends in a rule.
@@ -31,17 +35,16 @@ export type Row = {
   end?: Span | undefined
 }
 /**
- * What draws as one element. `toggle` names the task a press on it expands or collapses;
+ * What draws as one element. `toggle` names the task a press on it opens or closes the card of; `card` holds
+ * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press;
  * `opensSection` leads it with a blank line, past the gap every block has.
  */
-export type Block = { key: string; rows: Row[]; toggle?: string; opensSection?: boolean }
+export type Block = { key: string; rows: Row[]; toggle?: string; card?: Row[]; opensSection?: boolean }
 
 export const NOTHING_EXPANDED: ExpandedTasks = {}
-/** Starts each detail line, a wrapped one too: the guide that ties the details to their task. */
-const DETAIL_LEAD: Span = { text: '    │ ', dim: true }
 /** Between a task's id and its title. */
 const TITLE_GAP = '  '
-/** A collapsed task's title and meta line are cut at this many lines each; expanded, they show whole. */
+/** A task's title and its meta line are cut at this many lines each; with its card open, the title shows whole. */
 const TITLE_LINES = 2
 const META_LINES = 2
 /** Between the parts of a meta line. */
@@ -50,50 +53,12 @@ const SEPARATOR: Span = { text: ' · ', dim: true }
 /** By the task's status: `◑` is shipped work being verified, the other half of `◐` working. */
 export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', waiting: '■', done: '✓', dropped: '✗' }
 export const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', verifying: 'success', waiting: 'error', done: 'success' }
-/** A status note's color in the details: why a waiting task waits, what proves a verifying one; others draw in the text color. */
-const NOTE_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { waiting: 'error', verifying: 'success' }
 
 const NO_AREA = `No area for this session yet: /rename the tab to its session's id or name, run \`inbox read --session <id>\`, or /${COMMAND} <session> to pin one.`
 
 /** A block of one row, its key the block's. */
 export function single(key: string, spans: Span[], hang?: Span): Block {
   return { key, rows: [{ key, spans, hang }] }
-}
-
-/** `p2`, and `p2 correctness` when the team config names it. */
-function priorityLabel(task: TaskRow): string {
-  const text = priorityText(task.priority)
-  return task.priorityName === null ? text : `${text} ${task.priorityName}`
-}
-
-/**
- * The lines under an expanded task: the quoted ask, who asked and when with its priority, week and goals, its status
- * note and evidence, where else to read. A field with no value draws no line.
- */
-function detailRows(section: string, task: TaskRow, detail: TaskDetail): Row[] {
-  const line = (name: string, spans: Span[]): Row => ({
-    key: `${section}-detail:${task.id}:${name}`,
-    spans: [DETAIL_LEAD, ...spans],
-    hang: DETAIL_LEAD,
-  })
-  // Quotes read for another ref (the task's ref changed since it was expanded) are not this ask.
-  const quotes = detail.ref === task.ref ? detail.quotes : []
-  // A bare guide line opens the details and sets each quote apart from the next and from the facts.
-  const rows = quotes.flatMap((quote, i) => [line(`gap:${i}`, []), ...quote.lines.map((text, j) => line(`quote:${i}:${j}`, [{ text }]))])
-  rows.push(line('gap:facts', []))
-  const added = task.createdBy === task.source ? [] : [`added by ${task.createdBy}`]
-  const week = task.week === null ? [] : [`week ${shortDue(task.week)}`]
-  const asked = [`asked by ${task.source}`, ...added, shortTime(task.createdAt), priorityLabel(task), ...week, ...task.goals]
-  rows.push(line('asked', [{ text: asked.join(' · '), dim: true }]))
-  const outcome = [task.note, task.evidence === null ? null : `evidence ${task.evidence}`].filter(part => part !== null)
-  if (outcome.length > 0) {
-    rows.push(line('note', [{ text: `${task.status}: ${outcome.join(' · ')}`, color: NOTE_COLOR[task.status], dim: true }]))
-  }
-  // The files nothing was quoted from, named without line numbers.
-  const quoted = new Set(quotes.map(quote => refLabel(quote.ref)))
-  const others = [...new Set(refParts(task.ref).map(refLabel))].filter(label => !quoted.has(label))
-  if (others.length > 0) rows.push(line('see', [{ text: `see ${others.join(' · ')}`, dim: true }]))
-  return rows
 }
 
 /** The meta line's parts (meta.ts) between dim dots, each dim unless a color says it needs a look. */
@@ -111,8 +76,9 @@ function indentOf(task: TaskRow): Span {
 
 /**
  * `◐ T12  title`, the title cut at TITLE_LINES lines, and under it one dim meta line (meta.ts) cut at META_LINES;
- * expanded, both show whole and the details follow. `context` is the snapshot's (meta.ts contextOf); `viewer` is the
- * area whose list it is (null in the all view): a task it does not own says whose it is.
+ * with its card open, the title shows whole and the card (card.ts) takes the meta line's place. `context` is the
+ * snapshot's (meta.ts contextOf); `viewer` is the area whose list it is (null in the all view): a task it does not
+ * own says whose it is.
  */
 function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, context: WaitContext, viewer: string | null): Block {
   const detail = expanded[task.id]
@@ -124,17 +90,16 @@ function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, cont
     hang: indent,
     maxLines: detail === undefined ? TITLE_LINES : undefined,
   }
-  const meta: Row = {
-    key: `${section}-meta:${task.id}`,
-    spans: [indent, ...metaSpans(task, context, viewer)],
-    hang: indent,
-    maxLines: detail === undefined ? META_LINES : undefined,
-  }
-  return { key, toggle: task.id, rows: [title, meta, ...(detail === undefined ? [] : detailRows(section, task, detail))] }
+  if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: cardRows(section, task, detail, context, viewer) }
+  const meta: Row = { key: `${section}-meta:${task.id}`, spans: [indent, ...metaSpans(task, context, viewer)], hang: indent, maxLines: META_LINES }
+  return { key, toggle: task.id, rows: [title, meta] }
 }
 
-/** `✓ T4  title          14:02`: a task done or dropped today, dim, on one line with when it closed; expanded, whole. */
-function doneBlock(task: TaskRow, expanded: ExpandedTasks, now: number): Block {
+/**
+ * `✓ T4  title          14:02`: a task done or dropped today, dim, on one line with when it closed; with its card
+ * open (card.ts), the title shows whole and the card follows. `context` and `viewer` as taskBlock takes them.
+ */
+function doneBlock(task: TaskRow, expanded: ExpandedTasks, context: WaitContext, viewer: string): Block {
   const detail = expanded[task.id]
   const key = `done:${task.id}`
   const color = GLYPH_COLOR[task.status]
@@ -142,10 +107,11 @@ function doneBlock(task: TaskRow, expanded: ExpandedTasks, now: number): Block {
     key,
     spans: [color === undefined ? { text: GLYPH[task.status], dim: true } : { text: GLYPH[task.status], color }, { text: ` ${task.id}${TITLE_GAP}${task.title}`, dim: true }],
     hang: indentOf(task),
-    end: { text: whenWords(task.statusAt, now), dim: true },
+    end: { text: whenWords(task.statusAt, context.now), dim: true },
     maxLines: detail === undefined ? 1 : undefined,
   }
-  return { key, toggle: task.id, rows: [row, ...(detail === undefined ? [] : detailRows('done', task, detail))] }
+  if (detail !== undefined) return { key, toggle: task.id, rows: [row], card: cardRows('done', task, detail, context, viewer) }
+  return { key, toggle: task.id, rows: [row] }
 }
 
 /**
@@ -192,8 +158,8 @@ const FILTER_SECTION: Readonly<Record<BarStatus, string>> = {
 function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expanded: ExpandedTasks): Block[] {
   const tasks = statusLines(snap.tasks, area, snap.now, filter)
   if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
-  if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, snap.now))
   const context = contextOf(snap.tasks, snap.now)
+  if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, context, area))
   return tasks.map(task => taskBlock(FILTER_SECTION[filter], task, expanded, context, area))
 }
 
@@ -217,7 +183,7 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
   const context = contextOf(snap.tasks, snap.now)
   const tasks = (key: string, list: readonly TaskRow[]) => list.map(task => taskBlock(key, task, expanded, context, view.area))
-  const done = view.doneToday.map(task => doneBlock(task, expanded, snap.now))
+  const done = view.doneToday.map(task => doneBlock(task, expanded, context, view.area))
   return [
     ...blocks,
     ...section('verifying', { text: 'Verifying', color: 'success' }, view.verifying.length, tasks('verifying', view.verifying)),
@@ -244,7 +210,7 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
 }
 
 /**
- * The body under the buttons: the register's problem, if any, then the mode's view, expanded tasks with their details.
+ * The body under the buttons: the register's problem, if any, then the mode's view, the tasks in `expanded` with their cards open.
  * A snapshot never read (`now` 0: the pane's first moments, or a hot reload's until its first poll) says so, instead of
  * an empty list or a missing area it has not yet looked for. `filter`, the status bar's (status-bar.ts),
  * narrows the mine view to the area's tasks at that status; null shows them all.

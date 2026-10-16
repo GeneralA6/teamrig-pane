@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow, TaskStatus } from '../types'
+import { LABEL_CELLS } from '../hooks/card'
 import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
@@ -276,6 +277,10 @@ describe('view', () => {
     const late: Snapshot = { ...base, tasks: done, now: Date.UTC(2026, 9, 13, 23, 58) }
     expect(sameView(late, { ...late, now: Date.UTC(2026, 9, 13, 23, 59) })).toBe(true)
     expect(sameView(late, { ...late, now: Date.UTC(2026, 9, 14, 0, 1) })).toBe(false)
+    // An open task's card says since when it is open, which its meta line leaves out: `14:00` that day, `Tue 10-13` from UTC midnight on.
+    const opened: Snapshot = { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'po', at: NOW })), now: Date.UTC(2026, 9, 13, 23, 58) }
+    expect(sameView(opened, { ...opened, now: Date.UTC(2026, 9, 13, 23, 59) })).toBe(true)
+    expect(sameView(opened, { ...opened, now: Date.UTC(2026, 9, 14, 0, 1) })).toBe(false)
   })
 
   test('groups every owner with active tasks and counts the waiting ones', async () => {
@@ -315,6 +320,12 @@ describe('rows', () => {
   const rowAt = (blocks: readonly Block[], key: string) => blocks.flatMap(b => b.rows).find(r => r.key === key)
   const textAt = (blocks: readonly Block[], key: string) => {
     const row = rowAt(blocks, key)
+    return row ? textOf(row) : undefined
+  }
+  /** Where a card value's further lines start: the guide, then blank up to the value column. */
+  const CARD_UNDER = `    │ ${' '.repeat(LABEL_CELLS)}`
+  const cardText = (blocks: readonly Block[], key: string) => {
+    const row = blocks.flatMap(b => b.card ?? []).find(r => r.key === key)
     return row ? textOf(row) : undefined
   }
   const snapshotOf = (tasks: TaskRow[], area: string | null): Snapshot => ({
@@ -486,7 +497,7 @@ describe('rows', () => {
     expect(rowAt(blocks, 'problem')?.spans).toEqual([{ text: 'WARN events.jsonl: 1 unreadable line(s)', color: 'warning' }])
   })
 
-  test('an expanded task shows its title and meta line whole, then its quoted ask, who asked, its status note and the files nothing was quoted from, on a guide', async () => {
+  test("an open task's card takes its meta line's place: its title whole, the card's rows keyed by its section, on a guide", async () => {
     const ref = '~/team-notes/board/inbox/po.md:4; docs/x.md:9'
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'owner', ref, goals: ['G10.2', 'G15'], title: 'Ship it' }),
@@ -494,38 +505,43 @@ describe('rows', () => {
       createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', ref: 'quote' }),
     )
     const quotes = [{ ref: '~/team-notes/board/inbox/po.md:4', lines: ['2026-10-13 lead: ship the pane'] }]
-    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref, quotes }, T2: { ref: 'quote', quotes: [] } })
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref, quotes, goals: [] }, T2: { ref: 'quote', quotes: [], goals: [] } })
     expect(blocks.map(b => b.key)).toEqual(['header', 'next', 'next:T2', 'waiting', 'waiting:T1'])
-    expect(blockAt(blocks, 'waiting:T1')?.rows.map(r => r.key)).toEqual([
-      'waiting:T1',
-      'waiting-meta:T1',
-      'waiting-detail:T1:gap:0',
-      'waiting-detail:T1:quote:0:0',
-      'waiting-detail:T1:gap:facts',
-      'waiting-detail:T1:asked',
-      'waiting-detail:T1:note',
-      'waiting-detail:T1:see',
+    expect(blockAt(blocks, 'waiting:T1')?.rows.map(r => r.key)).toEqual(['waiting:T1'])
+    expect(rowAt(blocks, 'waiting:T1')?.maxLines).toBe(undefined)
+    expect(blockAt(blocks, 'waiting:T1')?.card?.map(r => r.key)).toEqual([
+      'waiting-card:T1:status',
+      'waiting-card:T1:status:1',
+      'waiting-card:T1:plan',
+      'waiting-card:T1:what',
+      'waiting-card:T1:what:1',
+      'waiting-card:T1:who',
+      'waiting-card:T1:goal',
+      'waiting-card:T1:goal:1',
+      'waiting-card:T1:evidence',
     ])
-    expect(blockAt(blocks, 'next:T2')?.rows.map(r => r.key)).toEqual([
-      'next:T2',
-      'next-meta:T2',
-      'next-detail:T2:gap:facts',
-      'next-detail:T2:asked',
-      'next-detail:T2:see',
+    expect(blockAt(blocks, 'waiting:T1')?.card?.map(textOf)).toEqual([
+      '    │ Status    waiting since 14:00 by po',
+      `${CARD_UNDER}needs owner`,
+      '    │ Plan      p3 · week 10-13',
+      '    │ What      2026-10-13 lead: ship the pane',
+      `${CARD_UNDER}see docs/x.md`,
+      '    │ Who       asked by owner · added by lead · 10-13 13:00',
+      '    │ Goal      G10.2',
+      `${CARD_UNDER}G15`,
+      '    │ Evidence  abc123',
     ])
-    expect([rowAt(blocks, 'waiting:T1')?.maxLines, rowAt(blocks, 'waiting-meta:T1')?.maxLines]).toEqual([undefined, undefined])
-    expect(textAt(blocks, 'waiting-detail:T1:gap:0')).toBe('    │ ')
-    expect(textAt(blocks, 'waiting-detail:T1:quote:0:0')).toBe('    │ 2026-10-13 lead: ship the pane')
-    expect(textAt(blocks, 'waiting-detail:T1:asked')).toBe('    │ asked by owner · added by lead · 10-13 13:00 · p3 · week 10-13 · G10.2 · G15')
-    expect(textAt(blocks, 'waiting-detail:T1:note')).toBe('    │ waiting: needs owner · evidence abc123')
-    expect(textAt(blocks, 'waiting-detail:T1:see')).toBe('    │ see docs/x.md')
-    expect(textAt(blocks, 'next-detail:T2:see')).toBe('    │ see quote')
-    expect(textAt(blocks, 'next-detail:T2:asked')).toBe('    │ asked by po · 10-13 13:00 · p3 · week 10-13 · G10.2')
-    const details = blocks.flatMap(b => b.rows).filter(r => r.key.includes('-detail:'))
-    expect(details.every(r => r.hang?.text === '    │ ' && r.spans[0]?.text === '    │ ')).toBe(true)
+    expect(blockAt(blocks, 'next:T2')?.card?.map(textOf)).toEqual([
+      '    │ Status    open since 13:00 by po',
+      '    │ Plan      p3 · week 10-13',
+      '    │ What      see quote',
+      '    │ Who       asked by po · 10-13 13:00',
+      '    │ Goal      G10.2',
+    ])
+    expect(blocks.flatMap(b => b.rows).some(r => r.key.includes('-meta:'))).toBe(false)
   })
 
-  test('an expanded task names its priority as the team config does, each fact only when set; the meta line keeps the bare number', async () => {
+  test('an open card names its priority as the team config does, each fact only when set; the meta line keeps the bare number', async () => {
     const tasks = rowsOf(
       [
         createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, ref: null, week: null, goals: [], title: 'Bare' }),
@@ -534,24 +550,27 @@ describe('rows', () => {
       ],
       PRIORITIES,
     )
-    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [] }, T2: { ref: 'docs/x.md', quotes: [] } })
-    expect(blockAt(blocks, 'next:T1')?.rows.map(r => r.key)).toEqual(['next:T1', 'next-meta:T1', 'next-detail:T1:gap:facts', 'next-detail:T1:asked'])
-    expect(textAt(blocks, 'next-detail:T1:asked')).toBe('    │ asked by owner · added by lead · 10-13 13:00 · p2 correctness')
-    expect(blockAt(blocks, 'working:T2')?.rows.map(r => r.key)).toEqual([
-      'working:T2',
-      'working-meta:T2',
-      'working-detail:T2:gap:facts',
-      'working-detail:T2:asked',
-      'working-detail:T2:note',
-      'working-detail:T2:see',
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [], goals: [] }, T2: { ref: 'docs/x.md', quotes: [], goals: [] } })
+    expect(blockAt(blocks, 'next:T1')?.card?.map(textOf)).toEqual([
+      '    │ Status    open since 13:00 by lead',
+      '    │ Plan      p2 correctness',
+      '    │ Who       asked by owner · added by lead · 10-13 13:00',
     ])
-    expect(textAt(blocks, 'working-detail:T2:asked')).toBe('    │ asked by owner · added by lead · 10-13 13:00 · p7 polish · week 10-13 · G10.2')
-    expect(textAt(blocks, 'working-detail:T2:note')).toBe('    │ in-progress: halfway')
+    expect(blockAt(blocks, 'working:T2')?.card?.map(r => r.key)).toEqual([
+      'working-card:T2:status',
+      'working-card:T2:status:1',
+      'working-card:T2:plan',
+      'working-card:T2:what',
+      'working-card:T2:who',
+      'working-card:T2:goal',
+    ])
+    expect(cardText(blocks, 'working-card:T2:plan')).toBe('    │ Plan      p7 polish · week 10-13')
+    expect(cardText(blocks, 'working-card:T2:status:1')).toBe(`${CARD_UNDER}halfway`)
     const collapsed = paneBlocks(snapshotOf(tasks, 'po'), 'mine', {})
     expect(textAt(collapsed, 'next:T1')).toBe('○ T1  Bare')
     expect(textAt(collapsed, 'next-meta:T1')).toBe('      p2 · new · asked by owner')
     expect(textAt(collapsed, 'working-meta:T2')).toBe('      p7 · in progress since 14:00')
-    expect(collapsed.flatMap(b => b.rows).filter(r => r.key.includes('-detail:'))).toEqual([])
+    expect(collapsed.every(b => b.card === undefined)).toBe(true)
   })
 
   test('quotes read for an older ref are not shown once the ref changes', async () => {
@@ -559,9 +578,30 @@ describe('rows', () => {
       createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', ref: 'old' }),
       updateLine('T1', 'po', NOW, { ref: 'new' }),
     )
-    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: 'old', quotes: [{ ref: 'old', lines: ['the old ask'] }] } })
-    expect(blocks.flatMap(b => b.rows).some(r => r.spans.some(span => span.text === 'the old ask'))).toBe(false)
-    expect(textAt(blocks, 'next-detail:T1:see')).toBe('    │ see new')
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: 'old', quotes: [{ ref: 'old', lines: ['the old ask'] }], goals: [] } })
+    expect(blocks.flatMap(b => b.card ?? []).some(r => r.spans.some(span => span.text === 'the old ask'))).toBe(false)
+    expect(cardText(blocks, 'next-card:T1:what')).toBe('    │ What      see new')
+  })
+
+  test("a done-today row opens the same card, its title whole, in the list and in the bar's done filter", async () => {
+    const tasks = fold(
+      createLine('T4', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', title: 'Shipped' }),
+      statusLine('T4', 'po', NOW, 'done', 'merged', 'abc123'),
+    )
+    const open = { T4: { ref: null, quotes: [], goals: [] } }
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', open)
+    expect(blockAt(blocks, 'done:T4')?.rows.map(r => [r.key, r.maxLines])).toEqual([['done:T4', undefined]])
+    expect(blockAt(blocks, 'done:T4')?.card?.map(textOf)).toEqual([
+      '    │ Status    done since 14:00 by po',
+      `${CARD_UNDER}merged`,
+      '    │ Plan      p3 · week 10-13',
+      '    │ What      see docs/x.md',
+      '    │ Who       asked by po · 10-13 13:00',
+      '    │ Goal      G10.2',
+      '    │ Evidence  abc123',
+    ])
+    expect(blockAt(paneBlocks(snapshotOf(tasks, 'po'), 'mine', open, 'done-today'), 'done:T4')?.card?.[0]?.key).toBe('done-card:T4:status')
+    expect(blockAt(paneBlocks(snapshotOf(tasks, 'po'), 'mine'), 'done:T4')?.card).toBe(undefined)
   })
 
   test('the all view heads each owner with its name and counts, the session area marked, its rows naming no owner', async () => {
@@ -579,18 +619,14 @@ describe('rows', () => {
     expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => b.opensSection)).toEqual([false, true])
   })
 
-  test('expanded, a verifying task\'s note is green', async () => {
+  test('open, a verifying task\'s card draws its note green', async () => {
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Shipped' }),
       statusLine('T1', 'po', NOW, 'verifying', 'health check passes', 'abc123'),
     )
-    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [] } })
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [], goals: [] } })
     expect(blocks.map(b => b.key)).toEqual(['header', 'verifying', 'verifying:T1'])
-    expect(rowAt(blocks, 'verifying-detail:T1:note')?.spans[1]).toEqual({
-      text: 'verifying: health check passes · evidence abc123',
-      color: 'success',
-      dim: true,
-    })
+    expect(blocks.flatMap(b => b.card ?? []).find(r => r.key === 'verifying-card:T1:status:1')?.spans[1]).toEqual({ text: 'health check passes', color: 'success' })
   })
 
   test('the all view counts each owner\'s verifying tasks and lists them first, with what proves them', async () => {
@@ -652,6 +688,42 @@ describe('layout', () => {
       { text: 'cd', dim: true },
       { text: 'e' },
     ])
+  })
+
+  test('keeps two links side by side as two spans, and a link apart from text in its style', async () => {
+    const link = (href: string) => ({ text: href, href })
+    expect(merged([link('https://a.example'), link('https://b.example'), { text: ' x' }])).toEqual([link('https://a.example'), link('https://b.example'), { text: ' x' }])
+  })
+
+  test('never splits a link: it starts a fresh line when it does not fit, and one wider than a line is shortened to it', async () => {
+    const href = 'https://example.com/pr/7'
+    const row: Row = { key: 'l', spans: [{ text: 'Links ' }, { text: href, href }], hang: UNDER }
+    expect(wrapRow(row, 30)).toEqual([[{ text: `Links ` }, { text: href, href }]])
+    expect(wrapRow(row, 28)).toEqual([[{ text: 'Links' }], [UNDER, { text: href, href }]])
+    // At the hang already, there is no more room to win: the link is cut there, ending in a mark, and still opens its whole address.
+    expect(wrapRow({ key: 'l', spans: [{ text: href, href }] }, 12)).toEqual([[{ text: 'https://exa…', href }]])
+    expect(wrapRow({ key: 'l', spans: [{ text: 'Links ' }, { text: href, href }], hang: UNDER }, 16)).toEqual([[{ text: 'Links' }], [UNDER, { text: 'https://exa…', href }]])
+  })
+
+  test('docked, an open card is its own wrapped text under its task, drawn apart from the press', async () => {
+    const block: Block = {
+      key: 'next:T1',
+      toggle: 'T1',
+      rows: [{ key: 'next:T1', spans: [{ text: '○ T1  Ship it' }] }],
+      card: [
+        { key: 'next-card:T1:status', spans: [{ text: '  │ ', dim: true }, { text: 'open since 13:00' }], hang: UNDER },
+        { key: 'next-card:T1:links', spans: [{ text: '  │ ', dim: true }, { text: 'https://a.example', href: 'https://a.example' }] },
+      ],
+    }
+    const [drawn] = dockLayout([block], 24)
+    expect([drawn?.key, drawn?.toggle, drawn === undefined ? '' : textOf(drawn)]).toEqual(['next:T1', 'T1', '○ T1  Ship it'])
+    expect(drawn?.card).toEqual([
+      { text: '  │ ', dim: true },
+      { text: 'open since 13:00\n' },
+      { text: '  │ ', dim: true },
+      { text: 'https://a.example', href: 'https://a.example' },
+    ])
+    expect(dockLayout([{ key: block.key, toggle: 'T1', rows: block.rows }], 24)[0]?.card).toBe(undefined)
   })
 
   test('docked, a block is one wrapped text that keeps its toggle, a section opening on a blank line', async () => {
@@ -723,6 +795,19 @@ describe('layout', () => {
   test('inline, a row\'s end follows its text on its one screen row', async () => {
     const block: Block = { key: 'd', rows: [{ key: 'd', spans: [{ text: '✓ T3' }], end: { text: '14:00', dim: true } }] }
     expect(inlineLayout([block], 5)[0]?.spans).toEqual([{ text: '✓ T3  ' }, { text: '14:00', dim: true }])
+  })
+
+  test("inline, an open card's rows follow its task's, a press on the task's first row alone", async () => {
+    const block: Block = {
+      key: 'next:T1',
+      toggle: 'T1',
+      rows: [{ key: 'next:T1', spans: [{ text: '○ T1' }] }],
+      card: [{ key: 'next-card:T1:status', spans: [{ text: 'open' }] }],
+    }
+    expect(inlineLayout([block], 6).map(d => [d.key, d.toggle])).toEqual([
+      ['next:T1', 'T1'],
+      ['next-card:T1:status', null],
+    ])
   })
 
   test('inline, each row takes one truncated screen row, capped, the last saying how many it left out', async () => {

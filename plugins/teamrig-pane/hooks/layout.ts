@@ -1,16 +1,21 @@
 // Lays the pane's blocks (rows.ts) out for where the pane sits. Docked, each block is one Text:
 // its rows word-wrapped to the body's columns here, so a wrapped line starts under its row's
-// `hang` (a task's title under its id, a detail under its guide) rather than at the pane's edge,
-// and the root Box's gap spaces the blocks. Wrapping here instead of nesting a Box per row keeps a
-// block one element, the cost rows.ts explains. A row can be cut at a few lines, ending in `…`, and
-// can carry an `end` drawn at its first line's right edge. Inline, above the prompt, each row is one
-// truncated screen row and the rows are capped. Widths are display cells (width.ts), so CJK and emoji
-// sequences wrap where the terminal wraps them and a cut never lands inside one.
+// `hang` (a task's title under its id, a card's value under its value column) rather than at the
+// pane's edge, and the root Box's gap spaces the blocks. Wrapping here instead of nesting a Box per row
+// keeps a block one element, the cost rows.ts explains; an open card is one more Text. A row can be cut
+// at a few lines, ending in `…`, and can carry an `end` drawn at its first line's right edge. A link is
+// never split: it starts a fresh line when that gives it more room, and one wider still is shortened to
+// its line, ending in `…`. Inline, above the prompt, each row is one truncated screen row and the rows
+// are capped. Widths are display cells (width.ts), so CJK and emoji sequences wrap where the terminal
+// wraps them and a cut never lands inside one.
 import type { Block, Row, Span } from './rows'
 import { cells, graphemes } from './width'
 
-/** One element of the body: a Text, inside the Button that expands its task when `toggle` names one. */
-export type Drawn = { key: string; spans: Span[]; wrap: 'wrap' | 'truncate-end'; toggle: string | null }
+/**
+ * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one. `card`,
+ * set while that card is open, is the card's own Text, drawn under the Button and outside it.
+ */
+export type Drawn = { key: string; spans: Span[]; wrap: 'wrap' | 'truncate-end'; toggle: string | null; card?: Span[] }
 
 const RULE = '─'
 const BLANK_LINE: Span = { text: ' ' }
@@ -40,8 +45,16 @@ function hangWithin(hang: Span, room: number): Span {
   return { ...hang, text: parts.slice(0, fitting(parts, room)).join('') }
 }
 
+/** `text` in `room` cells: whole when it fits, else cut between graphemes and ending in `…`. */
+function shortened(text: string, room: number): string {
+  if (cells(text) <= room) return text
+  const parts = graphemes(text)
+  return `${parts.slice(0, fitting(parts, Math.max(0, room - cells(ELLIPSIS)))).join('')}${ELLIPSIS}`
+}
+
+/** One style, and one link: two links side by side stay two. */
 function sameStyle(a: Span, b: Span): boolean {
-  return a.color === b.color && a.bold === b.bold && a.dim === b.dim
+  return a.color === b.color && a.bold === b.bold && a.dim === b.dim && a.href === b.href
 }
 
 /** Spans with each run of one style joined into one span, so a block draws as few elements as it can. */
@@ -92,6 +105,12 @@ function fill(spans: readonly Span[], rowHang: Span | undefined, columns: number
     put(hang)
   }
   for (const span of spans) {
+    // A link stays whole, so a press on any of it opens the one address: on a fresh line when that has more room, shortened when even that is too narrow.
+    if (span.href !== undefined) {
+      if (column > start && cells(span.text) > columns - column) breakLine()
+      put({ ...span, text: shortened(span.text, columns - column) })
+      continue
+    }
     for (const token of span.text.split(/( +)/)) {
       if (token === '') continue
       const width = cells(token)
@@ -165,17 +184,28 @@ function trimEnd(line: readonly Span[]): Span[] {
   return out.length > 0 ? out : [BLANK_LINE]
 }
 
+/** Lines as one Text's spans, a new line between each two. */
+function joinedLines(lines: readonly Span[][]): Span[] {
+  return merged(lines.flatMap((line, i) => (i === 0 ? line : [NEW_LINE, ...line])))
+}
+
 /**
  * Each block one Text of its rows wrapped to the body's own width (one column at least, for a body
- * resized below the pane's padding), a block that opens a section led by a blank line.
+ * resized below the pane's padding), a block that opens a section led by a blank line; an open card's
+ * rows wrapped the same way into its own Text.
  */
 export function dockLayout(blocks: readonly Block[], bodyColumns: number): Drawn[] {
   const columns = Math.max(1, bodyColumns)
+  const wrapped = (rows: readonly Row[]) => rows.flatMap(row => wrapRow(row, columns))
   return blocks.map(block => {
-    const lines = block.rows.flatMap(row => wrapRow(row, columns))
-    const all = block.opensSection === true ? [[BLANK_LINE], ...lines] : lines
-    const spans = merged(all.flatMap((line, i) => (i === 0 ? line : [NEW_LINE, ...line])))
-    return { key: block.key, spans, wrap: 'wrap', toggle: block.toggle ?? null }
+    const lines = wrapped(block.rows)
+    const drawn: Drawn = {
+      key: block.key,
+      spans: joinedLines(block.opensSection === true ? [[BLANK_LINE], ...lines] : lines),
+      wrap: 'wrap',
+      toggle: block.toggle ?? null,
+    }
+    return block.card === undefined ? drawn : { ...drawn, card: joinedLines(wrapped(block.card)) }
   })
 }
 
@@ -187,11 +217,11 @@ export function failedDrawing(error: unknown): Drawn[] {
 
 /**
  * Each row one truncated screen row, at most `maxRows`, the last saying how many it left out and
- * where the whole list shows. A press on a task's first row still expands it.
+ * where the whole list shows. A press on a task's first row still opens or closes its card, whose rows follow.
  */
 export function inlineLayout(blocks: readonly Block[], maxRows: number): Drawn[] {
   const rows = blocks.flatMap(block =>
-    block.rows.map((row, i): Drawn => ({
+    [...block.rows, ...(block.card ?? [])].map((row, i): Drawn => ({
       key: row.key,
       spans: merged(row.end === undefined ? row.spans : [...row.spans, { text: END_GAP }, row.end]),
       wrap: 'truncate-end',

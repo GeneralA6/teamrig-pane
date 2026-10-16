@@ -1,8 +1,9 @@
 // The dim line under a task's title (rows.ts), in plain words: its priority, when it is due, how long it has
 // stood at its status and what holds it (a waiting task's reasons, an open one's unfinished `after`), then
-// what needs a look (late, new, not picked up). Every date and time is UTC, as teamrig writes them; "today" is
-// the UTC day of the snapshot's clock. Pure: the words change with the clock and the other tasks' statuses, so
-// view.ts's sameView compares them to know when a poll must redraw.
+// what needs a look (late, new, not picked up). An open task's card (card.ts) shows it in place of this line,
+// in the same words. Every date and time is UTC, as teamrig writes them; "today" is the UTC day of the
+// snapshot's clock. Pure: the words change with the clock and the other tasks' statuses, so view.ts's sameView
+// compares them to know when a poll must redraw.
 import type { ThemeKey } from 'claude-code'
 import type { TaskRow, TaskStatus } from '../types'
 import { ACTIVE_STATUSES, dueTime, priorityText, unfinishedAfter, waitContext, waitText, type WaitContext } from './core/read/index'

@@ -1,4 +1,4 @@
-// The ask behind a task, quoted from where its ref points, for the details under an expanded row.
+// The ask behind a task, quoted from where its ref points, for the card an open task shows (card.ts).
 // A ref is `file:line` parts, and a line number drifts when its file is rewritten, so a line is
 // quoted only when something still ties it to the task:
 // - an inbox line (`inbox/<area>.md`) by its date. teamrig only appends to an inbox until someone
@@ -7,11 +7,11 @@
 // - any other line by its goal or the task's id. It must be a roadmap item (`- [ ] G10.1e ...`,
 //   `- S4 ...`) of one of the task's goals, sit inside one, or name the task (boards cite register
 //   ids). Other board and agenda lines are only named (T6's board/po.md:6 came to hold another item).
-// Each goal's own roadmap item is quoted too, found by its id rather than a line number, so a task
-// whose refs quote nothing still says what it serves.
+// Each goal's own roadmap item is read too, found by its id rather than a line number, so a task
+// whose refs quote nothing still says what it serves; one a ref already quoted is not read twice.
 // Quotes read as plain text: bullet, checkbox, bold and code marks stripped, a long line cut between
 // characters (graphemes, width.ts), never inside an emoji.
-import type { RefQuote, TaskDetail, TaskRow } from '../types'
+import type { GoalItem, RefQuote, TaskDetail, TaskRow } from '../types'
 import { slashed, type Files } from './source'
 import { graphemes } from './width'
 
@@ -174,15 +174,13 @@ export function anchoredLines(
   return quoted
 }
 
-/** The goal's own item: the first line whose item id is the goal; null when it has none. */
-export function goalItem(content: string, goal: string): { number: number; text: string } | null {
-  const all = content.split('\n')
-  const index = all.findIndex(line => GOAL_ITEM.exec(line)?.[2] === goal)
-  const line = all[index]
-  return line === undefined ? null : { number: index + 1, text: plainText(line) }
+/** The goal's own item as plain text: the first line whose item id is the goal; null when it has none. */
+export function goalItem(content: string, goal: string): string | null {
+  const line = content.split('\n').find(each => GOAL_ITEM.exec(each)?.[2] === goal)
+  return line === undefined ? null : plainText(line)
 }
 
-/** Reads the lines a task's refs point at, and its goals' items, when the person expands it. */
+/** Reads the lines a task's refs point at, and its goals' items, when the person opens its card. */
 export class TaskDetails {
   private readonly files: Files
   private readonly places: RefPlaces
@@ -198,7 +196,7 @@ export class TaskDetails {
       const lines = await this.quote(part, task)
       if (lines !== null) quotes.push({ ref: part, lines })
     }
-    return { ref: task.ref, quotes: [...quotes, ...(await this.goalQuotes(task, quotes))] }
+    return { ref: task.ref, quotes, goals: await this.goalItems(task, quotes) }
   }
 
   /** The part's lines while they still say what the task points at; null when they cannot be quoted. */
@@ -210,16 +208,16 @@ export class TaskDetails {
     return inboxArea(ref.file) === null ? anchoredLines(content, ref.lines, task) : datedLines(content, ref.lines, task.createdAt)
   }
 
-  /** The items of the task's goals that its refs did not already quote, each under its own line ref. */
-  private async goalQuotes(task: TaskRow, quoted: readonly RefQuote[]): Promise<RefQuote[]> {
+  /** The items of the task's goals that its refs did not already quote, in the goals' order. */
+  private async goalItems(task: TaskRow, quoted: readonly RefQuote[]): Promise<GoalItem[]> {
     const doc = this.places.goalsDoc
     if (doc === null || task.goals.length === 0) return []
     const content = await this.firstFile(candidatePaths(doc, this.places))
     if (content === null) return []
     const shown = new Set(quoted.flatMap(quote => quote.lines))
     return task.goals.flatMap(goal => {
-      const item = goalItem(content, goal)
-      return item === null || shown.has(item.text) ? [] : [{ ref: `${doc}:${item.number}`, lines: [item.text] }]
+      const text = goalItem(content, goal)
+      return text === null || shown.has(text) ? [] : [{ goal, text }]
     })
   }
 
