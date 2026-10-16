@@ -46,7 +46,8 @@ teamrig binds by its Claude Code title (`/rename web`) gets the same mark, so th
 `/teamrig-pane [mine | all | auto | <session>]` opens the pane, switches the view, follows the inbox read
 again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
 and lists the team's sessions. In the pane, `m` and `a` switch views, and `o`, `v`, `w`, `i` and `n`
-show one status's tasks alone (Status bar, below); on a task's page `b` and `f` go back and forward.
+show one status's tasks alone (Status bar, below); on a task's page `b` and `f` go back and forward, and
+in the dock `s` searches the tasks (below).
 
 In the side dock the tasks sit a blank line apart, each wrapped title and meta line starting under the
 title, and a blank line and a bold heading open each section (each owner in `all`).
@@ -89,6 +90,16 @@ drops those ahead of it. A page opens at its top and has no status bar; back to 
 you left to the middle of the dock, and the list keeps back and forward while a page lies ahead of it.
 `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed before today says so on its
 page. Above the prompt ids are plain words and no page shows.
+
+`search` (`s`, in the dock's mine and all row) shows a Find field. Each word typed must match, case aside,
+a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
+evidence or ref (one that starts with a mark, `.md`, matches anywhere), and the body lists the matches as
+you type, the matched words underlined: an active task as its title and a dim line of whose it is and the
+fields matched, a finished one on one dim line with when it closed. It searches what the pane holds, every
+area's active tasks and those finished today, never an older week's: the active ones in plan order, then
+the finished ones newest first, at most 30, with a dim line counting the rest. A click on a result opens
+its page, Enter opens the top one's, and back returns to the results; the trail names the search by its
+words. Emptying the field or `clear` closes it; Esc only hands the keys back.
 
 Boards, agendas and docs are rewritten and their line numbers drift, so a line is quoted only while
 something still ties it to the task: an inbox line by its date (inboxes are append-only; one dated

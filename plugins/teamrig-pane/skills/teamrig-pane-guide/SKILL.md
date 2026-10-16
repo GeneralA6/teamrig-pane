@@ -282,6 +282,34 @@ brings the card you left to the middle of the dock, and the list keeps back and 
 it; `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed before today says so on its page. Above
 the prompt ids are plain words and no page shows.
 
+### Search
+
+`search` (`s`), in the dock's mine and all row, shows a Find field under it. As you type, the body lists the tasks
+the pane holds that every word matches, the matched words underlined:
+
+```text
+○ T50  Load the feed
+       on etl
+
+○ T58  Read the source
+       on etl
+```
+
+| Part | What it does |
+| --- | --- |
+| A word | Matches, case aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note, evidence or ref; one that starts with a mark (`.md`) matches anywhere |
+| An active result | Its title row, then a dim line of whose it is and the other fields a word matched in |
+| A finished result | One dim line with when it closed |
+| A click on a result | Opens its page; `‹ back` (`b`) returns to the results |
+| Enter | Opens the top result's page |
+| `clear`, or an empty field | Closes the search and shows the place before it |
+
+The pane searches what it holds: every area's active tasks and those finished today, never an older week's. The
+active matches come in plan order, then the finished ones, newest first. At most 30 show; a dim line counts the
+rest (`4 more: add a word`), and when nothing matches, one dim line says so. The trail names a search by its words
+(`Search "etl the"`). Esc hands the keys back to the prompt and leaves the results drawn. Above the prompt no page
+shows, so there is no search.
+
 ## The Changes view
 
 `[Tasks] [Changes Δ3]` leads the pane in every state. Changes lists the files changed in each git repo the
