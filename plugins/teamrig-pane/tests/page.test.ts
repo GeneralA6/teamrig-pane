@@ -18,6 +18,8 @@ const TASKS = rowsOf([
 ])
 const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: 'pinned', unreadInbox: null, problem: null, now: NOW }
 const textOf = (row: Row) => row.spans.map(span => span.text).join('')
+/** A card row's first line on a page: the label padded to the value column, then the value. */
+const labelled = (label: string, value: string) => `${label.padEnd(LABEL_CELLS)}${value}`
 const rowsIn = (blocks: readonly Block[]) => blocks.flatMap(block => [...block.rows, ...(block.card ?? [])])
 
 describe('page', () => {
@@ -29,14 +31,16 @@ describe('page', () => {
     expect(block?.rows.map(textOf)).toEqual(['○ T50  Ship the pages'])
     expect(block?.rows[0]?.maxLines).toBe(undefined)
     const card = block?.card ?? []
-    expect(card.map(row => row.key)).toEqual(['page-card:T50:status', 'page-card:T50:plan', 'page-card:T50:what', 'page-card:T50:who', 'page-card:T50:after', 'page-card:T50:goal'])
+    expect(card.map(row => row.key.replace('page-card:T50:', ''))).toEqual(['status', 'priority', 'week', 'after', 'goal', 'from', 'added', 'reference'])
     expect(card.map(textOf)).toEqual([
-      'Status    open since 13:00 by lead',
-      'Plan      p3 · week 10-13',
-      'What      see docs/x.md',
-      'Who       asked by owner · added by lead · 10-13 13:00',
-      'After     T58 open',
-      'Goal      G10.2',
+      labelled('Status', 'not started since 13:00 by lead'),
+      labelled('Priority', '3'),
+      labelled('Week', 'Tue 10-13'),
+      labelled('After', 'T58 (not started)'),
+      labelled('Goal', 'G10.2'),
+      labelled('From', 'owner'),
+      labelled('Added', '13:00 by lead'),
+      labelled('Reference', 'docs/x.md'),
     ])
     expect(card.every(row => row.hang?.text === ' '.repeat(LABEL_CELLS))).toBe(true)
     expect(card.find(row => row.key.endsWith(':after'))?.spans.find(span => span.task !== undefined)).toEqual({ text: 'T58', task: 'T58' })
@@ -45,9 +49,9 @@ describe('page', () => {
   test('what the page read for its task quotes the ask; in the mine view another area’s task names its owner, in the all view none does', async () => {
     const detail: TaskDetail = { ref: 'docs/x.md', quotes: [{ ref: 'docs/x.md', lines: ['load it nightly'] }], goals: [] }
     const mine = rowsIn(pageBlocks(SNAP, 'mine', 'T58', { T58: detail })).map(textOf)
-    expect(mine).toContain('What      load it nightly')
-    expect(mine).toContain('Who       asked by owner · added by lead · 10-13 13:00 · owner etl')
-    expect(rowsIn(pageBlocks(SNAP, 'all', 'T58', { T58: detail })).map(textOf)).toContain('Who       asked by owner · added by lead · 10-13 13:00')
+    expect(mine).toContain(labelled('Description', 'load it nightly'))
+    expect(mine).toContain(labelled('Owner', 'etl'))
+    expect(rowsIn(pageBlocks(SNAP, 'all', 'T58', { T58: detail })).map(textOf).some(text => text.startsWith('Owner'))).toBe(false)
   })
 
   test('a task the snapshot no longer holds says it closed over 8 days ago, one dim line', async () => {

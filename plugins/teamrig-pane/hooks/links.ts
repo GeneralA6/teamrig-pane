@@ -1,5 +1,5 @@
 // The links an open task's card draws (card.ts): the GitHub issue a task came in from, then each web address
-// written in its ref, its latest note and its evidence, in that order, each once. Pure: what a press on one
+// written in its description, ref, latest note, proof and evidence, in that order, each once. Pure: what a press on one
 // opens is the surface's. A task id is no link here: card.ts makes each one the snapshot holds a press that opens that task's page (ids.ts).
 import type { TaskRow } from '../types'
 
@@ -24,11 +24,20 @@ const TRAILING = /[.,;:)\]'"]+$/
 /** An address with something after its `//`. */
 const HAS_HOST = /^https?:\/\/\S/i
 
-/** The issue page of a task teamrig opened from a GitHub issue; null for any other task, or a ref teamrig did not write. */
-export function issueUrl(task: Pick<TaskRow, 'source' | 'ref'>): string | null {
+/** A GitHub issue: its `<owner>/<repo>` and its number. */
+export type Issue = { repo: string; number: number }
+
+/** The issue teamrig opened a task from; null for any other task, or a ref teamrig did not write. */
+export function issueOf(task: Pick<TaskRow, 'source' | 'ref'>): Issue | null {
   if (task.source !== GITHUB_SOURCE || task.ref === null) return null
   const [, repo, number] = ISSUE_REF.exec(task.ref.trim()) ?? []
-  return repo === undefined || number === undefined ? null : `https://github.com/${repo}/issues/${number}`
+  return repo === undefined || number === undefined ? null : { repo, number: Number(number) }
+}
+
+/** The issue page of a task teamrig opened from a GitHub issue (issueOf); null for any other task. */
+export function issueUrl(task: Pick<TaskRow, 'source' | 'ref'>): string | null {
+  const issue = issueOf(task)
+  return issue === null ? null : `https://github.com/${issue.repo}/issues/${issue.number}`
 }
 
 /** How long `address` is once each byte past ASCII is percent-encoded: three characters a byte. */
@@ -48,9 +57,12 @@ export function addressesIn(text: string): string[] {
     .filter(address => HAS_HOST.test(address) && encodedLength(address) <= MAX_ADDRESS_CHARS)
 }
 
-/** What a task's card links to: its issue, then the addresses in its ref, note and evidence; each once, at most MAX_LINKS. */
-export function taskLinks(task: Pick<TaskRow, 'source' | 'ref' | 'note' | 'evidence'>): string[] {
+/**
+ * What a task's card links to: its issue, then the addresses in its description, ref, note, proof and evidence; each
+ * once, at most MAX_LINKS.
+ */
+export function taskLinks(task: Pick<TaskRow, 'source' | 'description' | 'ref' | 'note' | 'proof' | 'evidence'>): string[] {
   const issue = issueUrl(task)
-  const written = [task.ref, task.note, task.evidence].flatMap(text => (text === null ? [] : addressesIn(text)))
+  const written = [task.description, task.ref, task.note, task.proof, task.evidence].flatMap(text => (text === null ? [] : addressesIn(text)))
   return [...new Set([...(issue === null ? [] : [issue]), ...written])].slice(0, MAX_LINKS)
 }

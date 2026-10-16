@@ -23,6 +23,8 @@ type CreateOptions = {
   priority?: number
   due?: string | null
   title?: string
+  /** What the task is and why (`--description`); left off the line when not given, as teamrig leaves a null one. */
+  description?: string
   source?: string
   /** null: a task with no ref (`--ref none`). */
   ref?: string | null
@@ -43,6 +45,7 @@ export function createLine(id: string, o: CreateOptions): string {
     by: o.by,
     task: {
       title: o.title ?? `task ${id}`,
+      ...(o.description === undefined ? {} : { description: o.description }),
       owner: o.owner,
       source: o.source ?? 'owner',
       ref: o.ref === undefined ? 'docs/x.md' : o.ref,
@@ -66,6 +69,11 @@ export function statusLine(
   skill: string | null = null,
 ): string {
   return JSON.stringify({ v: EVENT_VERSION, type: 'status', id, at: iso(at), by, status, note, evidence, skill })
+}
+
+/** A status line to `verifying` with what proves it, as `teamrig set --status verifying --proof` writes it. */
+export function verifyingLine(id: string, by: string, at: number, proof: string, note: string | null = null, evidence: string | null = null): string {
+  return JSON.stringify({ v: EVENT_VERSION, type: 'status', id, at: iso(at), by, status: 'verifying', note, evidence, skill: null, proof })
 }
 
 /** A status line to `waiting` with its typed reasons, as `teamrig set --waits` writes it. */

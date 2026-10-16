@@ -17,8 +17,10 @@ export type Cut<T> = { items: T[]; more: number }
 export type TaskRow = {
   id: string
   title: string
+  /** What the task is and why, in plain words (`teamrig add --description`, a GitHub issue's body); null for a task written before teamrig kept one. */
+  description: string | null
   owner: string
-  /** 1 is the most urgent; drawn `p1`. */
+  /** 1 is the most urgent; drawn `p1` in a list, `Priority 1` on a card. */
   priority: number
   /** What the team config calls the priority (`register.priorities`); null when it names none. */
   priorityName: string | null
@@ -27,6 +29,8 @@ export type TaskRow = {
   status: TaskStatus
   /** The note of the newest status change (why it waits, what was done). */
   note: string | null
+  /** What proves a verifying task (`set --proof`); null in any other status, and for one set verifying before teamrig kept it, whose note says it. */
+  proof: string | null
   /** The newest evidence recorded (a sha or a path); a status change without one keeps it. */
   evidence: string | null
   /** The skill the newest status change names (`none` for a one-off); null when it named none. */
