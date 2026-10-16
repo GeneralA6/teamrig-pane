@@ -205,11 +205,11 @@ function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expande
 function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null): Block[] {
   if (snap.area === null) return [single('no-area', [{ text: NO_AREA, dim: true }])]
   const view = areaView(snap.tasks, snap.area, snap.now)
-  const header: Span[] = [{ text: view.area, bold: true }]
-  if (snap.areaSource === 'pinned') header.push({ text: ' (pinned)', dim: true })
+  // The session's own area goes unnamed, as its tab names the session; a pin names the area it shows.
+  const header: Span[] = snap.areaSource === 'pinned' ? [{ text: view.area, bold: true }, { text: ' (pinned) · ', dim: true }] : []
   const waiting = view.waiting.filter(task => task.owner === view.area).length
   const activeTotal = view.verifying.length + view.working.length + view.upNext.length + waiting
-  header.push({ text: ` · ${activeTotal} active`, dim: true })
+  header.push({ text: `${activeTotal} active`, dim: true })
   if (snap.unreadInbox !== null)
     header.push({ text: ` · inbox ${snap.unreadInbox} unread`, color: snap.unreadInbox > 0 ? 'warning' : 'subtle' })
   const blocks: Block[] = [{ key: 'header', rows: [{ key: 'header', spans: header, rule: true }] }]
