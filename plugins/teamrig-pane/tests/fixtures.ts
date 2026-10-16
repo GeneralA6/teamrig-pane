@@ -2,6 +2,7 @@
 import { EVENT_VERSION, MARK_VERSION } from '../hooks/core/read/index'
 import { lineHash } from '../hooks/line-hash'
 import type { FileStamp, Files } from '../hooks/source'
+import type { WaitRow } from '../types'
 
 export const NOW = Date.UTC(2026, 9, 13, 14, 0)
 export const HOUR = 3_600_000
@@ -65,6 +66,11 @@ export function statusLine(
   skill: string | null = null,
 ): string {
   return JSON.stringify({ v: EVENT_VERSION, type: 'status', id, at: iso(at), by, status, note, evidence, skill })
+}
+
+/** A status line to `waiting` with its typed reasons, as `teamrig set --waits` writes it. */
+export function waitingLine(id: string, by: string, at: number, waits: readonly WaitRow[], note: string | null = null): string {
+  return JSON.stringify({ v: EVENT_VERSION, type: 'status', id, at: iso(at), by, status: 'waiting', note, evidence: null, skill: null, waits })
 }
 
 export function updateLine(id: string, by: string, at: number, changes: Record<string, unknown>, note: string | null = null): string {

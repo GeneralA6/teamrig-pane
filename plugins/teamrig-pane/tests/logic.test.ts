@@ -10,7 +10,7 @@ import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
 import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
-import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine } from './fixtures'
+import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
@@ -266,6 +266,11 @@ describe('view', () => {
     expect(sameView({ ...base, tasks: bare }, { ...base, tasks: named })).toBe(false)
     const started = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' }), statusLine('T1', 'po', NOW, 'open', null, null, 'none'))
     expect(sameView(base, { ...base, tasks: started })).toBe(false)
+    // A reason the clock clears redraws: its row then reads ready.
+    const waits = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY }), waitingLine('T1', 'po', NOW - DAY, [{ kind: 'time', at: '2026-10-13 14:30' }]))
+    const waiting: Snapshot = { ...base, tasks: waits }
+    expect(sameView(waiting, { ...waiting, now: NOW + 60_000 })).toBe(true)
+    expect(sameView(waiting, { ...waiting, now: NOW + HOUR })).toBe(false)
     // A finished task leaves the list, and the bar's done today, at UTC midnight: a tick across it redraws.
     const done = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR }), statusLine('T1', 'po', NOW, 'done'))
     const late: Snapshot = { ...base, tasks: done, now: Date.UTC(2026, 9, 13, 23, 58) }
@@ -375,6 +380,21 @@ describe('rows', () => {
     expect(filtered.map(b => b.key)).toEqual(['header', ...shown, 'done:T7'])
     // Six finished draw no more line.
     expect(paneBlocks(snapshotOf(fold(...lines.slice(0, 12)), 'po'), 'mine').map(b => b.key)).not.toContain('done-more')
+  })
+
+  test('a waiting row names its reasons, then its note; an open one the unfinished tasks it comes after', async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po' }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      waitingLine('T2', 'po', NOW, [{ kind: 'decision', who: 'owner' }, { kind: 'task', id: 'T1' }], 'the copy first'),
+      createLine('T4', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      waitingLine('T4', 'po', NOW, [{ kind: 'time', at: '2026-10-16 14:00' }]),
+      createLine('T5', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', taskKeys: { after: ['T1'] } }),
+    )
+    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
+    expect(textAt(blocks, 'waiting-meta:T2')).toBe('      p3 · waiting since 14:00: decision owner, on T1; the copy first')
+    expect(textAt(blocks, 'waiting-meta:T4')).toBe('      p3 · waiting since 14:00: until Fri 10-16 14:00')
+    expect(textAt(blocks, 'next-meta:T5')).toBe('      p3 · after T1')
   })
 
   test('the more line names the key only when a done task is among the cut ones', async () => {

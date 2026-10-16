@@ -6,10 +6,10 @@
 // task's inside the Button that expands it), never a box per row, and inline the rows are capped.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, ExpandedTasks, Snapshot, TaskDetail, TaskRow, TaskStatus, ViewMode } from '../types'
-import { priorityText } from './core/read/index'
+import { priorityText, type WaitContext } from './core/read/index'
 import { COMMAND } from './command'
 import { refLabel, refParts } from './details'
-import { metaParts, whenWords } from './meta'
+import { contextOf, metaParts, whenWords } from './meta'
 import { BAR_LOOK } from './status-bar'
 import { areaView, ownerGroups, shortDue, shortTime, statusLines } from './view'
 import { cells } from './width'
@@ -97,8 +97,8 @@ function detailRows(section: string, task: TaskRow, detail: TaskDetail): Row[] {
 }
 
 /** The meta line's parts (meta.ts) between dim dots, each dim unless a color says it needs a look. */
-function metaSpans(task: TaskRow, now: number, viewer: string | null): Span[] {
-  return metaParts(task, now, viewer).flatMap((part, i) => {
+function metaSpans(task: TaskRow, context: WaitContext, viewer: string | null): Span[] {
+  return metaParts(task, context, viewer).flatMap((part, i) => {
     const span: Span = part.color === undefined ? { text: part.text, dim: true } : part
     return i === 0 ? [span] : [SEPARATOR, span]
   })
@@ -111,10 +111,10 @@ function indentOf(task: TaskRow): Span {
 
 /**
  * `◐ T12  title`, the title cut at TITLE_LINES lines, and under it one dim meta line (meta.ts) cut at META_LINES;
- * expanded, both show whole and the details follow. `viewer` is the area whose list it is (null in the all view):
- * a task it does not own says whose it is.
+ * expanded, both show whole and the details follow. `context` is the snapshot's (meta.ts contextOf); `viewer` is the
+ * area whose list it is (null in the all view): a task it does not own says whose it is.
  */
-function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, now: number, viewer: string | null): Block {
+function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, context: WaitContext, viewer: string | null): Block {
   const detail = expanded[task.id]
   const indent = indentOf(task)
   const key = `${section}:${task.id}`
@@ -126,7 +126,7 @@ function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, now:
   }
   const meta: Row = {
     key: `${section}-meta:${task.id}`,
-    spans: [indent, ...metaSpans(task, now, viewer)],
+    spans: [indent, ...metaSpans(task, context, viewer)],
     hang: indent,
     maxLines: detail === undefined ? META_LINES : undefined,
   }
@@ -194,7 +194,8 @@ function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expande
   const tasks = statusLines(snap.tasks, area, snap.now, filter)
   if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
   if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, snap.now))
-  return tasks.map(task => taskBlock(FILTER_SECTION[filter], task, expanded, snap.now, area))
+  const context = contextOf(snap.tasks, snap.now)
+  return tasks.map(task => taskBlock(FILTER_SECTION[filter], task, expanded, context, area))
 }
 
 /**
@@ -215,7 +216,8 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   // Filtered from the status bar, the header leads that status's tasks alone.
   if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
-  const tasks = (key: string, list: readonly TaskRow[]) => list.map(task => taskBlock(key, task, expanded, snap.now, view.area))
+  const context = contextOf(snap.tasks, snap.now)
+  const tasks = (key: string, list: readonly TaskRow[]) => list.map(task => taskBlock(key, task, expanded, context, view.area))
   const done = view.doneToday.map(task => doneBlock(task, expanded, snap.now))
   return [
     ...blocks,
@@ -231,13 +233,14 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
 function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
   const groups = ownerGroups(snap.tasks)
   if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
+  const context = contextOf(snap.tasks, snap.now)
   return groups.flatMap((group, i) => {
     const waiting = group.waiting > 0 ? ` · ${group.waiting} waiting` : ''
     const verifying = group.verifying > 0 ? ` · ${group.verifying} verifying` : ''
     const owner: Span = { text: group.owner, color: group.owner === snap.area ? 'claude' : undefined }
     // The first group sits under the buttons, already a gap away.
     const head = { ...sectionHeading(`owner:${group.owner}`, owner, ` · ${group.active.length} active${waiting}${verifying}`), opensSection: i > 0 }
-    return [head, ...group.active.map(task => taskBlock(group.owner, task, expanded, snap.now, null))]
+    return [head, ...group.active.map(task => taskBlock(group.owner, task, expanded, context, null))]
   })
 }
 
