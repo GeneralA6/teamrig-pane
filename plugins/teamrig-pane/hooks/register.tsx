@@ -562,7 +562,7 @@ export const register: Register = on => {
         <Button label="collapse" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />,
       )
 
-    // The Find field, under the buttons in the dock whatever it shows: the first change opens a search (a place, so back
+    // The Find field, under the switch in the dock whatever it shows: the first change opens a search (a place, so back
     // from a result's page returns to it), each change shows the results for its words, Enter opens the top one's page,
     // and an empty field or clear closes the search. It holds the query of the search shown, else nothing. `s: Find`
     // before it moves the focus ring into it; the field never takes the focus by itself, as it would then hold every
@@ -581,15 +581,19 @@ export const register: Register = on => {
         {place.kind === 'search' ? <Button label="clear" variant="secondary" onPress={() => void go($, leftSearch)} /> : null}
       </Box>
     )
-    // In the tasks view the mode buttons sit right under the switch, in the same block.
+    // In the tasks view the Find row sits right under the switch, then the mode buttons, in the same block. The field
+    // comes before every element that shows or hides with the place (collapse, clear, a page's steps): the engine keeps
+    // the focus ring at an index among the pane's elements, so one shown or hidden before the field would move the ring
+    // off it as the person types (the first key opens a search, which hides collapse), and the next keys would press
+    // the pane's hotkeys or reach the prompt.
     const controls =
       current === 'tasks' ? (
         <Box key="controls" flexDirection="column">
           {switchRow}
+          {findRow}
           <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
             {buttons}
           </Box>
-          {findRow}
         </Box>
       ) : (
         switchRow

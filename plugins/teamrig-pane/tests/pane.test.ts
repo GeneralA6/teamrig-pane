@@ -464,6 +464,21 @@ function keyedNode(node: unknown, key: string): unknown {
   return null
 }
 
+const FOCUSABLE = new Set(['Button', 'Input', 'Select'])
+
+/** A drawing's focusable elements (Button, Input, Select) in drawing order, by tag and key: the engine's focus ring is an index into them. */
+function focusables(node: unknown): { type: string; key: string }[] {
+  const props = propsOf(node)
+  const type = typeof node === 'object' && node !== null && 'type' in node && typeof node.type === 'string' ? node.type : null
+  if (type !== null && FOCUSABLE.has(type) && props !== null && 'key' in props && typeof props.key === 'string') return [{ type, key: props.key }]
+  return childrenOf(node).flatMap(focusables)
+}
+
+/** Where the Find field sits among a drawing's focusable elements; -1 where none is drawn. */
+function fieldIndex(node: unknown): number {
+  return focusables(node).findIndex(element => element.type === 'Input')
+}
+
 function keyedProps(node: unknown, key: string): object | null {
   return propsOf(keyedNode(node, key))
 }
@@ -770,7 +785,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^WARN the pane could not draw: .*state store unavailable/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'mine', 'all', 'archive', 'find-key'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'find-key', 'mine', 'all', 'archive'])
 
   isStateDown = false
   await pane.redraw(PANE_PROPS)
@@ -904,7 +919,8 @@ test('the Tasks / Changes switch leads the pane in every view, width and placeme
     await pane.redraw(props)
     const drawn = await pane.drawn()
     expect(buttonKeys(keyedNode(drawn, 'switch'))).toEqual(['tasks', 'changes'])
-    expect(buttonKeys(drawn).slice(0, 4)).toEqual(['tasks', 'changes', 'mine', 'all'])
+    // Then the mode buttons, past the Find row the dock draws between them.
+    expect(buttonKeys(drawn).filter(key => key !== 'find-key').slice(0, 4)).toEqual(['tasks', 'changes', 'mine', 'all'])
     const row = keyedProps(drawn, 'switch')
     expect(row !== null && 'flexWrap' in row ? row.flexWrap : null).toBe('wrap')
   }
@@ -1143,7 +1159,7 @@ test("a task id in an open card opens that task's page: its title and card alone
   await pane.press({ key: toT50 })
   drawn = await pane.drawn()
   // No status bar and no collapse on a page: the bar counts the list, and the page holds no card to collapse.
-  expect(buttonKeys(drawn)).toEqual(['tasks', 'changes', 'mine', 'all', 'archive', 'find-key', 'back', 'crumb:0', gotoKey(drawn, 'T58')])
+  expect(buttonKeys(drawn)).toEqual(['tasks', 'changes', 'find-key', 'mine', 'all', 'archive', 'back', 'crumb:0', gotoKey(drawn, 'T58')])
   expect(keyedProps(drawn, 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
   // Nowhere to go draws the step as dim words, no press.
   expect(await pane.find({ type: 'Text', text: 'forward ›' })).toMatchObject({ props: { dimColor: true } })
@@ -1151,8 +1167,8 @@ test("a task id in an open card opens that task's page: its title and card alone
   await pane.press({ key: gotoKey(drawn, 'T58') })
   expect(screenOf(await pane.drawn())).toEqual([
     ' Tasks Changes',
-    ' mine all archive',
     ' Find',
+    ' mine all archive',
     '',
     ' ‹ back  forward ›',
     ' Tasks › T50 › T58',
@@ -1203,11 +1219,11 @@ test('back, forward and the trail step through the places; the list keeps the he
   expect(buttonKeys(drawn)).toEqual([
     'tasks',
     'changes',
+    'find-key',
     'mine',
     'all',
     'archive',
     'collapse',
-    'find-key',
     'forward',
     'crumb:1',
     'crumb:2',
@@ -1279,8 +1295,8 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   // The active matches in plan order, each a press with a dim line of whose it is; the Find field draws no words.
   expect(screenOf(drawn)).toEqual([
     ' Tasks Changes',
-    ' mine all archive',
     ' Find  clear',
+    ' mine all archive',
     '',
     ' ○ T50  Load the feed\n       on etl',
     '',
@@ -1339,6 +1355,34 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   expect(buttonKeys(drawn)).not.toContain('find-key')
 })
 
+test('the Find field keeps its index among the focusable elements on the list, with a card open, in a search, on a page and on the Archive page, so the focus ring stays in it as the person types', async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, CHAIN)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  const indexes = [fieldIndex(await pane.drawn())]
+  // A card open shows collapse; the first key typed opens a search, which hides it and shows clear.
+  await pane.press({ key: 'next:T52' })
+  let drawn = await pane.drawn()
+  expect(buttonKeys(drawn)).toContain('collapse')
+  indexes.push(fieldIndex(drawn))
+  await pane.input({ key: 'find', text: 'e', kind: 'change' })
+  drawn = await pane.drawn()
+  expect(buttonKeys(drawn)).not.toContain('collapse')
+  expect(buttonKeys(drawn)).toContain('clear')
+  indexes.push(fieldIndex(drawn))
+  await pane.input({ key: 'find', text: 'etl' })
+  drawn = await pane.drawn()
+  expect(keyedNode(drawn, 'page-head')).not.toBe(null)
+  indexes.push(fieldIndex(drawn))
+  await pane.press({ key: 'archive' })
+  drawn = await pane.drawn()
+  expect(keyedNode(drawn, 'week-steps')).not.toBe(null)
+  indexes.push(fieldIndex(drawn))
+  // After Tasks, Changes and s: Find.
+  expect(indexes).toEqual([3, 3, 3, 3, 3])
+})
+
 test('archive (h) opens the Archive page at the week of now; prev (p) and next (l) step weeks; a row opens its page; back returns', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, [
@@ -1361,8 +1405,8 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   expect(await pane.find({ type: 'Text', text: /^next ›$/ })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(drawn)).toEqual([
     ' Tasks Changes',
-    ' mine all archive',
     ' Find',
+    ' mine all archive',
     '',
     ' ‹ back  forward ›',
     ' Tasks › Archive 10-12',
