@@ -4,7 +4,9 @@
 // anywhere but the newest place drops the places ahead of it; a page opens at its top, and a return from a page to
 // the list scrolls back to the element the page was opened from. A search (search.ts) is a place too, holding its
 // query: typing changes the query of the search shown, never adds a place, so back from a result's page returns to
-// the results, and emptying the field (or clear) closes the search. Ids and queries only, at most NAV_PLACES places,
+// the results, and emptying the field (or clear) closes the search. The Done page (done-rows.ts) is a place holding
+// its week: a step to an older or newer week changes the week of the page shown, never adds a place, so back
+// returns to where the page was opened from. Ids, queries and weeks only, at most NAV_PLACES places,
 // the oldest dropped first: what a page shows is read from the snapshot each time it draws (page.ts), and only the
 // pages a place names keep the details read for them. Pure: register.tsx keeps it in $.state and draws it.
 import type { Nav, Place } from '../types'
@@ -23,7 +25,7 @@ export function currentPlace(nav: Nav): Place {
   return nav.places[nav.at] ?? LIST
 }
 
-/** One place: the list whichever row it remembers, a task's page by its id, a search by its query. */
+/** One place: the list whichever row it remembers, a task's page by its id, a search by its query, the Done page by its week. */
 function samePlace(a: Place, b: Place): boolean {
   switch (a.kind) {
     case 'list':
@@ -32,6 +34,8 @@ function samePlace(a: Place, b: Place): boolean {
       return b.kind === 'task' && a.id === b.id
     case 'search':
       return b.kind === 'search' && a.query === b.query
+    case 'done':
+      return b.kind === 'done' && a.week === b.week
   }
 }
 
@@ -64,6 +68,12 @@ export function searched(nav: Nav, query: string): Nav {
   if (query === '') return leftSearch(nav)
   if (currentPlace(nav).kind !== 'search') return pushed(nav, { kind: 'search', query })
   return { ...nav, places: nav.places.map((place, i): Place => (i === nav.at ? { kind: 'search', query } : place)) }
+}
+
+/** `nav` showing the Done page for `week`: the Done page shown takes the week in its place, no new place; anywhere else it is pushed. */
+export function doneAt(nav: Nav, week: string): Nav {
+  if (currentPlace(nav).kind !== 'done') return pushed(nav, { kind: 'done', week })
+  return { ...nav, places: nav.places.map((place, i): Place => (i === nav.at ? { kind: 'done', week } : place)) }
 }
 
 /** `nav` with the search shown closed: it and the places ahead of it dropped, the place before it shown (the list when none). */
@@ -119,7 +129,7 @@ export function pagesKept<T>(byId: Readonly<Record<string, T>>, nav: Nav): Recor
 export type Landing = { kind: 'top' } | { kind: 'row'; key: string }
 
 /**
- * Where a step from `before` to `next` leaves the window: a page opens at its top, a search too (its field and first
+ * Where a step from `before` to `next` leaves the window: a page opens at its top, the Done page at each week, a search too (its field and first
  * results) unless it was shown already, and a step from a page back to the list lands on the element the list
  * remembers it was left from. Null for any other step, typing in a search among them, and when the list remembers
  * none: the window stays where it is.
@@ -129,6 +139,7 @@ export function landing(before: Nav, next: Nav): Landing | null {
   const from = currentPlace(before)
   switch (to.kind) {
     case 'task':
+    case 'done':
       return { kind: 'top' }
     case 'search':
       return from.kind === 'search' ? null : { kind: 'top' }
@@ -137,7 +148,7 @@ export function landing(before: Nav, next: Nav): Landing | null {
   }
 }
 
-/** A crumb's words: `Tasks` for the list, a page's task id, `Search` with its query in quotes. */
+/** A crumb's words: `Tasks` for the list, a page's task id, `Search` with its query in quotes, `Done 10-12` with its week's Monday. */
 export function placeLabel(place: Place): string {
   switch (place.kind) {
     case 'list':
@@ -146,6 +157,8 @@ export function placeLabel(place: Place): string {
       return place.id
     case 'search':
       return place.query === '' ? 'Search' : `Search "${place.query}"`
+    case 'done':
+      return `Done ${place.week.slice(5)}`
   }
 }
 

@@ -143,13 +143,14 @@ export type PaneView = 'tasks' | 'changes'
 /**
  * A place the tasks view shows (hooks/nav.ts): the list, remembering the key of the element a page was opened from
  * (null when none) so a return scrolls back to it, a task's page by its id, or a search (hooks/search.ts) by its
- * query, the words its Find field holds ('' before any is typed). Later places (a week of finished tasks) join as
- * kinds of their own.
+ * query, the words its Find field holds ('' before any is typed), or the Done page (hooks/done-rows.ts) by its week,
+ * the `YYYY-MM-DD` Monday it shows.
  */
 export type Place =
   | { readonly kind: 'list'; readonly row: string | null }
   | { readonly kind: 'task'; readonly id: string }
   | { readonly kind: 'search'; readonly query: string }
+  | { readonly kind: 'done'; readonly week: string }
 
 /** The places the person went through, oldest first (at most hooks/nav.ts NAV_PLACES), and the index of the one shown. */
 export type Nav = { readonly places: readonly Place[]; readonly at: number }
@@ -177,7 +178,7 @@ declare module 'claude-code' {
       requirements: RequirementProblem[]
       /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
       filter: BarStatus | null
-      /** Where the tasks view is (hooks/nav.ts): the list, a task's page or a search with its query, and the way back. */
+      /** Where the tasks view is (hooks/nav.ts): the list, a task's page, a search with its query or the Done page with its week, and the way back. */
       nav: Shaped<Nav>
       pages: Shaped<PageDetails>
     }

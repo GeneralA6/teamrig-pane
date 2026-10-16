@@ -38,6 +38,7 @@ import {
   canGoBack,
   canGoForward,
   currentPlace,
+  doneAt,
   forward,
   landing,
   leavingList,
@@ -52,6 +53,8 @@ import {
   type Landing,
   wentTo,
 } from './nav'
+import { weekSteps, weekOf } from './done'
+import { doneBlocks, weekWords } from './done-rows'
 import { pageBlocks } from './page'
 import { searchTasks, topResult } from './search'
 import { searchBlocks } from './search-rows'
@@ -67,6 +70,9 @@ const INLINE_MAX_ROWS = 6
 const TRAIL_SEPARATOR = ' › '
 const BACK_LABEL = '‹ back'
 const FORWARD_LABEL = 'forward ›'
+/** The Done page's steps to the week before and the week after the one it shows. */
+const PREV_LABEL = '‹ prev'
+const NEXT_LABEL = 'next ›'
 /** What the close hook answers the person's close with: the engine logs it as why the pane stayed. */
 const MINIMIZED = `minimized to its strip: a press on it, or /${COMMAND}, opens it again`
 /** How long one git run may take before it is killed and the repo shows the failure. */
@@ -104,7 +110,7 @@ const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as con
 /** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
 const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
 /** The places are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when Place or Nav changes shape. */
-const NAV_SHAPE = 'nav-v2'
+const NAV_SHAPE = 'nav-v3'
 const nav = atom({ plugin: 'teamrig-pane', key: 'nav' } as const, AT_LIST, { shape: NAV_SHAPE })
 const NO_PAGES: PageDetails = {}
 /** The pages' details, kept under CARDS_SHAPE as the open cards are: both hold TaskDetail. */
@@ -352,7 +358,9 @@ export const register: Register = on => {
             ? pageBlocks(snap, shown, place.id, await read($, pages))
             : place.kind === 'search'
               ? searchBlocks(snap, place.query)
-              : paneBlocks(snap, shown, open, bar?.filter ?? null)
+              : place.kind === 'done'
+                ? doneBlocks(snap, shown, place.week)
+                : paneBlocks(snap, shown, open, bar?.filter ?? null)
         const viewBlocks = current === 'tasks' ? tasksBlocks : changesBlocks(changed, isGitMissing(missing))
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
@@ -540,6 +548,17 @@ export const register: Register = on => {
           onPress={() => void go($, searching)}
         />,
       )
+    // Older done opens the Done page (done-rows.ts) at the week of now, in the dock alone, as search does.
+    if (!inline)
+      buttons.push(
+        <Button
+          key="older-done"
+          label="older done"
+          hotkey="h"
+          variant={place.kind === 'done' ? 'primary' : 'secondary'}
+          onPress={() => void go($, current => doneAt(current, weekOf(snap.now)))}
+        />,
+      )
     // A page shows no list, so no card in it to collapse.
     if (Object.keys(open).length > 0 && place.kind === 'list')
       buttons.push(
@@ -641,8 +660,30 @@ export const register: Register = on => {
       )
       return i === 0 ? [drawn] : [<Text key={`after:${crumb.index - 1}`} dimColor>{TRAIL_SEPARATOR}</Text>, drawn]
     })
+    // The Done page's week between its steps to the week before and after (p, l), each dim where the pane holds no
+    // older or newer week. A step changes the page's week in place, so back returns to where the page was opened from.
+    const stepTo = (week: string) => () => void go($, current => doneAt(current, week))
+    const steps = place.kind === 'done' ? weekSteps(place.week, snap.now) : null
+    const weekRow =
+      steps === null ? null : (
+        <Box key="week-steps" flexDirection="row" flexWrap="wrap" columnGap={2}>
+          {steps.prev === null ? (
+            nowhere('prev', PREV_LABEL)
+          ) : (
+            <Button key="prev" label={PREV_LABEL} hotkey="p" variant="secondary" onPress={stepTo(steps.prev)} />
+          )}
+          <Text key="week" bold>
+            {`week of ${weekWords(steps.week)}`}
+          </Text>
+          {steps.next === null ? (
+            nowhere('next', NEXT_LABEL)
+          ) : (
+            <Button key="next" label={NEXT_LABEL} hotkey="l" variant="secondary" onPress={stepTo(steps.next)} />
+          )}
+        </Box>
+      )
     const pageHead =
-      place.kind === 'task' || canGoForward(at) ? (
+      place.kind === 'task' || place.kind === 'done' || canGoForward(at) ? (
         <Box key="page-head" flexDirection="column">
           <Box flexDirection="row" columnGap={2}>
             {backStep}
@@ -660,6 +701,7 @@ export const register: Register = on => {
       <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={inline ? 0 : 1}>
         {controls}
         {pageHead}
+        {weekRow}
         {statusRows}
         {body.map(drawBlock)}
       </Box>
