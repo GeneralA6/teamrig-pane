@@ -2,9 +2,11 @@
 // browser keeps its history. The list comes first; a press on a task id in a card (card.ts) opens that task's
 // page, back and forward step along the places, and a crumb of the trail goes straight to its own. A jump from
 // anywhere but the newest place drops the places ahead of it; a page opens at its top, and a return from a page to
-// the list scrolls back to the element the page was opened from. Ids only, at most NAV_PLACES places, the oldest dropped first: what a page
-// shows is read from the snapshot each time it draws (page.ts), and only the pages a place names keep the details
-// read for them. Pure: register.tsx keeps it in $.state and draws it.
+// the list scrolls back to the element the page was opened from. A search (search.ts) is a place too, holding its
+// query: typing changes the query of the search shown, never adds a place, so back from a result's page returns to
+// the results, and emptying the field (or clear) closes the search. Ids and queries only, at most NAV_PLACES places,
+// the oldest dropped first: what a page shows is read from the snapshot each time it draws (page.ts), and only the
+// pages a place names keep the details read for them. Pure: register.tsx keeps it in $.state and draws it.
 import type { Nav, Place } from '../types'
 
 /** Most places kept; past it the oldest go first. */
@@ -21,10 +23,16 @@ export function currentPlace(nav: Nav): Place {
   return nav.places[nav.at] ?? LIST
 }
 
-/** One place: the list whichever row it remembers, a task's page by its id. */
+/** One place: the list whichever row it remembers, a task's page by its id, a search by its query. */
 function samePlace(a: Place, b: Place): boolean {
-  if (a.kind === 'list' || b.kind === 'list') return a.kind === b.kind
-  return a.id === b.id
+  switch (a.kind) {
+    case 'list':
+      return b.kind === 'list'
+    case 'task':
+      return b.kind === 'task' && a.id === b.id
+    case 'search':
+      return b.kind === 'search' && a.query === b.query
+  }
 }
 
 /** `nav` showing `place` next, past the one shown: the places ahead dropped, the oldest past NAV_PLACES too. The place shown already changes nothing. */
@@ -41,6 +49,28 @@ export function pushed(nav: Nav, place: Place): Nav {
 export function leavingList(nav: Nav, row: string): Nav {
   if (currentPlace(nav).kind !== 'list') return nav
   return { ...nav, places: nav.places.map((place, i): Place => (i === nav.at ? { kind: 'list', row } : place)) }
+}
+
+/** `nav` showing a search: the one shown, or a new one with no query yet, pushed as any place is. */
+export function searching(nav: Nav): Nav {
+  return currentPlace(nav).kind === 'search' ? nav : pushed(nav, { kind: 'search', query: '' })
+}
+
+/**
+ * `nav` showing the search for `query`, as the person types it: the search shown takes the query in its place, no new
+ * place, and anywhere else a search is pushed. An empty query closes the search (leftSearch).
+ */
+export function searched(nav: Nav, query: string): Nav {
+  if (query === '') return leftSearch(nav)
+  if (currentPlace(nav).kind !== 'search') return pushed(nav, { kind: 'search', query })
+  return { ...nav, places: nav.places.map((place, i): Place => (i === nav.at ? { kind: 'search', query } : place)) }
+}
+
+/** `nav` with the search shown closed: it and the places ahead of it dropped, the place before it shown (the list when none). */
+export function leftSearch(nav: Nav): Nav {
+  if (currentPlace(nav).kind !== 'search') return nav
+  const places = nav.places.slice(0, nav.at)
+  return places.length === 0 ? AT_LIST : { places, at: places.length - 1 }
 }
 
 export function canGoBack(nav: Nav): boolean {
@@ -89,19 +119,34 @@ export function pagesKept<T>(byId: Readonly<Record<string, T>>, nav: Nav): Recor
 export type Landing = { kind: 'top' } | { kind: 'row'; key: string }
 
 /**
- * Where a step from `before` to `next` leaves the window: a page opens at its top, and a step from a page back to the
- * list lands on the element the list remembers it was left from. Null for any other step, and when the list
- * remembers none: the window stays where it is.
+ * Where a step from `before` to `next` leaves the window: a page opens at its top, a search too (its field and first
+ * results) unless it was shown already, and a step from a page back to the list lands on the element the list
+ * remembers it was left from. Null for any other step, typing in a search among them, and when the list remembers
+ * none: the window stays where it is.
  */
 export function landing(before: Nav, next: Nav): Landing | null {
   const to = currentPlace(next)
-  if (to.kind === 'task') return { kind: 'top' }
-  return currentPlace(before).kind === 'task' && to.row !== null ? { kind: 'row', key: to.row } : null
+  const from = currentPlace(before)
+  switch (to.kind) {
+    case 'task':
+      return { kind: 'top' }
+    case 'search':
+      return from.kind === 'search' ? null : { kind: 'top' }
+    case 'list':
+      return from.kind === 'task' && to.row !== null ? { kind: 'row', key: to.row } : null
+  }
 }
 
-/** A crumb's words: `Tasks` for the list, a page's task id. */
+/** A crumb's words: `Tasks` for the list, a page's task id, `Search` with its query in quotes. */
 export function placeLabel(place: Place): string {
-  return place.kind === 'list' ? 'Tasks' : place.id
+  switch (place.kind) {
+    case 'list':
+      return 'Tasks'
+    case 'task':
+      return place.id
+    case 'search':
+      return place.query === '' ? 'Search' : `Search "${place.query}"`
+  }
 }
 
 /** A crumb of the trail: its place, the index a press goes to, and whether it is the place shown or one ahead of it. */

@@ -106,6 +106,7 @@ Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pa
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead |
 | `f` | Forward to the place back left, while there is one |
+| `s` | In the dock: a Find field that searches the tasks the pane holds (see [Search](#search)); emptying it, or `clear`, closes it |
 | `✕`, or `ctrl+x x` | Minimizes the pane to a one-row strip; it never closes |
 
 A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to

@@ -35,6 +35,8 @@ declare module 'claude-code/testing' {
     findAll(query: NodeQuery): Promise<FoundNode[]>
     /** Presses the button with this key. */
     press(target: { readonly key: string }): Promise<void>
+    /** Types `text` into the field with this key: a change (`onInput`), or by default a submit (Enter, `onSubmit`). */
+    input(target: { readonly key: string; readonly text: string; readonly kind?: 'change' | 'submit' }): Promise<unknown>
     /** Draws it again with new props (a resize, a scroll, a move inline). */
     redraw(props: PaneProps): Promise<void>
     /** The tree it drew last, as plain data. */
