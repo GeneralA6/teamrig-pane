@@ -47,7 +47,7 @@ teamrig binds by its Claude Code title (`/rename web`) gets the same mark, so th
 again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
 and lists the team's sessions. In the pane, `m` and `a` switch views, and `o`, `v`, `w`, `i` and `n`
 show one status's tasks alone (Status bar, below); on a task's page `b` and `f` go back and forward, and
-in the dock `s` searches the tasks (below).
+in the dock `s` searches the tasks and `h` lists the finished ones a week at a time (below).
 
 In the side dock the tasks sit a blank line apart, each wrapped title and meta line starting under the
 title, and a blank line and a bold heading open each section (each owner in `all`).
@@ -100,6 +100,15 @@ area's active tasks and those finished in the last 8 days, never older ones: the
 the finished ones newest first, at most 30, with a dim line counting the rest. A click on a result opens
 its page, Enter opens the top one's, and back returns to the results; the trail names the search by its
 words. Emptying the field or `clear` closes it; Esc only hands the keys back.
+
+`older done` (`h`, in the dock's mine and all row) opens the Done page on this week, a week starting
+Monday 00:00 UTC: the view's tasks closed done or dropped, a dim line a day, newest first, each task on one
+dim line with when it closed (in `all`, its owner too), at most 50 with a dim line counting the rest. Its
+head names whose tasks and how many were done and dropped. `‹ prev` (`p`) and `next ›` (`l`) step a
+week back and forward in place, so back returns to where the page was opened from; a click on a task
+opens its page, and back returns to the week. The pane holds the tasks finished in the last 8 days, so
+the steps reach back to the week those days start in, and that week ends with a dim line naming
+`teamrig list --status done,dropped` for older ones.
 
 Boards, agendas and docs are rewritten and their line numbers drift, so a line is quoted only while
 something still ties it to the task: an inbox line by its date (inboxes are append-only; one dated
