@@ -1,5 +1,6 @@
 // Copied from teamrig's src/config/types.ts by scripts/sync-core.ts: change it there, then run the sync.
 import type { TaskStatus } from '../register/model.ts';
+import type { CoreRuleKey } from '../rules/keys.ts';
 
 /** The config format this code reads and writes. Older files are migrated in memory on load. */
 export const CONFIG_VERSION = 3;
@@ -72,6 +73,29 @@ export type VerifyGate = (typeof VERIFY_GATES)[number];
 
 export function isVerifyGate(value: unknown): value is VerifyGate {
   return VERIFY_GATES.some((gate) => gate === value);
+}
+
+export const CONFLICT_WINNERS = ['local', 'teamrig'] as const;
+/** Which side of a recorded conflict wins: the local rule over the core rule, or the core rule over the local text kept. */
+export type ConflictWinner = (typeof CONFLICT_WINNERS)[number];
+
+export function isConflictWinner(value: unknown): value is ConflictWinner {
+  return CONFLICT_WINNERS.some((winner) => winner === value);
+}
+
+/**
+ * A local rule (a line of a CLAUDE.md, rules file, skill, memory file, hook or settings file) that conflicts with a
+ * core rule and that the user chose to keep, recorded by `rules keep`. The core pack lists it, naming the side that wins.
+ */
+export interface RuleConflict {
+  /** The file, `~/`-relative under the user's home folder, else absolute. */
+  readonly file: string;
+  /** The start of the line's text, which finds the line again when the lines above it move. */
+  readonly text: string;
+  readonly rule: CoreRuleKey;
+  readonly wins: ConflictWinner;
+  /** Why the user kept it, in their words. */
+  readonly reason?: string;
 }
 
 export interface SkillsConfig {
@@ -148,6 +172,25 @@ export interface LoopsConfig {
    * independent steps into one message; 0 never asks.
    */
   readonly chainNudgeAt: number;
+}
+
+/**
+ * Waking a session idle at its prompt when work is handed to it (src/wake/), instead of at its next prompt. A
+ * wake is a model turn, so only urgent work that can start now wakes, tasks handed together wake once, and each
+ * wake says what it costs.
+ */
+export interface WakeConfig {
+  /** Off: a session sees new work only at its next prompt. */
+  readonly enabled: boolean;
+  /**
+   * The least urgent priority that wakes a session: 1 wakes for p1 only. A session past its daily budget, or in
+   * the budget's quiet hours, wakes for p1 only whatever this says.
+   */
+  readonly priority: number;
+  /** How long a wake waits after the first new task it is for, so tasks handed together wake the session once. */
+  readonly batchSeconds: number;
+  /** The least time between two wakes of one session; work handed meanwhile waits and wakes it once. */
+  readonly minGapMinutes: number;
 }
 
 /** What `teamrig test` prints of a failed run. */
@@ -302,8 +345,8 @@ export interface AlertsConfig {
 /**
  * Context refresh: at any turn end with the session's context at or over `contextTokens`, at a task end
  * (`set <id> --status done`) with `everyTasks` tasks finished since its context was last fresh, or after the lead
- * asked for it, the session writes a handover; then teamrig starts it fresh on its own (`autoRestart`), or
- * the user types /clear.
+ * asked for it, the session writes a handover; then the user types /clear, or teamrig starts it fresh on its own
+ * (`autoRestart`).
  */
 export interface RefreshConfig {
   readonly enabled: boolean;
@@ -322,7 +365,7 @@ export interface RefreshConfig {
    * Once the handover is written and the turn has ended, start the session fresh, which reads the handover:
    * the plugin's mod runs /clear in its tab; where no mod claims the ask, end its Claude Code process and start
    * it again, in the same tab when `teamrig open` started it, else in a new tab. A prompt typed before then
-   * keeps the context. Off: the user types /clear.
+   * keeps the context. Off (the default): the user types /clear once done with the screen, which a /clear wipes.
    */
   readonly autoRestart: boolean;
   /** How long after the turn's end the automatic restart waits, so the user can still type to keep the context. */
@@ -339,9 +382,10 @@ export interface RefreshConfig {
 
 /**
  * Who may hire a session onto the team (`teamrig hire`): `off` nobody; `owner` the lead, once the owner
- * approved (`--approved-by`, kept with the hire); `lead` the lead, within the caps.
+ * approved (`--approved-by`, kept with the hire); `lead` the lead, within the caps; `automatic` as `lead`,
+ * and a hired session whose tasks are all closed may also retire itself (`teamrig retire`).
  */
-export const HIRING_POLICIES = ['off', 'owner', 'lead'] as const;
+export const HIRING_POLICIES = ['off', 'owner', 'lead', 'automatic'] as const;
 export type HiringPolicy = (typeof HIRING_POLICIES)[number];
 
 export function isHiringPolicy(value: unknown): value is HiringPolicy {
@@ -361,6 +405,36 @@ export interface HiringConfig {
   readonly idleHours: number;
   /** Days from a hire to its review date, unless the hire names one. */
   readonly reviewDays: number;
+  /** The most context tokens a rehired session's last Claude Code session may hold for `open --resume` to resume it. */
+  readonly resumeMaxTokens: number;
+  /** The most days that session may have been idle (its transcript unwritten) for `open --resume` to resume it. */
+  readonly resumeMaxIdleDays: number;
+}
+
+/**
+ * Who may start a burst (`teamrig burst start`), a time-boxed scale-out onto helpers and hired sessions
+ * that spends more of the week: `off` nobody; `owner` the lead, once the owner approved (`--approved-by`,
+ * kept with the burst); `lead` the lead, within the caps. No policy starts a burst on its own: it spends
+ * more of the week, a decision the owner gates, so a person always starts it by command.
+ */
+export const BURST_POLICIES = ['off', 'owner', 'lead'] as const;
+export type BurstPolicy = (typeof BURST_POLICIES)[number];
+
+export function isBurstPolicy(value: unknown): value is BurstPolicy {
+  return BURST_POLICIES.some((policy) => policy === value);
+}
+
+/** Bursts: who starts one, when the week's surplus is worth one, and the caps every burst stays within. */
+export interface BurstConfig {
+  readonly policy: BurstPolicy;
+  /** A surplus burst starts at the earliest this many hours before the week's reset. */
+  readonly surplusHours: number;
+  /** The least share of the week, in %, projected unused at the pace end for a surplus burst. */
+  readonly minSparePct: number;
+  /** The most helpers each burst session runs at once. */
+  readonly maxHelpers: number;
+  /** The most sessions one burst may hire (`hire --burst`); `hiring`'s caps apply as well. */
+  readonly maxHires: number;
 }
 
 /**
@@ -438,6 +512,8 @@ export interface KitConfig {
   readonly roles: RolesConfig;
   /** Decision areas only the human owner can approve; silence never counts as consent for them. */
   readonly ownerGates: readonly string[];
+  /** The local rules kept although they conflict with a core rule, each with the side that wins (`rules keep`). */
+  readonly ruleConflicts: readonly RuleConflict[];
   readonly messages: MessagesConfig;
   readonly register: RegisterConfig;
   readonly skills: SkillsConfig;
@@ -449,12 +525,14 @@ export interface KitConfig {
   readonly budget: BudgetConfig;
   readonly leadBoundary: LeadBoundaryConfig;
   readonly loops: LoopsConfig;
+  readonly wake: WakeConfig;
   readonly tests: TestsConfig;
   readonly github: GithubConfig;
   readonly alerts: AlertsConfig;
   readonly tabStatus: { readonly enabled: boolean };
   readonly refresh: RefreshConfig;
   readonly hiring: HiringConfig;
+  readonly burst: BurstConfig;
   /** How `teamrig open` starts a session in a new terminal tab. */
   readonly open: OpenConfig;
   /** Each session's Claude Code model and effort, by id; the lead's unset keys take `DEFAULT_LEAD_LAUNCH`. */

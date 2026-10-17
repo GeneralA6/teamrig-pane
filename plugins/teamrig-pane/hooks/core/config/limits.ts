@@ -15,6 +15,7 @@ export const CONFIG_LIMITS = {
   memoryIndexChars: { min: 500, max: 500_000 },
   skillListingChars: { min: 500, max: 500_000 },
   ownerGates: { maxItems: 8, maxLength: 60 },
+  ruleConflicts: { maxItems: 40 },
   protectedBranches: { maxItems: 8, maxLength: 64 },
   commitMaxLines: { min: 50, max: 5000 },
   commitMaxFiles: { min: 2, max: 500 },
@@ -27,6 +28,9 @@ export const CONFIG_LIMITS = {
   chainNudgeAt: { min: 0, max: 50 },
   leadOwnPaths: { maxItems: 16, maxLength: 256 },
   searchNudgeAt: { min: 0, max: 50 },
+  wakePriority: { min: 1, max: 99 },
+  wakeBatchSeconds: { min: 0, max: 3600 },
+  wakeMinGapMinutes: { min: 0, max: 1440 },
   maxFailureChars: { min: 500, max: 50_000 },
   githubRepos: { maxItems: 20, maxLength: 140 },
   closedDays: { min: 1, max: 365 },
@@ -50,6 +54,22 @@ export const CONFIG_LIMITS = {
   hiringMaxDailyPct: { min: 0.1, max: 100 },
   hiringIdleHours: { min: 1, max: 168 },
   hiringReviewDays: { min: 1, max: 90 },
+  hiringResumeMaxTokens: { min: 10_000, max: 1_000_000 },
+  hiringResumeMaxIdleDays: { min: 1, max: 90 },
+  burstSurplusHours: { min: 1, max: 167 },
+  burstMinSparePct: { min: 0.1, max: 100 },
+  burstMaxHelpers: { min: 0, max: 20 },
+  burstMaxHires: { min: 0, max: 20 },
+} as const;
+
+/**
+ * Bounds on the fields of one recorded rule conflict (`ruleConflicts`). A line longer than `textMaxLength` is
+ * recorded by its start, which is enough to find it again; the pack quotes less still.
+ */
+export const RULE_CONFLICT_LIMITS = {
+  fileMaxLength: 512,
+  textMaxLength: 300,
+  reasonMaxLength: 200,
 } as const;
 
 /**

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow } from '../types'
-import { priorityText, readMarks, readRegister, waitsText } from '../hooks/core/read/index'
+import { priorityText, readMarks, readRegister, TaskTree, waitsText } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
+import { whenWords } from '../hooks/meta'
 import { findPlaces } from '../hooks/places'
 import { paneBlocks, type Block } from '../hooks/rows'
 import { registerPaths, skippedText, TaskRegisterSource } from '../hooks/source'
@@ -18,10 +19,18 @@ const PATHS = registerPaths({ tasksDir: `${KIT}/teams/demo/state`, inboxDir: `${
 /** `MM-DD` or `MM-DD HH:MM`, as teamrig's shortUtc shortens a date. */
 const shortUtc = (text: string) => text.slice(5).replace('T', ' ')
 
-/** A row in the words of `teamrig list --all` (formatTask, src/register/views.ts): each fact it prints, from the pane's row. */
-function listLine(row: TaskRow): string {
+/** The dependency tree teamrig reads its list with, over the pane's rows read at `now`. */
+const treeOf = (rows: readonly TaskRow[], now: number) => new TaskTree(new Map(rows.map(row => [row.id, row])), new Date(now))
+
+/**
+ * A row in the words of `teamrig list --all` (formatTask, src/register/views.ts): each fact it prints, from the pane's
+ * row and the tree of the rows read with it: a due a task takes from a task that needs it reads `due 10-20 (from T3)`.
+ */
+function listLine(row: TaskRow, tree: TaskTree<TaskRow>): string {
   const parts = [`${row.id} ${row.status}`, priorityText(row.priority), `owner ${row.owner}`]
-  if (row.due !== null) parts.push(`due ${shortUtc(row.due)}`)
+  const due = tree.effectiveDue(row.id)
+  if (due !== undefined && due.from !== null) parts.push(`due ${shortUtc(due.due)} (from ${due.from})`)
+  else if (row.due !== null) parts.push(`due ${shortUtc(row.due)}`)
   if (row.after.length > 0) parts.push(`after ${row.after.join(',')}`)
   if (row.week !== null) parts.push(`week ${shortUtc(row.week)}`)
   parts.push(`from ${row.source}`)
@@ -76,7 +85,8 @@ describe('golden', () => {
   test('draws every task teamrig lists, field for field, and counts the lines it skips as its WARN line does', async () => {
     const snap = await paneSnapshot(goldenFiles())
     expect(linesOf(GOLDEN.list).length).toBe(6)
-    expect(snap.tasks.map(listLine).sort()).toEqual(linesOf(GOLDEN.list))
+    const tree = treeOf(snap.tasks, snap.now)
+    expect(snap.tasks.map(row => listLine(row, tree)).sort()).toEqual(linesOf(GOLDEN.list))
     expect(`WARN ${snap.problem}`).toBe(warnOf(GOLDEN.warn))
   })
 
@@ -89,9 +99,12 @@ describe('golden', () => {
   })
 
   test('draws its rows from what teamrig wrote: a waiting task\'s typed reasons and note, an open one\'s unfinished after', async () => {
-    const blocks = paneBlocks(await paneSnapshot(goldenFiles()), 'mine')
+    const snap = await paneSnapshot(goldenFiles())
+    const blocks = paneBlocks(snap, 'mine')
+    // Since when T2 waits is the moment the capture ran.
+    const since = whenWords(snap.tasks.find(task => task.id === 'T2')?.statusAt ?? '', snap.now)
     expect(rowText(blocks, 'working:T1')).toBe('◐ T1  First task with ref')
-    expect(rowText(blocks, 'waiting-meta:T2')).toBe('      p2 · waiting since 13:41: decision owner, until Wed 01-09 12:00; waiting on beta')
+    expect(rowText(blocks, 'waiting-meta:T2')).toBe(`      p2 · waiting since ${since}: decision owner, until Wed 01-09 12:00; waiting on beta`)
     expect(rowText(blocks, 'next:T3')).toBe('○ T3  Goals task renamed')
     expect(rowText(blocks, 'next-meta:T3')).toBe('      p1 · due Tue 10-20 · after T1 · asked by lead')
   })
@@ -113,7 +126,9 @@ describe('golden', () => {
     expect(GOLDEN.fixtures.map(fixture => fixture.name)).toEqual(['events-v0.jsonl', 'events-v1.jsonl', 'events-v2.jsonl'])
     for (const fixture of GOLDEN.fixtures) {
       const register = readRegister(fixture.events)
-      const lines = [...register.state.tasks.values()].map(task => listLine(rowOf(task, []))).sort()
+      const rows = [...register.state.tasks.values()].map(task => rowOf(task, []))
+      const tree = treeOf(rows, GOLDEN.generatedAt)
+      const lines = rows.map(row => listLine(row, tree)).sort()
       expect({ fixture: fixture.name, lines }).toEqual({ fixture: fixture.name, lines: linesOf(fixture.list) })
       const skipped = skippedText(PATHS, register, readMarks(''))
       expect({ fixture: fixture.name, warn: skipped === null ? '' : `WARN ${skipped}` }).toEqual({ fixture: fixture.name, warn: warnOf(fixture.warn) })
