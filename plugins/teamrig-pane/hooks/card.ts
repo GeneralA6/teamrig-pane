@@ -4,21 +4,22 @@
 // written before teamrig kept one shows the ask quoted from its ref (details.ts) instead. Status: since when, who
 // set it when that is known, then why a waiting task waits. Note: the newest status note. Proof: what proves a
 // verifying task. Priority, Due (Verify by while verifying; a date taken from a task that needs it names that task;
-// late in red) and Week, each on its own row. After: the
-// tasks planned first, with their status. Goal: each goal's roadmap item. From: who asked, or the GitHub issue it
-// came from. Added: when it was written and by whom, as a tracker's Created row. Owner: in another area's
-// list. Reference: where the ask is written, each file by its folder and name, other words as written (an issue
-// ref is the first link instead). Evidence. Links (links.ts). The register's fold keeps no parent, sub-tasks or
-// history, so the card has no row for them. In the list each line starts with a guide under the task's title; on a
-// task's page (page.ts) the card has the body to itself and starts at its edge. Pure: rows of spans that layout.ts
-// wraps, each value's lines under the value column, and register.tsx draws, a link as a link and a task id the
-// snapshot holds (ids.ts) underlined, a press on it opening that task's page.
+// late in red) and Week, each on its own row. After: the tasks planned first, with their status. Needed by: each
+// active task of another owner that needs it, with its owner and due, the earliest due first. Goal: each goal's
+// roadmap item. From: who asked, or the GitHub issue it came from. Added: when it was written and by whom, as a
+// tracker's Created row. Owner: in another area's list. Reference: where the ask is written, each file by its
+// folder and name, other words as written (an issue ref is the first link instead). Evidence. Links (links.ts). The
+// register's fold keeps no parent, sub-tasks or history, so the card has no row for them. In the list each line
+// starts with a guide under the task's title; on a task's page (page.ts) the card has the body to itself and starts
+// at its edge. Pure: rows of spans that layout.ts wraps, each value's lines under the value column, and
+// register.tsx draws, a link as a link and a task id the snapshot holds (ids.ts) underlined, a press on it opening
+// that task's page.
 import type { TaskDetail, TaskRow } from '../types'
 import type { TaskTree, WaitContext } from './core/read/index'
 import { lineRef, refLabel, refParts } from './details'
 import { idSpans } from './ids'
 import { issueOf, taskLinks } from './links'
-import { dayWords, dueWords, lateWords, STATUS_WORDS, waitingWords, whenWords } from './meta'
+import { dayWords, dueWords, lateWords, neededByLines, STATUS_WORDS, waitingWords, whenWords } from './meta'
 import type { Row, Span } from './rows'
 
 /** Starts each card line in the list: the guide that ties the card to its task's title. */
@@ -162,6 +163,7 @@ export function cardRows(
     ...field('due', task.status === 'verifying' ? 'Verify by' : 'Due', dueLines(task, tree)),
     ...field('week', 'Week', weekLines(task)),
     ...field('after', 'After', afterLines(task, context)),
+    ...field('needed-by', 'Needed by', neededByLines(task, tree).map(text => [{ text }])),
     ...field('goal', 'Goal', goalLines(task, detail)),
     ...field('from', 'From', fromLines(task)),
     ...field('added', 'Added', addedLines(task, context.now)),

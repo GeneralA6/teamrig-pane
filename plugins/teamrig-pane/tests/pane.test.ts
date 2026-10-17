@@ -1166,8 +1166,9 @@ test("a task id in an open card opens that task's page: its title and card alone
 
   await pane.press({ key: toT50 })
   drawn = await pane.drawn()
-  // No status bar and no collapse on a page: the bar counts the list, and the page holds no card to collapse.
-  expect(buttonKeys(drawn)).toEqual(['tasks', 'changes', 'find-key', 'mine', 'all', 'archive', 'back', 'crumb:0', gotoKey(drawn, 'T58')])
+  // No status bar and no collapse on a page: the bar counts the list, and the page holds no card to collapse. Its card
+  // names T58, planned first, and T52, of another owner, which needs it.
+  expect(buttonKeys(drawn)).toEqual(['tasks', 'changes', 'find-key', 'mine', 'all', 'archive', 'back', 'crumb:0', gotoKey(drawn, 'T58'), gotoKey(drawn, 'T52')])
   expect(keyedProps(drawn, 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
   // Nowhere to go draws the step as dim words, no press.
   expect(await pane.find({ type: 'Text', text: 'forward ›' })).toMatchObject({ props: { dimColor: true } })
@@ -1279,8 +1280,9 @@ test('mine and all show the list alone; inline no page shows; a page whose task 
     children: [{ props: { dimColor: true } }, '\n', { props: { dimColor: true } }],
   })
   await pane.press({ key: 'back' })
-  // T50's page names T58 no more as a press: the snapshot no longer holds it.
-  expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('goto:'))).toEqual([])
+  // T50's page names T58 no more as a press: the snapshot no longer holds it. T52, which needs T50, still is one.
+  const onT50 = await pane.drawn()
+  expect(buttonKeys(onT50).filter(key => key.startsWith('goto:'))).toEqual([gotoKey(onT50, 'T52')])
 })
 
 test('the dock always draws the Find field, s moving the focus into it; each change draws the matches, Enter opens the top one, back returns, clear or an empty field closes the search', async ($, on) => {

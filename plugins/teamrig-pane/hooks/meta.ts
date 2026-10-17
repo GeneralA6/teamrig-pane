@@ -1,10 +1,10 @@
 // The dim line under a task's title (rows.ts), in plain words: its priority, when it is due (teamrig's effective
-// due: an earlier date of a task that needs it, naming that task), how long it has
-// stood at its status and what holds it (a waiting task's reasons, an open one's unfinished `after`), then
-// what needs a look (late, new, not picked up). An open task's card (card.ts) shows it in place of this line,
-// in the same words. Every date and time is UTC, as teamrig writes them; "today" is the UTC day of the
-// snapshot's clock. Pure: the words change with the clock and the other tasks' statuses, so view.ts's sameView
-// compares them to know when a poll must redraw.
+// due: an earlier date of a task that needs it, naming that task), how long it has stood at its status and what
+// holds it (a waiting task's reasons, an open one's unfinished `after`), whom it holds up (the active tasks of other
+// sessions that need it), then what needs a look (late, new, not picked up). An open task's card (card.ts) shows it
+// in place of this line, in the same words. Every date and time is UTC, as teamrig writes them; "today" is the UTC
+// day of the snapshot's clock. Pure: the words change with the clock and the other tasks' statuses, so view.ts's
+// sameView compares them to know when a poll must redraw.
 import type { ThemeKey } from 'claude-code'
 import type { TaskRow, TaskStatus } from '../types'
 import { ACTIVE_STATUSES, priorityText, TaskTree, unfinishedAfter, waitText, type EffectiveDue, type WaitContext } from './core/read/index'
@@ -71,17 +71,48 @@ function effectiveDueOf(task: TaskRow, tree: TaskTree<TaskRow>): EffectiveDue | 
   return task.due === null || at === undefined ? undefined : { due: task.due, at, from: null }
 }
 
+/** `today 18:00`, `today`, `Fri 10-17 18:00` or `Fri 10-17`: a due at `now`, its time only when written with one. */
+function dateWords(due: EffectiveDue, now: number): string {
+  const day = utcDay(due.at) === utcDay(now) ? 'today' : dayWords(due.at)
+  // A bare day is due at its end, so only a due written with a time names one.
+  return due.due.trim().length > 10 ? `${day} ${new Date(due.at).toISOString().slice(11, 16)}` : day
+}
+
 /**
- * `today 18:00`, `today`, `Fri 10-17 18:00` or `Fri 10-17`, the effective due at `tree`'s clock, then `(from T7)`
- * when it is the date of T7, a task that needs this one; a due teamrig cannot read, as written less its year.
+ * The effective due at `tree`'s clock in dateWords' words, then `(from T7)` when it is the date of T7, a task that
+ * needs this one; a due teamrig cannot read, as written less its year.
  */
 export function dueWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null {
   const due = effectiveDueOf(task, tree)
   if (due === undefined) return task.due === null ? null : task.due.slice(5)
-  const day = utcDay(due.at) === utcDay(tree.context.now) ? 'today' : dayWords(due.at)
-  // A bare day is due at its end, so only a due written with a time names one.
-  const words = due.due.trim().length > 10 ? `${day} ${new Date(due.at).toISOString().slice(11, 16)}` : day
+  const words = dateWords(due, tree.context.now)
   return due.from === null ? words : `${words} (from ${due.from})`
+}
+
+/** `T7 (beta, due Thu 10-22)`: a task that needs another, its owner, and its effective due when it has one. */
+function neederWords(needer: TaskRow, tree: TaskTree<TaskRow>, withDue = true): string {
+  const due = withDue ? tree.effectiveDue(needer.id) : undefined
+  const facts = due === undefined ? [needer.owner] : [needer.owner, `due ${dateWords(due, tree.context.now)}`]
+  return `${needer.id} (${facts.join(', ')})`
+}
+
+/**
+ * `needed by T7 (beta, due Thu 10-22) +1`, as teamrig's rows say whom an active task holds up beyond its owner
+ * (core register/tree.ts neededByOthers): the active task of another owner that needs it with the earliest effective
+ * due, that task's owner and due, and how many more. The due is left out when the task's own due label already names
+ * where it comes from (`due Thu 10-22 (from T7)`). Null when no other owner's task needs it.
+ */
+export function neededByWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null {
+  const [first, ...rest] = tree.neededByOthers(task.id)
+  if (first === undefined) return null
+  const due = tree.effectiveDue(first.id)
+  const shown = due !== undefined && tree.effectiveDue(task.id)?.from === (due.from ?? first.id)
+  return `needed by ${neederWords(first, tree, !shown)}${rest.length > 0 ? ` +${rest.length}` : ''}`
+}
+
+/** Each active task of another owner that needs it, the earliest effective due first, in neederWords' words. */
+export function neededByLines(task: TaskRow, tree: TaskTree<TaskRow>): string[] {
+  return tree.neededByOthers(task.id).map(needer => neederWords(needer, tree))
 }
 
 /**
@@ -125,8 +156,9 @@ export function ageWords(ms: number): string {
 
 /**
  * The meta line's parts, in order: `on <owner>` when `viewer` (the area whose list it is) does not own it, the
- * priority, `due …` (`verify by …` while verifying; `(from T7)` on a date taken from T7), `<status> since …` with why a waiting task waits or what
- * proves a verifying one, `after T5` while a task not yet started has one unfinished, then the flags: `late 1d`,
+ * priority, `due …` (`verify by …` while verifying; `(from T7)` on a date taken from T7), `<status> since …` with
+ * why a waiting task waits or what proves a verifying one, `after T5` while a task not yet started has one
+ * unfinished, `needed by T7 (beta)` while a task of another owner needs it (neededByWords), then the flags: `late 1d`,
  * `new` (to its owner), `not picked up 2d`, and `asked by <who>` on a task not yet started that someone else
  * asked for. `tree` (treeOf) holds the clock and marks the ready reasons. `viewer` null (the all view)
  * names no owner.
@@ -149,6 +181,8 @@ export function metaParts(task: TaskRow, tree: TaskTree<TaskRow>, viewer: string
   // A plan dependency holds a task only until it starts, and only while one of its tasks is unfinished.
   const first = task.status === 'open' ? unfinishedAfter(task.after, context) : []
   if (first.length > 0) parts.push({ text: `after ${first.join(', ')}` })
+  const neededBy = neededByWords(task, tree)
+  if (neededBy !== null) parts.push({ text: neededBy })
   const late = lateWords(task, tree)
   if (late !== null) parts.push({ text: late, color: 'error' })
   const flags = flagsOf(task, tree)
