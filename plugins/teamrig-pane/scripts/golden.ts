@@ -143,11 +143,11 @@ try {
 
   // Every event kind, a null ref (no --ref, then update --ref none), a priority-only update, a goal with a space.
   teamrig(['team', 'create', TEAM, '--sessions', 'lead,alpha,beta', '--project', project])
-  as('lead', 'add', '--owner', 'alpha', '--priority', 'p1', '--title', 'First task with ref', '--ref', 'msg 10-15')
-  as('lead', 'add', '--owner', 'alpha', '--priority', 'p3', '--title', 'No ref task')
-  as('lead', 'add', '--owner', 'alpha', '--priority', 'p2', '--title', 'Goals task', '--ref', 'doc:1', '--goals', 'G1,roadmap goal', '--due', '2026-10-20', '--week', '2026-10-12')
-  as('alpha', 'add', '--owner', 'beta', '--priority', 'p4', '--title', 'Beta task from alpha', '--ref', 'x')
-  as('lead', 'add', '--owner', 'alpha', '--priority', 'p5', '--title', 'To be dropped', '--ref', 'r')
+  as('lead', 'add', '--owner', 'alpha', '--priority', 'p1', '--title', 'First task with ref', '--description', 'The first task, with a ref', '--ref', 'msg 10-15')
+  as('lead', 'add', '--owner', 'alpha', '--priority', 'p3', '--title', 'No ref task', '--description', 'A task with no ref')
+  as('lead', 'add', '--owner', 'alpha', '--priority', 'p2', '--title', 'Goals task', '--description', 'A task with goals, a due and a week', '--ref', 'doc:1', '--goals', 'G1,roadmap goal', '--due', '2026-10-20', '--week', '2026-10-12')
+  as('alpha', 'add', '--owner', 'beta', '--priority', 'p4', '--title', 'Beta task from alpha', '--description', 'A task one session asks of another', '--ref', 'x')
+  as('lead', 'add', '--owner', 'alpha', '--priority', 'p5', '--title', 'To be dropped', '--description', 'A task dropped later', '--ref', 'r')
   as('alpha', 'set', 'T1', '--status', 'in-progress')
   as('alpha', 'set', 'T2', '--status', 'waiting', '--waits', 'decision:owner,time:2030-01-09 12:00', '--note', 'waiting on beta')
   as('alpha', 'update', 'T3', '--after', 'T1')
@@ -160,7 +160,7 @@ try {
   as('lead', 'rename', 'alpha', 'alpha-team')
   // A priority only the team config names.
   writeFileSync(configFile, withPriority(read(configFile), { id: 7, name: 'icebox' }))
-  as('lead', 'add', '--owner', 'alpha', '--priority', 'p7', '--title', 'Icebox task')
+  as('lead', 'add', '--owner', 'alpha', '--priority', 'p7', '--title', 'Icebox task', '--description', 'A task at a priority only the config names')
 
   // The inbox: read to its second line, one more line, then trimmed from the top, then rewritten.
   as('lead', 'inbox', 'add', '--to', 'alpha', '--text', 'first line')
