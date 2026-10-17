@@ -15,7 +15,8 @@ labels on. No model calls, so no tokens. A switch over the list flips it to the 
 - **mine**: the session's area, under its status bar (Status bar, below) and a header counting its
   active tasks and unread inbox lines (`3 active · inbox 1 unread`; a pin names the area first,
   `web (pinned) · 3 active · …`). Its tasks follow in sections, each in teamrig's plan order (priority,
-  then due with undated last, then id) under a bold heading with its count, an empty one left out:
+  then the date it works to with undated last, then id: its own due, or an earlier one of an active task
+  that needs it) under a bold heading with its count, an empty one left out:
   `Verifying` (the nearest to done, so closing them comes first), `Working on`, `Up next`, `Waiting`
   (its own waiting tasks, then the newest 8 it asked of other sessions, each saying `on <owner>`) and
   `Done today`, the UTC day the status bar counts (the newest 6, then a dim line saying how many more,
@@ -27,14 +28,17 @@ labels on. No model calls, so no tokens. A switch over the list flips it to the 
 A task is two lines: its status mark, bold id and title (cut at two lines, whole while its card is open), then a dim meta line under
 the title. The mark is its status as `teamrig list` names it: `○` open, `◐` in progress, `◑` verifying,
 `■` waiting, `✓` done, `✗` dropped. The meta line reads `p2 · due Sat 10-17 · in progress since 11:55`:
-its priority, its due date (`verify by` while verifying), since when it stands at its status and why,
-then what needs a look. A verifying task's change has landed and waits for what proves it works: its
+its priority, the date it works to (its own due, or an earlier one of an active task that needs it,
+which it names: `due Wed 10-14 (from T7)`; `verify by` while verifying), since when it stands at its status
+and why, whom it holds up, then what needs a look. A verifying task's change has landed and waits for what proves it works: its
 note says what that is (`verifying since 09:10: tests pass on main`). A waiting task waits on a
 decision, an approval, another task or a time (`teamrig set --status waiting --waits`): in red, its line
 names each, a cleared one `ready`, then its note (`waiting since 14:00: decision owner, on T1 ready,
 until Fri 10-16 14:00; the copy first`). An old `blocked` line reads as waiting, with only its note. A
-task not started names the tasks planned before it that are still unfinished (`after T1, T2`). Then the
-flags: `late 1d` (red, past its due), `new` (its owner has not touched it yet), `not picked up 2d` (red,
+task not started names the tasks planned before it that are still unfinished (`after T1, T2`). A task the
+active task of another session needs says so, as `teamrig list` does: `needed by T7 (beta, due Thu 10-22) +1`,
+the one due first, its owner and due (left out when the due already says `(from T7)`), and how many more.
+Then the flags: `late 1d` (red, past its due), `new` (its owner has not touched it yet), `not picked up 2d` (red,
 still untouched 24 hours after it was assigned) and `asked by lead` on a task not started that another
 session asked for. A task done today is one dim line, `✓ T11  Signup API`, the time it closed at the
 right edge.
@@ -71,9 +75,12 @@ the value column, and shows only when it has a value:
 - **Note:** its newest status note;
 - **Proof:** what proves a verifying task, in green;
 - **Priority:** its number;
-- **Due:** its due date, `late 2d` in red once past it; **Verify by** while it is verifying;
+- **Due:** the date it works to, `late 2d` in red once past it, a date taken from a task that needs it
+  naming that task (`Wed 10-14 (from T7)`); **Verify by** while it is verifying;
 - **Week:** its planning week, by its first day;
 - **After:** the tasks planned before it, each with its status (`T5 (done)`);
+- **Needed by:** each active task of another owner that needs it, with its owner and due
+  (`T7 (beta, due Thu 10-22)`), the one due first;
 - **Goal:** the roadmap item of each of its goals (`--goals G10.1g`, `S4`), else the bare id;
 - **From:** who asked, or `GitHub issue #12` for a task teamrig opened from one;
 - **Added:** when it was written and by whom;
@@ -89,7 +96,7 @@ the value column, and shows only when it has a value:
 
 The card has no row for a parent, sub-tasks or history: the register keeps none of them for a task.
 
-A click on a task id in a card (in its `After` row, or written in a note) opens that task's page: its
+A click on a task id in a card (in its `After` or `Needed by` row, or written in a note) opens that task's page: its
 title whole and its card, the body to itself. Over it, `‹ back` and `forward ›` (`b`, `f`; dim words when
 there is nowhere to go) step through the places you went, as a browser does, and a trail under them names
 the last 4 (`Tasks › T50 › T58`): the one shown bold, those ahead of it dim, the rest a click away, `…` where

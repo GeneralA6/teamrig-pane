@@ -147,8 +147,9 @@ No area for this session yet: /rename the tab to its session's id or name, run `
 ```
 
 **mine** shows its status bar (below), then a header counting the area's active tasks and unread inbox lines,
-`3 active · inbox 2 unread`, then its tasks in sections, each in teamrig's plan order (priority, then due, undated
-last, then id) under a bold heading with its count; an empty section is left out:
+`3 active · inbox 2 unread`, then its tasks in sections, each in teamrig's plan order (priority, then the date it
+works to, undated last, then id: its own due, or an earlier one of an active task that needs it) under a bold
+heading with its count; an empty section is left out:
 
 1. `Verifying`: the change landed, its proof is still to come; these lead, because closing them comes first;
 2. `Working on`: in progress;
@@ -179,10 +180,11 @@ A task is two lines, its title and a dim meta line under it:
 | `○` `◐` `◑` `■` `✓` `✗` | open, in-progress, verifying, waiting, done, dropped (as `teamrig list` names them) |
 | `T12`, the title | The id, bold, and the title, cut at two lines; whole while its card is open |
 | `p2` | Its priority |
-| `due Sat 10-17` | Its due date; `verify by` while verifying |
+| `due Sat 10-17` | The date it works to: its own due, or an earlier one of an active task that needs it, which it names (`due Wed 10-14 (from T7)`); `verify by` while verifying |
 | `in progress since 11:55` | Since when it stands at its status (a time today, else a day); a verifying task's note follows, what will prove it |
 | `waiting since 14:00: decision owner, on T5 ready; the copy first` | In red: what a waiting task waits for (a decision, an approval, a task or a time, as `teamrig list` words it), a cleared one `ready`, then its note. An old `blocked` line reads as waiting, with only its note |
 | `after T5, T6` | A task not started: the tasks planned before it that are still unfinished |
+| `needed by T7 (beta, due Thu 10-22) +1` | Whom it holds up, as `teamrig list` says it: the active task of another session that needs it and is due first, its owner and due (left out when the due already says `(from T7)`), and how many more |
 | `on api` | In `Waiting`: a task asked of another session, and its owner |
 | `late 1d` | Past its due, in red |
 | `new` | The owner has not touched it yet |
@@ -235,6 +237,7 @@ value:
     │ Due          Sat 10-17
     │ Week         Tue 10-13
     │ After        T5 (done)
+    │ Needed by    T14 (web, due Mon 10-19)
     │ Goal         G10.2 Accounts
     │ From         lead
     │ Added        Tue 10-13 by lead
@@ -250,9 +253,10 @@ value:
 | `Note` | Its newest status note |
 | `Proof` | What proves a verifying task (`teamrig set --proof`), in green |
 | `Priority` | Its priority, a number |
-| `Due` | Its due date, `late 2d` in red once past it; `Verify by` while it is verifying |
+| `Due` | The date it works to, `late 2d` in red once past it, a date taken from a task that needs it naming that task (`Wed 10-14 (from T7)`); `Verify by` while it is verifying |
 | `Week` | Its planning week, by its first day |
 | `After` | The tasks planned before it (`--after`), each with its status |
+| `Needed by` | Each active task of another owner that needs it (planned after it, or waiting on it), with its owner and due, the one due first |
 | `Goal` | The roadmap item of each of its `--goals` from the goals document (see [reference.md](reference.md#where-the-register-is)), else the bare id |
 | `From` | Who asked, or `GitHub issue #12` for a task teamrig opened from one |
 | `Added` | When it was written and by whom |
