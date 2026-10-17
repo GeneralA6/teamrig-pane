@@ -98,10 +98,12 @@ describe('golden', () => {
   test('draws its rows from what teamrig wrote: a waiting task\'s typed reasons and note, an open one\'s unfinished after', async () => {
     const snap = await paneSnapshot(goldenFiles())
     const blocks = paneBlocks(snap, 'mine')
-    // Since when T2 waits is the moment the capture ran.
-    const since = whenWords(snap.tasks.find(task => task.id === 'T2')?.statusAt ?? '', snap.now)
+    // Since when T1 works and T2 waits is the moment the capture ran.
+    const since = (id: string) => whenWords(snap.tasks.find(task => task.id === id)?.statusAt ?? '', snap.now)
     expect(rowText(blocks, 'working:T1')).toBe('◐ T1  First task with ref')
-    expect(rowText(blocks, 'waiting-meta:T2')).toBe(`      p2 · waiting since ${since}: decision owner, until Wed 01-09 12:00; waiting on beta`)
+    // T3 comes after T1, so T1 works to T3's date, as teamrig's list says it.
+    expect(rowText(blocks, 'working-meta:T1')).toBe(`      p1 · due Tue 10-20 (from T3) · in progress since ${since('T1')}`)
+    expect(rowText(blocks, 'waiting-meta:T2')).toBe(`      p2 · waiting since ${since('T2')}: decision owner, until Wed 01-09 12:00; waiting on beta`)
     expect(rowText(blocks, 'next:T3')).toBe('○ T3  Goals task renamed')
     expect(rowText(blocks, 'next-meta:T3')).toBe('      p1 · due Tue 10-20 · after T1 · asked by lead')
   })

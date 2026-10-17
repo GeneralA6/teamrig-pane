@@ -4,6 +4,7 @@ import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { NOTHING_EXPANDED, paneBlocks } from '../hooks/rows'
 import { BAR_LOOK, BAR_STATUSES, barCells, barCounts, drawnText, filterText, inlineBarRows, statusBar, utcDay, type BarCounts, type BarPiece } from '../hooks/status-bar'
+import { treeOf } from '../hooks/meta'
 import { statusLines } from '../hooks/view'
 import { cells } from '../hooks/width'
 import { HOUR, NOW, createLine, statusLine, updateLine } from './fixtures'
@@ -272,7 +273,7 @@ describe('status bar filter', () => {
     const none = paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'working')
     expect(keysOf(none)).toEqual(['header', 'none-filtered'])
     expect(none[1]?.rows[0]?.spans).toEqual([{ text: 'Nothing in progress.', dim: true }])
-    expect(statusLines(tasks, 'po', NOW, 'done-today').map(task => task.id)).toEqual(['T5', 'T4'])
+    expect(statusLines(tasks, 'po', treeOf(tasks, NOW), 'done-today').map(task => task.id)).toEqual(['T5', 'T4'])
   })
 
   test('the all view takes no filter', async () => {

@@ -167,6 +167,17 @@ describe('card', () => {
     ])
   })
 
+  test('Due names the task whose earlier date the task works to, its id a press', async () => {
+    const tasks = rowsOf([
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', due: '2026-10-16' }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', due: '2026-10-14', taskKeys: { after: ['T1'] } }),
+    ])
+    const due = rowNamed(cardOf(tasks, 'T1'), 'due')
+    expect(textOf(due)).toBe(labelled('Due', 'Wed 10-14 (from T2)'))
+    expect(due.spans.filter(span => span.task !== undefined)).toEqual([{ text: 'T2', task: 'T2' }])
+    expect(textOf(rowNamed(cardOf(tasks, 'T2'), 'due'))).toBe(labelled('Due', 'Wed 10-14'))
+  })
+
   test("From says who asked, Added when and by whom it was written; Owner only in another area's list", async () => {
     const tasks = rowsOf([
       createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'lead' }),

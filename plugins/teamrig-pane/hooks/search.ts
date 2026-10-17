@@ -6,7 +6,7 @@
 // many more matched, and each keeps where its words matched so the drawing (search-rows.ts) underlines them. One
 // pass over the held tasks a query. Older weeks' finished tasks are not held, so not searched. Pure.
 import type { TaskRow } from '../types'
-import { byPlanOrder } from './core/read/index'
+import type { TaskTree } from './core/read/index'
 import { isActive, newestFirst } from './view'
 
 /** Most results kept for a query; how many more matched is counted. */
@@ -99,10 +99,11 @@ function hitOf(task: TaskRow, terms: readonly Term[]): Hit | null {
 }
 
 /**
- * The held tasks `query` names, in one pass over them: the active ones in plan order, then the finished ones newest
- * first, MAX_RESULTS in all at most, the active first, and how many more matched. A blank query names none.
+ * The held tasks `query` names, in one pass over them: the active ones in plan order on the effective dues of `tree`
+ * (the tree read over `tasks`, meta.ts treeOf), then the finished ones newest first, MAX_RESULTS in all at most, the
+ * active first, and how many more matched. A blank query names none.
  */
-export function searchTasks(tasks: readonly TaskRow[], query: string): SearchResults {
+export function searchTasks(tasks: readonly TaskRow[], query: string, tree: TaskTree<TaskRow>): SearchResults {
   const words = queryWords(query)
   if (words.length === 0) return NO_RESULTS
   const terms = words.map((word): Term => ({ word, pattern: patternOf(word) }))
@@ -112,7 +113,7 @@ export function searchTasks(tasks: readonly TaskRow[], query: string): SearchRes
     const hit = hitOf(task, terms)
     if (hit !== null) (isActive(task) ? active : done).push(hit)
   }
-  active.sort((a, b) => byPlanOrder(a.task, b.task))
+  active.sort((a, b) => tree.byPlanOrder(a.task, b.task))
   done.sort((a, b) => newestFirst(a.task, b.task))
   const keptActive = active.slice(0, MAX_RESULTS)
   const keptDone = done.slice(0, MAX_RESULTS - keptActive.length)
