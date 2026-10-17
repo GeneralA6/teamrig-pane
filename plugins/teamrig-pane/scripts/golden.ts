@@ -161,6 +161,8 @@ try {
   // A priority only the team config names.
   writeFileSync(configFile, withPriority(read(configFile), { id: 7, name: 'icebox' }))
   as('lead', 'add', '--owner', 'alpha', '--priority', 'p7', '--title', 'Icebox task', '--description', 'A task at a priority only the config names')
+  // A task of another session that needs one of alpha's, so alpha's row says whom it holds up.
+  as('beta', 'add', '--owner', 'beta', '--priority', 'p3', '--title', 'Beta task after T1', '--description', 'A task that needs a task of another session', '--after', 'T1', '--due', '2026-10-22')
 
   // The inbox: read to its second line, one more line, then trimmed from the top, then rewritten.
   as('lead', 'inbox', 'add', '--to', 'alpha', '--text', 'first line')
