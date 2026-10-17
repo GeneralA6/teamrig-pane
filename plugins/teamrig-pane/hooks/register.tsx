@@ -55,6 +55,7 @@ import {
 } from './nav'
 import { weekSteps, weekOf } from './done'
 import { doneBlocks, weekWords } from './done-rows'
+import { treeOf } from './meta'
 import { pageBlocks } from './page'
 import { searchTasks, topResult } from './search'
 import { searchBlocks } from './search-rows'
@@ -449,7 +450,7 @@ export const register: Register = on => {
     // moves the ring onto the page's back step: left in the field, a new round's and empty, it would type the next
     // keys into a new search, so b, f and s would never answer.
     const openTop = async (query: string) => {
-      const top = topResult(searchTasks(snap.tasks, query))
+      const top = topResult(searchTasks(snap.tasks, query, treeOf(snap.tasks, snap.now)))
       if (top === null) return
       await openPage(top.id, fieldKey(field))
       await focusOn($, 'back')

@@ -1,4 +1,5 @@
-// The dim line under a task's title (rows.ts), in plain words: its priority, when it is due, how long it has
+// The dim line under a task's title (rows.ts), in plain words: its priority, when it is due (teamrig's effective
+// due: an earlier date of a task that needs it, naming that task), how long it has
 // stood at its status and what holds it (a waiting task's reasons, an open one's unfinished `after`), then
 // what needs a look (late, new, not picked up). An open task's card (card.ts) shows it in place of this line,
 // in the same words. Every date and time is UTC, as teamrig writes them; "today" is the UTC day of the
@@ -6,7 +7,7 @@
 // compares them to know when a poll must redraw.
 import type { ThemeKey } from 'claude-code'
 import type { TaskRow, TaskStatus } from '../types'
-import { ACTIVE_STATUSES, dueTime, priorityText, TaskTree, unfinishedAfter, waitText, type WaitContext } from './core/read/index'
+import { ACTIVE_STATUSES, priorityText, TaskTree, unfinishedAfter, waitText, type EffectiveDue, type WaitContext } from './core/read/index'
 import type { Span } from './rows'
 import { utcDay } from './status-bar'
 
@@ -36,11 +37,15 @@ export const STATUS_WORDS: Readonly<Record<TaskStatus, string>> = {
 /** The statuses whose meta line says since when: the ones someone is acting on or waiting for. */
 const SAYS_SINCE: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['in-progress', 'verifying', 'waiting'])
 
-/** A date-only due is due at the end of that UTC day; an unreadable one is never overdue (teamrig's dueTime). */
-export function flagsOf(task: TaskRow, now: number): Flag[] {
+/**
+ * At `tree`'s clock: overdue past the effective due (teamrig's, core register/tree.ts: its own, or an earlier one of
+ * an active task that needs it), a date-only due at the end of that UTC day, an unreadable one never.
+ */
+export function flagsOf(task: TaskRow, tree: TaskTree<TaskRow>): Flag[] {
   if (!ACTIVE_STATUSES.includes(task.status)) return []
+  const now = tree.context.now
   const flags: Flag[] = []
-  const due = dueTime(task)
+  const due = tree.dueTime(task)
   if (due !== undefined && due < now) flags.push('overdue')
   if (task.ownerSeenAt === null) flags.push(now - Date.parse(task.assignedAt) > NOT_PICKED_UP_MS ? 'unseen' : 'new')
   return flags
@@ -59,26 +64,39 @@ export function whenWords(iso: string, now: number): string {
   return utcDay(ms) === utcDay(now) ? new Date(ms).toISOString().slice(11, 16) : dayWords(ms)
 }
 
-/** `today 18:00`, `today`, `Fri 10-17 18:00` or `Fri 10-17`; a due teamrig cannot read, as written less its year. */
-export function dueWords(task: TaskRow, now: number): string | null {
-  if (task.due === null) return null
-  const at = dueTime(task)
-  if (at === undefined) return task.due.slice(5)
-  const day = utcDay(at) === utcDay(now) ? 'today' : dayWords(at)
-  // A bare day is due at its end, so only a due written with a time names one.
-  return task.due.trim().length > 10 ? `${day} ${new Date(at).toISOString().slice(11, 16)}` : day
+/** The date the task works to, teamrig's effective due; a task the tree lacks keeps its own, as the tree's dueTime does. */
+function effectiveDueOf(task: TaskRow, tree: TaskTree<TaskRow>): EffectiveDue | undefined {
+  if (tree.task(task.id) !== undefined) return tree.effectiveDue(task.id)
+  const at = tree.dueTime(task)
+  return task.due === null || at === undefined ? undefined : { due: task.due, at, from: null }
 }
 
-/** `due today 18:00`, or `verify by …` while verifying: when the task is due; null with no due. */
-export function dueLabel(task: TaskRow, now: number): string | null {
-  const due = dueWords(task, now)
+/**
+ * `today 18:00`, `today`, `Fri 10-17 18:00` or `Fri 10-17`, the effective due at `tree`'s clock, then `(from T7)`
+ * when it is the date of T7, a task that needs this one; a due teamrig cannot read, as written less its year.
+ */
+export function dueWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null {
+  const due = effectiveDueOf(task, tree)
+  if (due === undefined) return task.due === null ? null : task.due.slice(5)
+  const day = utcDay(due.at) === utcDay(tree.context.now) ? 'today' : dayWords(due.at)
+  // A bare day is due at its end, so only a due written with a time names one.
+  const words = due.due.trim().length > 10 ? `${day} ${new Date(due.at).toISOString().slice(11, 16)}` : day
+  return due.from === null ? words : `${words} (from ${due.from})`
+}
+
+/**
+ * `due today 18:00`, or `verify by …` while verifying: when the task is due, the effective due as dueWords says it,
+ * as teamrig's VERIFY-OVERDUE reads it; null with no due.
+ */
+export function dueLabel(task: TaskRow, tree: TaskTree<TaskRow>): string | null {
+  const due = dueWords(task, tree)
   return due === null ? null : `${task.status === 'verifying' ? 'verify by' : 'due'} ${due}`
 }
 
-/** `late 1d` while an active task is past its due (flagsOf); null otherwise. */
-export function lateWords(task: TaskRow, now: number): string | null {
-  const deadline = dueTime(task)
-  return deadline !== undefined && flagsOf(task, now).includes('overdue') ? `late ${ageWords(now - deadline)}` : null
+/** `late 1d` while an active task is past its effective due (flagsOf); null otherwise. */
+export function lateWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null {
+  const deadline = tree.dueTime(task)
+  return deadline !== undefined && flagsOf(task, tree).includes('overdue') ? `late ${ageWords(tree.context.now - deadline)}` : null
 }
 
 /**
@@ -107,7 +125,7 @@ export function ageWords(ms: number): string {
 
 /**
  * The meta line's parts, in order: `on <owner>` when `viewer` (the area whose list it is) does not own it, the
- * priority, `due …` (`verify by …` while verifying), `<status> since …` with why a waiting task waits or what
+ * priority, `due …` (`verify by …` while verifying; `(from T7)` on a date taken from T7), `<status> since …` with why a waiting task waits or what
  * proves a verifying one, `after T5` while a task not yet started has one unfinished, then the flags: `late 1d`,
  * `new` (to its owner), `not picked up 2d`, and `asked by <who>` on a task not yet started that someone else
  * asked for. `tree` (treeOf) holds the clock and marks the ready reasons. `viewer` null (the all view)
@@ -120,7 +138,7 @@ export function metaParts(task: TaskRow, tree: TaskTree<TaskRow>, viewer: string
   const parts: Span[] = []
   if (others) parts.push({ text: `on ${task.owner}` })
   parts.push({ text: priorityText(task.priority) })
-  const due = dueLabel(task, now)
+  const due = dueLabel(task, tree)
   if (due !== null) parts.push({ text: due })
   if (SAYS_SINCE.has(task.status)) {
     // Why a waiting task waits, what proves a verifying one; an in-progress note is the card's.
@@ -131,9 +149,9 @@ export function metaParts(task: TaskRow, tree: TaskTree<TaskRow>, viewer: string
   // A plan dependency holds a task only until it starts, and only while one of its tasks is unfinished.
   const first = task.status === 'open' ? unfinishedAfter(task.after, context) : []
   if (first.length > 0) parts.push({ text: `after ${first.join(', ')}` })
-  const late = lateWords(task, now)
+  const late = lateWords(task, tree)
   if (late !== null) parts.push({ text: late, color: 'error' })
-  const flags = flagsOf(task, now)
+  const flags = flagsOf(task, tree)
   if (flags.includes('new') && !others) parts.push({ text: 'new', color: 'suggestion' })
   if (flags.includes('unseen')) parts.push({ text: `not picked up ${ageWords(now - Date.parse(task.assignedAt))}`, color: 'error' })
   if (task.status === 'open' && task.source !== task.owner && task.source !== viewer) parts.push({ text: `asked by ${task.source}` })

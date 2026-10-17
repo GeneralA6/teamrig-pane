@@ -5,7 +5,7 @@
 // (`opens`). Pure: blocks of rows (rows.ts) that layout.ts wraps.
 import type { Snapshot } from '../types'
 import { HELD_DAYS } from './done'
-import { whenWords } from './meta'
+import { treeOf, whenWords } from './meta'
 import { GLYPH, GLYPH_COLOR, indentOf, META_LINES, problemBlocks, readingBlock, SEPARATOR, single, TITLE_GAP, TITLE_LINES } from './rows'
 import type { Block, Row, Span } from './rows'
 import { fieldText, queryWords, searchTasks, type Hit, type Mark, type SearchedField } from './search'
@@ -118,7 +118,7 @@ export function searchBlocks(snap: Snapshot, query: string): Block[] {
   if (reading !== null) return [reading]
   const problems = problemBlocks(snap)
   if (queryWords(query).length === 0) return [...problems, single('search-hint', [{ text: SEARCH_HINT, dim: true }])]
-  const results = searchTasks(snap.tasks, query)
+  const results = searchTasks(snap.tasks, query, treeOf(snap.tasks, snap.now))
   if (results.active.length + results.done.length === 0) return [...problems, single('search-none', [{ text: NOTHING_FOUND, dim: true }])]
   const more = results.more > 0 ? [single('search-more', [{ text: `${results.more} more: add a word`, dim: true }])] : []
   return [...problems, ...results.active.map(activeBlock), ...results.done.map(hit => doneBlock(hit, snap.now)), ...more]

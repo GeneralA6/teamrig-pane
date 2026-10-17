@@ -10,6 +10,7 @@ import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, doneMoreText, paneBlocks, type Bl
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
+import { treeOf } from '../hooks/meta'
 import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
 import { HELD_DAYS } from '../hooks/done'
 import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine, waitingLine, verifyingLine } from './fixtures'
@@ -220,16 +221,27 @@ describe('view', () => {
       createLine('T4', { owner: 'po', by: 'po', at: NOW, priority: 3, due: '2026-10-14 09:00' }),
       createLine('T5', { owner: 'etl', by: 'po', at: NOW }),
     )
-    const view = areaView(tasks, 'po', NOW)
+    const view = areaView(tasks, 'po', treeOf(tasks, NOW))
     expect(view.upNext.map(t => t.id)).toEqual(['T2', 'T4', 'T3', 'T1'])
     expect(view.waiting.map(t => t.id)).toEqual(['T5'])
     expect([view.verifying, view.working, view.doneToday]).toEqual([[], [], []])
   })
 
+  test('plan order reads the effective due: an undated task a dated one needs comes before a later-dated one', async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, due: '2026-10-20' }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW }),
+      createLine('T3', { owner: 'etl', by: 'etl', at: NOW, due: '2026-10-15', taskKeys: { after: ['T2'] } }),
+    )
+    const tree = treeOf(tasks, NOW)
+    expect(areaView(tasks, 'po', tree).upNext.map(t => t.id)).toEqual(['T2', 'T1'])
+    expect(ownerGroups(tasks, tree).map(g => g.active.map(t => t.id))).toEqual([['T3'], ['T2', 'T1']])
+  })
+
   test('waiting holds its own waiting tasks first, then up to 8 it asked of others, counting them all', async () => {
     const asked = Array.from({ length: 10 }, (_, i) => createLine(`T${i + 10}`, { owner: 'etl', by: 'po', at: NOW }))
     const tasks = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 4 }), statusLine('T1', 'po', NOW, 'waiting', 'needs owner'), ...asked)
-    const view = areaView(tasks, 'po', NOW)
+    const view = areaView(tasks, 'po', treeOf(tasks, NOW))
     expect(view.waiting.map(t => t.id)).toEqual(['T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17'])
     expect(view.waitingTotal).toBe(11)
   })
@@ -246,11 +258,11 @@ describe('view', () => {
       createLine('T4', { owner: 'po', by: 'po', at: NOW - 48 * HOUR }),
       statusLine('T4', 'po', Date.UTC(2026, 9, 12, 23, 59), 'done'),
     )
-    const view = areaView(tasks, 'po', NOW)
+    const view = areaView(tasks, 'po', treeOf(tasks, NOW))
     expect(view.doneToday.map(t => t.id)).toEqual(['T3', 'T1'])
     expect([view.doneTotal, view.doneMoreDropped]).toEqual([2, 0])
     expect(barCounts(tasks, 'po', NOW)['done-today']).toBe(view.doneToday.filter(t => t.status === 'done').length)
-    expect(areaView(tasks, 'po', Date.UTC(2026, 9, 14)).doneTotal).toBe(0)
+    expect(areaView(tasks, 'po', treeOf(tasks, Date.UTC(2026, 9, 14))).doneTotal).toBe(0)
   })
 
   test('two snapshots draw the same pane unless a field, a task or a time label differs', async () => {
@@ -292,7 +304,7 @@ describe('view', () => {
       createLine('T3', { owner: 'etl', by: 'etl', at: NOW }),
       statusLine('T3', 'etl', NOW, 'done'),
     )
-    expect(ownerGroups(tasks).map(g => [g.owner, g.active.length, g.waiting])).toEqual([
+    expect(ownerGroups(tasks, treeOf(tasks, NOW)).map(g => [g.owner, g.active.length, g.waiting])).toEqual([
       ['etl', 1, 0],
       ['security', 1, 1],
     ])
@@ -306,10 +318,10 @@ describe('view', () => {
       createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, priority: 2 }),
       statusLine('T3', 'po', NOW, 'verifying', 'one clean roll'),
     )
-    const view = areaView(tasks, 'po', NOW)
+    const view = areaView(tasks, 'po', treeOf(tasks, NOW))
     expect(view.verifying.map(t => t.id)).toEqual(['T3', 'T2'])
     expect(view.upNext.map(t => t.id)).toEqual(['T1'])
-    const [group] = ownerGroups(tasks)
+    const [group] = ownerGroups(tasks, treeOf(tasks, NOW))
     expect(group?.active.map(t => t.id)).toEqual(['T3', 'T2', 'T1'])
     expect([group?.waiting, group?.verifying]).toEqual([0, 2])
   })

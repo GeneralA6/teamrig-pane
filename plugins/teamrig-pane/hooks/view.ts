@@ -1,7 +1,8 @@
 // What the pane shows, as plain data: pure functions over the folded tasks, so the drawing in
-// register.tsx only lays them out. The order and the due are teamrig's own (hooks/core/read).
+// register.tsx only lays them out. The order and the due are teamrig's own: plan order on the effective due, read
+// from the snapshot's dependency tree (meta.ts treeOf, core register/tree.ts).
 import type { BarStatus, Snapshot, TaskRow, TaskStatus } from '../types'
-import { ACTIVE_STATUSES, byPlanOrder, type TaskTree } from './core/read/index'
+import { ACTIVE_STATUSES, type TaskTree } from './core/read/index'
 import { metaText, treeOf, whenWords } from './meta'
 import { barStatusOf, isFinishedOn, utcDay } from './status-bar'
 
@@ -9,7 +10,7 @@ import { barStatusOf, isFinishedOn, utcDay } from './status-bar'
 export const MAX_FINISHED = 6
 export const MAX_ASKED = 8
 
-/** The area's own tasks and those it asked of others, each section in teamrig's plan order (priority, due, id). */
+/** The area's own tasks and those it asked of others, each section in teamrig's plan order (priority, effective due, id). */
 export type AreaView = {
   area: string
   /** Verifying (shipped, the proof still to come): the ones to close first. */
@@ -41,9 +42,9 @@ export function isVerifying(task: TaskRow): boolean {
   return task.status === 'verifying'
 }
 
-/** Verifying first, the ones to close, then teamrig's plan order. */
-function verifyingFirst(a: TaskRow, b: TaskRow): number {
-  return Number(isVerifying(b)) - Number(isVerifying(a)) || byPlanOrder(a, b)
+/** Verifying first, the ones to close, then teamrig's plan order on `tree`'s effective dues. */
+function verifyingFirst(tree: TaskTree<TaskRow>): (a: TaskRow, b: TaskRow) => number {
+  return (a, b) => Number(isVerifying(b)) - Number(isVerifying(a)) || tree.byPlanOrder(a, b)
 }
 
 /** Newest status change first: the order Done today, and a search's finished matches, list in. */
@@ -51,12 +52,14 @@ export function newestFirst(a: TaskRow, b: TaskRow): number {
   return Date.parse(b.statusAt) - Date.parse(a.statusAt)
 }
 
-export function areaView(tasks: readonly TaskRow[], area: string, now: number): AreaView {
-  const own = tasks.filter(t => t.owner === area && isActive(t)).sort(byPlanOrder)
+/** The area's view of `tasks`, `tree` the dependency tree read over them (meta.ts treeOf), today its clock's UTC day. */
+export function areaView(tasks: readonly TaskRow[], area: string, tree: TaskTree<TaskRow>): AreaView {
+  const planOrder = (a: TaskRow, b: TaskRow) => tree.byPlanOrder(a, b)
+  const own = tasks.filter(t => t.owner === area && isActive(t)).sort(planOrder)
   const at = (status: TaskStatus) => own.filter(t => t.status === status)
   const waiting = at('waiting')
-  const asked = tasks.filter(t => t.createdBy === area && t.owner !== area && isActive(t)).sort(byPlanOrder)
-  const today = utcDay(now)
+  const asked = tasks.filter(t => t.createdBy === area && t.owner !== area && isActive(t)).sort(planOrder)
+  const today = utcDay(tree.context.now)
   const done = tasks.filter(t => t.owner === area && isFinishedOn(t, today)).sort(newestFirst)
   return {
     area,
@@ -73,16 +76,16 @@ export function areaView(tasks: readonly TaskRow[], area: string, now: number): 
 
 /**
  * The area's own tasks at one status of the status bar (status-bar.ts), as its filter lists them, today
- * the UTC day of `now`: those done today newest first, the others in plan order.
+ * the UTC day of `tree`'s clock: those done today newest first, the others in plan order on `tree`'s effective dues.
  */
-export function statusLines(tasks: readonly TaskRow[], area: string, now: number, status: BarStatus): TaskRow[] {
-  const today = utcDay(now)
-  const order = status === 'done-today' ? newestFirst : byPlanOrder
+export function statusLines(tasks: readonly TaskRow[], area: string, tree: TaskTree<TaskRow>, status: BarStatus): TaskRow[] {
+  const today = utcDay(tree.context.now)
+  const order = status === 'done-today' ? newestFirst : (a: TaskRow, b: TaskRow) => tree.byPlanOrder(a, b)
   return tasks.filter(t => t.owner === area && barStatusOf(t, today) === status).sort(order)
 }
 
-/** Every owner with active tasks, by name, each list verifying first, then in plan order. */
-export function ownerGroups(tasks: readonly TaskRow[]): OwnerGroup[] {
+/** Every owner with active tasks, by name, each list verifying first, then in plan order on `tree`'s effective dues. */
+export function ownerGroups(tasks: readonly TaskRow[], tree: TaskTree<TaskRow>): OwnerGroup[] {
   const byOwner = new Map<string, TaskRow[]>()
   for (const task of tasks) {
     if (!isActive(task)) continue
@@ -92,7 +95,7 @@ export function ownerGroups(tasks: readonly TaskRow[]): OwnerGroup[] {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([owner, list]) => ({
       owner,
-      active: [...list].sort(verifyingFirst),
+      active: [...list].sort(verifyingFirst(tree)),
       waiting: list.filter(t => t.status === 'waiting').length,
       verifying: list.filter(isVerifying).length,
     }))

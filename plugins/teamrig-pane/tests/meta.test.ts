@@ -36,7 +36,7 @@ describe('meta words', () => {
   })
 
   test('a due reads today or its day, with its time only when it was written with one', async () => {
-    const due = (value: string | null) => dueWords(taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW, due: value })), NOW)
+    const due = (value: string | null) => dueWords(taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW, due: value })), AT_NOW)
     expect(due(null)).toBe(null)
     expect(due('2026-10-13')).toBe('today')
     expect(due('2026-10-13 18:00')).toBe('today 18:00')
@@ -44,7 +44,7 @@ describe('meta words', () => {
     expect(due('2026-10-16 09:30')).toBe('Fri 10-16 09:30')
     // teamrig's reader skips a create whose due it cannot read; a row built past it says the due as written.
     const odd = { ...taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW })), due: '2026-13-45' }
-    expect(dueWords(odd, NOW)).toBe('13-45')
+    expect(dueWords(odd, AT_NOW)).toBe('13-45')
   })
 
   test('an age is hours under a day, one at least, then whole days', async () => {
@@ -63,17 +63,48 @@ describe('meta words', () => {
 describe('meta flags', () => {
   test('a date-only due is due at the end of that UTC day', async () => {
     const task = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW, due: '2026-10-13' }))
-    expect(flagsOf(task, NOW)).toEqual([])
-    expect(flagsOf(task, Date.UTC(2026, 9, 13, 23, 59))).toEqual([])
-    expect(flagsOf(task, Date.UTC(2026, 9, 14, 0, 1))).toEqual(['overdue'])
+    expect(flagsOf(task, treeOf([task], NOW))).toEqual([])
+    expect(flagsOf(task, treeOf([task], Date.UTC(2026, 9, 13, 23, 59)))).toEqual([])
+    expect(flagsOf(task, treeOf([task], Date.UTC(2026, 9, 14, 0, 1)))).toEqual(['overdue'])
   })
 
   test('an untouched task is new, then not picked up after a day; a finished one has no flags', async () => {
     const task = taskOf(createLine('T1', { owner: 'po', by: 'lead', at: NOW }))
-    expect(flagsOf(task, NOW + HOUR)).toEqual(['new'])
-    expect(flagsOf(task, NOW + NOT_PICKED_UP_MS + HOUR)).toEqual(['unseen'])
+    expect(flagsOf(task, treeOf([task], NOW + HOUR))).toEqual(['new'])
+    expect(flagsOf(task, treeOf([task], NOW + NOT_PICKED_UP_MS + HOUR))).toEqual(['unseen'])
     const done = taskOf(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-01' }), statusLine('T1', 'po', NOW, 'done'))
-    expect(flagsOf(done, NOW)).toEqual([])
+    expect(flagsOf(done, treeOf([done], NOW))).toEqual([])
+  })
+})
+
+describe('meta effective due', () => {
+  /** T1 dated Fri 10-16, and T2 of the same owner, dated Wed 10-14, planned after it: T1 works to T2's date. */
+  const [first, needer] = tasksOf(
+    createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', due: '2026-10-16' }),
+    createLine('T2', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', due: '2026-10-14', taskKeys: { after: ['T1'] } }),
+  )
+  if (first === undefined || needer === undefined) throw new Error('no tasks')
+
+  test("a date taken from a task that needs it reads that task's date and names it; lateness counts from it", async () => {
+    expect(textOf(first, 'po', NOW, [first, needer])).toEqual(['p3', 'due Wed 10-14 (from T2)'])
+    expect(textOf(first, 'po', NOW + 2 * DAY, [first, needer])).toEqual(['p3', 'due Wed 10-14 (from T2)', 'late 14h'])
+    expect(flagsOf(first, treeOf([first, needer], NOW + 2 * DAY))).toEqual(['overdue'])
+    // The task that needs it reads its own date.
+    expect(dueWords(needer, treeOf([first, needer], NOW))).toBe('Wed 10-14')
+  })
+
+  test('a task alone in the snapshot, or one the tree lacks, works to its own date', async () => {
+    expect(textOf(first, 'po', NOW + 2 * DAY, [first])).toEqual(['p3', 'due Fri 10-16'])
+    expect(dueWords(first, AT_NOW)).toBe('Fri 10-16')
+    expect(flagsOf(first, treeOf([needer], Date.UTC(2026, 9, 15, 12, 0)))).toEqual([])
+  })
+
+  test("a verifying task's verify-by date is the effective due too", async () => {
+    const verifying = taskOf(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', due: '2026-10-16' }),
+      statusLine('T1', 'po', NOW - HOUR, 'verifying', 'one clean night'),
+    )
+    expect(textOf(verifying, 'po', NOW, [verifying, needer])).toEqual(['p3', 'verify by Wed 10-14 (from T2)', 'verifying since 13:00: one clean night'])
   })
 })
 

@@ -164,9 +164,9 @@ const FILTER_SECTION: Readonly<Record<BarStatus, string>> = {
 
 /** The area's tasks at the status the bar filters to, under no heading: what the filter's line names. */
 function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expanded: ExpandedTasks): Block[] {
-  const tasks = statusLines(snap.tasks, area, snap.now, filter)
-  if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
   const tree = treeOf(snap.tasks, snap.now)
+  const tasks = statusLines(snap.tasks, area, tree, filter)
+  if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
   if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, tree, area))
   return tasks.map(task => taskBlock(FILTER_SECTION[filter], task, expanded, tree, area))
 }
@@ -177,7 +177,8 @@ function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expande
  */
 function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null): Block[] {
   if (snap.area === null) return [single('no-area', [{ text: NO_AREA, dim: true }])]
-  const view = areaView(snap.tasks, snap.area, snap.now)
+  const tree = treeOf(snap.tasks, snap.now)
+  const view = areaView(snap.tasks, snap.area, tree)
   // The session's own area goes unnamed, as its tab names the session; a pin names the area it shows.
   const header: Span[] = snap.areaSource === 'pinned' ? [{ text: view.area, bold: true }, { text: ' (pinned) · ', dim: true }] : []
   const waiting = view.waiting.filter(task => task.owner === view.area).length
@@ -189,7 +190,6 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   // Filtered from the status bar, the header leads that status's tasks alone.
   if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
-  const tree = treeOf(snap.tasks, snap.now)
   const tasks = (key: string, list: readonly TaskRow[]) => list.map(task => taskBlock(key, task, expanded, tree, view.area))
   const done = view.doneToday.map(task => doneBlock(task, expanded, tree, view.area))
   return [
@@ -204,9 +204,9 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
 
 /** Every owner with active tasks under a heading with its counts, the session's own area marked. */
 function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
-  const groups = ownerGroups(snap.tasks)
-  if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
   const tree = treeOf(snap.tasks, snap.now)
+  const groups = ownerGroups(snap.tasks, tree)
+  if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
   return groups.flatMap((group, i) => {
     const waiting = group.waiting > 0 ? ` · ${group.waiting} waiting` : ''
     const verifying = group.verifying > 0 ? ` · ${group.verifying} verifying` : ''

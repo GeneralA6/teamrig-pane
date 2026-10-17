@@ -3,7 +3,8 @@
 // Description: what the task is and why, as written (`teamrig add --description`, a GitHub issue's body); a task
 // written before teamrig kept one shows the ask quoted from its ref (details.ts) instead. Status: since when, who
 // set it when that is known, then why a waiting task waits. Note: the newest status note. Proof: what proves a
-// verifying task. Priority, Due (Verify by while verifying, late in red) and Week, each on its own row. After: the
+// verifying task. Priority, Due (Verify by while verifying; a date taken from a task that needs it names that task;
+// late in red) and Week, each on its own row. After: the
 // tasks planned first, with their status. Goal: each goal's roadmap item. From: who asked, or the GitHub issue it
 // came from. Added: when it was written and by whom, as a tracker's Created row. Owner: in another area's
 // list. Reference: where the ask is written, each file by its folder and name, other words as written (an issue
@@ -66,11 +67,11 @@ function statusLines(task: TaskRow, context: WaitContext): Lines {
   return why === null ? [first] : [first, [{ text: why, color: 'error' }]]
 }
 
-/** `Fri 10-17`, then `late 1d` in red while it is past due. */
-function dueLines(task: TaskRow, now: number): Lines {
-  const due = dueWords(task, now)
+/** `Fri 10-17` (`Fri 10-17 (from T7)` on a date taken from T7, meta.ts dueWords), then `late 1d` in red while it is past due. */
+function dueLines(task: TaskRow, tree: TaskTree<TaskRow>): Lines {
+  const due = dueWords(task, tree)
   if (due === null) return []
-  const late = lateWords(task, now)
+  const late = lateWords(task, tree)
   const parts: Span[] = [{ text: due }]
   if (late !== null) parts.push({ text: late, color: 'error' })
   return [joined(parts)]
@@ -158,7 +159,7 @@ export function cardRows(
     ...field('note', 'Note', textLines(task.note)),
     ...field('proof', 'Proof', textLines(task.proof, { color: 'success' })),
     ...field('priority', 'Priority', [[{ text: String(task.priority) }]]),
-    ...field('due', task.status === 'verifying' ? 'Verify by' : 'Due', dueLines(task, context.now)),
+    ...field('due', task.status === 'verifying' ? 'Verify by' : 'Due', dueLines(task, tree)),
     ...field('week', 'Week', weekLines(task)),
     ...field('after', 'After', afterLines(task, context)),
     ...field('goal', 'Goal', goalLines(task, detail)),

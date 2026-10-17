@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow } from '../types'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
+import { treeOf } from '../hooks/meta'
 import type { Block, Span } from '../hooks/rows'
 import { MAX_RESULTS, NO_RESULTS, queryWords, searchTasks, topResult, type Hit } from '../hooks/search'
 import { EXCERPT_LEAD, excerpt, markedSpans, NOTHING_FOUND, SEARCH_HINT, searchBlocks } from '../hooks/search-rows'
@@ -24,15 +25,18 @@ const TASKS = rowsOf([
 ])
 const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, problem: null, now: NOW }
 
+/** What `query` finds among `tasks`, the active ones in plan order on their tree's effective dues. */
+const search = (tasks: readonly TaskRow[], query: string) => searchTasks(tasks, query, treeOf(tasks, NOW))
+
 /** The ids `query` finds, the active ones, then `|`, then the finished ones. */
 function found(query: string, tasks: readonly TaskRow[] = TASKS): string[] {
-  const results = searchTasks(tasks, query)
+  const results = search(tasks, query)
   return [...results.active.map(hit => hit.task.id), '|', ...results.done.map(hit => hit.task.id)]
 }
 
 /** The one hit `query` finds. */
 function hitOf(query: string): Hit {
-  const [hit, ...rest] = [...searchTasks(TASKS, query).active, ...searchTasks(TASKS, query).done]
+  const [hit, ...rest] = [...search(TASKS, query).active, ...search(TASKS, query).done]
   if (hit === undefined || rest.length > 0) throw new Error(`${query} finds ${rest.length + (hit === undefined ? 0 : 1)} tasks`)
   return hit
 }
@@ -77,9 +81,18 @@ describe('search', () => {
 
   test('the active matches first in plan order, then the finished ones newest first', async () => {
     expect(found('the')).toEqual(['T58', 'T52', 'T50', '|', 'T9', 'T7'])
-    expect(topResult(searchTasks(TASKS, 'the'))?.id).toBe('T58')
-    expect(topResult(searchTasks(TASKS, 'column'))?.id).toBe('T7')
-    expect(topResult(searchTasks(TASKS, 'nothing-here'))).toBe(null)
+    expect(topResult(search(TASKS, 'the'))?.id).toBe('T58')
+    expect(topResult(search(TASKS, 'column'))?.id).toBe('T7')
+    expect(topResult(search(TASKS, 'nothing-here'))).toBe(null)
+  })
+
+  test('plan order reads the effective due: an undated task a dated one needs comes first', async () => {
+    const tasks = rowsOf([
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, title: 'Draw the chart', due: '2026-10-20' }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW, title: 'Draw the axis' }),
+      createLine('T3', { owner: 'etl', by: 'etl', at: NOW, title: 'Ship the report', due: '2026-10-15', taskKeys: { after: ['T2'] } }),
+    ])
+    expect(found('draw', tasks)).toEqual(['T2', 'T1', '|'])
   })
 
   test("keeps where each word matched, in order, overlapping ones joined; the id's match is its own flag", async () => {
@@ -95,16 +108,16 @@ describe('search', () => {
   test(`keeps at most ${MAX_RESULTS} matches, the active first, and counts the rest`, async () => {
     const lines = Array.from({ length: 34 }, (_, i) => createLine(`T${100 + i}`, { owner: 'bulk', by: 'po', at: NOW - 5 * HOUR }))
     const finished = Array.from({ length: 3 }, (_, i) => statusLine(`T${100 + i}`, 'bulk', NOW - HOUR, 'done', 'shipped', 'abc'))
-    const results = searchTasks(rowsOf([...lines, ...finished]), 'bulk')
+    const results = search(rowsOf([...lines, ...finished]), 'bulk')
     expect([results.active.length, results.done.length, results.more]).toEqual([MAX_RESULTS, 0, 4])
-    const few = searchTasks(rowsOf([...lines.slice(0, 28), ...finished]), 'bulk')
+    const few = search(rowsOf([...lines.slice(0, 28), ...finished]), 'bulk')
     expect([few.active.length, few.done.length, few.more]).toEqual([25, 3, 0])
-    const over = searchTasks(rowsOf([...lines.slice(0, 31), ...finished]), 'bulk')
+    const over = search(rowsOf([...lines.slice(0, 31), ...finished]), 'bulk')
     expect([over.active.length, over.done.length, over.more]).toEqual([28, 2, 1])
   })
 
   test('a blank query names nothing', async () => {
-    expect(searchTasks(TASKS, '  ')).toBe(NO_RESULTS)
+    expect(search(TASKS, '  ')).toBe(NO_RESULTS)
     expect(queryWords(' Load  the\tfeed ')).toEqual(['load', 'the', 'feed'])
   })
 })
