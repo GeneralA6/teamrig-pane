@@ -178,6 +178,24 @@ describe('card', () => {
     expect(textOf(rowNamed(cardOf(tasks, 'T2'), 'due'))).toBe(labelled('Due', 'Wed 10-14'))
   })
 
+  test('Needed by lists each active task of another owner that needs it, with its owner and due, each id a press', async () => {
+    const tasks = rowsOf([
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po' }),
+      createLine('T2', { owner: 'etl', by: 'etl', at: NOW - DAY, source: 'etl', due: '2026-10-16', taskKeys: { after: ['T1'] } }),
+      createLine('T3', { owner: 'web', by: 'web', at: NOW - DAY, source: 'web', taskKeys: { after: ['T1'] } }),
+      createLine('T4', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', taskKeys: { after: ['T1'] } }),
+    ])
+    const card = cardOf(tasks, 'T1')
+    expect([rowNamed(card, 'needed-by'), rowNamed(card, 'needed-by:1')].map(textOf)).toEqual([
+      labelled('Needed by', 'T2 (etl, due Fri 10-16)'),
+      `${UNDER}T3 (web)`,
+    ])
+    expect(rowNamed(card, 'needed-by').spans.filter(span => span.task !== undefined)).toEqual([{ text: 'T2', task: 'T2' }])
+    // po's own T4 is not listed, and T2, needing nothing, holds no one up.
+    expect(card.some(row => row.key.endsWith(':needed-by:2'))).toBe(false)
+    expect(rowNamed(cardOf(tasks, 'T2'), 'needed-by')).toBe(NO_ROW)
+  })
+
   test("From says who asked, Added when and by whom it was written; Owner only in another area's list", async () => {
     const tasks = rowsOf([
       createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'lead' }),

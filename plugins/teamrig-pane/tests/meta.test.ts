@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow, WaitRow } from '../types'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { ageWords, dayWords, dueWords, flagsOf, metaParts, metaText, NOT_PICKED_UP_MS, STATUS_WORDS, treeOf, waitingWords, whenWords } from '../hooks/meta'
+import { ageWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, NOT_PICKED_UP_MS, STATUS_WORDS, treeOf, waitingWords, whenWords } from '../hooks/meta'
 import { HOUR, NOW, createLine, iso, statusLine, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
@@ -105,6 +105,60 @@ describe('meta effective due', () => {
       statusLine('T1', 'po', NOW - HOUR, 'verifying', 'one clean night'),
     )
     expect(textOf(verifying, 'po', NOW, [verifying, needer])).toEqual(['p3', 'verify by Wed 10-14 (from T2)', 'verifying since 13:00: one clean night'])
+  })
+})
+
+describe('meta needed by', () => {
+  /** po's own T4 plans after T1 too. */
+  const ownNeeder = createLine('T4', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', due: '2026-10-13', taskKeys: { after: ['T1'] } })
+  /** Who needs T1: T2 (etl, Fri 10-16) plans after it, T3 (web, Wed 10-14) waits on it; po's own T4, and T5, done. */
+  const needers = [
+    createLine('T2', { owner: 'etl', by: 'etl', at: NOW - DAY, source: 'etl', due: '2026-10-16', taskKeys: { after: ['T1'] } }),
+    createLine('T3', { owner: 'web', by: 'web', at: NOW - DAY, source: 'web', due: '2026-10-14' }),
+    waitingLine('T3', 'web', NOW - HOUR, [{ kind: 'task', id: 'T1' }]),
+    ownNeeder,
+    createLine('T5', { owner: 'web', by: 'web', at: NOW - DAY, source: 'web', due: '2026-10-13', taskKeys: { after: ['T1'] } }),
+    statusLine('T5', 'web', NOW - HOUR, 'done'),
+  ]
+  const own = (due: string | null = null) => createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', due })
+  /** The first task the lines write (T1), the snapshot they fold to, and the tree over it at NOW. */
+  const read = (...lines: string[]) => ({ task: taskOf(...lines), tasks: tasksOf(...lines), tree: treeOf(tasksOf(...lines), NOW) })
+
+  test('names the earliest-due task of another owner that needs it, its owner and due, then how many more', async () => {
+    const { task, tasks } = read(own('2026-10-20'), ...needers)
+    // po's own T4 gives T1 its date; the needed-by names T3, the other owners' earliest, with T3's due.
+    expect(textOf(task, 'po', NOW, tasks)).toEqual(['p3', 'due today (from T4)', 'needed by T3 (web, due Wed 10-14) +1'])
+  })
+
+  test("leaves the due out when the task's due label already names where it comes from", async () => {
+    const { task, tasks } = read(own(), ...needers.slice(0, 3))
+    expect(textOf(task, 'po', NOW, tasks)).toEqual(['p3', 'due Wed 10-14 (from T3)', 'needed by T3 (web) +1'])
+    // A needer with no date is named by its owner alone.
+    const undated = read(own(), createLine('T2', { owner: 'etl', by: 'etl', at: NOW - DAY, source: 'etl', taskKeys: { after: ['T1'] } }))
+    expect(neededByWords(undated.task, undated.tree)).toBe('needed by T2 (etl)')
+  })
+
+  test('the card lists each of them, the earliest due first, each with its owner and due', async () => {
+    const { task, tree } = read(own(), ...needers)
+    expect(neededByLines(task, tree)).toEqual(['T3 (web, due Wed 10-14)', 'T2 (etl, due Fri 10-16)'])
+  })
+
+  test('a finished task, or one only its owner needs, holds no one up', async () => {
+    const done = read(own(), statusLine('T1', 'po', NOW, 'done'), ...needers)
+    expect(neededByWords(done.task, done.tree)).toBe(null)
+    const mine = read(own(), ownNeeder)
+    expect(neededByLines(mine.task, mine.tree)).toEqual([])
+  })
+
+  test('it follows what holds the task: after its unfinished after, before the flags', async () => {
+    const tasks = tasksOf(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po' }),
+      createLine('T2', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'lead', taskKeys: { after: ['T1'] } }),
+      createLine('T3', { owner: 'etl', by: 'etl', at: NOW - DAY, source: 'etl', taskKeys: { after: ['T2'] } }),
+    )
+    const task = tasks.find(each => each.id === 'T2')
+    if (task === undefined) throw new Error('no T2')
+    expect(textOf(task, 'po', NOW, tasks)).toEqual(['p3', 'after T1', 'needed by T3 (etl)', 'new', 'asked by lead'])
   })
 })
 
