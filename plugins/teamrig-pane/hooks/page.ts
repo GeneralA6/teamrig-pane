@@ -6,7 +6,7 @@
 import type { PageDetails, Snapshot, ViewMode } from '../types'
 import { cardRows } from './card'
 import { HELD_DAYS } from './done'
-import { contextOf } from './meta'
+import { treeOf } from './meta'
 import { problemBlocks, readingBlock, single, titleRow, type Block } from './rows'
 
 /**
@@ -22,6 +22,6 @@ export function pageBlocks(snap: Snapshot, mode: ViewMode, id: string, details: 
   if (task === undefined) return [...problemBlocks(snap), single(key, [{ text: `${id} left the pane's tasks: it closed over ${HELD_DAYS} days ago.`, dim: true }])]
   const detail = details[id] ?? { ref: task.ref, quotes: [], goals: [] }
   const viewer = mode === 'mine' ? snap.area : null
-  const card = cardRows('page', task, detail, contextOf(snap.tasks, snap.now), viewer, null)
+  const card = cardRows('page', task, detail, treeOf(snap.tasks, snap.now), viewer, null)
   return [...problemBlocks(snap), { key, rows: [titleRow(key, task)], card }]
 }

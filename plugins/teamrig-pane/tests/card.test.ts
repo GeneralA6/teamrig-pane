@@ -4,7 +4,7 @@ import { cardRows, LABEL_CELLS } from '../hooks/card'
 import { readRegister, type PriorityConfig } from '../hooks/core/read/index'
 import { wrapRow } from '../hooks/layout'
 import { rowOf } from '../hooks/log'
-import { contextOf } from '../hooks/meta'
+import { treeOf } from '../hooks/meta'
 import type { Row } from '../hooks/rows'
 import { HOUR, NOW, createLine, statusLine, updateLine, verifyingLine, waitingLine } from './fixtures'
 
@@ -35,7 +35,7 @@ const textOf = (row: Row) => row.spans.map(span => span.text).join('')
 
 /** The card of `id` among `tasks`, in the `po` list's waiting section unless said otherwise. */
 function cardOf(tasks: readonly TaskRow[], id: string, detail: TaskDetail = UNREAD, viewer: string | null = 'po', now = NOW): Row[] {
-  return cardRows('waiting', taskOf(tasks, id), detail, contextOf(tasks, now), viewer)
+  return cardRows('waiting', taskOf(tasks, id), detail, treeOf(tasks, now), viewer)
 }
 
 /** The first line of the row keyed `row` in a card, or an empty row when the card has none. */
@@ -161,7 +161,7 @@ describe('card', () => {
     expect(rowNamed(verifying, 'proof').spans[2]?.color).toBe('success')
     // A task finished earlier on its day: when it closed, and its note.
     const done = rowsOf([createLine('T3', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po' }), statusLine('T3', 'po', NOW - HOUR, 'done', 'merged', 'def456')])
-    expect(cardRows('done', taskOf(done, 'T3'), UNREAD, contextOf(done, NOW), 'po').slice(0, 2).map(textOf)).toEqual([
+    expect(cardRows('done', taskOf(done, 'T3'), UNREAD, treeOf(done, NOW), 'po').slice(0, 2).map(textOf)).toEqual([
       labelled('Status', 'done since 13:00 by po'),
       labelled('Note', 'merged'),
     ])

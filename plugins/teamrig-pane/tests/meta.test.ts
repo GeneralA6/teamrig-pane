@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow, WaitRow } from '../types'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { ageWords, contextOf, dayWords, dueWords, flagsOf, metaParts, metaText, NOT_PICKED_UP_MS, STATUS_WORDS, waitingWords, whenWords } from '../hooks/meta'
+import { ageWords, dayWords, dueWords, flagsOf, metaParts, metaText, NOT_PICKED_UP_MS, STATUS_WORDS, treeOf, waitingWords, whenWords } from '../hooks/meta'
 import { HOUR, NOW, createLine, iso, statusLine, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
@@ -19,11 +19,11 @@ function taskOf(...lines: string[]): TaskRow {
 }
 
 /** The clock at NOW over a snapshot of no tasks: every task reason reads ready. */
-const AT_NOW = contextOf([], NOW)
+const AT_NOW = treeOf([], NOW)
 
 /** The meta line's words at `now`, the snapshot holding `tasks`. */
 const textOf = (task: TaskRow, viewer: string | null, now = NOW, tasks: readonly TaskRow[] = []) =>
-  metaParts(task, contextOf(tasks, now), viewer).map(part => part.text)
+  metaParts(task, treeOf(tasks, now), viewer).map(part => part.text)
 
 describe('meta words', () => {
   test('a day is its UTC weekday and month-day; a time today is its hour, an older one its day', async () => {
@@ -111,7 +111,7 @@ describe('meta line', () => {
       'waiting since Tue 10-13: decision owner, on T1 ready, until Fri 10-16 14:00 ready; the copy first',
     ])
     const approval = taskOf(createLine('T3', { owner: 'po', by: 'po', at: NOW - DAY }), waitingLine('T3', 'po', NOW, [{ kind: 'approval', who: 'lead' }]))
-    expect(waitingWords(approval, AT_NOW)).toBe('approval lead')
+    expect(waitingWords(approval, AT_NOW.context)).toBe('approval lead')
   })
 
   test('a task not yet started names the tasks it comes after that are unfinished; once started, none', async () => {

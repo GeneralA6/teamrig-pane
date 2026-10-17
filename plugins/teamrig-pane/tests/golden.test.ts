@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow } from '../types'
-import { priorityText, readMarks, readRegister, TaskTree, waitsText } from '../hooks/core/read/index'
+import { priorityText, readMarks, readRegister, waitsText, type TaskTree } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { whenWords } from '../hooks/meta'
+import { treeOf, whenWords } from '../hooks/meta'
 import { findPlaces } from '../hooks/places'
 import { paneBlocks, type Block } from '../hooks/rows'
 import { registerPaths, skippedText, TaskRegisterSource } from '../hooks/source'
@@ -18,9 +18,6 @@ const PATHS = registerPaths({ tasksDir: `${KIT}/teams/demo/state`, inboxDir: `${
 
 /** `MM-DD` or `MM-DD HH:MM`, as teamrig's shortUtc shortens a date. */
 const shortUtc = (text: string) => text.slice(5).replace('T', ' ')
-
-/** The dependency tree teamrig reads its list with, over the pane's rows read at `now`. */
-const treeOf = (rows: readonly TaskRow[], now: number) => new TaskTree(new Map(rows.map(row => [row.id, row])), new Date(now))
 
 /**
  * A row in the words of `teamrig list --all` (formatTask, src/register/views.ts): each fact it prints, from the pane's

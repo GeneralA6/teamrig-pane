@@ -7,10 +7,10 @@
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, ExpandedTasks, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
-import type { WaitContext } from './core/read/index'
+import type { TaskTree } from './core/read/index'
 import { cardRows } from './card'
 import { COMMAND } from './command'
-import { contextOf, metaParts, whenWords } from './meta'
+import { metaParts, treeOf, whenWords } from './meta'
 import { BAR_LOOK } from './status-bar'
 import { areaView, ownerGroups, statusLines } from './view'
 import { cells } from './width'
@@ -65,8 +65,8 @@ export function single(key: string, spans: Span[], hang?: Span): Block {
 }
 
 /** The meta line's parts (meta.ts) between dim dots, each dim unless a color says it needs a look. */
-function metaSpans(task: TaskRow, context: WaitContext, viewer: string | null): Span[] {
-  return metaParts(task, context, viewer).flatMap((part, i) => {
+function metaSpans(task: TaskRow, tree: TaskTree<TaskRow>, viewer: string | null): Span[] {
+  return metaParts(task, tree, viewer).flatMap((part, i) => {
     const span: Span = part.color === undefined ? { text: part.text, dim: true } : part
     return i === 0 ? [span] : [SEPARATOR, span]
   })
@@ -89,25 +89,25 @@ export function titleRow(key: string, task: TaskRow, maxLines?: number): Row {
 
 /**
  * `◐ T12  title`, the title cut at TITLE_LINES lines, and under it one dim meta line (meta.ts) cut at META_LINES;
- * with its card open, the title shows whole and the card (card.ts) takes the meta line's place. `context` is the
- * snapshot's (meta.ts contextOf); `viewer` is the area whose list it is (null in the all view): a task it does not
+ * with its card open, the title shows whole and the card (card.ts) takes the meta line's place. `tree` is the
+ * snapshot's (meta.ts treeOf); `viewer` is the area whose list it is (null in the all view): a task it does not
  * own says whose it is.
  */
-function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, context: WaitContext, viewer: string | null): Block {
+function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, tree: TaskTree<TaskRow>, viewer: string | null): Block {
   const detail = expanded[task.id]
   const indent = indentOf(task)
   const key = `${section}:${task.id}`
   const title = titleRow(key, task, detail === undefined ? TITLE_LINES : undefined)
-  if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: cardRows(section, task, detail, context, viewer) }
-  const meta: Row = { key: `${section}-meta:${task.id}`, spans: [indent, ...metaSpans(task, context, viewer)], hang: indent, maxLines: META_LINES }
+  if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: cardRows(section, task, detail, tree, viewer) }
+  const meta: Row = { key: `${section}-meta:${task.id}`, spans: [indent, ...metaSpans(task, tree, viewer)], hang: indent, maxLines: META_LINES }
   return { key, toggle: task.id, rows: [title, meta] }
 }
 
 /**
  * `✓ T4  title          14:02`: a task done or dropped today, dim, on one line with when it closed; with its card
- * open (card.ts), the title shows whole and the card follows. `context` and `viewer` as taskBlock takes them.
+ * open (card.ts), the title shows whole and the card follows. `tree` and `viewer` as taskBlock takes them.
  */
-function doneBlock(task: TaskRow, expanded: ExpandedTasks, context: WaitContext, viewer: string): Block {
+function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: TaskTree<TaskRow>, viewer: string): Block {
   const detail = expanded[task.id]
   const key = `done:${task.id}`
   const color = GLYPH_COLOR[task.status]
@@ -115,10 +115,10 @@ function doneBlock(task: TaskRow, expanded: ExpandedTasks, context: WaitContext,
     key,
     spans: [color === undefined ? { text: GLYPH[task.status], dim: true } : { text: GLYPH[task.status], color }, { text: ` ${task.id}${TITLE_GAP}${task.title}`, dim: true }],
     hang: indentOf(task),
-    end: { text: whenWords(task.statusAt, context.now), dim: true },
+    end: { text: whenWords(task.statusAt, tree.context.now), dim: true },
     maxLines: detail === undefined ? 1 : undefined,
   }
-  if (detail !== undefined) return { key, toggle: task.id, rows: [row], card: cardRows('done', task, detail, context, viewer) }
+  if (detail !== undefined) return { key, toggle: task.id, rows: [row], card: cardRows('done', task, detail, tree, viewer) }
   return { key, toggle: task.id, rows: [row] }
 }
 
@@ -166,9 +166,9 @@ const FILTER_SECTION: Readonly<Record<BarStatus, string>> = {
 function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expanded: ExpandedTasks): Block[] {
   const tasks = statusLines(snap.tasks, area, snap.now, filter)
   if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
-  const context = contextOf(snap.tasks, snap.now)
-  if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, context, area))
-  return tasks.map(task => taskBlock(FILTER_SECTION[filter], task, expanded, context, area))
+  const tree = treeOf(snap.tasks, snap.now)
+  if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, tree, area))
+  return tasks.map(task => taskBlock(FILTER_SECTION[filter], task, expanded, tree, area))
 }
 
 /**
@@ -189,9 +189,9 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   // Filtered from the status bar, the header leads that status's tasks alone.
   if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
-  const context = contextOf(snap.tasks, snap.now)
-  const tasks = (key: string, list: readonly TaskRow[]) => list.map(task => taskBlock(key, task, expanded, context, view.area))
-  const done = view.doneToday.map(task => doneBlock(task, expanded, context, view.area))
+  const tree = treeOf(snap.tasks, snap.now)
+  const tasks = (key: string, list: readonly TaskRow[]) => list.map(task => taskBlock(key, task, expanded, tree, view.area))
+  const done = view.doneToday.map(task => doneBlock(task, expanded, tree, view.area))
   return [
     ...blocks,
     ...section('verifying', { text: 'Verifying', color: 'success' }, view.verifying.length, tasks('verifying', view.verifying)),
@@ -206,14 +206,14 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
 function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
   const groups = ownerGroups(snap.tasks)
   if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
-  const context = contextOf(snap.tasks, snap.now)
+  const tree = treeOf(snap.tasks, snap.now)
   return groups.flatMap((group, i) => {
     const waiting = group.waiting > 0 ? ` · ${group.waiting} waiting` : ''
     const verifying = group.verifying > 0 ? ` · ${group.verifying} verifying` : ''
     const owner: Span = { text: group.owner, color: group.owner === snap.area ? 'claude' : undefined }
     // The first group sits under the buttons, already a gap away.
     const head = { ...sectionHeading(`owner:${group.owner}`, owner, ` · ${group.active.length} active${waiting}${verifying}`), opensSection: i > 0 }
-    return [head, ...group.active.map(task => taskBlock(group.owner, task, expanded, context, null))]
+    return [head, ...group.active.map(task => taskBlock(group.owner, task, expanded, tree, null))]
   })
 }
 
