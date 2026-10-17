@@ -2,9 +2,11 @@
 import { isRecord, type JsonRecord } from '../core/guards.ts';
 import { NAME_PATTERN, NAME_RULE } from '../core/ids.ts';
 import { isTaskStatus, LEGACY_WAITING_HINT, LEGACY_WAITING_STATUS, SESSION_NAME, TASK_STATUSES, type TaskStatus } from '../register/model.ts';
+import { CORE_RULE_KEYS, isCoreRuleKey } from '../rules/keys.ts';
 import {
   DEFAULT_ALERTS,
   DEFAULT_BUDGET,
+  DEFAULT_BURST,
   DEFAULT_COMMITS,
   DEFAULT_CONTEXT_FILES,
   DEFAULT_GITHUB,
@@ -21,14 +23,19 @@ import {
   DEFAULT_SESSION_SHARE,
   DEFAULT_SKILLS,
   DEFAULT_TESTS,
+  DEFAULT_WAKE,
 } from './defaults.ts';
 import { isEffort, isModel } from './launch.ts';
-import { CONFIG_LIMITS } from './limits.ts';
+import { CONFIG_LIMITS, RULE_CONFLICT_LIMITS } from './limits.ts';
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
 import {
+  BURST_POLICIES,
+  CONFLICT_WINNERS,
   ESCALATIONS,
   HIRING_POLICIES,
+  isBurstPolicy,
   isCommitGate,
+  isConflictWinner,
   isEffortLevel,
   isEscalation,
   isHiringPolicy,
@@ -46,9 +53,11 @@ import {
   type BudgetConfig,
   type BudgetLiftConfig,
   type BudgetReset,
+  type BurstConfig,
   type CommitsConfig,
   type GithubConfig,
   type HiringConfig,
+  type RuleConflict,
   type LeadBoundaryConfig,
   type KitConfig,
   type LaunchConfig,
@@ -62,6 +71,7 @@ import {
   type SkillsConfig,
   type PriorityConfig,
   type TeamLink,
+  type WakeConfig,
 } from './types.ts';
 
 export interface ConfigParse {
@@ -216,6 +226,14 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
       shortLine(CONFIG_LIMITS.ownerGates.maxLength),
       CONFIG_LIMITS.ownerGates.maxItems,
     ),
+    ruleConflicts: read.list(
+      raw,
+      'ruleConflicts',
+      '',
+      [],
+      (value, itemPath) => parseRuleConflict(read, value, itemPath),
+      CONFIG_LIMITS.ruleConflicts.maxItems,
+    ),
     messages: {
       maxLines: read.integer(messages, 'maxLines', 'messages', DEFAULT_MESSAGES.maxLines, CONFIG_LIMITS.maxLines),
       coldAfterMinutes: read.integer(messages, 'coldAfterMinutes', 'messages', DEFAULT_MESSAGES.coldAfterMinutes, CONFIG_LIMITS.coldAfterMinutes),
@@ -248,6 +266,7 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
     loops: {
       chainNudgeAt: read.integer(read.section(raw, 'loops', ''), 'chainNudgeAt', 'loops', DEFAULT_LOOPS.chainNudgeAt, CONFIG_LIMITS.chainNudgeAt),
     },
+    wake: parseWake(read, read.section(raw, 'wake', '')),
     tests: {
       maxFailureChars: read.integer(read.section(raw, 'tests', ''), 'maxFailureChars', 'tests', DEFAULT_TESTS.maxFailureChars, CONFIG_LIMITS.maxFailureChars),
     },
@@ -258,6 +277,7 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
     tabStatus: { enabled: read.boolean(tabStatus, 'enabled', 'tabStatus', false) },
     refresh: parseRefresh(read, read.section(raw, 'refresh', '')),
     hiring: parseHiring(read, read.section(raw, 'hiring', '')),
+    burst: parseBurst(read, read.section(raw, 'burst', '')),
     open: parseOpen(read, read.section(raw, 'open', '')),
     launch,
     paths: parsePaths(read, read.section(raw, 'paths', '')),
@@ -271,6 +291,16 @@ function parseLeadBoundary(read: ConfigReader, raw: JsonRecord): LeadBoundaryCon
     enabled: read.boolean(raw, 'enabled', 'leadBoundary', DEFAULT_LEAD_BOUNDARY.enabled),
     ownPaths: read.stringList(raw, 'ownPaths', 'leadBoundary', DEFAULT_LEAD_BOUNDARY.ownPaths, shortLine(CONFIG_LIMITS.leadOwnPaths.maxLength), CONFIG_LIMITS.leadOwnPaths.maxItems),
     searchNudgeAt: read.integer(raw, 'searchNudgeAt', 'leadBoundary', DEFAULT_LEAD_BOUNDARY.searchNudgeAt, CONFIG_LIMITS.searchNudgeAt),
+  };
+}
+
+/** `wake`: a priority as the register numbers them, and both waits bounded to a day at most. */
+function parseWake(read: ConfigReader, raw: JsonRecord): WakeConfig {
+  return {
+    enabled: read.boolean(raw, 'enabled', 'wake', DEFAULT_WAKE.enabled),
+    priority: read.integer(raw, 'priority', 'wake', DEFAULT_WAKE.priority, CONFIG_LIMITS.wakePriority),
+    batchSeconds: read.integer(raw, 'batchSeconds', 'wake', DEFAULT_WAKE.batchSeconds, CONFIG_LIMITS.wakeBatchSeconds),
+    minGapMinutes: read.integer(raw, 'minGapMinutes', 'wake', DEFAULT_WAKE.minGapMinutes, CONFIG_LIMITS.wakeMinGapMinutes),
   };
 }
 
@@ -481,6 +511,24 @@ function oneOf(words: readonly string[]): Check<string> {
   return (value) => (words.includes(value) ? undefined : `expected one of ${words.join(', ')}`);
 }
 
+/** One recorded rule conflict: each field one line within its bound, the rule a core rule's key. */
+function parseRuleConflict(read: ConfigReader, value: unknown, path: string): RuleConflict | undefined {
+  const conflict = read.objectItem(value, path);
+  if (conflict === undefined) {
+    return undefined;
+  }
+  const before = read.issues.length;
+  const file = read.requiredString(conflict, 'file', path, shortLine(RULE_CONFLICT_LIMITS.fileMaxLength));
+  const text = read.requiredString(conflict, 'text', path, shortLine(RULE_CONFLICT_LIMITS.textMaxLength));
+  const rule = read.requiredString(conflict, 'rule', path, oneOf(CORE_RULE_KEYS));
+  const wins = read.requiredString(conflict, 'wins', path, oneOf(CONFLICT_WINNERS));
+  const reason = read.optionalString(conflict, 'reason', path, shortLine(RULE_CONFLICT_LIMITS.reasonMaxLength));
+  if (read.issues.length !== before || !isCoreRuleKey(rule) || !isConflictWinner(wins)) {
+    return undefined;
+  }
+  return { file, text, rule, wins, ...(reason === undefined ? {} : { reason }) };
+}
+
 function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
   const path = 'register';
   const defaults = DEFAULT_REGISTER;
@@ -665,6 +713,22 @@ function parseHiring(read: ConfigReader, raw: JsonRecord): HiringConfig {
     maxDailyPct,
     idleHours: read.integer(raw, 'idleHours', path, defaults.idleHours, CONFIG_LIMITS.hiringIdleHours),
     reviewDays: read.integer(raw, 'reviewDays', path, defaults.reviewDays, CONFIG_LIMITS.hiringReviewDays),
+    resumeMaxTokens: read.integer(raw, 'resumeMaxTokens', path, defaults.resumeMaxTokens, CONFIG_LIMITS.hiringResumeMaxTokens),
+    resumeMaxIdleDays: read.integer(raw, 'resumeMaxIdleDays', path, defaults.resumeMaxIdleDays, CONFIG_LIMITS.hiringResumeMaxIdleDays),
+  };
+}
+
+/** `burst`: who starts one, its surplus trigger and its caps. */
+function parseBurst(read: ConfigReader, raw: JsonRecord): BurstConfig {
+  const path = 'burst';
+  const defaults = DEFAULT_BURST;
+  const policy = read.string(raw, 'policy', path, defaults.policy, oneOf(BURST_POLICIES));
+  return {
+    policy: isBurstPolicy(policy) ? policy : defaults.policy,
+    surplusHours: read.integer(raw, 'surplusHours', path, defaults.surplusHours, CONFIG_LIMITS.burstSurplusHours),
+    minSparePct: read.number(raw, 'minSparePct', path, defaults.minSparePct, CONFIG_LIMITS.burstMinSparePct),
+    maxHelpers: read.integer(raw, 'maxHelpers', path, defaults.maxHelpers, CONFIG_LIMITS.burstMaxHelpers),
+    maxHires: read.integer(raw, 'maxHires', path, defaults.maxHires, CONFIG_LIMITS.burstMaxHires),
   };
 }
 

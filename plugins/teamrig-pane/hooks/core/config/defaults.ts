@@ -2,6 +2,7 @@
 import type {
   AlertsConfig,
   BudgetConfig,
+  BurstConfig,
   CommitsConfig,
   ContextFilesConfig,
   GithubConfig,
@@ -16,6 +17,7 @@ import type {
   RegisterConfig,
   SkillsConfig,
   TestsConfig,
+  WakeConfig,
 } from './types.ts';
 
 /** Defaults for every key except the roster (`sessions`, `roles.lead`), which each team supplies. */
@@ -110,6 +112,14 @@ export const DEFAULT_ALERTS: AlertsConfig = { persistentFailureHours: 24 };
 export const DEFAULT_LOOPS: LoopsConfig = { chainNudgeAt: 6 };
 export const DEFAULT_LEAD_BOUNDARY: LeadBoundaryConfig = { enabled: true, ownPaths: [], searchNudgeAt: 3 };
 
+/**
+ * On, for p1 only. In one team of 12 sessions, others handed a session 3 to 6 p1 tasks a day once its register
+ * settled, so even all of them waking a session cold (about 210k W each) costs about 1.3M W a day, under 0.2% of
+ * a 900M W week. Two minutes gathers the tasks handed in one sitting into one wake, and 15 minutes between wakes
+ * caps a session at 4 an hour however much is handed.
+ */
+export const DEFAULT_WAKE: WakeConfig = { enabled: true, priority: 1, batchSeconds: 120, minGapMinutes: 15 };
+
 /** About a screenful: two or three failing tests with their errors and first stack frames. */
 export const DEFAULT_TESTS: TestsConfig = { maxFailureChars: 4000 };
 
@@ -122,6 +132,8 @@ export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {
 /**
  * Claude Code compacts a 200k window at about 167k, so 120k refreshes before that; every 3 tasks catches a
  * session that grows slowly, from 80k up. Measured over 8 days of 12 sessions: about 9 refreshes a day in all.
+ * The user types /clear for the fresh start (`autoRestart` off): an automatic /clear wiped the screen while the
+ * user was still reading the last reply, still had its question to answer, or was away.
  */
 export const DEFAULT_REFRESH: RefreshConfig = {
   enabled: true,
@@ -129,7 +141,7 @@ export const DEFAULT_REFRESH: RefreshConfig = {
   everyTasks: 3,
   everyTasksMinTokens: 80_000,
   tabTitle: true,
-  autoRestart: true,
+  autoRestart: false,
   restartDelaySeconds: 15,
   endCommand: [],
 };
@@ -138,9 +150,17 @@ export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto' };
 
 /**
  * A hire spends the week's budget, so it waits for the owner's yes: at most two hires at 1% of the week a day
- * each, 3% in all, reviewed after a week and due to retire after 4 hours with no open task.
+ * each, 3% in all, reviewed after a week and due to retire after 4 hours with no open task. A rehire resumes its
+ * last Claude Code session only when it holds at most 250k tokens of context and was idle at most a week.
  */
-export const DEFAULT_HIRING: HiringConfig = { policy: 'owner', maxSessions: 2, dailyPct: 1, maxDailyPct: 3, idleHours: 4, reviewDays: 7 };
+/**
+ * A burst spends more of the week, so the owner approves each one. A surplus burst may start from 48 hours before
+ * the reset once at least 5% of the week is projected unused; each burst session runs at most 3 helpers at once,
+ * and one burst hires at most 2 sessions, as many as `hiring.maxSessions` allows by default.
+ */
+export const DEFAULT_BURST: BurstConfig = { policy: 'owner', surplusHours: 48, minSparePct: 5, maxHelpers: 3, maxHires: 2 };
+
+export const DEFAULT_HIRING: HiringConfig = { policy: 'owner', maxSessions: 2, dailyPct: 1, maxDailyPct: 3, idleHours: 4, reviewDays: 7, resumeMaxTokens: 250_000, resumeMaxIdleDays: 7 };
 
 /**
  * The lead's model and effort for each key its `launch` entry leaves unset: Opus (Claude Code's `opus`
