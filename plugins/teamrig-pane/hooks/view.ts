@@ -1,8 +1,8 @@
 // What the pane shows, as plain data: pure functions over the folded tasks, so the drawing in
 // register.tsx only lays them out. The order and the due are teamrig's own (hooks/core/read).
 import type { BarStatus, Snapshot, TaskRow, TaskStatus } from '../types'
-import { ACTIVE_STATUSES, byPlanOrder, type WaitContext } from './core/read/index'
-import { contextOf, metaText, whenWords } from './meta'
+import { ACTIVE_STATUSES, byPlanOrder, type TaskTree } from './core/read/index'
+import { metaText, treeOf, whenWords } from './meta'
 import { barStatusOf, isFinishedOn, utcDay } from './status-bar'
 
 /** At most this many tasks done today are listed, and this many asked of others; the heading counts them all. */
@@ -151,8 +151,9 @@ function sameValue(a: FieldValue, b: FieldValue): boolean {
  * What the clock and the other tasks change in a drawing of the task: an active one's meta line and its card's
  * `since` words (card.ts: an open task's too, which its meta line leaves out), whether a finished one is done today.
  */
-function timeLabel(task: TaskRow, context: WaitContext): string {
-  return isActive(task) ? `${metaText(task, context)} · ${whenWords(task.statusAt, context.now)}` : String(isFinishedOn(task, utcDay(context.now)))
+function timeLabel(task: TaskRow, tree: TaskTree<TaskRow>): string {
+  const now = tree.context.now
+  return isActive(task) ? `${metaText(task, tree)} · ${whenWords(task.statusAt, now)}` : String(isFinishedOn(task, utcDay(now)))
 }
 
 /**
@@ -163,13 +164,13 @@ export function sameView(a: Snapshot, b: Snapshot): boolean {
   if (a.area !== b.area || a.areaSource !== b.areaSource || a.unreadInbox !== b.unreadInbox || a.problem !== b.problem)
     return false
   if (a.tasks.length !== b.tasks.length) return false
-  const [contextA, contextB] = [contextOf(a.tasks, a.now), contextOf(b.tasks, b.now)]
+  const [treeA, treeB] = [treeOf(a.tasks, a.now), treeOf(b.tasks, b.now)]
   return a.tasks.every((task, i) => {
     const other = b.tasks[i]
     return (
       other !== undefined &&
       FIELDS.every(field => sameValue(task[field], other[field])) &&
-      timeLabel(task, contextA) === timeLabel(other, contextB)
+      timeLabel(task, treeA) === timeLabel(other, treeB)
     )
   })
 }

@@ -6,7 +6,7 @@
 // compares them to know when a poll must redraw.
 import type { ThemeKey } from 'claude-code'
 import type { TaskRow, TaskStatus } from '../types'
-import { ACTIVE_STATUSES, dueTime, priorityText, unfinishedAfter, waitContext, waitText, type WaitContext } from './core/read/index'
+import { ACTIVE_STATUSES, dueTime, priorityText, TaskTree, unfinishedAfter, waitText, type WaitContext } from './core/read/index'
 import type { Span } from './rows'
 import { utcDay } from './status-bar'
 
@@ -82,11 +82,12 @@ export function lateWords(task: TaskRow, now: number): string | null {
 }
 
 /**
- * What a reason is judged ready by: the snapshot's clock and its tasks' statuses. The snapshot holds the active
- * tasks and those finished within HELD_DAYS (source.ts), so one it lacks finished earlier and reads finished, as in teamrig.
+ * The snapshot's tasks as teamrig's dependency tree reads them at its clock (core register/tree.ts); its `context` is
+ * what a waiting task's reasons are judged ready by. The snapshot holds the active tasks and those finished within
+ * HELD_DAYS (source.ts), so one it lacks finished earlier and reads finished, as in teamrig.
  */
-export function contextOf(tasks: readonly TaskRow[], now: number): WaitContext {
-  return waitContext(new Map(tasks.map(task => [task.id, task])), new Date(now))
+export function treeOf(tasks: readonly TaskRow[], now: number): TaskTree<TaskRow> {
+  return new TaskTree(new Map(tasks.map(task => [task.id, task])), new Date(now))
 }
 
 /**
@@ -109,10 +110,11 @@ export function ageWords(ms: number): string {
  * priority, `due …` (`verify by …` while verifying), `<status> since …` with why a waiting task waits or what
  * proves a verifying one, `after T5` while a task not yet started has one unfinished, then the flags: `late 1d`,
  * `new` (to its owner), `not picked up 2d`, and `asked by <who>` on a task not yet started that someone else
- * asked for. `context` (contextOf) holds the clock and marks the ready reasons. `viewer` null (the all view)
+ * asked for. `tree` (treeOf) holds the clock and marks the ready reasons. `viewer` null (the all view)
  * names no owner.
  */
-export function metaParts(task: TaskRow, context: WaitContext, viewer: string | null): Span[] {
+export function metaParts(task: TaskRow, tree: TaskTree<TaskRow>, viewer: string | null): Span[] {
+  const context = tree.context
   const now = context.now
   const others = viewer !== null && task.owner !== viewer
   const parts: Span[] = []
@@ -139,8 +141,8 @@ export function metaParts(task: TaskRow, context: WaitContext, viewer: string | 
 }
 
 /** The meta line's words alone, as the snapshot's clock and tasks draw them: what sameView compares. */
-export function metaText(task: TaskRow, context: WaitContext): string {
-  return metaParts(task, context, null)
+export function metaText(task: TaskRow, tree: TaskTree<TaskRow>): string {
+  return metaParts(task, tree, null)
     .map(part => part.text)
     .join(' · ')
 }

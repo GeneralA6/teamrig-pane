@@ -13,7 +13,7 @@
 // wraps, each value's lines under the value column, and register.tsx draws, a link as a link and a task id the
 // snapshot holds (ids.ts) underlined, a press on it opening that task's page.
 import type { TaskDetail, TaskRow } from '../types'
-import type { WaitContext } from './core/read/index'
+import type { TaskTree, WaitContext } from './core/read/index'
 import { lineRef, refLabel, refParts } from './details'
 import { idSpans } from './ids'
 import { issueOf, taskLinks } from './links'
@@ -136,7 +136,7 @@ function labelled(key: string, label: string, lines: Lines, isKnown: (id: string
 
 /**
  * The card's rows, keyed `<section>-card:<id>:<row>`. `detail` is what was read when it opened (details.ts),
- * `context` the snapshot's (meta.ts contextOf), `viewer` the area whose list it is (null in the all view). An id
+ * `tree` the snapshot's (meta.ts treeOf), `viewer` the area whose list it is (null in the all view). An id
  * in its words is a span of its own, marked with its task, when the snapshot holds that task. `lead` starts each
  * line: the guide under the task's title in the list, none on a task's page.
  */
@@ -144,10 +144,11 @@ export function cardRows(
   section: string,
   task: TaskRow,
   detail: TaskDetail,
-  context: WaitContext,
+  tree: TaskTree<TaskRow>,
   viewer: string | null,
   lead: Span | null = GUIDE,
 ): Row[] {
+  const context = tree.context
   const key = (row: string) => `${section}-card:${task.id}:${row}`
   const isKnown = (id: string) => context.statusOf(id) !== undefined
   const field = (row: string, label: string, lines: Lines) => labelled(key(row), label, lines, isKnown, lead)
