@@ -291,6 +291,16 @@ harness, 20,000 of its shorter events (3.4 MiB, 4,082 tasks, 409 kept) load and 
 a redraw takes 43-48 ms and a switch to `all` 36-40 ms (three runs, 2026-10-15); a poll with nothing
 new reads nothing.
 
+Every scroll, focus move, keystroke and poll write draws the pane again, so a docked draw lays out
+only the rows near what you see (`hooks/window.ts`): those within two screenfuls of the scroll window,
+plus the focused element and the row a page was opened from, each with a screenful around it. Each
+run of the other rows is one empty box as tall as they are, so the body keeps its height and the
+scrollbar its place, and the wrapped lines of a row that did not change are kept from the draw before.
+The plugin's own work per draw (`mine` view, 56 columns, 40 rows shown, median, 2026-10-18) at 100,
+500 and 2,000 tasks fell from 11, 53 and 212 ms to 1.7, 7 and 28 ms, and the elements the host lays
+out from 576, 2,843 and 11,676 to 102 at each size. Tab and Shift+Tab move through the rows drawn,
+so Shift+Tab from the top lands on the last row drawn, not the list's last: scroll to the end for it.
+
 `$.state` outlives a hot reload, so the snapshot is kept under a shape tag (`SNAPSHOT_SHAPE` in
 `hooks/register.tsx`): bump it whenever the `Snapshot` or `TaskRow` type changes, and a reloaded pane
 reads what the older code wrote as not yet read, drawing `Reading the register…` until its first poll
