@@ -436,6 +436,32 @@ test('a register of 20,000 events loads and draws in well under a second, and a 
   expect(disk.reads.length).toBe(reads)
 })
 
+test('docked, a list of 2,000 tasks draws only the elements near the window, and a scroll draws the rows it moves to', async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(
+    EVENTS,
+    Array.from({ length: 2_000 }, (_, i) => createLine(`T${i + 1}`, { owner: 'po', by: 'lead', at: NOW - HOUR, title: `Long list task ${i + 1}` })),
+  )
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'all' })
+  const numbers = async () =>
+    (await pane.findAll({ type: 'Text', text: /Long list task \d+/ })).map(found => Number(/Long list task (\d+)/.exec(found.text)?.[1]))
+  // Four screenfuls of 40 rows hold a few dozen tasks of the 2,000, and the tree's buttons stay as few.
+  const top = await numbers()
+  expect(top).toContain(1)
+  expect(top.length).toBeLessThan(60)
+  expect(top).not.toContain(2_000)
+  expect(buttonKeys(await pane.drawn()).length).toBeLessThan(80)
+
+  await pane.redraw({ ...PANE_PROPS, scroll: { offset: 5_000, bodyRows: 40 } })
+  const middle = await numbers()
+  expect(middle.length).toBeGreaterThan(0)
+  expect(middle.length).toBeLessThan(60)
+  expect(Math.min(...middle)).toBeGreaterThan(1)
+  expect(Math.max(...middle)).toBeLessThan(2_000)
+})
+
 /** A drawn element's props, when it has any. */
 function propsOf(node: unknown): object | null {
   return typeof node === 'object' && node !== null && 'props' in node && typeof node.props === 'object' && node.props !== null ? node.props : null

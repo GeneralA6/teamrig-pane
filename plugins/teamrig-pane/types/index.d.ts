@@ -202,6 +202,8 @@ declare module 'claude-code' {
       findField: FindField
       /** The focus ring's landings in the pane (hooks/find-field.ts): the line under the Find field reads them. */
       ring: RingLandings
+      /** The key of the pane element the focus ring last landed on, null for none: a windowed body (hooks/window.ts) always draws it. */
+      held: string | null
     }
   }
 }
