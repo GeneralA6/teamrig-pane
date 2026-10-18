@@ -37,6 +37,8 @@ declare module 'claude-code' {
     readonly gap?: number
     readonly columnGap?: number
     readonly paddingX?: number
+    /** The rows the Box takes: an empty one holds that many (a windowed body's spacer, hooks/window.ts). */
+    readonly height?: number
     readonly children?: Child
   }
   export type TextProps = {

@@ -26,7 +26,8 @@ import { findPlaces, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails } from './details'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
-import { dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
+import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
+import { windowed, type Slot } from './window'
 import { NOTHING_EXPANDED, paneBlocks, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
@@ -121,6 +122,19 @@ const pages = atom({ plugin: 'teamrig-pane', key: 'pages' } as const, NO_PAGES, 
 const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, FIRST_FIELD)
 /** The focus ring's landings in the pane (find-field.ts), counted by the ui.focus hook. */
 const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS)
+/** The key of the pane element the focus ring last landed on, null for none or an engine stop: a windowed body (window.ts) always draws it. */
+const held = atom({ plugin: 'teamrig-pane', key: 'held' } as const, null)
+
+/** The key of an open card's element: `from` for the presses on the task ids in it. */
+function openKey(key: string): string {
+  return `${key}-open`
+}
+
+/** True when the element keyed `key` is drawn in `drawn`: its press, its open card, or a press on a task id in the card. */
+function isDrawnIn(drawn: Drawn, key: string): boolean {
+  const open = openKey(drawn.key)
+  return key === drawn.key || key === open || (key.startsWith('goto:') && key.includes(`:${open}:`))
+}
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -356,17 +370,24 @@ export const register: Register = on => {
 
   // One Text per block (rows.ts, layout.ts), the unstyled spans plain strings: a few elements a
   // task. A task's block is a plain Button around its Text, so a press (or Enter on it) expands or
-  // collapses the task. Docked, the root's gap spaces the blocks and its padding the frame.
+  // collapses the task. Docked, the root's gap spaces the blocks and its padding the frame, and only the blocks
+  // near the window are drawn (window.ts), each run of the others one empty Box of their rows.
   // Each landing of the pane's focus ring the engine let through is counted, the line under the Find field reading
-  // where the keys go from it (find-field.ts). A failed count lets the ring move as it would have.
+  // where the keys go from it (find-field.ts), and the element it landed on kept, which a windowed body draws
+  // wherever the window is. A failed count lets the ring move as it would have.
   on('ui.focus', { requestId: PANE }, async ($, e, next) => {
     const moved = await next(e)
-    if (moved.deny === undefined) await update($, ring, current => landedOn(current, e.element))
+    if (moved.deny === undefined) {
+      await update($, ring, current => landedOn(current, e.element))
+      await update($, held, () => e.element ?? null)
+    }
     return moved
   }).catch(($, e, next) => next(e))
 
   /** Where the keys were as the pane last drew (find-field.ts): every drawing updates it, whatever it shows. */
   let keysMemo = FIRST_MEMO
+  /** The rows the last docked layout wrapped: a drawing re-wraps only the rows that changed since. */
+  const wraps = new WrapCache()
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Link, Input } = $.ui.resolve(e)
     const inline = e.props.placement === 'inline'
@@ -383,12 +404,14 @@ export const register: Register = on => {
     /** The Find field's round (find-field.ts), drawn in the tasks view docked. */
     let field: FindField = FIRST_FIELD
     let landings: RingLandings = NO_LANDINGS
+    let heldKey: string | null = null
     let body: Drawn[] = []
     /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
     let barLines: BarPiece[][] = []
     const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
     try {
       landings = await read($, ring)
+      heldKey = await read($, held)
       keysMemo = drawnWith(keysMemo, e.props.isFocused, landings)
       isMinimized = (await read($, size)) === 'minimized'
       current = await read($, view)
@@ -419,7 +442,7 @@ export const register: Register = on => {
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
         barLines = bar === null ? [] : inline ? bar.lines.slice(0, inlineBarRows(bar, cap)) : bar.lines
-        body = inline ? inlineLayout(blocks, cap - barLines.length) : dockLayout(blocks, columns)
+        body = inline ? inlineLayout(blocks, cap - barLines.length) : dockLayout(blocks, columns, wraps)
       }
     } catch (error) {
       barLines = []
@@ -536,7 +559,7 @@ export const register: Register = on => {
     const drawBlock = (drawn: Drawn) => {
       const head = headOf(drawn)
       if (drawn.card === undefined) return head
-      const from = `${drawn.key}-open`
+      const from = openKey(drawn.key)
       return (
         <Box key={from} flexDirection="column">
           {head}
@@ -544,6 +567,17 @@ export const register: Register = on => {
         </Box>
       )
     }
+    // Docked, the body is drawn windowed (window.ts): the elements near what the person sees, the one the keys are
+    // on and the one a step back to the list lands on, each run of the others one empty Box of their rows.
+    const listed = currentPlace(at)
+    const landingKey = listed.kind === 'list' ? listed.row : null
+    const bodyWindow = {
+      offset: e.props.scroll.offset,
+      bodyRows: e.props.scroll.bodyRows,
+      gap: 1,
+      isAnchor: (drawn: Drawn) => [heldKey, landingKey].some(key => key !== null && isDrawnIn(drawn, key)),
+    }
+    const drawSlot = (slot: Slot) => (slot.kind === 'drawn' ? drawBlock(slot.drawn) : <Box key={slot.key} height={slot.rows} />)
 
     // The switch: first in every state, so the other view is always one press (or t / d) away, its
     // buttons wrapping under each other in a dock too narrow for both. Minimized, it is the whole
@@ -773,7 +807,7 @@ export const register: Register = on => {
         {pageHead}
         {weekRow}
         {statusRows}
-        {body.map(drawBlock)}
+        {inline ? body.map(drawBlock) : windowed(body, bodyWindow).map(drawSlot)}
       </Box>
     )
   })
