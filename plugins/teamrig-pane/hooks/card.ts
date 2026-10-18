@@ -32,6 +32,25 @@ const SEPARATOR: Span = { text: ' · ', dim: true }
 /** A value's lines, each its spans; a row with none is left out. */
 type Lines = Span[][]
 
+/** A fact a card shows on its labelled row, named as its row's key ends. */
+export type CardField =
+  | 'description'
+  | 'status'
+  | 'note'
+  | 'proof'
+  | 'priority'
+  | 'due'
+  | 'week'
+  | 'after'
+  | 'needed-by'
+  | 'goal'
+  | 'from'
+  | 'added'
+  | 'owner'
+  | 'reference'
+  | 'evidence'
+  | 'links'
+
 /** Spans between dim dots. */
 function joined(parts: readonly Span[]): Span[] {
   return parts.flatMap((part, i) => (i === 0 ? [part] : [SEPARATOR, part]))
@@ -140,7 +159,8 @@ function labelled(key: string, label: string, lines: Lines, isKnown: (id: string
  * The card's rows, keyed `<section>-card:<id>:<row>`. `detail` is what was read when it opened (details.ts),
  * `tree` the snapshot's (meta.ts treeOf), `viewer` the area whose list it is (null in the all view). An id
  * in its words is a span of its own, marked with its task, when the snapshot holds that task. `lead` starts each
- * line: the guide under the task's title in the list, none on a task's page.
+ * line: the guide under the task's title in the list, none on a task's page. `only` keeps those facts alone (the
+ * banner's, banner.ts); null keeps every one.
  */
 export function cardRows(
   section: string,
@@ -149,11 +169,13 @@ export function cardRows(
   tree: TaskTree<TaskRow>,
   viewer: string | null,
   lead: Span | null = GUIDE,
+  only: ReadonlySet<CardField> | null = null,
 ): Row[] {
   const context = tree.context
-  const key = (row: string) => `${section}-card:${task.id}:${row}`
+  const key = (row: CardField) => `${section}-card:${task.id}:${row}`
   const isKnown = (id: string) => context.statusOf(id) !== undefined
-  const field = (row: string, label: string, lines: Lines) => labelled(key(row), label, lines, isKnown, lead)
+  const field = (row: CardField, label: string, lines: Lines) =>
+    only === null || only.has(row) ? labelled(key(row), label, lines, isKnown, lead) : []
   return [
     ...field('description', 'Description', descriptionLines(task, detail)),
     ...field('status', 'Status', statusLines(task, context)),
