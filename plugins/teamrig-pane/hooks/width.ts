@@ -73,10 +73,19 @@ export function graphemeCells(grapheme: string): number {
   return EAST_ASIAN_WIDE.test(grapheme) ? 2 : 1
 }
 
+/** How many non-ASCII texts' widths cells keeps; past it, it starts over. */
+export const KEPT_WIDTHS = 4_096
+/** Non-ASCII texts' widths: the pane's glyphs and separators recur in every row, and segmenting them is the cost. */
+const widths = new Map<string, number>()
+
 /** A text's width in cells, as the terminal draws it. */
 export function cells(text: string): number {
   if (ASCII.test(text)) return text.length
+  const known = widths.get(text)
+  if (known !== undefined) return known
   let width = 0
   for (const grapheme of graphemes(text)) width += graphemeCells(grapheme)
+  if (widths.size >= KEPT_WIDTHS) widths.clear()
+  widths.set(text, width)
   return width
 }

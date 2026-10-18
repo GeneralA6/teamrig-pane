@@ -193,8 +193,38 @@ function trimEnd(line: readonly Span[]): Span[] {
   return out.length > 0 ? out : [BLANK_LINE]
 }
 
+/** Wrapped lines, shared between layouts: read, never changed. */
+export type Lines = readonly (readonly Span[])[]
+
+/**
+ * Each row's lines from the layout before when nothing wrapRow reads changed (its spans, hang, rule, maxLines and end,
+ * and the columns; never its key), so a redraw re-wraps only the rows that did: the engine asks for the tree again on
+ * each scroll move, and a register write redraws a list whose rows mostly stayed. It keeps only the rows the last
+ * layout used, so it never outgrows the list drawn.
+ */
+export class WrapCache {
+  /** The last layout's rows. */
+  private kept = new Map<string, Lines>()
+  /** The rows this layout used so far. */
+  private used = new Map<string, Lines>()
+
+  /** `row` in `columns` cells, as wrapRow wraps it. */
+  wrap(row: Row, columns: number): Lines {
+    const key = JSON.stringify([columns, row.spans, row.hang ?? null, row.rule === true, row.maxLines ?? null, row.end ?? null])
+    const lines = this.used.get(key) ?? this.kept.get(key) ?? wrapRow(row, columns)
+    this.used.set(key, lines)
+    return lines
+  }
+
+  /** Ends a layout: the rows it used are kept for the next one, and any it did not are dropped. */
+  settle(): void {
+    this.kept = this.used
+    this.used = new Map()
+  }
+}
+
 /** Lines as one Text's spans, a new line between each two. */
-function joinedLines(lines: readonly Span[][]): Span[] {
+function joinedLines(lines: Lines): Span[] {
   return merged(lines.flatMap((line, i) => (i === 0 ? line : [NEW_LINE, ...line])))
 }
 
@@ -211,9 +241,9 @@ export function piecesOf(line: readonly Span[]): Piece[] {
 }
 
 /** Wrapped card lines as parts: each run of lines with no task id one Text, each line with one a row of its pieces. */
-export function cardParts(lines: readonly Span[][]): CardPart[] {
+export function cardParts(lines: Lines): CardPart[] {
   const parts: CardPart[] = []
-  let run: Span[][] = []
+  let run: (readonly Span[])[] = []
   const key = () => `card:${parts.length}`
   const endRun = () => {
     if (run.length > 0) parts.push({ kind: 'text', key: key(), spans: joinedLines(run) })
@@ -234,12 +264,13 @@ export function cardParts(lines: readonly Span[][]): CardPart[] {
 /**
  * Each block one Text of its rows wrapped to the body's own width (one column at least, for a body
  * resized below the pane's padding), a block that opens a section led by a blank line; an open card's
- * rows wrapped the same way into its parts.
+ * rows wrapped the same way into its parts. `wraps` carries the rows wrapped by the layout before (WrapCache);
+ * by default none are.
  */
-export function dockLayout(blocks: readonly Block[], bodyColumns: number): Drawn[] {
+export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps: WrapCache = new WrapCache()): Drawn[] {
   const columns = Math.max(1, bodyColumns)
-  const wrapped = (rows: readonly Row[]) => rows.flatMap(row => wrapRow(row, columns))
-  return blocks.map(block => {
+  const wrapped = (rows: readonly Row[]): Lines => rows.flatMap(row => wraps.wrap(row, columns))
+  const body = blocks.map(block => {
     const lines = wrapped(block.rows)
     const drawn: Drawn = {
       key: block.key,
@@ -250,6 +281,8 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number): Drawn
     }
     return block.card === undefined ? drawn : { ...drawn, card: cardParts(wrapped(block.card)) }
   })
+  wraps.settle()
+  return body
 }
 
 /** The body when building it threw: one line naming the error, so the pane is never left blank. */
