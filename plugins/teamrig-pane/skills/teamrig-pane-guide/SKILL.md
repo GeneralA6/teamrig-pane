@@ -26,7 +26,7 @@ module in Claude Code's own runtime), an early-access plugin surface that may ch
 | Fullscreen layout | `"tui": "fullscreen"` in `~/.claude/settings.json` | Only the fullscreen layout docks the pane on the right. Without it the pane sits above the prompt. |
 | Terminal width | 110 columns to dock, 144 to open by itself | Narrower, the pane sits above the prompt; `/teamrig-pane` opens it at any width. |
 | teamrig | a team with a register | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). |
-| git | on the PATH | Only for the Changes tab, which runs `git status` per repo, and `git diff` and `git grep` to count the changed lines. Without it the pane draws a `WARN` line with the fix. |
+| git | on the PATH | Only for the Changes tab, which runs `git status` per repo, `git diff` and `git grep` to count the changed lines, and `git diff` for each file's diff you open. Without it the pane draws a `WARN` line with the fix. |
 | Node.js | none to use it; 22.18 or later to develop it | The pane runs inside Claude Code. The repository's tools and tests run on Node (`engines` in `package.json`). |
 | Operating system | Linux, Windows or macOS | CI runs the tests on ubuntu, windows and macos, each on Node 22 and 24, and the plugin tests in Claude Code on each. CI is paused for now: each change is tested before it is pushed on one machine, Node and Claude Code release, so the others go unchecked until CI runs again. |
 
@@ -418,14 +418,20 @@ worktree's often does), then each file with git's two-letter code (`M `, ` M`, `
 root, its lines added and removed (`+12 -3`; `+0 -0` for none, `binary` for a binary file; an untracked folder
 sums its files) and a rename's source (`← old.ts`). Files written outside any repo come last.
 
+A click on a file's row, or Enter on it, opens its diff under it and a second one closes it: each hunk's `@@` line
+dim, `+` lines green, `-` lines red, the lines around them plain. It is git's diff of the file against the last
+commit (its staged and unstaged edits, as the row counts them; an untracked file's every line added), the first 200
+lines shown and the rest counted, each line cut at 3 screen lines. An open diff follows the file's edits and closes
+when the file leaves the list; an untracked folder opens none.
+
 `Δn` counts the listed files, on the button and in the pane's tab title (`Tasks · Δ3`, shown while more than one
-pane is open). The view cannot open Claude Code's own `/diff` pane.
+pane is open). The view cannot open Claude Code's own `/diff` pane: the diff under a file is the pane's own.
 
 Each repo costs one `git --no-optional-locks status --porcelain=v1 -b -z` (it takes no index lock, so it never
 blocks a commit), and while it has changed files one `git diff HEAD --numstat -z` and up to two
 `git grep --untracked -c` runs to count their lines: on the next 3 second poll after a write or a Bash or
-PowerShell call, every 60 seconds, and at once on a switch to Changes. A count git can't give is left out, with no
-warning, and git never runs in a folder that is gone.
+PowerShell call, every 60 seconds, and at once on a switch to Changes; each open diff is one more `git diff` then.
+A count git can't give is left out, with no warning, and git never runs in a folder that is gone.
 
 ## How it relates to the teamrig CLI
 

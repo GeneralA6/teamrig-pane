@@ -64,7 +64,8 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
   A line under it says where your keys go: into the search, to the pane's keys, or to Claude's prompt.
 - **Archive:** `h` lists the tasks finished this week, a day at a time; `p` and `l` step a week back
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.
-- **Changes:** the files changed in each git repo the session works in, each with its lines added and removed.
+- **Changes:** the files changed in each git repo the session works in, each with its lines added and removed;
+  a click on a file opens its diff under it, `+` lines green and `-` lines red.
   Press the switch, or `t` and `d` while the pane holds the keyboard.
 
 ## How it reads teamrig
