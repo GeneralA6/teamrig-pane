@@ -22,8 +22,6 @@ export type TaskRow = {
   owner: string
   /** 1 is the most urgent; drawn `p1` in a list, `Priority 1` on a card. */
   priority: number
-  /** What the team config calls the priority (`register.priorities`); null when it names none. */
-  priorityName: string | null
   /** `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`, UTC; a bare day means its end. */
   due: string | null
   status: TaskStatus

@@ -3,7 +3,7 @@
 // event, status and line teamrig writes reads here as teamrig's own commands read it (T248). This file
 // only maps a folded task to the row the pane draws.
 import type { TaskRow, TaskStatus, WaitRow } from '../types'
-import { priorityName, type PriorityConfig, type Task, type TaskStatus as ReadStatus, type WaitReason } from './core/read/index'
+import type { Task, TaskStatus as ReadStatus, WaitReason } from './core/read/index'
 
 /** True only when A and B are the same union. */
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
@@ -14,15 +14,14 @@ export const STATUS_CONTRACT_MATCHES: Same<TaskStatus, ReadStatus> = true
 // The same for what a waiting task waits for.
 export const WAIT_CONTRACT_MATCHES: Same<WaitRow, WaitReason> = true
 
-/** A task as the pane draws it, its priority named as the team config names it. */
-export function rowOf(task: Task, priorities: readonly PriorityConfig[]): TaskRow {
+/** A task as the pane draws it. */
+export function rowOf(task: Task): TaskRow {
   return {
     id: task.id,
     title: task.title,
     description: task.description,
     owner: task.owner,
     priority: task.priority,
-    priorityName: priorityName(priorities, task.priority) ?? null,
     due: task.due,
     status: task.status,
     note: task.note,

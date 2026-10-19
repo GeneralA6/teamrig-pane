@@ -32,8 +32,8 @@ The settings file is one JSON object of those settings. A folder in it is absolu
 { "tasksDir": "~/notes/tasks", "inboxDir": "~/notes/board/inbox" }
 ```
 
-With both folders named, the team is still looked for, only to name the priorities; when none is found,
-teamrig's defaults name them.
+With both folders named, the team is still looked for, for the files that name its sessions and for its
+notes; when none is found, the pane goes without them.
 
 The variables come from the environment Claude Code runs in (its settings' `env` block works too), all read once
 when the session starts: after a change, restart or resume the session.

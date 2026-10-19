@@ -216,10 +216,9 @@ What the host draws and the mod can't change:
 By default the pane reads the register where teamrig keeps it for the session's team:
 `<kit home>/teams/<team>/state` (the kit home is `$TEAMRIG_HOME`, else `~/.teamrig`; the team is
 `$TEAMRIG_TEAM`, else the nearest `.teamrig.json` up from the session's folder), with its inbox in
-`state/inbox`. A team config's `paths.state` and `paths.inbox` move them, as they do for teamrig, and
-its `register.priorities` name the priorities (teamrig's defaults when it names none, or when the team
-has no config). With both folders named below, the session's team is still looked for, only to name
-the priorities: when none can be found or read, teamrig's defaults name them.
+`state/inbox`. A team config's `paths.state` and `paths.inbox` move them, as they do for teamrig. With
+both folders named below, the session's team is still looked for, for the files that name its sessions
+and for its notes: when none can be found or read, the pane goes without them.
 
 Any folder can be named instead, each on its own; a variable wins over the settings file, which wins
 over the team default:

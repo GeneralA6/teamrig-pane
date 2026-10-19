@@ -350,7 +350,7 @@ export const register: Register = on => {
     details = new TaskDetails(files, refPlaces)
     refFiles = new RefFileReader(files, refPlaces)
     const started = new LiveRegister({
-      source: 'missing' in paths ? paths : new TaskRegisterSource(files, paths, places.found ? places.priorities : []),
+      source: 'missing' in paths ? paths : new TaskRegisterSource(files, paths),
       sessionId: () => $.session.id(),
       now: () => $.clock.now(),
       publish: async change => {
