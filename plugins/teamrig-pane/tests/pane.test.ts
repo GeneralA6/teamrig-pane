@@ -98,14 +98,16 @@ function fakeStore(on: On, kept: Readonly<Record<string, unknown>>) {
 }
 
 /**
- * The repos a fake git knows: each folder's root, each root's `status --porcelain=v1 -b -z` output, and the
- * line counts' outputs (`diff --numstat -z`, `grep -c -z`; none by default). Tests change it as they go.
+ * The repos a fake git knows: each folder's root, each root's `status --porcelain=v1 -b -z` output, the
+ * line counts' outputs (`diff --numstat -z`, `grep -c -z`; none by default), and each file's diff by its path
+ * (none by default). Tests change it as they go.
  */
 type FakeRepos = {
   roots: Record<string, string>
   statuses: Record<string, string>
   numstats?: Record<string, string>
   greps?: Record<string, string>
+  patches?: Record<string, string>
   /** No git to start: every run rejects as a spawn of a missing program does. */
   isMissing?: boolean
 }
@@ -126,7 +128,9 @@ function fakeGit(on: On, repos: FakeRepos) {
     const root = repos.roots[cwd]
     if (command === 'rev-parse') return root === undefined ? answer('', 128, 'fatal: not a git repository') : answer(`${root}
 `)
-    if (command === 'diff') return answer(repos.numstats?.[cwd] ?? '')
+    if (command === 'diff' && e.argv.includes('--numstat')) return answer(repos.numstats?.[cwd] ?? '')
+    // A file's diff, named last; `--no-index` exits 1 on finding a difference.
+    if (command === 'diff') return answer(repos.patches?.[(e.argv.at(-1) ?? '').replace(':(literal)', '')] ?? '', e.argv.includes('--no-index') ? 1 : 0)
     if (command === 'grep') return repos.greps?.[cwd] === undefined ? answer('', 1) : answer(repos.greps[cwd])
     return answer(repos.statuses[cwd] ?? '## main\0')
   })
@@ -1097,6 +1101,42 @@ test("the Changes view lists each repo's changed files with their lines, counted
 
   await pane.press({ key: 'tasks' })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
+})
+
+test('a press on a Changes file opens its diff under it, kept current as the file changes, and a second press closes it', async ($, on) => {
+  const patch = (line: string) => ['diff --git a/hooks/a.ts b/hooks/a.ts', '--- a/hooks/a.ts', '+++ b/hooks/a.ts', '@@ -1,2 +1,2 @@', ' const x = 1', '-const y = 2', `+${line}`, ''].join('\n')
+  const patches: Record<string, string> = { 'hooks/a.ts': patch('const y = 3') }
+  const repos: FakeRepos = { roots: { '/work': '/work' }, statuses: { '/work': REPO_STATUS }, numstats: { '/work': REPO_NUMSTAT }, greps: { '/work': REPO_GREP }, patches }
+  const { clock, runs } = await start(on, {}, repos)
+  on('tool.call', { tool: 'Bash' }, async () => ({ result: 'ran' }))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await clock.settle()
+  await pane.redraw(PANE_PROPS)
+  await pane.press({ key: 'changes' })
+  // The file's row is a press in its repo's card: keyed by the card (`repo:/work-open`) and the row.
+  const file = 'diff:repo:/work-open:/work:hooks/a.ts'
+  await pane.press({ key: file })
+  await clock.settle()
+  expect(await pane.find({ text: /-const y = 2/ })).toBeDefined()
+  expect(await pane.find({ text: /\+const y = 3/ })).toBeDefined()
+  expect(await pane.find({ text: /\+\+\+ b\/hooks/ })).toBeUndefined()
+
+  // Edited again to the same counts: the shell call's read of the changes reads the open diff again.
+  patches['hooks/a.ts'] = patch('const y = 4')
+  await $.tool.call({ tool: 'Bash', command: 'npm run fmt' })
+  await clock.advance(3_000)
+  expect(await pane.find({ text: /\+const y = 4/ })).toBeDefined()
+
+  await pane.press({ key: file })
+  await clock.settle()
+  expect(await pane.find({ text: /const y/ })).toBeUndefined()
+  // Closed, it is read no more: the next read runs the numstat alone.
+  const diffRuns = () => runs.filter(run => run === 'diff /work').length
+  const before = diffRuns()
+  await $.tool.call({ tool: 'Bash', command: 'npm run fmt' })
+  await clock.advance(3_000)
+  expect(diffRuns()).toBe(before + 1)
 })
 
 test('a file the session writes adds its repo on the next poll; a failed write adds none; one outside any repo is listed as such', async ($, on) => {

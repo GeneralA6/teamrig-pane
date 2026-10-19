@@ -45,10 +45,13 @@ export type Row = {
   maxLines?: number | undefined
   /** Drawn at the right edge of the row's first line, the text wrapping in the room left of it. */
   end?: Span | undefined
+  /** The Changes file whose diff a press on the row opens or closes (changes-rows.ts): in a card the row is a press of its own. */
+  expands?: string
 }
 /**
  * What draws as one element. `toggle` names the task a press on it opens or closes the card of; `card` holds
- * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press; `opens` names
+ * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press (a repo's files in
+ * the Changes view are its header's card too, each a press of its own: changes-rows.ts); `opens` names
  * the task a press on it opens the page of (a search result, search-rows.ts);
  * `opensSection` leads it with a blank line, past the gap every block has.
  */

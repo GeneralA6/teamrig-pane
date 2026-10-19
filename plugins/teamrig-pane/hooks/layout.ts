@@ -19,16 +19,28 @@ import { cells, graphemes } from './width'
  */
 export type Piece = { kind: 'id'; span: Span; task: string } | { kind: 'file'; span: Span; file: RefFile } | { kind: 'words'; spans: Span[] }
 /**
- * A run of a card's lines: a Text of the lines that hold no press (`text`), or one line that holds one
- * (`line`), its pieces drawn side by side.
+ * A run of a card's lines: a Text of the lines that hold no press (`text`), one line that holds one (`line`), its
+ * pieces drawn side by side, or a row that is a press of its own (`press`, a Changes file opening its diff), its
+ * lines one Text keyed by the row.
  */
-export type CardPart = { kind: 'text'; key: string; spans: Span[] } | { kind: 'line'; key: string; pieces: Piece[] }
+export type CardPart =
+  | { kind: 'text'; key: string; spans: Span[] }
+  | { kind: 'line'; key: string; pieces: Piece[] }
+  | { kind: 'press'; key: string; spans: Span[]; expands: string }
 /**
- * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, or its
- * page when `opens` does (a search result). `card`, set while that card is open, is the card's own parts, drawn
- * under the Button and outside it.
+ * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, its
+ * page when `opens` does (a search result), or, inline, a Changes file's diff when `expands` does. `card`, set
+ * while that card is open, is the card's own parts, drawn under the Button and outside it.
  */
-export type Drawn = { key: string; spans: Span[]; wrap: 'wrap' | 'truncate-end'; toggle: string | null; opens?: string; card?: CardPart[] }
+export type Drawn = {
+  key: string
+  spans: Span[]
+  wrap: 'wrap' | 'truncate-end'
+  toggle: string | null
+  opens?: string
+  expands?: string
+  card?: CardPart[]
+}
 
 const RULE = '─'
 const BLANK_LINE: Span = { text: ' ' }
@@ -258,11 +270,11 @@ export function piecesOf(line: readonly Span[]): Piece[] {
   return pieces
 }
 
-/** Wrapped card lines as parts: each run of lines with no press one Text, each line with one a row of its pieces. */
-export function cardParts(lines: Lines): CardPart[] {
+/** Wrapped card lines as parts: each run of lines with no press one Text, each line with one a row of its pieces; keyed from `first` on. */
+export function cardParts(lines: Lines, first = 0): CardPart[] {
   const parts: CardPart[] = []
   let run: (readonly Span[])[] = []
-  const key = () => `card:${parts.length}`
+  const key = () => `card:${first + parts.length}`
   const endRun = () => {
     if (run.length > 0) parts.push({ kind: 'text', key: key(), spans: joinedLines(run) })
     run = []
@@ -274,6 +286,26 @@ export function cardParts(lines: Lines): CardPart[] {
     }
     endRun()
     parts.push({ kind: 'line', key: key(), pieces: piecesOf(line) })
+  }
+  endRun()
+  return parts
+}
+
+/** A card's rows as parts: each row with `expands` a press of its own, its lines one Text; each run of the others as cardParts makes it. */
+export function rowParts(rows: readonly Row[], wrap: (row: Row) => Lines): CardPart[] {
+  const parts: CardPart[] = []
+  let run: Row[] = []
+  const endRun = () => {
+    parts.push(...cardParts(run.flatMap(wrap), parts.length))
+    run = []
+  }
+  for (const row of rows) {
+    if (row.expands === undefined) {
+      run.push(row)
+      continue
+    }
+    endRun()
+    parts.push({ kind: 'press', key: row.key, spans: joinedLines(wrap(row)), expands: row.expands })
   }
   endRun()
   return parts
@@ -297,7 +329,7 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps:
       toggle: block.toggle ?? null,
       ...(block.opens === undefined ? {} : { opens: block.opens }),
     }
-    return block.card === undefined ? drawn : { ...drawn, card: cardParts(wrapped(block.card)) }
+    return block.card === undefined ? drawn : { ...drawn, card: rowParts(block.card, row => wraps.wrap(row, columns)) }
   })
   wraps.settle()
   return body
@@ -312,7 +344,7 @@ export function failedDrawing(error: unknown): Drawn[] {
 /**
  * Each row one truncated screen row, at most `maxRows`, the last saying how many it left out and
  * where the whole list shows. A press on a task's first row still opens or closes its card, whose rows follow,
- * their task ids drawn as the words they are: a page opens from the dock.
+ * their task ids drawn as the words they are: a page opens from the dock. A press on a Changes file opens its diff.
  */
 export function inlineLayout(blocks: readonly Block[], maxRows: number): Drawn[] {
   const rows = blocks.flatMap(block =>
@@ -321,6 +353,7 @@ export function inlineLayout(blocks: readonly Block[], maxRows: number): Drawn[]
       spans: merged(row.end === undefined ? row.spans : [...row.spans, { text: END_GAP }, row.end]),
       wrap: 'truncate-end',
       toggle: i === 0 ? (block.toggle ?? null) : null,
+      ...(row.expands === undefined ? {} : { expands: row.expands }),
     })),
   )
   if (rows.length <= maxRows) return rows
