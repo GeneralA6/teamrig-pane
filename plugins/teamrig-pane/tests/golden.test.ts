@@ -7,7 +7,7 @@ import { findPlaces } from '../hooks/places'
 import { paneBlocks, type Block } from '../hooks/rows'
 import { registerPaths, skippedText, TaskRegisterSource } from '../hooks/source'
 import { GOLDEN_ROOT, GOLDEN_SESSION, goldenModule, underGoldenRoot, type GoldenRegister } from '../scripts/golden-format'
-import { MemoryFiles } from './fixtures'
+import { MemoryFiles, treeAt } from './fixtures'
 import { GOLDEN } from './golden-register'
 
 // The pane against what the real teamrig CLI wrote and printed at the pinned commit (scripts/golden.ts).
@@ -81,7 +81,7 @@ function goldenFiles(changes: Record<string, string> = {}): MemoryFiles {
 async function paneSnapshot(files: MemoryFiles): Promise<Snapshot> {
   const places = await findPlaces({ env: { TEAMRIG_HOME: KIT }, files, home: null, cwd: `${GOLDEN_ROOT}/proj` })
   if (!places.found) throw new Error(places.problem)
-  const snap = await new TaskRegisterSource(files, registerPaths(places.dirs)).poll({
+  const snap = await new TaskRegisterSource(files, registerPaths(places.dirs), places.notPickedUpAfterHours).poll({
     claudeSession: GOLDEN_SESSION,
     pinned: null,
     now: GOLDEN.generatedAt,
@@ -94,7 +94,7 @@ describe('golden', () => {
   test('draws every task teamrig lists, field for field, and counts the lines it skips as its WARN line does', async () => {
     const snap = await paneSnapshot(goldenFiles())
     expect(linesOf(GOLDEN.list).length).toBe(7)
-    const tree = treeOf(snap.tasks, snap.now)
+    const tree = treeOf(snap)
     expect(snap.tasks.map(row => listLine(row, tree)).sort()).toEqual(linesOf(GOLDEN.list))
     expect(`WARN ${snap.problem}`).toBe(warnOf(GOLDEN.warn))
   })
@@ -136,7 +136,7 @@ describe('golden', () => {
     for (const fixture of GOLDEN.fixtures) {
       const register = readRegister(fixture.events)
       const rows = [...register.state.tasks.values()].map(task => rowOf(task))
-      const tree = treeOf(rows, GOLDEN.generatedAt)
+      const tree = treeAt(rows, GOLDEN.generatedAt)
       const lines = rows.map(row => listLine(row, tree)).sort()
       expect({ fixture: fixture.name, lines }).toEqual({ fixture: fixture.name, lines: linesOf(fixture.list) })
       const skipped = skippedText(PATHS, register, readMarks(''))

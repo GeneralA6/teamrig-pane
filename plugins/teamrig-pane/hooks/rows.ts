@@ -7,10 +7,9 @@
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, ExpandedTasks, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
-import type { TaskTree } from './core/read/index'
 import { cardRows } from './card'
 import { COMMAND } from './command'
-import { metaParts, treeOf, whenWords } from './meta'
+import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
 import { BAR_LOOK } from './status-bar'
 import { areaView, ownerGroups, statusLines } from './view'
 import { cells } from './width'
@@ -78,7 +77,7 @@ export function single(key: string, spans: Span[], hang?: Span): Block {
 }
 
 /** The meta line's parts (meta.ts) between dim dots, each dim unless a color says it needs a look. */
-function metaSpans(task: TaskRow, tree: TaskTree<TaskRow>, viewer: string | null): Span[] {
+function metaSpans(task: TaskRow, tree: PaneTree, viewer: string | null): Span[] {
   return metaParts(task, tree, viewer).flatMap((part, i) => {
     const span: Span = part.color === undefined ? { text: part.text, dim: true } : part
     return i === 0 ? [span] : [SEPARATOR, span]
@@ -106,7 +105,7 @@ export function titleRow(key: string, task: TaskRow, maxLines?: number): Row {
  * snapshot's (meta.ts treeOf); `viewer` is the area whose list it is (null in the all view): a task it does not
  * own says whose it is.
  */
-function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, tree: TaskTree<TaskRow>, viewer: string | null): Block {
+function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, tree: PaneTree, viewer: string | null): Block {
   const detail = expanded[task.id]
   const indent = indentOf(task)
   const key = `${section}:${task.id}`
@@ -120,7 +119,7 @@ function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, tree
  * `✓ T4  title          14:02`: a task done or dropped today, dim, on one line with when it closed; with its card
  * open (card.ts), the title shows whole and the card follows. `tree` and `viewer` as taskBlock takes them.
  */
-function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: TaskTree<TaskRow>, viewer: string): Block {
+function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: PaneTree, viewer: string): Block {
   const detail = expanded[task.id]
   const key = `done:${task.id}`
   const color = GLYPH_COLOR[task.status]
@@ -177,7 +176,7 @@ const FILTER_SECTION: Readonly<Record<BarStatus, string>> = {
 
 /** The area's tasks at the status the bar filters to, under no heading: what the filter's line names. */
 function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expanded: ExpandedTasks): Block[] {
-  const tree = treeOf(snap.tasks, snap.now)
+  const tree = treeOf(snap)
   const tasks = statusLines(snap.tasks, area, tree, filter)
   if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
   if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, tree, area))
@@ -190,7 +189,7 @@ function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expande
  */
 function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null): Block[] {
   if (snap.area === null) return [single('no-area', [{ text: NO_AREA, dim: true }])]
-  const tree = treeOf(snap.tasks, snap.now)
+  const tree = treeOf(snap)
   const view = areaView(snap.tasks, snap.area, tree)
   // The session's own area goes unnamed, as its tab names the session; a pin names the area it shows.
   const header: Span[] = snap.areaSource === 'pinned' ? [{ text: view.area, bold: true }, { text: ' (pinned) · ', dim: true }] : []
@@ -217,7 +216,7 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
 
 /** Every owner with active tasks under a heading with its counts, the session's own area marked. */
 function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
-  const tree = treeOf(snap.tasks, snap.now)
+  const tree = treeOf(snap)
   const groups = ownerGroups(snap.tasks, tree)
   if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
   return groups.flatMap((group, i) => {

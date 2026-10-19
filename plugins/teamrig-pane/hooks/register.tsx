@@ -43,7 +43,8 @@ import { findPlaces, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails, type RefPlaces } from './details'
 import { RefFileReader } from './ref-file'
-import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
+import { DEFAULT_REGISTER } from './core/read/index'
+import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { windowed, type Slot } from './window'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
@@ -105,14 +106,22 @@ const MINIMIZED = `minimized to its strip: a press on it, or /${COMMAND}, opens 
 const GIT_TIMEOUT_MS = 10_000
 
 // The pane's $.state (declared in ../types); the engine's scan wants atoms written in the module that uses them.
-const EMPTY_SNAPSHOT: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, problem: null, now: 0 }
+const EMPTY_SNAPSHOT: Snapshot = {
+  tasks: [],
+  area: null,
+  areaSource: null,
+  unreadInbox: null,
+  problem: null,
+  notPickedUpAfterHours: DEFAULT_REGISTER.check.notPickedUpAfterHours,
+  now: 0,
+}
 /**
  * The tag the snapshot is kept under. $.state outlives a hot reload, so without it a new pane would
  * draw the snapshot the old code wrote, rows missing the fields it now reads; under another tag that
  * value reads as absent (the empty snapshot, until the reload's first poll). Bump it whenever the
  * Snapshot or TaskRow type in ../types changes shape.
  */
-const SNAPSHOT_SHAPE = 'register-v4'
+const SNAPSHOT_SHAPE = 'register-v5'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */
@@ -338,10 +347,12 @@ export const register: Register = on => {
       TEAMRIG_TEAM: await $.env.get('TEAMRIG_TEAM'),
     }
     const places = await findPlaces({ env, files, home: home ?? null, cwd: e.cwd })
-    const paths = places.found ? registerPaths(places.dirs) : { missing: places.problem }
+    const registerAt: { paths: RegisterPaths; notPickedUpAfterHours: number } | { missing: string } = places.found
+      ? { paths: registerPaths(places.dirs), notPickedUpAfterHours: places.notPickedUpAfterHours }
+      : { missing: places.problem }
     team = places.found && places.team !== null ? { files, paths: places.team } : null
     const refPlaces: RefPlaces = {
-      inboxDir: 'missing' in paths ? null : paths.inboxDir,
+      inboxDir: 'missing' in registerAt ? null : registerAt.paths.inboxDir,
       home: home ?? null,
       cwd: e.cwd,
       teamDir: places.found && places.team !== null ? places.team.dir : null,
@@ -350,7 +361,7 @@ export const register: Register = on => {
     details = new TaskDetails(files, refPlaces)
     refFiles = new RefFileReader(files, refPlaces)
     const started = new LiveRegister({
-      source: 'missing' in paths ? paths : new TaskRegisterSource(files, paths),
+      source: 'missing' in registerAt ? registerAt : new TaskRegisterSource(files, registerAt.paths, registerAt.notPickedUpAfterHours),
       sessionId: () => $.session.id(),
       now: () => $.clock.now(),
       publish: async change => {
@@ -591,7 +602,7 @@ export const register: Register = on => {
     // moves the ring onto the page's back step: left in the field, a new round's and empty, it would type the next
     // keys into a new search, so b, f and s would never answer.
     const openTop = async (query: string) => {
-      const top = topResult(searchTasks(snap.tasks, query, treeOf(snap.tasks, snap.now)))
+      const top = topResult(searchTasks(snap.tasks, query, treeOf(snap)))
       if (top === null) return
       await openPage(top.id, fieldKey(field))
       await focusOn($, 'back')
@@ -949,7 +960,7 @@ export const register: Register = on => {
     const snap = await read($, snapshot)
     if (snap.area === null) return next(e)
     const { Box, Button, Text, Link } = $.ui.resolve(e)
-    const tree = treeOf(snap.tasks, snap.now)
+    const tree = treeOf(snap)
     const isOpen = await read($, bannerOpen)
     const [banner] = dockLayout([bannerBlock(currentTask(snap, tree), isOpen, tree, snap.area)], e.props.bodyColumns, bannerWraps)
     if (banner === undefined) return next(e)

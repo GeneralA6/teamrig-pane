@@ -220,10 +220,12 @@ export class TaskRegisterSource {
   private lastArea: string | null = null
   private readonly files: Files
   private readonly paths: RegisterPaths
+  private readonly notPickedUpAfterHours: number
 
-  constructor(files: Files, paths: RegisterPaths) {
+  constructor(files: Files, paths: RegisterPaths, notPickedUpAfterHours: number) {
     this.files = files
     this.paths = paths
+    this.notPickedUpAfterHours = notPickedUpAfterHours
     this.register = new LayoutRegister(files, paths.events)
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
   }
@@ -256,6 +258,7 @@ export class TaskRegisterSource {
       areaSource,
       unreadInbox: area !== null && this.inbox && mark !== undefined ? unreadOf(area, this.inbox.current, mark, lineHash).lines.length : null,
       problem: skippedText(this.paths, this.register.current, this.marks.current),
+      notPickedUpAfterHours: this.notPickedUpAfterHours,
       now,
     }
   }

@@ -5,7 +5,7 @@ import { doneWeek, HELD_DAYS, heldSince, heldWeek, heldWeeks, isHeldFinished, MA
 import { doneBlocks, heldText, OLDER_DONE_COMMAND, weekWords } from '../hooks/done-rows'
 import { rowOf } from '../hooks/log'
 import type { Block } from '../hooks/rows'
-import { HOUR, NOW, createLine, statusLine } from './fixtures'
+import { HOUR, NOT_PICKED_UP_HOURS, NOW, createLine, statusLine } from './fixtures'
 
 /** The rows teamrig's reader folds from event lines. */
 function rowsOf(lines: readonly string[]): TaskRow[] {
@@ -106,7 +106,7 @@ function linesOf(blocks: readonly Block[]): string[] {
   )
 }
 
-const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, problem: null, now: NOW }
+const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, problem: null, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, now: NOW }
 
 describe('doneBlocks', () => {
   test("mine: the area's head and counts, each day dim, each row opening its page with when it closed", () => {

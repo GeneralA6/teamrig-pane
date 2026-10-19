@@ -5,19 +5,19 @@ import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { treeOf } from '../hooks/meta'
 import type { Row } from '../hooks/rows'
-import { HOUR, NOW, createLine, statusLine } from './fixtures'
+import { HOUR, NOT_PICKED_UP_HOURS, NOW, createLine, statusLine, treeAt } from './fixtures'
 
 function rowsOf(lines: readonly string[]): TaskRow[] {
   return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task))
 }
 
 function snapOf(lines: readonly string[], area: string | null = 'po'): Snapshot {
-  return { tasks: rowsOf(lines), area, areaSource: area === null ? null : 'pinned', unreadInbox: 0, problem: null, now: NOW }
+  return { tasks: rowsOf(lines), area, areaSource: area === null ? null : 'pinned', unreadInbox: 0, problem: null, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, now: NOW }
 }
 
 /** The task the banner of `snap` shows, as `kind id`, or null. */
 function picked(snap: Snapshot): string | null {
-  const current = currentTask(snap, treeOf(snap.tasks, snap.now))
+  const current = currentTask(snap, treeOf(snap))
   return current === null ? null : `${current.kind} ${current.task.id}`
 }
 
@@ -60,7 +60,7 @@ describe('currentTask', () => {
 
 describe('bannerBlock', () => {
   const snap = snapOf(LINES)
-  const tree = treeOf(snap.tasks, NOW)
+  const tree = treeAt(snap.tasks, NOW)
 
   test('closed, one row cut at one line: the task in progress, or the next one after a dim next', () => {
     const now = bannerBlock(currentTask(snap, tree), false, tree, 'po')

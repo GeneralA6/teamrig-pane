@@ -15,14 +15,25 @@ const HOUR_MS = 3_600_000
 const DAY_MS = 24 * HOUR_MS
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
 
-/**
- * teamrig's `register check` flags an untouched task as NOT-PICKED-UP after the team config's
- * `register.check.notPickedUpAfterHours`; the pane keeps that setting's default, 24 hours.
- */
-export const NOT_PICKED_UP_MS = DAY_MS
-
-/** overdue: past its due; new: the owner has not touched it yet; unseen: still untouched after a day. */
+/** overdue: past its due; new: the owner has not touched it yet; unseen: still untouched past the team's hours. */
 export type Flag = 'overdue' | 'new' | 'unseen'
+
+/** What treeOf reads from a snapshot (types/index.d.ts Snapshot): its tasks, its clock and the team's NOT PICKED UP hours. */
+export type TreeSource = { readonly tasks: readonly TaskRow[]; readonly now: number; readonly notPickedUpAfterHours: number }
+
+/**
+ * teamrig's dependency tree of the snapshot's tasks at its clock (core register/tree.ts), with how long a task may
+ * stand untouched by its owner before teamrig's `register check` flags it NOT-PICKED-UP: the team config's
+ * `register.check.notPickedUpAfterHours`.
+ */
+export class PaneTree extends TaskTree<TaskRow> {
+  readonly notPickedUpMs: number
+
+  constructor(tasks: ReadonlyMap<string, TaskRow>, now: Date, notPickedUpAfterHours: number) {
+    super(tasks, now)
+    this.notPickedUpMs = notPickedUpAfterHours * HOUR_MS
+  }
+}
 
 /** How a status reads in a sentence: `in progress since 11:55`. */
 export const STATUS_WORDS: Readonly<Record<TaskStatus, string>> = {
@@ -38,16 +49,23 @@ export const STATUS_WORDS: Readonly<Record<TaskStatus, string>> = {
 const SAYS_SINCE: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['in-progress', 'verifying', 'waiting'])
 
 /**
- * At `tree`'s clock: overdue past the effective due (teamrig's, core register/tree.ts: its own, or an earlier one of
- * an active task that needs it), a date-only due at the end of that UTC day, an unreadable one never.
+ * At `tree`'s clock, an active task past its effective due (teamrig's, core register/tree.ts: its own, or an earlier
+ * one of an active task that needs it), a date-only due at the end of that UTC day, an unreadable one never.
  */
-export function flagsOf(task: TaskRow, tree: TaskTree<TaskRow>): Flag[] {
-  if (!ACTIVE_STATUSES.includes(task.status)) return []
-  const now = tree.context.now
-  const flags: Flag[] = []
+function isOverdue(task: TaskRow, tree: TaskTree<TaskRow>): boolean {
   const due = tree.dueTime(task)
-  if (due !== undefined && due < now) flags.push('overdue')
-  if (task.ownerSeenAt === null) flags.push(now - Date.parse(task.assignedAt) > NOT_PICKED_UP_MS ? 'unseen' : 'new')
+  return ACTIVE_STATUSES.includes(task.status) && due !== undefined && due < tree.context.now
+}
+
+/**
+ * An active task's flags at `tree`'s clock: overdue (isOverdue), then, while its owner has not touched it, new, or
+ * unseen once it has stood so past the team's hours, as teamrig's NOT-PICKED-UP reads it.
+ */
+export function flagsOf(task: TaskRow, tree: PaneTree): Flag[] {
+  if (!ACTIVE_STATUSES.includes(task.status)) return []
+  const flags: Flag[] = []
+  if (isOverdue(task, tree)) flags.push('overdue')
+  if (task.ownerSeenAt === null) flags.push(tree.context.now - Date.parse(task.assignedAt) > tree.notPickedUpMs ? 'unseen' : 'new')
   return flags
 }
 
@@ -124,19 +142,20 @@ export function dueLabel(task: TaskRow, tree: TaskTree<TaskRow>): string | null 
   return due === null ? null : `${task.status === 'verifying' ? 'verify by' : 'due'} ${due}`
 }
 
-/** `late 1d` while an active task is past its effective due (flagsOf); null otherwise. */
+/** `late 1d` while an active task is past its effective due (isOverdue); null otherwise. */
 export function lateWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null {
   const deadline = tree.dueTime(task)
-  return deadline !== undefined && flagsOf(task, tree).includes('overdue') ? `late ${ageWords(tree.context.now - deadline)}` : null
+  return deadline !== undefined && isOverdue(task, tree) ? `late ${ageWords(tree.context.now - deadline)}` : null
 }
 
 /**
- * The snapshot's tasks as teamrig's dependency tree reads them at its clock (core register/tree.ts); its `context` is
- * what a waiting task's reasons are judged ready by. The snapshot holds the active tasks and those finished within
- * HELD_DAYS (source.ts), so one it lacks finished earlier and reads finished, as in teamrig.
+ * The snapshot's tasks as teamrig's dependency tree reads them at its clock (core register/tree.ts), with the team's
+ * NOT PICKED UP hours; its `context` is what a waiting task's reasons are judged ready by. The snapshot holds the
+ * active tasks and those finished within HELD_DAYS (source.ts), so one it lacks finished earlier and reads finished,
+ * as in teamrig.
  */
-export function treeOf(tasks: readonly TaskRow[], now: number): TaskTree<TaskRow> {
-  return new TaskTree(new Map(tasks.map(task => [task.id, task])), new Date(now))
+export function treeOf(snap: TreeSource): PaneTree {
+  return new PaneTree(new Map(snap.tasks.map(task => [task.id, task])), new Date(snap.now), snap.notPickedUpAfterHours)
 }
 
 /**
@@ -163,7 +182,7 @@ export function ageWords(ms: number): string {
  * asked for. `tree` (treeOf) holds the clock and marks the ready reasons. `viewer` null (the all view)
  * names no owner.
  */
-export function metaParts(task: TaskRow, tree: TaskTree<TaskRow>, viewer: string | null): Span[] {
+export function metaParts(task: TaskRow, tree: PaneTree, viewer: string | null): Span[] {
   const context = tree.context
   const now = context.now
   const others = viewer !== null && task.owner !== viewer
@@ -193,7 +212,7 @@ export function metaParts(task: TaskRow, tree: TaskTree<TaskRow>, viewer: string
 }
 
 /** The meta line's words alone, as the snapshot's clock and tasks draw them: what sameView compares. */
-export function metaText(task: TaskRow, tree: TaskTree<TaskRow>): string {
+export function metaText(task: TaskRow, tree: PaneTree): string {
   return metaParts(task, tree, null)
     .map(part => part.text)
     .join(' · ')

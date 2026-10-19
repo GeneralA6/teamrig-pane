@@ -76,6 +76,11 @@ export type Snapshot = {
   unreadInbox: number | null
   /** What the pane could not read: a failed load (the last good tasks stay drawn), or the lines teamrig's reader skipped. */
   problem: string | null
+  /**
+   * Hours a task may stand untouched by its owner before it reads NOT PICKED UP: the team config's
+   * `register.check.notPickedUpAfterHours`, as teamrig's `register check` reads it.
+   */
+  notPickedUpAfterHours: number
   /** When it was built, so due and age labels move on without a file change. */
   now: number
 }
