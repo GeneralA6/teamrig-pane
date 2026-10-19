@@ -85,8 +85,8 @@ the value column, and shows only when it has a value:
 - **From:** who asked, or `GitHub issue #12` for a task teamrig opened from one;
 - **Added:** when it was written and by whom;
 - **Owner:** its owner, in another area's list;
-- **Reference:** where its ask is written: each file by its folder and name (`inbox/po.md`), other
-  words as written;
+- **Reference:** where its ask is written: each file by its folder and name (`inbox/po.md`), a click
+  away from its page (below), other words as written;
 - **Evidence:** its evidence;
 - **Links:** up to 5 addresses, each a link: the GitHub issue a task teamrig opened from one came
   from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its description, its ref,
@@ -105,6 +105,13 @@ drops those ahead of it. A page opens at its top and has no status bar; back to 
 you left to the middle of the dock, and the list keeps back and forward while a page lies ahead of it.
 `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed over 8 days ago says so on
 its page. Above the prompt ids are plain words and no page shows.
+
+A click on a file in a card's `Reference` row opens that file's page, a place among the others: its folder and
+name, where it was read, then its text as plain lines, read whole as the page opens (tabs as two spaces, a wrapped
+line under its own indent). A ref that names a line (`board.md:6`) opens the page at that line, drawn bold. The pane
+looks for the file where it looks for the lines a card quotes: an inbox in the inbox folder, `~/` under the home
+folder, a relative path in the session's folder and each folder above it, then in the team's folder. A file it does
+not find lists each path it looked at; one over 256 KiB, or not text, says why it is not shown.
 
 The dock always shows a Find field under its Tasks and Changes switch; `s` or a click puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
