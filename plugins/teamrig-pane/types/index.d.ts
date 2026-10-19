@@ -134,6 +134,8 @@ export type RepoChanges = {
   files: Cut<FileChange>
   /** True when git wrote more than the 4 MiB a run keeps, so the list stops short. */
   isPartial: boolean
+  /** True on a branch with no commit yet: there is no HEAD, so its lines are the staged ones (against the empty tree). */
+  isUnborn: boolean
   /** Why the repo could not be read; null when it was. */
   problem: string | null
 }
@@ -143,6 +145,24 @@ export type ChangesSnapshot = { repos: RepoChanges[]; outside: string[]; isRead:
 
 /** The repo roots and outside files the session has found, all a reloaded pane needs to read them again. */
 export type KnownChanges = { roots: string[]; outside: string[] }
+
+/**
+ * One line of a file's diff as drawn (hooks/diff.ts): a hunk's `@@` line, a line added, removed or the same around
+ * them (its text without git's marker), or a note git writes (`\ No newline at end of file`, `Binary files … differ`).
+ */
+export type DiffLine = { kind: 'hunk' | 'add' | 'del' | 'same' | 'note'; text: string }
+
+/**
+ * A Changes file's open diff (hooks/diff.ts): being read; read, its first DIFF_KEPT lines and how many more it has
+ * (`isCut` when git wrote more than the 4 MiB a run keeps, so the count stops short too); or why git could not read it.
+ */
+export type FileDiff =
+  | { kind: 'reading' }
+  | { kind: 'read'; lines: DiffLine[]; more: number; isCut: boolean }
+  | { kind: 'failed'; problem: string }
+
+/** The Changes files whose diffs are open, by their row's key (`<repo root>:<path>`, hooks/changes-rows.ts). */
+export type OpenDiffs = { readonly [file: string]: FileDiff }
 
 /** A version's three numbers: `2.1.295` is major 2, minor 1, patch 295. */
 export type Version = { major: number; minor: number; patch: number }
@@ -200,7 +220,7 @@ export type BarStatus = 'done-today' | 'verifying' | 'working' | 'waiting' | 'no
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads and the open diffs are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -209,6 +229,8 @@ declare module 'claude-code' {
       view: PaneView
       changes: Shaped<ChangesSnapshot>
       known: Shaped<KnownChanges>
+      /** The Changes files whose diffs are open (hooks/diff.ts), as git last read them. */
+      diffs: Shaped<OpenDiffs>
       requirements: RequirementProblem[]
       /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
       filter: BarStatus | null

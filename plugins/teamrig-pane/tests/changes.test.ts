@@ -53,13 +53,14 @@ function answered(got: GitRun | Error): GitRun {
  * A git over fixed answers: each folder's root (absent: not a repo), each root's status output, or a run that rejects,
  * and the line counts' runs (by default no tracked line changed and no untracked line matched); and a disk where every
  * path is there but those in `gone`. `calls` lists each git run as `<command> <cwd>`, `argv` its arguments, `checked`
- * each path asked about.
+ * each path asked about, `reads` each snapshot read.
  */
 function fakeGit(roots: Record<string, string>, statuses: Record<string, GitRun | Error>, gone = new Set<string>(), lines: LineAnswers = {}) {
   const calls: string[] = []
   const argv: (readonly string[])[] = []
   const checked: string[] = []
   const published: ChangesSnapshot[] = []
+  const reads: ChangesSnapshot[] = []
   const ports: ChangesPorts = {
     exists: async path => {
       checked.push(path)
@@ -82,8 +83,11 @@ function fakeGit(roots: Record<string, string>, statuses: Record<string, GitRun 
     publish: async next => {
       published.push(next)
     },
+    onRead: async read => {
+      reads.push(read)
+    },
   }
-  return { argv, calls, checked, published, ports }
+  return { argv, calls, checked, published, ports, reads }
 }
 
 describe('changes', () => {
@@ -166,6 +170,17 @@ describe('changes', () => {
     expect(outside.slice(0, 3)).toEqual(['C:/notes/n5.md', 'C:/notes/n22.md', 'C:/notes/n21.md'])
   })
 
+  test('each read is handed on, drawn or not, so the open diffs are read again with it', async () => {
+    const { published, ports, reads } = fakeGit({ 'C:/work/repo': REPO }, {})
+    const changes = new LiveChanges(ports)
+    await changes.addFolder('C:/work/repo')
+    await changes.refresh()
+    await changes.refresh()
+    expect(published).toHaveLength(1)
+    expect(reads).toHaveLength(2)
+    expect(reads[1]).toEqual(published[0])
+  })
+
   test("the session's folder adds its repo; a folder outside any repo adds none", async () => {
     const { calls, published, ports } = fakeGit({ 'C:/work/repo': REPO }, {})
     const changes = new LiveChanges(ports)
@@ -221,7 +236,7 @@ describe('changes', () => {
 
   test('the known repos and files are those drawn, and a reloaded pane starts from both the known and the drawn ones', () => {
     const drawn: ChangesSnapshot = {
-      repos: [{ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, problem: null }],
+      repos: [{ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, isUnborn: false, problem: null }],
       outside: ['C:/notes/a.md'],
       isRead: true,
     }
@@ -395,6 +410,7 @@ describe('changes', () => {
     expect(unborn.calls).toEqual(['rev-parse C:/work/repo', `status ${REPO}`, `diff ${REPO}`])
     expect(unborn.argv.at(-1)).toEqual(['--no-optional-locks', 'diff', '--cached', '--numstat', '-z'])
     expect(unborn.published[0]?.repos[0]?.files.items).toEqual([change('A ', 'a.ts', null, text(2, 0))])
+    expect(unborn.published[0]?.repos[0]?.isUnborn).toBe(true)
 
     const untracked = fakeGit({ 'C:/work/repo': REPO }, { [REPO]: ran(['## main', '?? a.ts', ''].join('\0')) }, new Set(), { grep: () => ran('a.ts\u00003\n') })
     const only = new LiveChanges(untracked.ports)
@@ -456,7 +472,7 @@ describe('changes rows', () => {
       .find(row => row.key === key)
       ?.spans.map(span => span.text)
       .join('')
-  const repo = (over: Partial<RepoChanges>): RepoChanges => ({ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, problem: null, ...over })
+  const repo = (over: Partial<RepoChanges>): RepoChanges => ({ root: REPO, branch: 'main', files: { items: [], more: 0 }, isPartial: false, isUnborn: false, problem: null, ...over })
 
   test('says git is being read, then, in plain text, why no repo is listed yet', () => {
     expect(changesBlocks(EMPTY_CHANGES).map(block => block.key)).toEqual(['reading'])
