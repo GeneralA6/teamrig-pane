@@ -178,22 +178,24 @@ every task again.
 
 ## The banner
 
-The pane's first row, in every state, names the task the session works on: its area's task in progress that
-took its status last (`◐ T469  Banner atop each terminal`), else its first open task in plan order after a dim
-`next`, else a dim `nothing in progress or open` (`no area yet` before the session has one). It follows the
-register as the list does, cut at one line. A click on it opens the task's description, status, note, proof,
-priority and due under its title; a second click closes it. It stays one press whatever it shows, so the keys'
-place among the pane's elements never moves with it. The engine gives a plugin no row atop the terminal itself,
-and only a pane draws a part a click reaches, so the banner leads the pane.
+The band above the prompt names the task the session works on: its area's task in progress that took its
+status last (`◐ T595  Current-task banner outside the pane`), else its first open task in plan order after a
+dim `next`, else a dim `nothing in progress or open`. It follows the register as the list does, cut at one
+line, whether the pane is open, minimized or never drawn; a session with no area gets no band from the pane. A
+click on it opens the task's description, status, note, proof, priority and due under its title; a second
+click closes it. The band is the engine's, directly above the prompt input, in the terminal and the desktop
+app: the one place outside a pane where a plugin draws a part a click reaches, as no plugin gets a row atop the
+terminal. A survey takes the band while it is up, its `[-]` (or `ctrl+x ctrl+a`) folds it, and a card taller
+than the band scrolls in it. The press has no key of its own: a band's key would answer that key typed in an
+empty prompt.
 
 ## Minimizing, not closing
 
 The close mark (`✕`, or `ctrl+x x`) minimizes the pane to a one-row strip instead of closing it, so a
 stray click never loses it. The close is refused (a `ui.close` veto), so the pane also keeps its place
 among the panes the person opened: a later open needs 110 columns, not the 144 an unasked open needs.
-The strip is the Tasks / Changes switch (below), a `minimized` mark and the banner cut to the row. To open it
-in full again, click either button, which opens the pane on that view, or the banner, which opens it with the
-banner's card open, press `t` or `d` while the pane holds the keyboard
+The strip is the Tasks / Changes switch (below) and a `minimized` mark. To open it in full again, click
+either button, which opens the pane on that view, press `t` or `d` while the pane holds the keyboard
 (`ctrl+x tab` or a click on it), or run `/teamrig-pane`. The size is kept in `$.store` (`paneSize`, one
 for the plugin), so the next session, after a restart or a hot reload too, opens as the last one was
 left. The plugin's own close and an unload still close it.
@@ -240,7 +242,7 @@ or what is wrong.
 
 ## Tasks and Changes
 
-The switch, `[Tasks] [Changes Δ3]`, leads the pane under the banner in every state: open, in a dock however narrow (its
+The switch, `[Tasks] [Changes Δ3]`, leads the pane in every state: open, in a dock however narrow (its
 two buttons wrap under each other rather than clip), above the prompt, and as the minimized strip. While
 the pane holds the keyboard, `t` presses Tasks and `d` Changes (`c` already closes the cards).
 
