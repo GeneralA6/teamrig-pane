@@ -206,7 +206,33 @@ declare module 'claude-code' {
     readonly scroll: { readonly offset: number; readonly bodyRows: number }
     readonly view: Readonly<Record<string, unknown>>
   }
-  export type RenderRequest = { readonly plugin: string; readonly surface: 'terminal'; readonly component: string; readonly requestId: string; readonly props: PaneProps }
+  /** The band above the prompt as the engine draws it: one instance, where the surveys draw too. */
+  export type AbovePromptProps = {
+    /** True while a survey holds the band; a hook yields to it. */
+    readonly hasSurvey: boolean
+    readonly isWorking: boolean
+    /** Rows the band may take; a taller tree scrolls in a window of `scroll.bodyRows`. */
+    readonly maxRows: number
+    /** Cells the tree is laid out in, the engine's `[-]` at the right end left out. */
+    readonly bodyColumns: number
+    readonly scroll: { readonly offset: number; readonly bodyRows: number }
+    readonly view: Readonly<Record<string, unknown>>
+  }
+  /** The props of each component the plugin draws. */
+  export interface RenderProps {
+    Pane: PaneProps
+    AbovePrompt: AbovePromptProps
+  }
+  export type RenderComponent = keyof RenderProps
+  /** A request to draw one component, its props that component's. */
+  export type RenderInput<C extends RenderComponent> = {
+    readonly plugin: string
+    readonly surface: 'terminal'
+    readonly component: C
+    readonly requestId: string
+    readonly props: RenderProps[C]
+  }
+  export type RenderRequest<C extends RenderComponent = RenderComponent> = { [K in C]: RenderInput<K> }[C]
 
   /** The tool inputs the plugin watches, by tool name. */
   export interface ToolInputs {
@@ -233,7 +259,7 @@ declare module 'claude-code' {
     'command.run': { filter: { readonly command: string }; e: CommandRun; result: { readonly text?: string } }
     'ui.open': { filter: { readonly id: string }; e: PaneOpen; result: Answer<{ isPlaced: boolean }> }
     'ui.close': { filter: { readonly id: string }; e: { readonly id: string; readonly origin: PaneCloseOrigin }; result: { readonly deny?: string } }
-    'ui.render': { filter: { readonly component: string; readonly requestId: string }; e: RenderRequest; result: JSX.Element }
+    'ui.render': { filter: { readonly component: RenderComponent; readonly requestId?: string }; e: RenderRequest; result: JSX.Element }
     'ui.scroll': { filter: { readonly requestId: string }; e: UiScrollInput; result: UiScrollResult }
     'ui.focus': { filter: { readonly requestId: string }; e: UiFocusInput; result: UiFocusResult }
     'fs.stat': { filter: never; e: { readonly path: string }; result: Answer<FsStat> }
@@ -259,6 +285,7 @@ declare module 'claude-code' {
   /** Registers a handler: for every event of a name, or for those matching `filter`. */
   export interface On {
     <T extends ToolName>(event: 'tool.call', filter: { readonly tool: T }, handler: Handler<ToolCall<T>, ToolResult>): Registration<ToolCall<T>, ToolResult>
+    <C extends RenderComponent>(event: 'ui.render', filter: { readonly component: C; readonly requestId?: string }, handler: Handler<RenderInput<C>, JSX.Element>): Registration<RenderInput<C>, JSX.Element>
     <K extends EventName>(event: K, handler: Handler<Events[K]['e'], Events[K]['result']>): Registration<Events[K]['e'], Events[K]['result']>
     <K extends EventName>(event: K, filter: Events[K]['filter'], handler: Handler<Events[K]['e'], Events[K]['result']>): Registration<Events[K]['e'], Events[K]['result']>
   }
