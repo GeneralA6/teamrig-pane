@@ -159,14 +159,16 @@ export type PaneView = 'tasks' | 'changes'
 /**
  * A place the tasks view shows (hooks/nav.ts): the list, remembering the key of the element a page was opened from
  * (null when none) so a return scrolls back to it, a task's page by its id, or a search (hooks/search.ts) by its
- * query, the words its Find field holds ('' before any is typed), or the Done page (hooks/done-rows.ts) by its week,
- * the `YYYY-MM-DD` Monday it shows.
+ * query, the words its Find field holds ('' before any is typed), the Done page (hooks/done-rows.ts) by its week,
+ * the `YYYY-MM-DD` Monday it shows, or a reference file's page (hooks/file-page.ts) by the file as its ref writes it
+ * and the line it lands on.
  */
 export type Place =
   | { readonly kind: 'list'; readonly row: string | null }
   | { readonly kind: 'task'; readonly id: string }
   | { readonly kind: 'search'; readonly query: string }
   | { readonly kind: 'done'; readonly week: string }
+  | { readonly kind: 'file'; readonly file: string; readonly line: number | null }
 
 /** The places the person went through, oldest first (at most hooks/nav.ts NAV_PLACES), and the index of the one shown. */
 export type Nav = { readonly places: readonly Place[]; readonly at: number }
@@ -187,6 +189,9 @@ export type RingLandings = { readonly count: number; readonly onField: boolean }
 /** What each page a place names read for its task when it opened (hooks/details.ts), by task id. */
 export type PageDetails = { readonly [id: string]: TaskDetail }
 
+/** What each file page a place names read when it opened (hooks/ref-file.ts), by the file as its ref writes it. */
+export type FilePages = { readonly [file: string]: RefFileRead }
+
 /** `mine`: this session's area; `all`: every owner's active tasks. */
 export type ViewMode = 'mine' | 'all'
 
@@ -195,7 +200,7 @@ export type BarStatus = 'done-today' | 'verifying' | 'working' | 'waiting' | 'no
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places and the pages' details are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -207,9 +212,10 @@ declare module 'claude-code' {
       requirements: RequirementProblem[]
       /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
       filter: BarStatus | null
-      /** Where the tasks view is (hooks/nav.ts): the list, a task's page, a search with its query or the Done page with its week, and the way back. */
+      /** Where the tasks view is (hooks/nav.ts): the list, a task's page, a search with its query, the Done page with its week or a file's page, and the way back. */
       nav: Shaped<Nav>
       pages: Shaped<PageDetails>
+      filePages: Shaped<FilePages>
       /** The Find field's round and the text it holds as drawn (hooks/find-field.ts). */
       findField: FindField
       /** The focus ring's landings in the pane (hooks/find-field.ts): the line under the Find field reads them. */

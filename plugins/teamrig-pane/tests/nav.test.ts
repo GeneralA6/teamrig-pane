@@ -7,12 +7,15 @@ import {
   canGoForward,
   currentPlace,
   doneAt,
+  filesKept,
   forward,
+  isPage,
   landing,
   leavingList,
   leftSearch,
   NAV_PLACES,
   pagesKept,
+  placeFiles,
   placeIds,
   placeLabel,
   pushed,
@@ -200,5 +203,38 @@ describe('nav', () => {
     expect(trailWords(wentTo(long, 2))).toEqual(['…', '[T2]', '+T3', '+T4', '+T5'])
     expect(trailWords(wentTo(long, 0))).toEqual(['[list]', '+T1', '+T2', '+T3', '…'])
     expect(trail(wentTo(long, 0)).crumbs.map(crumb => crumb.index)).toEqual([0, 1, 2, 3])
+  })
+})
+
+describe('file pages', () => {
+  const file = (name: string, line: number | null = null): Place => ({ kind: 'file', file: name, line })
+
+  test('a file page is one place by its file and line: the same pushed again changes nothing, another line is a new place', async () => {
+    const nav = pushed(through('T52'), file('notes/api/t26.md', 12))
+    expect(pushed(nav, file('notes/api/t26.md', 12))).toBe(nav)
+    expect(pushed(nav, file('notes/api/t26.md')).places).toEqual([{ kind: 'list', row: null }, page('T52'), file('notes/api/t26.md', 12), file('notes/api/t26.md')])
+  })
+
+  test('a task, the Archive and a file are pages; the list and a search are not', async () => {
+    const places: Place[] = [page('T5'), done('2026-10-12'), file('x/y.md'), { kind: 'list', row: null }, search('feed')]
+    expect(places.map(isPage)).toEqual([true, true, true, false, false])
+  })
+
+  test('keeps the reads of the files a place still names, and drops the rest', async () => {
+    const nav = pushed(back(pushed(through('T52'), file('a/old.md'))), file('a/new.md', 3))
+    expect([...placeFiles(nav)]).toEqual(['a/new.md'])
+    expect(filesKept({ 'a/old.md': 1, 'a/new.md': 2 }, nav)).toEqual({ 'a/new.md': 2 })
+    expect(placeFiles(through('T52')).size).toBe(0)
+  })
+
+  test('a file page opens at the line its ref points at, else its top; back to the list lands on the element it was left from', async () => {
+    const atLine = pushed(leavingList(AT_LIST, 'card:T52:ref'), file('notes/api/t26.md', 12))
+    expect(landing(AT_LIST, atLine)).toEqual({ kind: 'line', file: 'notes/api/t26.md', line: 12 })
+    expect(landing(AT_LIST, pushed(AT_LIST, file('notes/api/t26.md')))).toEqual({ kind: 'top' })
+    expect(landing(atLine, back(atLine))).toEqual({ kind: 'row', key: 'card:T52:ref' })
+  })
+
+  test("a file's crumb is its name", async () => {
+    expect([placeLabel(file('~/.teamrig/teams/web/notes/api/t26.md', 4)), placeLabel(file('C:\\w\\README.md')), placeLabel(file('board.md'))]).toEqual(['t26.md', 'README.md', 'board.md'])
   })
 })
