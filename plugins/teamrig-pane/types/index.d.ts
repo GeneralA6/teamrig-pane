@@ -94,6 +94,18 @@ export type GoalItem = { goal: string; text: string }
  */
 export type TaskDetail = { ref: string | null; quotes: RefQuote[]; goals: GoalItem[] }
 
+/** A file a task's ref names (hooks/ref-file.ts): as the ref writes it (`~/`, relative or absolute), and the line it points at, null for none. */
+export type RefFile = { readonly file: string; readonly line: number | null }
+
+/**
+ * A reference file as its page read it (hooks/ref-file.ts): the path it was found at and its text, the paths looked at
+ * when none held it, or the path and why it is not shown (too big, not text, a failed read).
+ */
+export type RefFileRead =
+  | { readonly kind: 'read'; readonly path: string; readonly text: string }
+  | { readonly kind: 'missing'; readonly tried: readonly string[] }
+  | { readonly kind: 'unreadable'; readonly path: string; readonly reason: string }
+
 /** The tasks whose card the person opened, by id; a task absent shows its meta line. */
 export type ExpandedTasks = { readonly [id: string]: TaskDetail }
 

@@ -41,8 +41,11 @@ type SettingKey = (typeof SETTING_KEYS)[number]
 type Settings = Partial<Record<SettingKey, string>>
 type DirKey = Exclude<SettingKey, 'goalsDoc'>
 
-/** The files that name a team's sessions, where teamrig keeps them: its config and its rename log; either may not be there. */
-export type TeamFiles = { team: string; config: string; renames: string }
+/**
+ * The session's team and where teamrig keeps it: its folder (which holds the team's notes, read for a card's
+ * reference files), and the files that name its sessions, its config and its rename log; either may not be there.
+ */
+export type TeamFiles = { team: string; dir: string; config: string; renames: string }
 
 /**
  * The register's folders, the priorities' names (the team config's, else teamrig's defaults) and the session's team's
@@ -175,7 +178,7 @@ async function teamFolders(
       state,
       inbox: inTeamHome(paths.inbox) ?? `${state}/inbox`,
       priorities: read?.config.register.priorities ?? DEFAULT_REGISTER.priorities,
-      files: { team: team.value, config: configPath, renames: `${state}/renames.jsonl` },
+      files: { team: team.value, dir: teamHome, config: configPath, renames: `${state}/renames.jsonl` },
     },
   }
 }

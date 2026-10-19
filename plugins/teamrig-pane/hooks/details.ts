@@ -35,9 +35,10 @@ export const MAX_QUOTE_CHARS = 320
 export type LineRef = { file: string; lines: number[] }
 /**
  * Where ref files are found: inboxes in the register's inbox folder, `~/` under home, a relative
- * path up from the session's folder; `goalsDoc` is where goal items are looked up by id (null: none are quoted).
+ * path up from the session's folder, then in the team's folder (`teamDir`, which holds the team's `notes/`);
+ * `goalsDoc` is where goal items are looked up by id (null: none are quoted).
  */
-export type RefPlaces = { inboxDir: string | null; home: string | null; cwd: string | null; goalsDoc: string | null }
+export type RefPlaces = { inboxDir: string | null; home: string | null; cwd: string | null; teamDir: string | null; goalsDoc: string | null }
 
 /** A ref's parts: `;`-separated, each a `file:line` ref or a short quote ref; none for a task with no ref. */
 export function refParts(ref: string | null): string[] {
@@ -65,10 +66,15 @@ export function inboxArea(file: string): string | null {
   return INBOX_FILE.exec(file)?.[1] ?? null
 }
 
+/** A file as a person reads it: its folder and name. */
+export function fileLabel(file: string): string {
+  return slashed(file).split('/').slice(-2).join('/')
+}
+
 /** A ref part as a person reads it: its file's folder and name, no line numbers; a quote ref as written. */
 export function refLabel(part: string): string {
   const file = lineRef(part)?.file
-  return file === undefined ? part : slashed(file).split('/').slice(-2).join('/')
+  return file === undefined ? part : fileLabel(file)
 }
 
 /** A folder and each folder above it, nearest first. */
@@ -77,14 +83,19 @@ function foldersUp(folder: string): string[] {
   return parts.map((_, i) => parts.slice(0, parts.length - i).join('/'))
 }
 
-/** Every path a ref's file may be at, nearest first: refs are written relative to the workspace root. */
+/**
+ * Every path a ref's file may be at, nearest first: refs are written relative to the workspace root, or to the
+ * team's folder (`notes/api/t26-findings.md`).
+ */
 export function candidatePaths(file: string, places: RefPlaces): string[] {
   const path = slashed(file)
   const area = inboxArea(path)
   if (area !== null) return places.inboxDir === null ? [] : [`${slashed(places.inboxDir)}/${area}.md`]
   if (path.startsWith('~/')) return places.home === null ? [] : [`${slashed(places.home)}/${path.slice(2)}`]
   if (ABSOLUTE.test(path)) return [path]
-  return places.cwd === null ? [] : foldersUp(places.cwd).map(folder => `${folder}/${path}`)
+  const up = places.cwd === null ? [] : foldersUp(places.cwd)
+  const team = places.teamDir === null ? [] : [slashed(places.teamDir)]
+  return [...up, ...team].map(folder => `${folder}/${path}`)
 }
 
 /** A quoted line as plain text, cut at MAX_QUOTE_CHARS characters. */
