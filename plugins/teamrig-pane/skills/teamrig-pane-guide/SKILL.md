@@ -106,6 +106,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | `c` | Closes every open card (shown while one is open) |
 | Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
+| A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
 | A click on the banner | Opens the current task's card under its title; again closes it |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead |
 | `f` | Forward to the place back left, while there is one |
@@ -267,7 +268,7 @@ value:
 | `From` | Who asked, or `GitHub issue #12` for a task teamrig opened from one |
 | `Added` | When it was written and by whom |
 | `Owner` | Its owner, in another area's list |
-| `Reference` | Where its ask is written: each file by its folder and name (`inbox/po.md`), other words as written |
+| `Reference` | Where its ask is written: each file by its folder and name (`inbox/po.md`), a click away from its page, other words as written |
 | `Evidence` | Its evidence |
 | `Links` | Up to 5 links: the GitHub issue a task teamrig opened from one came from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its description, ref, newest note, proof and evidence, once each |
 
@@ -310,6 +311,26 @@ The pane keeps 20 places, the oldest dropped first. A page opens at its top and 
 brings the card you left to the middle of the dock, and the list keeps back and forward while a page lies ahead of
 it; `Tasks` (`t`), `mine` and `all` show the list alone. A task that closed over 8 days ago says so on its page. Above
 the prompt ids are plain words and no page shows.
+
+### A reference file's page
+
+A click on a file in a card's `Reference` row opens that file's page, under the same back, forward and trail: its
+folder and name, where it was read, then its text as plain lines, read whole as the page opens:
+
+```text
+‹ back  forward ›
+Tasks › T58 › t26-findings.md
+────────────────────────────────────────────────
+
+api/t26-findings.md
+C:/kit/teams/web/notes/api/t26-findings.md · line 6
+```
+
+A ref that names a line (`board.md:6`) opens the page at that line, drawn bold. Tabs draw as two spaces and a wrapped
+line keeps its indent. The pane looks for the file where it looks for the lines a card quotes: an inbox in the inbox
+folder, `~/` under the home folder, a relative path in the session's folder and each folder above it, then in the
+team's folder. A file it does not find lists each path it looked at; one over 256 KiB, or not text, says why it is
+not shown. The page shows the file as it was when the page opened: open it again from the card for a newer one.
 
 ### Find
 
