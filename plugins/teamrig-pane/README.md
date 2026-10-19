@@ -261,12 +261,24 @@ and git's first error line under it. Files written outside any repo come last, t
 started at all (`git --version`, run once a session), a `WARN` line above the view says so, and the view lists
 nothing rather than wait on git.
 
+A press on a file's row (a click, or Enter on it) opens its diff under it, as `/diff` shows one, and a second
+press closes it: each hunk's `@@` line dim, then its lines, `+` added in green, `-` removed in red and the
+lines around them plain. A tracked file's diff is `git --no-optional-locks diff HEAD -- <path>`, its staged and
+unstaged edits as its row counts them (`--cached`, the staged lines, on a branch with no commit yet; a rename's
+names its old path too, so it shows as one file); an untracked file's is `git diff --no-index` against nothing.
+Color, external diff tools and textconv filters are off, whatever git's config says. The first 200 lines show
+and the rest are counted (`… 40 more lines`); a line wraps under its text and stops at 3 screen lines, ending in
+`…`, so a minified line can't fill the pane. A binary file shows git's `Binary files … differ`, a diff git
+can't read a `WARN` line with git's first error line. An untracked folder opens no diff. An open diff is read
+again with each read of the changes below, one git run per open file, so it follows the edits; a file that
+leaves the list (committed, say) closes its diff. The open diffs stay open across a hot reload.
+
 Each repo costs one `git --no-optional-locks status --porcelain=v1 -b -z` (no index lock, so it never
 blocks a commit; 10 s timeout), and while it has changed files one `git diff HEAD --numstat -z` and up
 to two `git grep --untracked -c` runs for their lines (also lock-free; a count git can't give is left
 out, with no warning): on the next 3 s poll after a write or a shell call (Bash, PowerShell; a burst of
-edits costs one run), every 60 s for changes made from elsewhere, and at once on a switch to Changes.
-Git only, no model calls. After a hot reload the repos and files already found stay known, also after a
+edits costs one run), every 60 s for changes made from elsewhere, and at once on a switch to Changes;
+each open diff is one more run then. Git only, no model calls. After a hot reload the repos and files already found stay known, also after a
 version that changes how the drawn changes are kept.
 
 `Δn` on the Changes button counts the files the view lists, and so does the pane's tab title
@@ -279,7 +291,7 @@ What the host draws and the mod can't change:
   with the rows;
 - the tab strip, and so the title's `Δn`, shows only while more than one pane is open;
 - a mod can't show or focus the built-in Diff pane (`/diff`), so Changes is the plugin's own list of
-  git's changes: each file and its line counts, not the diff itself.
+  git's changes, and its own diff of each file under it.
 
 ## Reading the register
 
@@ -325,7 +337,8 @@ so Shift+Tab from the top lands on the last row drawn, not the list's last: scro
 `hooks/register.tsx`): bump it whenever the `Snapshot` or `TaskRow` type changes, and a reloaded pane
 reads what the older code wrote as not yet read, drawing `Reading the register…` until its first poll
 (at most 3 s), instead of rows with fields missing or a `No area` line it has not looked for yet. The
-drawn changes are kept the same way (`CHANGES_SHAPE`), and the repos and files found apart from them
+drawn changes are kept the same way (`CHANGES_SHAPE`), the open diffs too (`DIFFS_SHAPE`, bumped when
+`FileDiff` or `DiffLine` changes), and the repos and files found apart from them
 under a shape of their own (`KNOWN_SHAPE`, bumped only when `KnownChanges` changes), so a bump of
 `CHANGES_SHAPE` never makes a reloaded pane forget the repos the session found.
 
