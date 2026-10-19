@@ -222,7 +222,7 @@ declare module 'claude-code' {
       ring: RingLandings
       /** The key of the pane element the focus ring last landed on, null for none: a windowed body (hooks/window.ts) always draws it. */
       held: string | null
-      /** Whether the banner (hooks/banner.ts) shows its task's card; a press on it opens and closes it. */
+      /** Whether the banner (hooks/banner.ts) in the band above the prompt shows its task's card; a press on it opens and closes it. */
       banner: boolean
     }
   }

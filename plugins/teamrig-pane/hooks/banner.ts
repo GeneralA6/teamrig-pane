@@ -1,10 +1,10 @@
-// The banner, the pane's first row in every state (T469): the task the session works on now, so a glance at any tab
-// tells what it is doing. The engine gives a mod no slot atop the terminal, and only a pane draws a part a press
-// reaches, so the banner leads the pane. Now: the area's own in-progress task that took its status last. With none in
-// progress, its next: the first open task in plan order (teamrig's list order), after a dim `next`. With neither, a
-// dim line says so. A press opens it to the card's facts the person reads first (what it is, where it stands, when
-// it is due) and a second press closes it. Pure: one block of rows that layout.ts wraps and register.tsx draws as one
-// press, the same element whatever it shows, so the focus ring's index among the pane's elements never moves with it.
+// The banner (T469, T595): the task the session works on now, so a glance at any tab tells what it is doing. It is
+// drawn in the band above the prompt (register.tsx), the one place outside the pane the engine gives a mod and one a
+// press reaches, so it shows whether the pane is open, minimized or never opened. Now: the area's own in-progress task
+// that took its status last. With none in progress, its next: the first open task in plan order (teamrig's list
+// order), after a dim `next`. With neither, a dim line says so. A press opens it to the card's facts the person reads
+// first (what it is, where it stands, when it is due) and a second press closes it. Pure: one block of rows that
+// layout.ts wraps and register.tsx draws as one press.
 import type { Snapshot, TaskDetail, TaskRow } from '../types'
 import { cardRows, type CardField } from './card'
 import type { TaskTree } from './core/read/index'
@@ -14,8 +14,6 @@ import { cells } from './width'
 
 /** The block's key, and its press's. */
 export const BANNER_KEY = 'banner'
-/** With no area known; the body says how to give the session one (rows.ts). */
-export const NO_AREA_BANNER = 'no area yet'
 export const NOTHING_CURRENT = 'nothing in progress or open'
 
 /** Before the title of the task up next, when none is in progress. */
@@ -39,10 +37,11 @@ export function currentTask(snap: Snapshot, tree: TaskTree<TaskRow>): Current | 
 
 /**
  * The banner's block: `◐ T12  title` (after `next` for a task not started) cut at one line, or with `isOpen` the title
- * whole and the card's facts under it at the edge. `tree` is the snapshot's (meta.ts treeOf), `area` the session's.
+ * whole and the card's facts under it at the edge. `tree` is the snapshot's (meta.ts treeOf), `area` the session's:
+ * the band draws none for a session with no area.
  */
-export function bannerBlock(current: Current | null, isOpen: boolean, tree: TaskTree<TaskRow>, area: string | null): Block {
-  if (current === null) return { key: BANNER_KEY, rows: [{ key: BANNER_KEY, spans: [{ text: area === null ? NO_AREA_BANNER : NOTHING_CURRENT, dim: true }] }] }
+export function bannerBlock(current: Current | null, isOpen: boolean, tree: TaskTree<TaskRow>, area: string): Block {
+  if (current === null) return { key: BANNER_KEY, rows: [{ key: BANNER_KEY, spans: [{ text: NOTHING_CURRENT, dim: true }] }] }
   const { task } = current
   const title = titleRow(BANNER_KEY, task, isOpen ? undefined : 1)
   const head: Row =

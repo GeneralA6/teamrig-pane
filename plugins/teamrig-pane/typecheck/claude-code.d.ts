@@ -36,8 +36,6 @@ declare module 'claude-code' {
     readonly flexWrap?: 'wrap' | 'nowrap'
     readonly gap?: number
     readonly columnGap?: number
-    /** 0 keeps the Box at its content's width in a row too narrow for all: the minimized strip's switch beside a long banner. */
-    readonly flexShrink?: number
     readonly paddingX?: number
     /** The rows the Box takes: an empty one holds that many (a windowed body's spacer, hooks/window.ts). */
     readonly height?: number

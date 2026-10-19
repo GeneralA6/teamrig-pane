@@ -15,8 +15,9 @@
 // session (size.ts). A switch row, first in every
 // state and width, the strip included, flips the body between the tasks and the Changes view: the
 // files changed in the git repos the session works in and their lines (changes.ts), counted as Δn on
-// the switch and in the tab title. Reads files and runs git (status, diff, grep; no model calls);
-// /teamrig-pane steers it.
+// the switch and in the tab title. The band above the prompt shows the task the session works on now
+// (banner.ts), a press opening its card, whether the pane is open, minimized or never drawn. Reads
+// files and runs git (status, diff, grep; no model calls); /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Components, Context, Register } from 'claude-code'
 import type {
@@ -44,7 +45,7 @@ import { TaskDetails, type RefPlaces } from './details'
 import { RefFileReader } from './ref-file'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
-import { rowsOf, windowed, type Slot } from './window'
+import { windowed, type Slot } from './window'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
 import { NOTHING_EXPANDED, paneBlocks, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
@@ -149,7 +150,7 @@ const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, FI
 const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS)
 /** The key of the pane element the focus ring last landed on, null for none or an engine stop: a windowed body (window.ts) always draws it. */
 const held = atom({ plugin: 'teamrig-pane', key: 'held' } as const, null)
-/** Whether the banner (banner.ts) shows its task's card: a press on it opens and closes it. */
+/** Whether the banner (banner.ts) in the band above the prompt shows its task's card: a press on it opens and closes it. */
 const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, false)
 
 /** The key of an open card's element: `from` for the presses on the task ids in it. */
@@ -475,8 +476,6 @@ export const register: Register = on => {
   let keysMemo = FIRST_MEMO
   /** The rows the last docked layout wrapped: a drawing re-wraps only the rows that changed since. */
   const wraps = new WrapCache()
-  /** The banner's own: each layout settles its cache, so one shared with the body would drop the body's rows. */
-  const bannerWraps = new WrapCache()
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text, Button, Link, Input } = $.ui.resolve(e)
     const inline = e.props.placement === 'inline'
@@ -497,8 +496,6 @@ export const register: Register = on => {
     let landings: RingLandings = NO_LANDINGS
     let heldKey: string | null = null
     let body: Drawn[] = []
-    /** The banner (banner.ts) laid out at the body's width; null when its read threw. */
-    let banner: Drawn | null = null
     /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
     let barLines: BarPiece[][] = []
     const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
@@ -509,13 +506,8 @@ export const register: Register = on => {
       isMinimized = (await read($, size)) === 'minimized'
       current = await read($, view)
       changed = await read($, changes)
-      // The banner shows in every state, the strip's too, so the snapshot is read minimized as well.
-      snap = await read($, snapshot)
-      const tree = treeOf(snap.tasks, snap.now)
-      const isBannerOpen = !isMinimized && (await read($, bannerOpen))
-      const [laid] = dockLayout([bannerBlock(currentTask(snap, tree), isBannerOpen, tree, snap.area)], columns, bannerWraps)
-      banner = laid ?? null
       if (!isMinimized) {
+        snap = await read($, snapshot)
         shown = await read($, mode)
         open = await read($, expanded)
         const missing = await read($, requirements)
@@ -672,38 +664,17 @@ export const register: Register = on => {
     }
     // Docked, the body is drawn windowed (window.ts): the elements near what the person sees, the one the keys are
     // on and the one a step lands on, each run of the others one empty Box of their rows.
-    // The window's offset counts the rows above the body; the banner's, open as long as its card, are taken off it
-    // so the rest above stays under the screenful window.ts assumes.
-    const bannerRows = banner === null ? 0 : rowsOf(banner) + 1
     const bodyWindow = {
-      offset: e.props.scroll.offset - bannerRows,
+      offset: e.props.scroll.offset,
       bodyRows: e.props.scroll.bodyRows,
       gap: 1,
       isAnchor: (drawn: Drawn) => [heldKey, landingKey].some(key => key !== null && isDrawnIn(drawn, key)),
     }
     const drawSlot = (slot: Slot) => (slot.kind === 'drawn' ? drawBlock(slot.drawn) : <Box key={slot.key} height={slot.rows} />)
 
-    // The banner: the pane's first row in every state, one press whatever it shows (banner.ts), so the focus ring's
-    // index among the elements never moves with it. A press opens its card or closes it; on the strip, where it is
-    // cut to the row, a press opens the pane in full with the card open.
-    const pressBanner = async () => {
-      if (isMinimized) {
-        await update($, bannerOpen, () => true)
-        await sizer?.set('open')
-        return
-      }
-      await update($, bannerOpen, isOpen => !isOpen)
-    }
-    const bannerPress =
-      banner === null ? null : (
-        <Button key={BANNER_KEY} plain onPress={() => void pressBanner()}>
-          {drawText(banner.spans, isMinimized ? 'truncate-end' : banner.wrap)}
-        </Button>
-      )
-
-    // The switch: first under the banner in every state, so the other view is always one press (or t / d) away,
-    // its buttons wrapping under each other in a dock too narrow for both. Minimized, it and the banner are the
-    // whole pane, one row, and a press on either button opens the pane in full on that view.
+    // The switch: first in every state, so the other view is always one press (or t / d) away, its
+    // buttons wrapping under each other in a dock too narrow for both. Minimized, it is the whole
+    // pane, one row, and a press on either button opens the pane in full on that view.
     // The Tasks button shows the list, from a page too, scrolled back to where the page was opened from.
     const switchTo = async (target: PaneView) => {
       await update($, view, () => target)
@@ -734,13 +705,7 @@ export const register: Register = on => {
         ) : null}
       </Box>
     )
-    if (isMinimized && body.length === 0)
-      return (
-        <Box paddingX={PAD_COLUMNS} flexDirection="row" columnGap={1}>
-          <Box flexShrink={0}>{switchRow}</Box>
-          {bannerPress}
-        </Box>
-      )
+    if (isMinimized && body.length === 0) return <Box paddingX={PAD_COLUMNS}>{switchRow}</Box>
 
     const buttons = [
       <Button
@@ -931,12 +896,36 @@ export const register: Register = on => {
       ) : null
     return (
       <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={inline ? 0 : 1}>
-        {bannerPress}
         {controls}
         {pageHead}
         {weekRow}
         {statusRows}
         {inline ? body.map(drawBlock) : windowed(body, bodyWindow).map(drawSlot)}
+      </Box>
+    )
+  })
+
+  /** The banner's own: each layout settles its cache, so one shared with the pane's body would drop its rows. */
+  const bannerWraps = new WrapCache()
+  // The band above the prompt (AbovePrompt): the banner (banner.ts), the task the session works on now, one press that
+  // opens its card and a second that closes it, wrapped at the band's width. A survey takes the band, and a session
+  // with no area draws none, so a session outside a team gets no band from the pane. The engine scrolls a card
+  // taller than the band and folds the band from its [-] (ctrl+x ctrl+a). The press has no hotkey: a band's hotkey
+  // answers a bare key typed in an empty prompt.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) return next(e)
+    const snap = await read($, snapshot)
+    if (snap.area === null) return next(e)
+    const { Box, Button, Text, Link } = $.ui.resolve(e)
+    const tree = treeOf(snap.tasks, snap.now)
+    const isOpen = await read($, bannerOpen)
+    const [banner] = dockLayout([bannerBlock(currentTask(snap, tree), isOpen, tree, snap.area)], e.props.bodyColumns, bannerWraps)
+    if (banner === undefined) return next(e)
+    return (
+      <Box>
+        <Button key={BANNER_KEY} plain onPress={() => void update($, bannerOpen, wasOpen => !wasOpen)}>
+          {drawSpans({ Text, Link }, banner.spans, banner.wrap)}
+        </Button>
       </Box>
     )
   })
