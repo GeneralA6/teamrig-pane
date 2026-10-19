@@ -9,9 +9,10 @@
 // HEAD --numstat -z` counts the tracked files' lines and one `grep --untracked -I -c` the untracked
 // ones' (a second grep only to tell an untracked binary file from an empty one). A repo is read on the
 // next 3 s poll after a write or a shell call (a burst of edits costs one read), every 60 s (a commit or
-// a change made from elsewhere), and at once when the person switches to the view. Runs git only; no
-// model calls. The repos and outside files found are kept apart from the drawn snapshot (KnownChanges),
-// so a reload that bumps the snapshot's shape still knows them.
+// a change made from elsewhere), and at once when the person switches to the view; after each read the
+// open diffs are read again (diff.ts). Runs git only; no model calls. The repos and outside files found
+// are kept apart from the drawn snapshot (KnownChanges), so a reload that bumps the snapshot's shape
+// still knows them.
 import type { ChangesSnapshot, Cut, FileChange, KnownChanges, LineCount, RepoChanges } from '../types'
 import { messageOf } from './errors'
 import { POLL_MS, TICK_MS, type Timer } from './live'
@@ -27,7 +28,7 @@ export const PATHSPEC_BUDGET = 16_000
 const TOPLEVEL = ['rev-parse', '--show-toplevel'] as const
 const STATUS = ['--no-optional-locks', 'status', '--porcelain=v1', '-b', '-z'] as const
 /** Names a path as it is spelled, never as a glob. */
-const LITERAL = ':(literal)'
+export const LITERAL = ':(literal)'
 /** A status line on a branch with no commit yet. */
 const UNBORN = /^(?:No commits yet|Initial commit) on (.+)$/
 const BINARY: LineCount = { kind: 'binary' }
@@ -43,6 +44,8 @@ export type ChangesPorts = {
   exists: (path: string) => Promise<boolean>
   /** Writes the changes atom (each write redraws the pane). */
   publish: (next: ChangesSnapshot) => Promise<void>
+  /** Runs after each read, whether or not it changed what is drawn: the open diffs (diff.ts) are read again, as an edit can keep a file's counts. Never rejects. */
+  onRead: (read: ChangesSnapshot) => Promise<void>
 }
 
 /** The folder a file is in, by either separator; a drive or filesystem root keeps its separator; `.` for a bare name. */
@@ -158,7 +161,7 @@ function grepArgs(paths: readonly string[], isTextOnly: boolean): string[] {
 }
 
 /** The first line git wrote to stderr, or what its exit code says. */
-function failure(ran: GitRun): string {
+export function failure(ran: GitRun): string {
   const line = ran.stderr.split('\n').find(text => text.trim() !== '')
   return line?.trim() ?? `git exited ${ran.exitCode}`
 }
@@ -243,9 +246,11 @@ export class LiveChanges {
     try {
       const read = await Promise.all([...this.repos].map(root => this.readRepo(root)))
       const next: ChangesSnapshot = { repos: read.filter(repo => repo !== null), outside: [...this.outside], isRead: true }
-      if (this.shown !== null && JSON.stringify(this.shown) === JSON.stringify(next)) return
-      await this.ports.publish(next)
-      this.shown = next
+      if (this.shown === null || JSON.stringify(this.shown) !== JSON.stringify(next)) {
+        await this.ports.publish(next)
+        this.shown = next
+      }
+      await this.ports.onRead(next)
     } catch {
       this.isDirty = true
     } finally {
@@ -279,7 +284,7 @@ export class LiveChanges {
 
   /** One repo as git reads it now; null once its folder or its `.git` is gone, and it leaves the list. */
   private async readRepo(root: string): Promise<RepoChanges | null> {
-    const unread = { root, branch: null, files: kept<FileChange>([], CHANGES_KEPT), isPartial: false }
+    const unread = { root, branch: null, files: kept<FileChange>([], CHANGES_KEPT), isPartial: false, isUnborn: false }
     try {
       if (!(await this.ports.exists(`${root}/.git`))) {
         this.forget(root)
@@ -290,7 +295,7 @@ export class LiveChanges {
       const status = parseStatus(ran.stdout)
       const files = kept(status.files, CHANGES_KEPT)
       const items = await this.withLines(root, files.items, status.isUnborn)
-      return { root, branch: status.branch, files: { items, more: files.more }, isPartial: ran.isStdoutTruncated, problem: null }
+      return { root, branch: status.branch, files: { items, more: files.more }, isPartial: ran.isStdoutTruncated, isUnborn: status.isUnborn, problem: null }
     } catch (error) {
       return { ...unread, problem: messageOf(error) }
     }
