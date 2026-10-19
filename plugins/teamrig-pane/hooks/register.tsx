@@ -18,7 +18,7 @@
 // the switch and in the tab title. Reads files and runs git (status, diff, grep; no model calls);
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
-import type { Context, Register } from 'claude-code'
+import type { Components, Context, Register } from 'claude-code'
 import type {
   BarStatus,
   ExpandedTasks,
@@ -227,6 +227,50 @@ async function clearSearch($: Context): Promise<void> {
 async function showMode($: Context, shown: ViewMode): Promise<void> {
   await update($, mode, () => shown)
   await go($, current => reset(current, false))
+}
+
+/** The components spans draw with: each render hook passes those its surface resolved. */
+type SpanComponents = Pick<Components, 'Text' | 'Link'>
+
+const isPlain = (span: Span) =>
+  span.color === undefined && span.bold !== true && span.dim !== true && span.underline !== true && span.href === undefined
+
+/** One span as a Text in its own style. */
+function styledSpan({ Text }: SpanComponents, span: Span, key?: string) {
+  return (
+    <Text key={key} color={span.color} bold={span.bold} dimColor={span.dim} underline={span.underline}>
+      {span.text}
+    </Text>
+  )
+}
+
+/** A span in a Text: a plain string, a link, or a styled Text. */
+function inSpan(components: SpanComponents, span: Span, key: string) {
+  const { Link } = components
+  if (span.href !== undefined)
+    return (
+      <Link key={key} href={span.href}>
+        {span.text}
+      </Link>
+    )
+  return isPlain(span) ? span.text : styledSpan(components, span, key)
+}
+
+/** A row's spans as one Text, wrapped or cut as `wrap` says; a lone span with no link is that Text in its style. */
+function drawSpans(components: SpanComponents, spans: readonly Span[], wrap: Drawn['wrap'], key?: string) {
+  const { Text } = components
+  const [first, ...rest] = spans
+  if (first !== undefined && rest.length === 0 && first.href === undefined)
+    return (
+      <Text key={key} wrap={wrap} color={first.color} bold={first.bold} dimColor={first.dim} underline={first.underline}>
+        {first.text}
+      </Text>
+    )
+  return (
+    <Text key={key} wrap={wrap}>
+      {spans.map((span, index) => inSpan(components, span, String(index)))}
+    </Text>
+  )
 }
 
 
@@ -543,37 +587,9 @@ export const register: Register = on => {
       await focusOn($, 'back')
     }
 
-    const isPlain = (span: Span) =>
-      span.color === undefined && span.bold !== true && span.dim !== true && span.underline !== true && span.href === undefined
-    const styled = (span: Span, key?: string) => (
-      <Text key={key} color={span.color} bold={span.bold} dimColor={span.dim} underline={span.underline}>
-        {span.text}
-      </Text>
-    )
-    /** A span in a Text: a plain string, a link, or a styled Text. */
-    const inSpan = (span: Span, key: string) => {
-      if (span.href !== undefined)
-        return (
-          <Link key={key} href={span.href}>
-            {span.text}
-          </Link>
-        )
-      return isPlain(span) ? span.text : styled(span, key)
-    }
-    const drawText = (spans: readonly Span[], wrap: Drawn['wrap'], key?: string) => {
-      const [first, ...rest] = spans
-      if (first !== undefined && rest.length === 0 && first.href === undefined)
-        return (
-          <Text key={key} wrap={wrap} color={first.color} bold={first.bold} dimColor={first.dim} underline={first.underline}>
-            {first.text}
-          </Text>
-        )
-      return (
-        <Text key={key} wrap={wrap}>
-          {spans.map((span, index) => inSpan(span, String(index)))}
-        </Text>
-      )
-    }
+    const spanComponents = { Text, Link }
+    const styled = (span: Span, key?: string) => styledSpan(spanComponents, span, key)
+    const drawText = (spans: readonly Span[], wrap: Drawn['wrap'], key?: string) => drawSpans(spanComponents, spans, wrap, key)
     /** A press in a card (a task id, a reference file): its text underlined, in its span's style. */
     const drawPress = (span: Span, key: string) => (
       <Text key={key} underline color={span.color} bold={span.bold} dimColor={span.dim}>
