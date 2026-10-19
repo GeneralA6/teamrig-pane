@@ -106,6 +106,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | `c` | Closes every open card (shown while one is open) |
 | Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
+| A click on the banner | Opens the current task's card under its title; again closes it |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead |
 | `f` | Forward to the place back left, while there is one |
 | `s` | In the dock: puts the cursor in the Find field, always shown under the switch, that searches the tasks the pane holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
@@ -117,9 +118,14 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to
 `~/.claude/keybindings.json` (the context it belongs under is unverified).
 
-Minimized, the pane is one row: the `[Tasks] [Changes Δn]` switch and a `minimized` mark. A click on either
-button, `t` or `d`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
-session.
+The banner, the pane's first row in every state, names the task the session works on: its area's task in
+progress that took its status last, else its first open task in plan order after a dim `next`. It follows the
+register as the list does. A click opens that task's description, status, note, proof, priority and due under
+it; a second click closes it.
+
+Minimized, the pane is one row: the `[Tasks] [Changes Δn]` switch, a `minimized` mark and the banner. A click on
+either button, `t` or `d`, or `/teamrig-pane` opens it in full again; a click on the banner opens it with the
+banner's card open. Its size (open or minimized) is kept for the next session.
 
 ## Where the pane sits
 
