@@ -19,7 +19,7 @@
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Context, Register } from 'claude-code'
-import type { BarStatus, ExpandedTasks, FindField, Nav, PageDetails, PaneView, RequirementProblem, RingLandings, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, FilePages, FindField, Nav, PageDetails, PaneView, RequirementProblem, RingLandings, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
@@ -46,6 +46,7 @@ import {
   landing,
   leavingList,
   leftSearch,
+  filesKept,
   pagesKept,
   placeLabel,
   pushed,
@@ -58,6 +59,7 @@ import {
 import { weekSteps, weekOf } from './done'
 import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
+import { lineBlockKey } from './file-page'
 import { pageBlocks } from './page'
 import { searchTasks, topResult } from './search'
 import { searchBlocks } from './search-rows'
@@ -114,11 +116,15 @@ const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as con
 /** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
 const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
 /** The places are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when Place or Nav changes shape. */
-const NAV_SHAPE = 'nav-v3'
+const NAV_SHAPE = 'nav-v4'
 const nav = atom({ plugin: 'teamrig-pane', key: 'nav' } as const, AT_LIST, { shape: NAV_SHAPE })
 const NO_PAGES: PageDetails = {}
 /** The pages' details, kept under CARDS_SHAPE as the open cards are: both hold TaskDetail. */
 const pages = atom({ plugin: 'teamrig-pane', key: 'pages' } as const, NO_PAGES, { shape: CARDS_SHAPE })
+/** The file pages' reads are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when RefFileRead changes shape. */
+const FILES_SHAPE = 'files-v1'
+const NO_FILES: FilePages = {}
+const filePages = atom({ plugin: 'teamrig-pane', key: 'filePages' } as const, NO_FILES, { shape: FILES_SHAPE })
 /** The Find field's round (find-field.ts): the key it is drawn under and the text it starts with. */
 const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, FIRST_FIELD)
 /** The focus ring's landings in the pane (find-field.ts), counted by the ui.focus hook. */
@@ -148,10 +154,11 @@ function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
 type StepOrigin = 'typing' | 'step'
 
 /**
- * Moves the tasks view by `step` (nav.ts), keeping only the details of the pages a place still names. A step other
- * than typing that changes what the Find field should hold starts a new round of it (find-field.ts). A page opens
- * at its top, and a step from a page back to the list brings the element the page was opened from to the middle of
- * the window; a refused or failed scroll (an engine without `$.ui.scroll` among them) leaves the window where it is.
+ * Moves the tasks view by `step` (nav.ts), keeping only the details of the pages, and the reads of the files, a place
+ * still names. A step other than typing that changes what the Find field should hold starts a new round of it
+ * (find-field.ts). A page opens at its top, a file's page at its ref's line, and a step from a page back to the list
+ * brings the element the page was opened from to the middle of the window; a refused or failed scroll (an engine
+ * without `$.ui.scroll` among them) leaves the window where it is.
  */
 async function go($: Context, step: (current: Nav) => Nav, origin: StepOrigin = 'step'): Promise<void> {
   // The step runs on the places as last written, so a step written while this one runs is never lost.
@@ -164,13 +171,18 @@ async function go($: Context, step: (current: Nav) => Nav, origin: StepOrigin = 
   if (before === null || next === before) return
   if (origin === 'step') await update($, findField, field => fieldAfter(field, before, next))
   await update($, pages, current => pagesKept(current, next))
+  await update($, filePages, current => filesKept(current, next))
   const to = landing(before, next)
   if (to !== null) await scrollTo($, to).catch(() => undefined)
 }
 
-/** Moves the pane's window to the top, or brings the element a landing names to its middle. */
+/**
+ * Moves the pane's window to the top, brings the element a landing names to its middle, or a file page's line to the
+ * window's top by the paragraph that holds it (file-page.ts), the page's top when none does.
+ */
 async function scrollTo($: Context, to: Landing): Promise<void> {
-  await $.ui.scroll(to.kind === 'top' ? { to: 'start', in: PANE } : { to: { key: to.key }, in: PANE, block: 'center' })
+  const key = to.kind === 'top' ? null : to.kind === 'row' ? to.key : lineBlockKey(to, (await read($, filePages))[to.file])
+  await $.ui.scroll(key === null ? { to: 'start', in: PANE } : { to: { key }, in: PANE, block: to.kind === 'line' ? 'start' : 'center' })
 }
 
 /** Moves the pane's focus ring onto the element keyed `key`; refused while the pane does not hold the keys, which leaves it where it was. */

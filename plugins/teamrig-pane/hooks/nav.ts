@@ -6,9 +6,11 @@
 // query: typing changes the query of the search shown, never adds a place, so back from a result's page returns to
 // the results, and emptying the field (or clear) closes the search. The Archive page (done-rows.ts) is a place holding
 // its week: a step to an older or newer week changes the week of the page shown, never adds a place, so back
-// returns to where the page was opened from. Ids, queries and weeks only, at most NAV_PLACES places,
-// the oldest dropped first: what a page shows is read from the snapshot each time it draws (page.ts), and only the
-// pages a place names keep the details read for them. Pure: register.tsx keeps it in $.state and draws it.
+// returns to where the page was opened from. A press on a file a card's Reference row names (ref-file.ts) opens that
+// file's page (file-page.ts), a place holding the file as the ref writes it and the line it points at: it opens at
+// that line, or its top for none. Ids, queries, weeks and file names only, at most NAV_PLACES places, the oldest
+// dropped first: what a page shows is read from the snapshot each time it draws (page.ts), and only the pages a place
+// names keep the details, and the files, read for them. Pure: register.tsx keeps it in $.state and draws it.
 import type { Nav, Place } from '../types'
 
 /** Most places kept; past it the oldest go first. */
@@ -25,7 +27,7 @@ export function currentPlace(nav: Nav): Place {
   return nav.places[nav.at] ?? LIST
 }
 
-/** One place: the list whichever row it remembers, a task's page by its id, a search by its query, the Archive page by its week. */
+/** One place: the list whichever row it remembers, a task's page by its id, a search by its query, the Archive page by its week, a file's page by its file and line. */
 function samePlace(a: Place, b: Place): boolean {
   switch (a.kind) {
     case 'list':
@@ -36,7 +38,14 @@ function samePlace(a: Place, b: Place): boolean {
       return b.kind === 'search' && a.query === b.query
     case 'done':
       return b.kind === 'done' && a.week === b.week
+    case 'file':
+      return b.kind === 'file' && a.file === b.file && a.line === b.line
   }
+}
+
+/** Whether `place` is a page, drawn under back, forward and the trail: a task's, the Archive's or a file's. */
+export function isPage(place: Place): boolean {
+  return place.kind === 'task' || place.kind === 'done' || place.kind === 'file'
 }
 
 /** `nav` showing `place` next, past the one shown: the places ahead dropped, the oldest past NAV_PLACES too. The place shown already changes nothing. */
@@ -114,20 +123,35 @@ export function placeIds(nav: Nav): Set<string> {
   return new Set(nav.places.flatMap(place => (place.kind === 'task' ? [place.id] : [])))
 }
 
-/** What each page read for its task, `byId`, less the pages no place of `nav` names any more. */
-export function pagesKept<T>(byId: Readonly<Record<string, T>>, nav: Nav): Record<string, T> {
-  const ids = placeIds(nav)
-  return Object.fromEntries(Object.entries(byId).filter(([id]) => ids.has(id)))
+/** The files the places name: the file pages whose reads are worth keeping. */
+export function placeFiles(nav: Nav): Set<string> {
+  return new Set(nav.places.flatMap(place => (place.kind === 'file' ? [place.file] : [])))
 }
 
-/** Where the pane's window goes after a step: a page's top, or the element of the list keyed `key`. */
-export type Landing = { kind: 'top' } | { kind: 'row'; key: string }
+/** `byName` less the entries `names` does not hold. */
+function kept<T>(byName: Readonly<Record<string, T>>, names: ReadonlySet<string>): Record<string, T> {
+  return Object.fromEntries(Object.entries(byName).filter(([name]) => names.has(name)))
+}
+
+/** What each page read for its task, `byId`, less the pages no place of `nav` names any more. */
+export function pagesKept<T>(byId: Readonly<Record<string, T>>, nav: Nav): Record<string, T> {
+  return kept(byId, placeIds(nav))
+}
+
+/** What each file page read, `byFile`, less the files no place of `nav` names any more. */
+export function filesKept<T>(byFile: Readonly<Record<string, T>>, nav: Nav): Record<string, T> {
+  return kept(byFile, placeFiles(nav))
+}
+
+/** Where the pane's window goes after a step: a page's top, the element of the list keyed `key`, or line `line` of a file's page. */
+export type Landing = { kind: 'top' } | { kind: 'row'; key: string } | { kind: 'line'; file: string; line: number }
 
 /**
- * Where a step from `before` to `next` leaves the window: a page opens at its top, the Archive page at each week, a search too (its field and first
- * results) unless it was shown already, and a step from a page back to the list lands on the element the list
- * remembers it was left from. Null for any other step, typing in a search among them, and when the list remembers
- * none: the window stays where it is.
+ * Where a step from `before` to `next` leaves the window: a page opens at its top, the Archive page at each week, a
+ * file's page at the line its ref points at (its top for none), a search at its top too (its field and first results)
+ * unless it was shown already, and a step from a task's or a file's page back to the list lands on the element the
+ * list remembers it was left from. Null for any other step, typing in a search among them, and when the list
+ * remembers none: the window stays where it is.
  */
 export function landing(before: Nav, next: Nav): Landing | null {
   const to = currentPlace(next)
@@ -136,14 +160,19 @@ export function landing(before: Nav, next: Nav): Landing | null {
     case 'task':
     case 'done':
       return { kind: 'top' }
+    case 'file':
+      return to.line === null ? { kind: 'top' } : { kind: 'line', file: to.file, line: to.line }
     case 'search':
       return from.kind === 'search' ? null : { kind: 'top' }
     case 'list':
-      return from.kind === 'task' && to.row !== null ? { kind: 'row', key: to.row } : null
+      return (from.kind === 'task' || from.kind === 'file') && to.row !== null ? { kind: 'row', key: to.row } : null
   }
 }
 
-/** A crumb's words: `Tasks` for the list, a page's task id, `Search` with its query in quotes, `Archive 10-12` with its week's Monday. */
+/**
+ * A crumb's words: `Tasks` for the list, a page's task id, `Search` with its query in quotes, `Archive 10-12` with its
+ * week's Monday, a file's name.
+ */
 export function placeLabel(place: Place): string {
   switch (place.kind) {
     case 'list':
@@ -154,6 +183,8 @@ export function placeLabel(place: Place): string {
       return place.query === '' ? 'Search' : `Search "${place.query}"`
     case 'done':
       return `Archive ${place.week.slice(5)}`
+    case 'file':
+      return place.file.split(/[\\/]/).at(-1) ?? place.file
   }
 }
 
