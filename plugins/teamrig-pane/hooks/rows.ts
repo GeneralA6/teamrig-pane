@@ -6,7 +6,7 @@
 // opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
-import type { BarStatus, ExpandedTasks, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
 import type { TaskTree } from './core/read/index'
 import { cardRows } from './card'
 import { COMMAND } from './command'
@@ -19,9 +19,19 @@ import { cells } from './width'
  * A run of text in one style. No `color` (absent or undefined, as a span picks it by a condition) draws in the theme's
  * text color. With `href` the text is a link to that address (a card's Links row), never split across lines. With
  * `task` the text is that task's id in an open card (ids.ts), which a press on opens as a page; never split either.
- * `underline` marks the words a search matched (search-rows.ts).
+ * With `file` the text names a file a card's Reference row lists (ref-file.ts), which a press on opens as a page too
+ * (file-page.ts); never split. `underline` marks the words a search matched (search-rows.ts).
  */
-export type Span = { text: string; color?: ThemeKey | undefined; bold?: boolean; dim?: boolean; underline?: boolean; href?: string; task?: string }
+export type Span = {
+  text: string
+  color?: ThemeKey | undefined
+  bold?: boolean
+  dim?: boolean
+  underline?: boolean
+  href?: string
+  task?: string
+  file?: RefFile
+}
 /**
  * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
  * undefined as `single` passes it on, starts them at the edge); a `rule` row ends in a rule.

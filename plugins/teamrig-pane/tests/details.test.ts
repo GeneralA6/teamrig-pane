@@ -12,7 +12,6 @@ import {
   governingGoal,
   lineRef,
   plainText,
-  refLabel,
   refParts,
 } from '../hooks/details'
 import { graphemes } from '../hooks/width'
@@ -54,16 +53,13 @@ describe('details', () => {
     expect(refParts('~/a/inbox/po.md:1; docs/x.md:5;  ;quote')).toEqual(['~/a/inbox/po.md:1', 'docs/x.md:5', 'quote'])
   })
 
-  test('reads a line, a capped range or two lines, and labels a ref by folder and file', async () => {
+  test('reads a line, a capped range or two lines', async () => {
     expect(lineRef('docs/R.md:21')).toEqual({ file: 'docs/R.md', lines: [21] })
     expect(lineRef('C:\\a\\inbox\\etl.md:5-6')).toEqual({ file: 'C:\\a\\inbox\\etl.md', lines: [5, 6] })
     expect(lineRef('x/inbox/po.md:6,8')?.lines).toEqual([6, 8])
     expect(lineRef('x/po.md:1-40')?.lines.length).toBe(MAX_QUOTED_LINES)
     expect(lineRef('x/po.md:9-3')).toBeNull()
     expect(lineRef('owner, in the meeting')).toBeNull()
-    expect(refLabel('~/team-notes/board/po.md:6')).toBe('board/po.md')
-    expect(refLabel('docs/ROADMAP-NEXT.md:38-41')).toBe('docs/ROADMAP-NEXT.md')
-    expect(refLabel('owner, in the meeting')).toBe('owner, in the meeting')
   })
 
   test('finds inboxes in the inbox folder, ~/ under home, and a relative ref up from the session folder, then in the team folder', async () => {

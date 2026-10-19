@@ -703,13 +703,16 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
     cardLine('Goal', 'G10.1g'),
     cardLine('From', 'owner'),
     cardLine('Added', '13:00 by lead'),
-    cardLine('Reference', 'inbox/po.md'),
-    `${CARD_UNDER}docs/ROADMAP.md`,
   ])
-  // The card sits under the task's button, the two in a column of their own: one Box more than collapsed.
+  // Each reference file is a press, so its line is a row of its own under the card's text.
   const drawn = await pane.drawn()
-  expect(buttonKeys(keyedNode(drawn, 'next:T1-open'))).toEqual(['next:T1'])
-  expect(countType(drawn, 'Box')).toBe(boxes + 1)
+  const screen = screenOf(drawn)
+  expect(screen).toContain(` ${cardLine('Reference', 'inbox/po.md')}`)
+  expect(screen).toContain(` ${CARD_UNDER}docs/ROADMAP.md`)
+  // The card sits under the task's button, the two in a column of their own, each reference line a row in it: three
+  // Boxes more than collapsed.
+  expect(buttonKeys(keyedNode(drawn, 'next:T1-open')).map(key => key.split(':').slice(0, 2).join(':'))).toEqual(['next:T1', 'goto:file', 'goto:file'])
+  expect(countType(drawn, 'Box')).toBe(boxes + 3)
 
   await pane.press({ key: 'next:T1' })
   expect(await pane.find({ text: /│ Status|ship the pane with details/ })).toBeUndefined()
@@ -741,9 +744,11 @@ test("an open card shows its priority as a number, never the team config's name 
     `${CARD_UNDER}G15`,
     cardLine('From', 'owner'),
     cardLine('Added', '13:00 by lead'),
-    cardLine('Reference', 'docs/x.md'),
-    cardLine('Evidence', 'abc1234'),
   ])
+  // The reference file, a press, draws on a row of its own, and the rows after it in a text of their own.
+  const screen = screenOf(await pane.drawn())
+  expect(screen).toContain(` ${cardLine('Reference', 'docs/x.md')}`)
+  expect(screen).toContain(` ${cardLine('Evidence', 'abc1234')}`)
   expect(await pane.find({ text: /correctness/ })).toBeUndefined()
 })
 
@@ -759,7 +764,8 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   await pane.press({ key: 'po:T1' })
   expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {7}waiting since 14:00 by security\n {4}│ Note {9}needs owner paste\n/ })).toBeDefined()
   expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeUndefined()
-  expect(countType(await pane.drawn(), 'Box')).toBe(7)
+  // Each open card is a column Box, its reference file's line a row Box in it.
+  expect(countType(await pane.drawn(), 'Box')).toBe(9)
   const collapse = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'collapse')
   expect(collapse?.props).toMatchObject({ hotkey: 'c' })
 
@@ -1207,6 +1213,13 @@ function gotoKey(node: unknown, id: string): string {
   return keys[0] ?? ''
 }
 
+/** The key of the press on a reference file the drawing holds: one, in an open card or a page. */
+function fileKey(node: unknown): string {
+  const keys = buttonKeys(node).filter(key => key.startsWith('goto:file:'))
+  if (keys.length !== 1) throw new Error(`${keys.length} presses on a reference file`)
+  return keys[0] ?? ''
+}
+
 function typeOf(node: unknown): unknown {
   return typeof node === 'object' && node !== null && 'type' in node ? node.type : null
 }
@@ -1266,8 +1279,21 @@ test("a task id in an open card opens that task's page: its title and card alone
   await pane.press({ key: toT50 })
   drawn = await pane.drawn()
   // No status bar and no collapse on a page: the bar counts the list, and the page holds no card to collapse. Its card
-  // names T58, planned first, and T52, of another owner, which needs it.
-  expect(buttonKeys(drawn)).toEqual([BANNER_KEY, 'tasks', 'changes', 'find-key', 'mine', 'all', 'archive', 'back', 'crumb:0', gotoKey(drawn, 'T58'), gotoKey(drawn, 'T52')])
+  // names T58, planned first, T52, of another owner, which needs it, and the file it references.
+  expect(buttonKeys(drawn)).toEqual([
+    BANNER_KEY,
+    'tasks',
+    'changes',
+    'find-key',
+    'mine',
+    'all',
+    'archive',
+    'back',
+    'crumb:0',
+    gotoKey(drawn, 'T58'),
+    gotoKey(drawn, 'T52'),
+    fileKey(drawn),
+  ])
   expect(keyedProps(drawn, 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
   // Nowhere to go draws the step as dim words, no press.
   expect(await pane.find({ type: 'Text', text: 'forward ›' })).toMatchObject({ props: { dimColor: true } })
@@ -1342,6 +1368,7 @@ test('back, forward and the trail step through the places; the list keeps the he
     'count:not-started',
     'next:T52',
     gotoKey(drawn, 'T50'),
+    fileKey(drawn),
   ])
   expect(await pane.find({ type: 'Text', text: '‹ back' })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › T50 › T58'])
@@ -1383,7 +1410,77 @@ test('mine and all show the list alone; inline no page shows; a page whose task 
   await pane.press({ key: 'back' })
   // T50's page names T58 no more as a press: the snapshot no longer holds it. T52, which needs T50, still is one.
   const onT50 = await pane.drawn()
-  expect(buttonKeys(onT50).filter(key => key.startsWith('goto:'))).toEqual([gotoKey(onT50, 'T52')])
+  expect(buttonKeys(onT50).filter(key => key.startsWith('goto:'))).toEqual([gotoKey(onT50, 'T52'), fileKey(onT50)])
+})
+
+test("a reference file in an open card opens as a page: its name, where it was read and its text, under back and the trail; back returns to the card", async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, CHAIN)
+  disk.write('/work/docs/x.md', ['# Pages', '', 'Draw each task as a page,', '\tits card alone.'])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'next:T52' })
+  let drawn = await pane.drawn()
+  const toFile = fileKey(drawn)
+  expect(keyedProps(drawn, toFile)).toMatchObject({ plain: true })
+  expect(childrenOf(keyedNode(drawn, toFile))).toMatchObject([{ type: 'Text', props: { underline: true }, children: ['docs/x.md'] }])
+
+  await pane.press({ key: toFile })
+  expect(screenOf(await pane.drawn())).toEqual([
+    ...CHAIN_BANNER,
+    ' Tasks Changes',
+    ' Find',
+    ' Keys go to Claude · click the field to search',
+    ' mine all archive',
+    '',
+    ' ‹ back  forward ›',
+    ' Tasks › x.md',
+    ` ${'─'.repeat(PANE_PROPS.bodyColumns - 2)}`,
+    '',
+    ' docs/x.md',
+    ' /work/docs/x.md',
+    '',
+    ' # Pages',
+    '',
+    ' Draw each task as a page,',
+    '   its card alone.',
+  ])
+
+  // Back on the list, the head stays while forward returns to the file.
+  await pane.press({ key: 'back' })
+  drawn = await pane.drawn()
+  expect(buttonKeys(keyedNode(drawn, 'page-head'))).toContain('forward')
+  expect(buttonKeys(drawn)).toContain(fileKey(drawn))
+})
+
+test("a reference file's line: its page lands on the paragraph that holds it, the line bold; a file not found lists where it was looked for", async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Read the long brief', ref: 'docs/long.md:300; docs/gone.md' })])
+  disk.write('/work/docs/long.md', Array.from({ length: 400 }, (_, i) => `brief line ${i + 1}`))
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'next:T1' })
+  const [toLong] = buttonKeys(await pane.drawn()).filter(key => key.startsWith('goto:file:'))
+  if (toLong === undefined) throw new Error('no press on docs/long.md')
+
+  await pane.press({ key: toLong })
+  // 400 lines with no blank line split every 50: line 300 sits in the block from line 251, drawn though far below
+  // the window's top, as the step lands there, in a Box under its key: a Text keeps none for `$.ui.scroll` to find.
+  // The kit has no implementation of a plugin's own scroll (it throws before any ui.scroll hook), so the move
+  // itself is the engine's; what the test holds is that its target is drawn. The paragraphs it does not land on
+  // stay Texts, keyless.
+  const drawn = await pane.drawn()
+  expect(propsOf(keyedNode(drawn, 'file-page:para:251'))).toMatchObject({ key: 'file-page:para:251' })
+  expect(keyedNode(drawn, 'file-page:para:1')).toBeNull()
+  expect(await pane.find({ type: 'Text', text: /^brief line 300\n?$/ })).toMatchObject({ props: { bold: true } })
+
+  await pane.press({ key: 'back' })
+  const toGone = buttonKeys(await pane.drawn()).filter(key => key.startsWith('goto:file:'))[1]
+  if (toGone === undefined) throw new Error('no press on docs/gone.md')
+  await pane.press({ key: toGone })
+  const screen = screenOf(await pane.drawn())
+  expect(screen).toContain(' Not found. Looked for it at:')
+  expect(screen).toContain(' /work/docs/gone.md')
 })
 
 test('the dock always draws the Find field, s moving the focus into it; each change draws the matches, Enter opens the top one, back returns, clear or an empty field closes the search', async ($, on) => {
