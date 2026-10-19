@@ -1706,6 +1706,33 @@ test("a reference file's line: its page lands on the paragraph that holds it, th
   expect(screen).toContain(' /work/docs/gone.md')
 })
 
+test("the header's inbox count opens the inbox as a page, landing on its first unread line, bold; reading it marks nothing read", async ($, on) => {
+  const { clock, disk } = await start(on)
+  // The fixture's three items, a blank line after the one read: the two unread start on line 3.
+  disk.write(INBOX, ['line one', '', 'line two', 'line three'])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  let drawn = await pane.drawn()
+  const presses = buttonKeys(drawn).filter(key => key.startsWith('goto:inbox:'))
+  expect(presses).toHaveLength(1)
+  const [toInbox] = presses
+  if (toInbox === undefined) throw new Error('no press on the inbox count')
+  expect(childrenOf(keyedNode(drawn, toInbox))).toMatchObject([{ type: 'Text', props: { underline: true, color: 'warning' }, children: ['inbox 2 unread'] }])
+
+  await pane.press({ key: toInbox })
+  drawn = await pane.drawn()
+  const screen = screenOf(drawn)
+  expect(screen).toContain(' inbox/po.md')
+  expect(screen).toContain(` ${INBOX} · line 3`)
+  expect(propsOf(keyedNode(drawn, 'file-page:para:3'))).toMatchObject({ key: 'file-page:para:3' })
+  expect(await pane.find({ type: 'Text', text: /^line two\n?$/ })).toMatchObject({ props: { bold: true } })
+
+  // Back on the list after a poll, the two lines are still unread: the pane writes no mark.
+  await pane.press({ key: 'back' })
+  await clock.advance(3_000)
+  expect(await pane.find({ text: /inbox 2 unread/ })).toBeDefined()
+})
+
 test('the dock always draws the Find field, s moving the focus into it; each change draws the matches, Enter opens the top one, back returns, clear or an empty field closes the search', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, CHAIN)

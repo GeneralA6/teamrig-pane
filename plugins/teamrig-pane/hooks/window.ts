@@ -32,7 +32,7 @@ function partRows(part: CardPart): number {
   return part.kind === 'line' ? 1 : linesOf(part.spans)
 }
 
-/** Rows a body element takes, as dockLayout wrapped it: its Text's lines and its open card's. */
+/** Rows a body element takes, as dockLayout wrapped it: its Text's lines (its parts', when drawn as parts, are the same) and its open card's. */
 export function rowsOf(drawn: Drawn): number {
   return linesOf(drawn.spans) + (drawn.card ?? []).reduce((rows, part) => rows + partRows(part), 0)
 }

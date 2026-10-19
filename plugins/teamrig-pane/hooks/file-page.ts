@@ -88,3 +88,13 @@ export function lineBlockKey(file: RefFile, read: RefFileRead | undefined): stri
   const holding = found.find(paragraph => paragraph.first + paragraph.lines.length - 1 >= line) ?? found.at(-1)
   return holding === undefined ? null : paragraphKey(holding)
 }
+
+/**
+ * The line an inbox's page lands on: the first of its `unread` newest items (its lines that are not blank, as teamrig
+ * counts them: inboxLines), the newest when none is unread. Null when nothing was read or it holds no item.
+ */
+export function unreadLine(read: RefFileRead, unread: number): number | null {
+  if (read.kind !== 'read') return null
+  const items = read.text.split(/\r?\n/).flatMap((line, i) => (line.trim() === '' ? [] : [i + 1]))
+  return items.at(-Math.max(1, Math.min(unread, items.length))) ?? null
+}

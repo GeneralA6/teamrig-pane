@@ -66,6 +66,11 @@ export function inboxArea(file: string): string | null {
   return INBOX_FILE.exec(file)?.[1] ?? null
 }
 
+/** The file `area`'s inbox is, as a ref names it: the inbox folder holds it (candidatePaths). */
+export function inboxFile(area: string): string {
+  return `inbox/${area}.md`
+}
+
 /** A file as a person reads it: its folder and name. */
 export function fileLabel(file: string): string {
   return slashed(file).split('/').slice(-2).join('/')
