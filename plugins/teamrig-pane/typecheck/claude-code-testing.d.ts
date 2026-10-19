@@ -3,7 +3,7 @@
 // each test file in the engine with this kit.
 
 declare module 'claude-code/testing' {
-  import type { On, RenderRequest, PaneProps, SessionStart, CommandRun, ToolCall, ToolName, ToolResult, UiFocusInput, UiFocusResult } from 'claude-code'
+  import type { On, RenderComponent, RenderInput, RenderProps, SessionStart, CommandRun, ToolCall, ToolName, ToolResult, UiFocusInput, UiFocusResult } from 'claude-code'
 
   export interface Matchers {
     toBe(expected: unknown): void
@@ -29,8 +29,8 @@ declare module 'claude-code/testing' {
   /** A drawn element a query found: its component, its props and the text inside it. */
   export type FoundNode = { readonly type: string; readonly props: Readonly<Record<string, unknown>>; readonly text: string }
   export type NodeQuery = { readonly type?: string; readonly text?: RegExp | string }
-  /** A pane mounted as the engine would draw it, driven like a person would. */
-  export interface MountedPane {
+  /** A component mounted as the engine would draw it, driven like a person would. */
+  export interface Mounted<C extends RenderComponent> {
     find(query: NodeQuery): Promise<FoundNode | undefined>
     findAll(query: NodeQuery): Promise<FoundNode[]>
     /** Presses the button with this key. */
@@ -38,16 +38,18 @@ declare module 'claude-code/testing' {
     /** Types `text` into the field with this key: a change (`onInput`), or by default a submit (Enter, `onSubmit`). */
     input(target: { readonly key: string; readonly text: string; readonly kind?: 'change' | 'submit' }): Promise<unknown>
     /** Draws it again with new props (a resize, a scroll, a move inline). */
-    redraw(props: PaneProps): Promise<void>
+    redraw(props: RenderProps[C]): Promise<void>
     /** The tree it drew last, as plain data. */
     drawn(): Promise<unknown>
   }
+  /** The pane mounted. */
+  export type MountedPane = Mounted<'Pane'>
   /** The engine around the plugin under test: the person's and the session's side of it. */
   export interface TestEngine {
     readonly session: { start(e: SessionStart): Promise<void> }
     readonly command: { run(e: CommandRun): Promise<{ readonly text?: string }> }
     readonly ui: {
-      mount(request: RenderRequest): Promise<MountedPane>
+      mount<C extends RenderComponent>(request: RenderInput<C>): Promise<Mounted<C>>
       /** Raises `ui.focus` as the engine does when the ring moves: through the plugin's hooks, then the test's own beneath them. */
       focus(e: UiFocusInput): Promise<UiFocusResult>
     }
