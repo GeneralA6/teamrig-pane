@@ -53,6 +53,7 @@ import { PaneSizer, SIZE_KEY } from './size'
 import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
 import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from './changes'
 import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
+import { LiveDiffs, NO_DIFFS } from './diff'
 import {
   AT_LIST,
   back,
@@ -120,7 +121,7 @@ const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, NOTH
 const size = atom({ plugin: 'teamrig-pane', key: 'size' } as const, 'open')
 const view = atom({ plugin: 'teamrig-pane', key: 'view' } as const, 'tasks')
 /** The changes are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when ChangesSnapshot changes shape. */
-const CHANGES_SHAPE = 'changes-v2'
+const CHANGES_SHAPE = 'changes-v3'
 const changes = atom({ plugin: 'teamrig-pane', key: 'changes' } as const, EMPTY_CHANGES, { shape: CHANGES_SHAPE })
 /**
  * The repo roots and outside files found, kept apart from the drawn changes: a version that bumps
@@ -129,6 +130,9 @@ const changes = atom({ plugin: 'teamrig-pane', key: 'changes' } as const, EMPTY_
  */
 const KNOWN_SHAPE = 'known-v1'
 const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KNOWN, { shape: KNOWN_SHAPE })
+/** The open diffs are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when FileDiff or DiffLine changes shape. */
+const DIFFS_SHAPE = 'diffs-v1'
+const diffs = atom({ plugin: 'teamrig-pane', key: 'diffs' } as const, NO_DIFFS, { shape: DIFFS_SHAPE })
 const NOTHING_MISSING: RequirementProblem[] = []
 /** What the pane lacks (requirements.ts); each session start checks again and writes it anew, a hot reload's too. */
 const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, NOTHING_MISSING)
@@ -158,10 +162,10 @@ function openKey(key: string): string {
   return `${key}-open`
 }
 
-/** True when the element keyed `key` is drawn in `drawn`: its press, its open card, or a press on a task id in the card. */
+/** True when the element keyed `key` is drawn in `drawn`: its press, its open card, or a press in the card (a task id, a reference file, a Changes file). */
 function isDrawnIn(drawn: Drawn, key: string): boolean {
   const open = openKey(drawn.key)
-  return key === drawn.key || key === open || (key.startsWith('goto:') && key.includes(`:${open}:`))
+  return key === drawn.key || key === open || (/^(?:goto|diff):/.test(key) && key.includes(`:${open}:`))
 }
 
 /** The open cards less one. */
@@ -287,6 +291,8 @@ export const register: Register = on => {
   let sizer: PaneSizer | null = null
   /** Reads the session's git changes; set when the session starts. */
   let tracked: LiveChanges | null = null
+  /** Opens, closes and reads again the Changes files' diffs; set when the session starts. */
+  let diffing: LiveDiffs | null = null
   /** The tab title last asked for: `Tasks · Δn` (changes-rows.ts paneTitle). */
   let title = paneTitle(EMPTY_CHANGES)
   /**
@@ -367,9 +373,20 @@ export const register: Register = on => {
     const seed = await read($, changes)
     const kept = await read($, known)
     title = paneTitle(seed)
+    const git = (args: readonly string[], cwd: string) => $.process.run(['git', ...args], { cwd, timeoutMs: GIT_TIMEOUT_MS })
+    const diffsLive = new LiveDiffs(
+      {
+        git,
+        publish: async opened => {
+          await update($, diffs, () => opened)
+        },
+      },
+      { diffs: await read($, diffs), changes: seed },
+    )
+    diffing = diffsLive
     const changesLive = new LiveChanges(
       {
-        git: (args, cwd) => $.process.run(['git', ...args], { cwd, timeoutMs: GIT_TIMEOUT_MS }),
+        git,
         exists: path => $.fs.exists(path),
         publish: async fresh => {
           await update($, changes, () => fresh)
@@ -380,6 +397,7 @@ export const register: Register = on => {
           title = retitled
           await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS }).catch(() => undefined)
         },
+        onRead: fresh => diffsLive.refresh(fresh),
       },
       knownSeed(seed, kept),
     )
@@ -530,7 +548,7 @@ export const register: Register = on => {
                 : place.kind === 'file'
                   ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
                   : paneBlocks(snap, shown, open, bar?.filter ?? null)
-        const viewBlocks = current === 'tasks' ? tasksBlocks : changesBlocks(changed, isGitMissing(missing))
+        const viewBlocks = current === 'tasks' ? tasksBlocks : changesBlocks(changed, isGitMissing(missing), await read($, diffs))
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
@@ -591,10 +609,17 @@ export const register: Register = on => {
     /**
      * A card's lines with no press as one Text; a line with one as a row of its pieces, each id a press that opens
      * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, then where it
-     * is drawn (`from`, the card's element).
+     * is drawn (`from`, the card's element); a Changes file's row one press that opens or closes its diff, keyed
+     * `diff:`, then where it is drawn and the row.
      */
     const drawPart = (part: CardPart, wrap: Drawn['wrap'], from: string) => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
+      if (part.kind === 'press')
+        return (
+          <Button key={`diff:${from}:${part.key}`} plain onPress={() => void diffing?.toggle(part.expands)}>
+            {drawText(part.spans, wrap)}
+          </Button>
+        )
       return (
         <Box key={part.key} flexDirection="row">
           {part.pieces.map((piece, i) => {
@@ -618,11 +643,18 @@ export const register: Register = on => {
         </Box>
       )
     }
-    // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), else
-    // words alone.
+    // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), or,
+    // inline, a Changes file's diff (`expands`), else words alone.
     const headOf = (drawn: Drawn) => {
       const id = drawn.toggle
       const opens = drawn.opens
+      const expands = drawn.expands
+      if (expands !== undefined)
+        return (
+          <Button key={drawn.key} plain onPress={() => void diffing?.toggle(expands)}>
+            {drawText(drawn.spans, drawn.wrap)}
+          </Button>
+        )
       if (opens !== undefined)
         return (
           <Button key={drawn.key} plain onPress={() => void openPage(opens, drawn.key)}>

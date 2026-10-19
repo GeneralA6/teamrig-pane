@@ -5,7 +5,7 @@ import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
 import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
-import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, wrapRow, type Drawn } from '../hooks/layout'
+import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, doneMoreText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
@@ -789,6 +789,34 @@ describe('layout', () => {
     ])
     expect(cardParts([])).toEqual([])
     expect(piecesOf([{ text: 'T5', task: 'T5' }, { text: 'T5', task: 'T5' }])).toHaveLength(2)
+  })
+
+  test("a Changes file's row is a press of its own in its repo's card, keyed as the row; the rows between are Text runs", async () => {
+    const a: Row = { key: 'C:/r:a.ts', spans: [{ text: ' M a.ts' }], expands: 'C:/r:a.ts' }
+    const b: Row = { key: 'C:/r:b.ts', spans: [{ text: '?? b.ts' }], expands: 'C:/r:b.ts' }
+    const added: Row = { key: 'diff:C:/r:a.ts:0', spans: [{ text: '   ' }, { text: '+x', color: 'success' }] }
+    const removed: Row = { key: 'diff:C:/r:a.ts:1', spans: [{ text: '   ' }, { text: '-y', color: 'error' }] }
+    const block: Block = { key: 'repo:C:/r', rows: [{ key: 'repo:C:/r', spans: [{ text: 'r' }] }], card: [a, added, removed, b] }
+    const card = dockLayout([block], 40)[0]?.card ?? []
+    expect(card.map(part => [part.kind, part.key])).toEqual([
+      ['press', 'C:/r:a.ts'],
+      ['text', 'card:1'],
+      ['press', 'C:/r:b.ts'],
+    ])
+    expect(card[0]).toEqual({ kind: 'press', key: 'C:/r:a.ts', spans: [{ text: ' M a.ts' }], expands: 'C:/r:a.ts' })
+    // A press row that wraps keeps every line in its one press.
+    const wrapped = rowParts([{ ...a, spans: [{ text: ' M a-long-name.ts' }], hang: { text: '   ' } }], row => wrapRow(row, 10))
+    expect(wrapped).toHaveLength(1)
+    expect(wrapped[0]?.kind === 'press' ? wrapped[0].spans.map(span => span.text).join('') : '').toContain('\n')
+    expect(rowParts([], row => wrapRow(row, 10))).toEqual([])
+    // Inline, each row is one, a file's row its press.
+    expect(inlineLayout([block], 10).map(drawn => [drawn.key, drawn.expands ?? null])).toEqual([
+      ['repo:C:/r', null],
+      ['C:/r:a.ts', 'C:/r:a.ts'],
+      ['diff:C:/r:a.ts:0', null],
+      ['diff:C:/r:a.ts:1', null],
+      ['C:/r:b.ts', 'C:/r:b.ts'],
+    ])
   })
 
   test('a task id is never split or merged: it moves to a fresh line whole, two side by side stay two, words beside one stay apart', async () => {

@@ -1,7 +1,7 @@
 // The Changes view: its data (hooks/changes.ts), git's status read per repo and repos found from the files the session
 // writes, and its rows (hooks/changes-rows.ts).
 import { describe, expect, test } from 'claude-code/testing'
-import type { ChangesSnapshot, FileChange, KnownChanges, LineCount, RepoChanges } from '../types'
+import type { ChangesSnapshot, DiffLine, FileChange, FileDiff, KnownChanges, LineCount, OpenDiffs, RepoChanges } from '../types'
 import {
   branchOf,
   changeCount,
@@ -20,7 +20,7 @@ import {
   type ChangesPorts,
   type GitRun,
 } from '../hooks/changes'
-import { changesBlocks, changesLabel, lineSpans, paneTitle } from '../hooks/changes-rows'
+import { changesBlocks, changesLabel, DIFF_LINE_ROWS, diffRows, lineSpans, paneTitle } from '../hooks/changes-rows'
 import type { Block } from '../hooks/rows'
 
 const REPO = 'C:/work/repo'
@@ -468,7 +468,7 @@ describe('changes', () => {
 describe('changes rows', () => {
   const textOf = (blocks: readonly Block[], key: string) =>
     blocks
-      .flatMap(block => block.rows)
+      .flatMap(block => [...block.rows, ...(block.card ?? [])])
       .find(row => row.key === key)
       ?.spans.map(span => span.text)
       .join('')
@@ -525,7 +525,6 @@ describe('changes rows', () => {
     })
     expect(blocks.map(block => [block.key, block.opensSection === true])).toEqual([
       [`repo:${REPO}`, false],
-      [`files:${REPO}`, false],
       ['repo:C:/work/gone', true],
       ['problem:C:/work/gone', false],
       ['repo:C:/work/clean', true],
@@ -541,5 +540,56 @@ describe('changes rows', () => {
     expect(textOf(blocks, 'problem:C:/work/gone')).toBe('WARN fatal: bad object HEAD')
     expect(textOf(blocks, 'repo:C:/work/clean')).toBe('clean · main · clean')
     expect(textOf(blocks, 'outside')).toBe('── written outside git (1)')
+    // The files are the header's card, so no blank line parts them from it.
+    expect(blocks[0]?.card?.map(row => row.key)).toEqual([`${REPO}:new.ts`, `${REPO}:t/`, `${REPO}:more`, `${REPO}:partial`])
+  })
+
+  test("a file's row opens its diff, an untracked folder's none; an open diff's lines sit under its row in the card", () => {
+    const key = `${REPO}:a.ts`
+    const files = [change(' M', 'a.ts', null, text(1, 1)), change('??', 't/'), change('??', 'b.md')]
+    const changes: ChangesSnapshot = { repos: [repo({ files: { items: files, more: 0 } })], outside: [], isRead: true }
+    const lines: DiffLine[] = [
+      { kind: 'hunk', text: '@@ -1 +1 @@' },
+      { kind: 'del', text: 'old' },
+      { kind: 'add', text: 'new' },
+      { kind: 'same', text: 'kept' },
+    ]
+    const diffs: OpenDiffs = { [key]: { kind: 'read', lines, more: 3, isCut: false } }
+    const blocks = changesBlocks(changes, false, diffs)
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0]?.card?.map(row => [row.key, row.expands ?? null])).toEqual([
+      [key, key],
+      [`diff:${key}:0`, null],
+      [`diff:${key}:1`, null],
+      [`diff:${key}:2`, null],
+      [`diff:${key}:3`, null],
+      [`diff:${key}:more`, null],
+      [`${REPO}:t/`, null],
+      [`${REPO}:b.md`, `${REPO}:b.md`],
+    ])
+    expect(blocks[0]?.card?.slice(1, 6).map(row => row.spans)).toEqual([
+      [{ text: '   ' }, { text: '@@ -1 +1 @@', dim: true }],
+      [{ text: '   ' }, { text: '-old', color: 'error' }],
+      [{ text: '   ' }, { text: '+new', color: 'success' }],
+      [{ text: '   ' }, { text: ' kept' }],
+      [{ text: '   ' }, { text: '… 3 more lines', dim: true }],
+    ])
+    // A diff line wraps under its text, past its marker, and stops at DIFF_LINE_ROWS screen lines.
+    expect(blocks[0]?.card?.[2]).toMatchObject({ hang: { text: '    ' }, maxLines: DIFF_LINE_ROWS })
+    // Closed, the file's row stands alone.
+    expect(changesBlocks(changes).at(0)?.card?.map(row => row.key)).toEqual([key, `${REPO}:t/`, `${REPO}:b.md`])
+  })
+
+  test('an open diff while git reads it, when git fails, with no line changed, and cut short', () => {
+    const key = `${REPO}:a.ts`
+    const words = (diff: FileDiff) => diffRows(key, diff).map(row => row.spans.map(span => span.text).join(''))
+    expect(words({ kind: 'reading' })).toEqual(['   Reading the diff…'])
+    expect(words({ kind: 'failed', problem: 'fatal: bad revision HEAD' })).toEqual(['   WARN git could not read the diff: fatal: bad revision HEAD'])
+    expect(words({ kind: 'read', lines: [], more: 0, isCut: false })).toEqual(['   No line changed: a mode change, a rename or an empty file.'])
+    expect(words({ kind: 'read', lines: [{ kind: 'add', text: 'a' }], more: 0, isCut: true })).toEqual([
+      '   +a',
+      "   … some more lines: git's diff ran past 4 MiB and stops short",
+    ])
+    expect(words({ kind: 'read', lines: [], more: 2, isCut: true })).toEqual(["   … 2+ more lines: git's diff ran past 4 MiB and stops short"])
   })
 })

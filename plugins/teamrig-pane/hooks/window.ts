@@ -27,9 +27,9 @@ function linesOf(spans: readonly Span[]): number {
   return spans.reduce((lines, span) => lines + span.text.split('\n').length - 1, 1)
 }
 
-/** Rows a card part takes: a Text its lines, a line with a task id one row. */
+/** Rows a card part takes: a Text or a press its lines, a line with a task id one row. */
 function partRows(part: CardPart): number {
-  return part.kind === 'text' ? linesOf(part.spans) : 1
+  return part.kind === 'line' ? 1 : linesOf(part.spans)
 }
 
 /** Rows a body element takes, as dockLayout wrapped it: its Text's lines and its open card's. */
