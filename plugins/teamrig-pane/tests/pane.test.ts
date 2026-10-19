@@ -467,7 +467,7 @@ test('a register of 20,000 events loads and draws in well under a second, and a 
   expect(disk.reads.length).toBe(reads)
 })
 
-test('docked, a list of 2,000 tasks draws only the elements near the window, and a scroll draws the rows it moves to', async ($, on) => {
+test("docked, a list of 2,000 tasks draws only the elements near the window and the list's two ends, and a scroll draws the rows it moves to", async ($, on) => {
   const { disk } = await start(on)
   disk.write(
     EVENTS,
@@ -478,19 +478,41 @@ test('docked, a list of 2,000 tasks draws only the elements near the window, and
   await pane.press({ key: 'all' })
   const numbers = async () =>
     (await pane.findAll({ type: 'Text', text: /Long list task \d+/ })).map(found => Number(/Long list task (\d+)/.exec(found.text)?.[1]))
-  // Four screenfuls of 40 rows hold a few dozen tasks of the 2,000, and the tree's buttons stay as few.
+  // Four screenfuls of 40 rows, and a screenful above the list's last task, hold a few dozen tasks of the 2,000, and
+  // the tree's buttons stay as few.
   const top = await numbers()
   expect(top).toContain(1)
+  expect(top).toContain(2_000)
+  expect(top).not.toContain(1_000)
   expect(top.length).toBeLessThan(60)
-  expect(top).not.toContain(2_000)
   expect(buttonKeys(await pane.drawn()).length).toBeLessThan(80)
 
+  // In the middle: the rows around the window, away from both ends, and a screenful at each end.
   await pane.redraw({ ...PANE_PROPS, scroll: { offset: 5_000, bodyRows: 40 } })
   const middle = await numbers()
-  expect(middle.length).toBeGreaterThan(0)
-  expect(middle.length).toBeLessThan(60)
-  expect(Math.min(...middle)).toBeGreaterThan(1)
-  expect(Math.max(...middle)).toBeLessThan(2_000)
+  expect(middle.filter(n => n > 100 && n < 1_900).length).toBeGreaterThan(0)
+  expect(middle).toContain(1)
+  expect(middle).toContain(2_000)
+  expect(middle.length).toBeLessThan(100)
+})
+
+test("docked, a long list's first and last tasks are drawn wherever the window stands, so Tab and Shift+Tab wrap to its true ends", async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(
+    EVENTS,
+    Array.from({ length: 2_000 }, (_, i) => createLine(`T${i + 1}`, { owner: 'po', by: 'lead', at: NOW - HOUR, title: `Long list task ${i + 1}` })),
+  )
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'all' })
+  // The engine's focus ring runs over the drawing's focusable elements in order and wraps at its ends: Shift+Tab on its
+  // first lands on its last, the list's last task's press; Tab on from the buttons and the Find field reaches its first.
+  for (const offset of [0, 3_000, 6_000]) {
+    await pane.redraw({ ...PANE_PROPS, scroll: { offset, bodyRows: 40 } })
+    const ring = focusables(await pane.drawn()).map(element => element.key)
+    expect(ring.find(key => /^po:T\d+$/.test(key))).toBe('po:T1')
+    expect(ring.at(-1)).toBe('po:T2000')
+  }
 })
 
 /** A drawn element's props, when it has any. */
