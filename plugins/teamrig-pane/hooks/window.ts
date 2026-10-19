@@ -2,8 +2,10 @@
 // it again on each scroll move, so a list drawn whole costs every move all its elements: thousands for a register of
 // a thousand tasks. Windowed, a drawing holds the elements whose rows meet the window the person sees, with at least
 // a screenful around it, and each element an anchor keeps (the one the keys are on, the one a step back to the list
-// lands on), with a screenful around it too, so the keys and the engine's scroll to an element always find what they move to. A
-// run of the others is one empty Box as tall as their rows, so the tree keeps its height and the window its place.
+// lands on), with a screenful around it too, so the keys and the engine's scroll to an element always find what they move to.
+// The body's first and last elements are kept the same way, so Tab past the end and Shift+Tab past the top wrap to the
+// list's true ends, not to the ends of what is drawn. A run of the others is one empty Box as tall as their rows, so the
+// tree keeps its height and the window its place.
 import type { CardPart, Drawn } from './layout'
 import type { Span } from './rows'
 
@@ -42,17 +44,19 @@ export function rowsOf(drawn: Drawn): number {
  * spacer of their rows and the gaps between them. The window's offset counts the pane's rows above the body (the
  * buttons, the Find field, the status bar), always under a screenful, so the range drawn around it runs from two
  * screenfuls above the offset to two below: what is seen, and at least a screenful each way, for the engine's own
- * scrolls that ask for no new drawing (a held element kept in view).
+ * scrolls that ask for no new drawing (a held element kept in view). An anchor, and the body's first and last
+ * elements, are kept with a screenful around each.
  */
 export function windowed(body: readonly Drawn[], window: BodyWindow): Slot[] {
   const screen = Math.max(1, window.bodyRows)
   const ranges: { from: number; to: number }[] = [{ from: window.offset - 2 * screen, to: window.offset + 2 * screen }]
   const placed: { drawn: Drawn; top: number; rows: number }[] = []
+  const last = body.length - 1
   let top = 0
-  for (const drawn of body) {
+  for (const [i, drawn] of body.entries()) {
     const rows = rowsOf(drawn)
     placed.push({ drawn, top, rows })
-    if (window.isAnchor(drawn)) ranges.push({ from: top - screen, to: top + rows + screen })
+    if (i === 0 || i === last || window.isAnchor(drawn)) ranges.push({ from: top - screen, to: top + rows + screen })
     top += rows + window.gap
   }
   const slots: Slot[] = []

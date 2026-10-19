@@ -355,13 +355,14 @@ new reads nothing.
 
 Every scroll, focus move, keystroke and poll write draws the pane again, so a docked draw lays out
 only the rows near what you see (`hooks/window.ts`): those within two screenfuls of the scroll window,
-plus the focused element and the row a page was opened from, each with a screenful around it. Each
-run of the other rows is one empty box as tall as they are, so the body keeps its height and the
-scrollbar its place, and the wrapped lines of a row that did not change are kept from the draw before.
-The plugin's own work per draw (`mine` view, 56 columns, 40 rows shown, median, 2026-10-18) at 100,
-500 and 2,000 tasks fell from 11, 53 and 212 ms to 1.7, 7 and 28 ms, and the elements the host lays
-out from 576, 2,843 and 11,676 to 102 at each size. Tab and Shift+Tab move through the rows drawn,
-so Shift+Tab from the top lands on the last row drawn, not the list's last: scroll to the end for it.
+plus the focused element, the row a page was opened from and the list's first and last rows, each with
+a screenful around it. Each run of the other rows is one empty box as tall as they are, so the body
+keeps its height and the scrollbar its place, and the wrapped lines of a row that did not change are
+kept from the draw before. The plugin's own work per draw (`mine` view, 56 columns, 40 rows shown,
+median, 2026-10-18, before the first and last rows were kept) at 100, 500 and 2,000 tasks fell from
+11, 53 and 212 ms to 1.7, 7 and 28 ms, and the elements the host lays out from 576, 2,843 and 11,676
+to 102 at each size. Keeping the list's ends adds at most two screenfuls of rows at any size, so Tab
+from the last row and Shift+Tab from the top wrap to the list's true ends.
 
 `$.state` outlives a hot reload, so the snapshot is kept under a shape tag (`SNAPSHOT_SHAPE` in
 `hooks/register.tsx`): bump it whenever the `Snapshot` or `TaskRow` type changes, and a reloaded pane

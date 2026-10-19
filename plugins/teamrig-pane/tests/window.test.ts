@@ -49,24 +49,34 @@ describe('windowed', () => {
     expect(slots.some(slot => slot.kind === 'spacer')).toBe(false)
   })
 
-  test('draws the elements within two screenfuls of the window and keeps the rest as one spacer of their rows and gaps', () => {
+  test('draws the elements within two screenfuls of the window and the last with a screenful above it, the rest one spacer of their rows and gaps', () => {
     const all = body(2_000, 4)
     const slots = windowed(all, at(0, 40))
-    // Each element is 4 rows and a gap: rows 0 to 80 meet elements e0 to e15.
-    expect(drawnKeys(slots)).toEqual(Array.from({ length: 16 }, (_, i) => `e${i}`))
-    expect(slots.at(-1)).toEqual({ kind: 'spacer', key: 'skip:e16', rows: 1_984 * 4 + 1_983 })
+    // Each element is 4 rows and a gap: rows 0 to 80 meet elements e0 to e15, and the 40 rows above e1999 meet e1991 on.
+    expect(drawnKeys(slots)).toEqual([...Array.from({ length: 16 }, (_, i) => `e${i}`), ...Array.from({ length: 9 }, (_, i) => `e${1_991 + i}`)])
+    expect(slots[16]).toEqual({ kind: 'spacer', key: 'skip:e16', rows: 1_975 * 4 + 1_974 })
+    expect(slots.at(-1)).toEqual({ kind: 'drawn', drawn: all[1_999] })
     expect(treeRows(slots)).toBe(treeRows(all.map(drawn => ({ kind: 'drawn', drawn }))))
   })
 
-  test('scrolled to the middle, draws the elements around it between two spacers, the tree as tall as drawn whole', () => {
+  test('scrolled to the middle, draws the elements around it and the two ends, a spacer between each, the tree as tall as drawn whole', () => {
     const all = body(2_000, 4)
     const slots = windowed(all, at(5_000, 40))
-    const keys = drawnKeys(slots)
-    expect(keys[0]).toBe('e984')
-    expect(keys.at(-1)).toBe('e1015')
-    expect(slots[0]).toEqual({ kind: 'spacer', key: 'skip:e0', rows: 984 * 4 + 983 })
-    expect(slots.at(-1)?.kind).toBe('spacer')
+    // The first element and the 40 rows under it: e0 to e8; the window's: e984 to e1015; the last's: e1991 to e1999.
+    expect(drawnKeys(slots)).toEqual([
+      ...Array.from({ length: 9 }, (_, i) => `e${i}`),
+      ...Array.from({ length: 32 }, (_, i) => `e${984 + i}`),
+      ...Array.from({ length: 9 }, (_, i) => `e${1_991 + i}`),
+    ])
+    expect(slots.filter(slot => slot.kind === 'spacer')).toEqual([
+      { kind: 'spacer', key: 'skip:e9', rows: 975 * 4 + 974 },
+      { kind: 'spacer', key: 'skip:e1016', rows: 975 * 4 + 974 },
+    ])
     expect(treeRows(slots)).toBe(2_000 * 4 + 1_999)
+  })
+
+  test('keeps a one-element body drawn wherever the window stands', () => {
+    expect(drawnKeys(windowed(body(1, 4), at(5_000, 40)))).toEqual(['e0'])
   })
 
   test('draws an anchored element far from the window with a screenful around it, so the keys and a scroll find it', () => {
