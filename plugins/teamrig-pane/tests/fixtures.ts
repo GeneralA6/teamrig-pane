@@ -1,11 +1,19 @@
 // Register lines shaped as teamrig writes them (events v2, inbox marks v1), and an in-memory `Files`.
-import { EVENT_VERSION, MARK_VERSION } from '../hooks/core/read/index'
+import { DEFAULT_REGISTER, EVENT_VERSION, MARK_VERSION } from '../hooks/core/read/index'
 import { lineHash } from '../hooks/line-hash'
+import { treeOf, type PaneTree } from '../hooks/meta'
 import type { FileStamp, Files } from '../hooks/source'
-import type { WaitRow } from '../types'
+import type { TaskRow, WaitRow } from '../types'
 
 export const NOW = Date.UTC(2026, 9, 13, 14, 0)
 export const HOUR = 3_600_000
+/** teamrig's default hours before an untouched task reads NOT PICKED UP, for a team whose config sets none. */
+export const NOT_PICKED_UP_HOURS = DEFAULT_REGISTER.check.notPickedUpAfterHours
+
+/** The tree of `tasks` at `now`, for a team whose config sets `notPickedUpAfterHours` (teamrig's default when unset). */
+export function treeAt(tasks: readonly TaskRow[], now: number, notPickedUpAfterHours = NOT_PICKED_UP_HOURS): PaneTree {
+  return treeOf({ tasks, now, notPickedUpAfterHours })
+}
 
 export function iso(ms: number): string {
   return new Date(ms).toISOString()

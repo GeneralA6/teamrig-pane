@@ -3,8 +3,9 @@
 // session's team (`<kit home>/teams/<team>/state`, or the team config's `paths.state` and
 // `paths.inbox`, read by teamrig's own reader). The goals document comes from its variable or the
 // settings file, else none. The team's config and rename log, read again by sessions.ts at each
-// `/teamrig-pane <session>`, name its sessions.
-import { parseConfigText, type ConfigRead } from './core/read/index'
+// `/teamrig-pane <session>`, name its sessions. The team config also sets how long a task may stand untouched by its
+// owner before it reads NOT PICKED UP.
+import { DEFAULT_REGISTER, parseConfigText, type ConfigRead } from './core/read/index'
 import { slashed, type Files, type RegisterDirs } from './source'
 
 /** The variables the pane reads. */
@@ -47,11 +48,12 @@ type DirKey = Exclude<SettingKey, 'goalsDoc'>
 export type TeamFiles = { team: string; dir: string; config: string; renames: string }
 
 /**
- * The register's folders and the session's team's files (null when no team was found), or the problem the pane shows
+ * The register's folders, the session's team's files (null when no team was found) and the hours a task may stand
+ * untouched before it reads NOT PICKED UP (the team config's, else teamrig's default), or the problem the pane shows
  * instead of tasks; the goals document either way.
  */
 export type Places =
-  | { found: true; dirs: RegisterDirs; team: TeamFiles | null; goalsDoc: string | null }
+  | { found: true; dirs: RegisterDirs; team: TeamFiles | null; notPickedUpAfterHours: number; goalsDoc: string | null }
   | { found: false; problem: string; goalsDoc: string | null }
 
 export type PlacesInput = {
@@ -84,16 +86,23 @@ export async function findPlaces(input: PlacesInput): Promise<Places> {
   const tasksDir = chosen('tasksDir')
   const inboxDir = chosen('inboxDir')
   const team = await teamFolders(input, variable, kit, settingsPath)
-  // Both folders named: the team is looked for only for its files, so a team that cannot be found or read leaves none
-  // instead of a problem.
+  // Both folders named: the team is looked for only for its files and its hours, so a team that cannot be found or
+  // read leaves no files and teamrig's default hours instead of a problem.
   if (tasksDir !== undefined && inboxDir !== undefined) {
-    return { found: true, dirs: { tasksDir, inboxDir }, team: team.ok ? team.value.files : null, goalsDoc }
+    return {
+      found: true,
+      dirs: { tasksDir, inboxDir },
+      team: team.ok ? team.value.files : null,
+      notPickedUpAfterHours: team.ok ? team.value.notPickedUpAfterHours : DEFAULT_REGISTER.check.notPickedUpAfterHours,
+      goalsDoc,
+    }
   }
   if (!team.ok) return { found: false, problem: team.problem, goalsDoc }
   return {
     found: true,
     dirs: { tasksDir: tasksDir ?? team.value.state, inboxDir: inboxDir ?? team.value.inbox },
     team: team.value.files,
+    notPickedUpAfterHours: team.value.notPickedUpAfterHours,
     goalsDoc,
   }
 }
@@ -136,15 +145,18 @@ async function readSettings(files: PlacesInput['files'], path: string, isNamed: 
   return { ok: true, value: settings }
 }
 
-/** What a team's config sets for the pane: the team's state and inbox folders, and the files naming its sessions. */
-type TeamFolders = { state: string; inbox: string; files: TeamFiles }
+/**
+ * What a team's config sets for the pane: the team's state and inbox folders, the files naming its sessions, and the
+ * hours a task may stand untouched before it reads NOT PICKED UP.
+ */
+type TeamFolders = { state: string; inbox: string; files: TeamFiles; notPickedUpAfterHours: number }
 
 /** Why teamrig cannot read a config: where in it, then what. */
 type ConfigIssue = Extract<ConfigRead, { status: 'unreadable' }>['issue']
 
 /**
- * The team's state and inbox folders as teamrig lays them out, or why they cannot be found. A team with no config
- * file keeps them under its home, as teamrig reads it.
+ * The team's state and inbox folders as teamrig lays them out, and its NOT PICKED UP hours, or why they cannot be
+ * found. A team with no config file keeps the folders under its home and teamrig's default hours, as teamrig reads it.
  */
 async function teamFolders(
   input: PlacesInput,
@@ -174,6 +186,7 @@ async function teamFolders(
       state,
       inbox: inTeamHome(paths.inbox) ?? `${state}/inbox`,
       files: { team: team.value, dir: teamHome, config: configPath, renames: `${state}/renames.jsonl` },
+      notPickedUpAfterHours: (read?.config.register ?? DEFAULT_REGISTER).check.notPickedUpAfterHours,
     },
   }
 }

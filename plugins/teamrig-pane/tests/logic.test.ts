@@ -10,10 +10,9 @@ import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, doneMoreText, paneBlocks, type Bl
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
-import { treeOf } from '../hooks/meta'
 import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
 import { HELD_DAYS } from '../hooks/done'
-import { HOUR, MemoryFiles, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, updateLine, waitingLine, verifyingLine } from './fixtures'
+import { HOUR, MemoryFiles, NOT_PICKED_UP_HOURS, NOW, S1, S2, S3, bigRegister, createLine, iso, markLine, statusLine, treeAt, updateLine, waitingLine, verifyingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
@@ -201,7 +200,7 @@ describe('view', () => {
       createLine('T4', { owner: 'po', by: 'po', at: NOW, priority: 3, due: '2026-10-14 09:00' }),
       createLine('T5', { owner: 'etl', by: 'po', at: NOW }),
     )
-    const view = areaView(tasks, 'po', treeOf(tasks, NOW))
+    const view = areaView(tasks, 'po', treeAt(tasks, NOW))
     expect(view.upNext.map(t => t.id)).toEqual(['T2', 'T4', 'T3', 'T1'])
     expect(view.waiting.map(t => t.id)).toEqual(['T5'])
     expect([view.verifying, view.working, view.doneToday]).toEqual([[], [], []])
@@ -213,7 +212,7 @@ describe('view', () => {
       createLine('T2', { owner: 'po', by: 'po', at: NOW }),
       createLine('T3', { owner: 'etl', by: 'etl', at: NOW, due: '2026-10-15', taskKeys: { after: ['T2'] } }),
     )
-    const tree = treeOf(tasks, NOW)
+    const tree = treeAt(tasks, NOW)
     expect(areaView(tasks, 'po', tree).upNext.map(t => t.id)).toEqual(['T2', 'T1'])
     expect(ownerGroups(tasks, tree).map(g => g.active.map(t => t.id))).toEqual([['T3'], ['T2', 'T1']])
   })
@@ -221,7 +220,7 @@ describe('view', () => {
   test('waiting holds its own waiting tasks first, then up to 8 it asked of others, counting them all', async () => {
     const asked = Array.from({ length: 10 }, (_, i) => createLine(`T${i + 10}`, { owner: 'etl', by: 'po', at: NOW }))
     const tasks = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 4 }), statusLine('T1', 'po', NOW, 'waiting', 'needs owner'), ...asked)
-    const view = areaView(tasks, 'po', treeOf(tasks, NOW))
+    const view = areaView(tasks, 'po', treeAt(tasks, NOW))
     expect(view.waiting.map(t => t.id)).toEqual(['T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17'])
     expect(view.waitingTotal).toBe(11)
   })
@@ -238,20 +237,21 @@ describe('view', () => {
       createLine('T4', { owner: 'po', by: 'po', at: NOW - 48 * HOUR }),
       statusLine('T4', 'po', Date.UTC(2026, 9, 12, 23, 59), 'done'),
     )
-    const view = areaView(tasks, 'po', treeOf(tasks, NOW))
+    const view = areaView(tasks, 'po', treeAt(tasks, NOW))
     expect(view.doneToday.map(t => t.id)).toEqual(['T3', 'T1'])
     expect([view.doneTotal, view.doneMoreDropped]).toEqual([2, 0])
     expect(barCounts(tasks, 'po', NOW)['done-today']).toBe(view.doneToday.filter(t => t.status === 'done').length)
-    expect(areaView(tasks, 'po', treeOf(tasks, Date.UTC(2026, 9, 14))).doneTotal).toBe(0)
+    expect(areaView(tasks, 'po', treeAt(tasks, Date.UTC(2026, 9, 14))).doneTotal).toBe(0)
   })
 
   test('two snapshots draw the same pane unless a field, a task or a time label differs', async () => {
     const tasks = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' }))
-    const base: Snapshot = { tasks, area: 'po', areaSource: 'pinned', unreadInbox: 0, problem: null, now: NOW }
+    const base: Snapshot = { tasks, area: 'po', areaSource: 'pinned', unreadInbox: 0, problem: null, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, now: NOW }
     expect(sameView(base, { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' })) })).toBe(true)
     expect(sameView(base, { ...base, now: NOW + HOUR / 2 })).toBe(true)
     expect(sameView(base, { ...base, now: NOW + 2 * HOUR })).toBe(false)
     expect(sameView(base, { ...base, unreadInbox: 1 })).toBe(false)
+    expect(sameView(base, { ...base, notPickedUpAfterHours: NOT_PICKED_UP_HOURS * 2 })).toBe(false)
     const regoaled = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', goals: ['G11'] }))
     expect(sameView(base, { ...base, tasks: regoaled })).toBe(false)
     expect(sameView(base, { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, title: 'Renamed' })) })).toBe(false)
@@ -281,7 +281,7 @@ describe('view', () => {
       createLine('T3', { owner: 'etl', by: 'etl', at: NOW }),
       statusLine('T3', 'etl', NOW, 'done'),
     )
-    expect(ownerGroups(tasks, treeOf(tasks, NOW)).map(g => [g.owner, g.active.length, g.waiting])).toEqual([
+    expect(ownerGroups(tasks, treeAt(tasks, NOW)).map(g => [g.owner, g.active.length, g.waiting])).toEqual([
       ['etl', 1, 0],
       ['security', 1, 1],
     ])
@@ -295,10 +295,10 @@ describe('view', () => {
       createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, priority: 2 }),
       statusLine('T3', 'po', NOW, 'verifying', 'one clean roll'),
     )
-    const view = areaView(tasks, 'po', treeOf(tasks, NOW))
+    const view = areaView(tasks, 'po', treeAt(tasks, NOW))
     expect(view.verifying.map(t => t.id)).toEqual(['T3', 'T2'])
     expect(view.upNext.map(t => t.id)).toEqual(['T1'])
-    const [group] = ownerGroups(tasks, treeOf(tasks, NOW))
+    const [group] = ownerGroups(tasks, treeAt(tasks, NOW))
     expect(group?.active.map(t => t.id)).toEqual(['T3', 'T2', 'T1'])
     expect([group?.waiting, group?.verifying]).toEqual([0, 2])
   })
@@ -326,6 +326,7 @@ describe('rows', () => {
     areaSource: 'inbox-read',
     unreadInbox: 2,
     problem: null,
+    notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
     now: NOW,
   })
 
@@ -1016,7 +1017,7 @@ describe('source', () => {
     files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW }))
     files.write(PATHS.marks, markLine('po', 2, S1, NOW, 'b'))
     files.write(`${PATHS.inboxDir}/po.md`, 'a\nb\n\nc\n')
-    const source = new TaskRegisterSource(files, PATHS)
+    const source = new TaskRegisterSource(files, PATHS, NOT_PICKED_UP_HOURS)
 
     const first = await source.poll({ claudeSession: S1, pinned: null, now: NOW })
     expect(first?.area).toBe('po')
@@ -1038,7 +1039,7 @@ describe('source', () => {
     const inbox = `${PATHS.inboxDir}/po.md`
     files.write(inbox, 'one\ntwo\nthree\n')
     files.write(PATHS.marks, markLine('po', 2, S1, NOW, 'two'))
-    const source = new TaskRegisterSource(files, PATHS)
+    const source = new TaskRegisterSource(files, PATHS, NOT_PICKED_UP_HOURS)
     const unread = async () => (await source.poll({ claudeSession: S1, pinned: null, now: NOW, force: true }))?.unreadInbox
     expect(await unread()).toBe(1)
     // Appended: the lines past the mark.
@@ -1073,13 +1074,13 @@ describe('source', () => {
       createLine('T7', { owner: 'po', by: 'po', at: NOW - 10 * DAY }),
       statusLine('T7', 'po', NOW - HELD_DAYS * DAY - 60_000, 'done'),
     ].join('\n'))
-    const snap = await new TaskRegisterSource(files, PATHS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
+    const snap = await new TaskRegisterSource(files, PATHS, NOT_PICKED_UP_HOURS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
     // T2 and T6 finished days ago, within HELD_DAYS: the Archive page and search show them. T7 finished a minute before.
     expect(snap?.tasks.map(task => task.id)).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'T6'])
 
     const big = new MemoryFiles()
     big.write(PATHS.events, bigRegister(20_000).join('\n'))
-    const all = await new TaskRegisterSource(big, PATHS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
+    const all = await new TaskRegisterSource(big, PATHS, NOT_PICKED_UP_HOURS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
     // po's 408 and the last task, its done line past the 20,000th; none of the 3,673 finished a month ago.
     expect(all?.tasks.length).toBe(409)
     expect(all?.problem).toBe(null)
@@ -1089,7 +1090,7 @@ describe('source', () => {
     const files = new MemoryFiles()
     const good = createLine('T1', { owner: 'po', by: 'lead', at: NOW })
     files.write(PATHS.events, [good, '{"v":2', createLine('T2', { owner: 'po', by: 'lead', at: NOW, lineKeys: { v: 3 } }), statusLine('T9', 'po', NOW, 'done')].join('\n'))
-    const source = new TaskRegisterSource(files, PATHS)
+    const source = new TaskRegisterSource(files, PATHS, NOT_PICKED_UP_HOURS)
     const first = await source.poll({ claudeSession: S1, pinned: 'po', now: NOW })
     expect(first?.tasks.map(task => task.id)).toEqual(['T1'])
     expect(first?.problem).toBe('events.jsonl: 1 unreadable line(s), 1 line(s) from a newer teamrig, 1 event(s) naming no task')
@@ -1098,21 +1099,27 @@ describe('source', () => {
   })
 
   test('a pin wins over the inbox read, and missing files read as an empty register with no unread count', async () => {
-    const source = new TaskRegisterSource(new MemoryFiles(), PATHS)
+    const source = new TaskRegisterSource(new MemoryFiles(), PATHS, NOT_PICKED_UP_HOURS)
     const snap = await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW })
-    expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, problem: null, now: NOW })
+    expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, problem: null, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, now: NOW })
+  })
+
+  test("each snapshot carries the team config's NOT PICKED UP hours the source was made with", async () => {
+    const source = new TaskRegisterSource(new MemoryFiles(), PATHS, 48)
+    expect((await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW }))?.notPickedUpAfterHours).toBe(48)
+    expect((await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW + HOUR, force: true }))?.notPickedUpAfterHours).toBe(48)
   })
 })
 
 
 /** Ports over a MemoryFiles register, recording what the class publishes and pins; `clock.now` moves its time. */
 function livePorts(files: MemoryFiles, ids: string[]) {
-  let current: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, problem: null, now: 0 }
+  let current: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, problem: null, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, now: 0 }
   let writes = 0
   const clock = { now: NOW }
   const pins = new Map<string, string>()
   const ports: LivePorts = {
-    source: new TaskRegisterSource(files, PATHS),
+    source: new TaskRegisterSource(files, PATHS, NOT_PICKED_UP_HOURS),
     sessionId: async () => ids[0] ?? 'none',
     now: async () => clock.now,
     publish: async change => {

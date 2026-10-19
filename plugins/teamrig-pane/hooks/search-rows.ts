@@ -118,7 +118,7 @@ export function searchBlocks(snap: Snapshot, query: string): Block[] {
   if (reading !== null) return [reading]
   const problems = problemBlocks(snap)
   if (queryWords(query).length === 0) return [...problems, single('search-hint', [{ text: SEARCH_HINT, dim: true }])]
-  const results = searchTasks(snap.tasks, query, treeOf(snap.tasks, snap.now))
+  const results = searchTasks(snap.tasks, query, treeOf(snap))
   if (results.active.length + results.done.length === 0) return [...problems, single('search-none', [{ text: NOTHING_FOUND, dim: true }])]
   const more = results.more > 0 ? [single('search-more', [{ text: `${results.more} more: add a word`, dim: true }])] : []
   return [...problems, ...results.active.map(activeBlock), ...results.done.map(hit => doneBlock(hit, snap.now)), ...more]

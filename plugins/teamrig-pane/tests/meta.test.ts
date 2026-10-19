@@ -2,8 +2,8 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow, WaitRow } from '../types'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { ageWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, NOT_PICKED_UP_MS, STATUS_WORDS, treeOf, waitingWords, whenWords } from '../hooks/meta'
-import { HOUR, NOW, createLine, iso, statusLine, waitingLine } from './fixtures'
+import { ageWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, STATUS_WORDS, waitingWords, whenWords } from '../hooks/meta'
+import { HOUR, NOT_PICKED_UP_HOURS, NOW, createLine, iso, statusLine, treeAt, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
@@ -19,11 +19,11 @@ function taskOf(...lines: string[]): TaskRow {
 }
 
 /** The clock at NOW over a snapshot of no tasks: every task reason reads ready. */
-const AT_NOW = treeOf([], NOW)
+const AT_NOW = treeAt([], NOW)
 
 /** The meta line's words at `now`, the snapshot holding `tasks`. */
 const textOf = (task: TaskRow, viewer: string | null, now = NOW, tasks: readonly TaskRow[] = []) =>
-  metaParts(task, treeOf(tasks, now), viewer).map(part => part.text)
+  metaParts(task, treeAt(tasks, now), viewer).map(part => part.text)
 
 describe('meta words', () => {
   test('a day is its UTC weekday and month-day; a time today is its hour, an older one its day', async () => {
@@ -63,17 +63,24 @@ describe('meta words', () => {
 describe('meta flags', () => {
   test('a date-only due is due at the end of that UTC day', async () => {
     const task = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW, due: '2026-10-13' }))
-    expect(flagsOf(task, treeOf([task], NOW))).toEqual([])
-    expect(flagsOf(task, treeOf([task], Date.UTC(2026, 9, 13, 23, 59)))).toEqual([])
-    expect(flagsOf(task, treeOf([task], Date.UTC(2026, 9, 14, 0, 1)))).toEqual(['overdue'])
+    expect(flagsOf(task, treeAt([task], NOW))).toEqual([])
+    expect(flagsOf(task, treeAt([task], Date.UTC(2026, 9, 13, 23, 59)))).toEqual([])
+    expect(flagsOf(task, treeAt([task], Date.UTC(2026, 9, 14, 0, 1)))).toEqual(['overdue'])
   })
 
   test('an untouched task is new, then not picked up after a day; a finished one has no flags', async () => {
     const task = taskOf(createLine('T1', { owner: 'po', by: 'lead', at: NOW }))
-    expect(flagsOf(task, treeOf([task], NOW + HOUR))).toEqual(['new'])
-    expect(flagsOf(task, treeOf([task], NOW + NOT_PICKED_UP_MS + HOUR))).toEqual(['unseen'])
+    expect(flagsOf(task, treeAt([task], NOW + HOUR))).toEqual(['new'])
+    expect(flagsOf(task, treeAt([task], NOW + NOT_PICKED_UP_HOURS * HOUR + HOUR))).toEqual(['unseen'])
     const done = taskOf(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-01' }), statusLine('T1', 'po', NOW, 'done'))
-    expect(flagsOf(done, treeOf([done], NOW))).toEqual([])
+    expect(flagsOf(done, treeAt([done], NOW))).toEqual([])
+  })
+
+  test("a team config's hours move when an untouched task reads not picked up, as teamrig's register check reads them", async () => {
+    const task = taskOf(createLine('T1', { owner: 'po', by: 'lead', at: NOW }))
+    expect(flagsOf(task, treeAt([task], NOW + 25 * HOUR, 48))).toEqual(['new'])
+    expect(flagsOf(task, treeAt([task], NOW + 49 * HOUR, 48))).toEqual(['unseen'])
+    expect(flagsOf(task, treeAt([task], NOW + 2 * HOUR, 1))).toEqual(['unseen'])
   })
 })
 
@@ -88,15 +95,15 @@ describe('meta effective due', () => {
   test("a date taken from a task that needs it reads that task's date and names it; lateness counts from it", async () => {
     expect(textOf(first, 'po', NOW, [first, needer])).toEqual(['p3', 'due Wed 10-14 (from T2)'])
     expect(textOf(first, 'po', NOW + 2 * DAY, [first, needer])).toEqual(['p3', 'due Wed 10-14 (from T2)', 'late 14h'])
-    expect(flagsOf(first, treeOf([first, needer], NOW + 2 * DAY))).toEqual(['overdue'])
+    expect(flagsOf(first, treeAt([first, needer], NOW + 2 * DAY))).toEqual(['overdue'])
     // The task that needs it reads its own date.
-    expect(dueWords(needer, treeOf([first, needer], NOW))).toBe('Wed 10-14')
+    expect(dueWords(needer, treeAt([first, needer], NOW))).toBe('Wed 10-14')
   })
 
   test('a task alone in the snapshot, or one the tree lacks, works to its own date', async () => {
     expect(textOf(first, 'po', NOW + 2 * DAY, [first])).toEqual(['p3', 'due Fri 10-16'])
     expect(dueWords(first, AT_NOW)).toBe('Fri 10-16')
-    expect(flagsOf(first, treeOf([needer], Date.UTC(2026, 9, 15, 12, 0)))).toEqual([])
+    expect(flagsOf(first, treeAt([needer], Date.UTC(2026, 9, 15, 12, 0)))).toEqual([])
   })
 
   test("a verifying task's verify-by date is the effective due too", async () => {
@@ -122,7 +129,7 @@ describe('meta needed by', () => {
   ]
   const own = (due: string | null = null) => createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', due })
   /** The first task the lines write (T1), the snapshot they fold to, and the tree over it at NOW. */
-  const read = (...lines: string[]) => ({ task: taskOf(...lines), tasks: tasksOf(...lines), tree: treeOf(tasksOf(...lines), NOW) })
+  const read = (...lines: string[]) => ({ task: taskOf(...lines), tasks: tasksOf(...lines), tree: treeAt(tasksOf(...lines), NOW) })
 
   test('names the earliest-due task of another owner that needs it, its owner and due, then how many more', async () => {
     const { task, tasks } = read(own('2026-10-20'), ...needers)
