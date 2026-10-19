@@ -381,12 +381,12 @@ on one dim line with when it closed:
 
 ```text
 ‹ back  forward ›
-Tasks › Done 10-12
+Tasks › Archive 10-12
 ────────────────────────────────────────────────
 
 ‹ prev  week of Mon 10-12  next ›
 
-Done · po · 1 done · 0 dropped
+Archive · po · 1 done · 0 dropped
 
 Tue 10-13
 
@@ -396,7 +396,7 @@ Tue 10-13
 | Part | What it does |
 | --- | --- |
 | `‹ prev` (`p`), `next ›` (`l`) | The week before and the week after, dim where the pane holds none; a step changes the week in place, so `‹ back` returns to where the page was opened from |
-| `Done · po · 1 done · 0 dropped` | Whose tasks (in mine the area's, every owner's when the session has none; in all every owner's) and how many closed done and dropped that week |
+| `Archive · po · 1 done · 0 dropped` | Whose tasks (in mine the area's, every owner's when the session has none; in all every owner's) and how many closed done and dropped that week |
 | A day | A dim line, `Tue 10-13`, then the tasks closed that day, newest first |
 | A task | `✓` done or `✗` dropped, its id and title, when it closed (in all, its owner too); a click opens its page, and back returns to the week |
 | `3 more this week: search finds them` | Past 50 rows, the rest counted |
