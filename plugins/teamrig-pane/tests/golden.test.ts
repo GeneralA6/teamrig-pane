@@ -81,7 +81,7 @@ function goldenFiles(changes: Record<string, string> = {}): MemoryFiles {
 async function paneSnapshot(files: MemoryFiles): Promise<Snapshot> {
   const places = await findPlaces({ env: { TEAMRIG_HOME: KIT }, files, home: null, cwd: `${GOLDEN_ROOT}/proj` })
   if (!places.found) throw new Error(places.problem)
-  const snap = await new TaskRegisterSource(files, registerPaths(places.dirs), places.priorities).poll({
+  const snap = await new TaskRegisterSource(files, registerPaths(places.dirs)).poll({
     claudeSession: GOLDEN_SESSION,
     pinned: null,
     now: GOLDEN.generatedAt,
@@ -99,12 +99,10 @@ describe('golden', () => {
     expect(`WARN ${snap.problem}`).toBe(warnOf(GOLDEN.warn))
   })
 
-  test('keeps what list does not print: a ref cleared or never given, the evidence, a priority named by the team config', async () => {
+  test('keeps what list does not print: a ref cleared or never given, the evidence', async () => {
     const tasks = new Map((await paneSnapshot(goldenFiles())).tasks.map(task => [task.id, task]))
     expect([tasks.get('T1')?.ref, tasks.get('T2')?.ref, tasks.get('T3')?.ref]).toEqual([null, null, 'doc:1'])
     expect(tasks.get('T4')?.evidence).toBe('sha abc')
-    expect(tasks.get('T2')?.priorityName).toBe('correctness')
-    expect(tasks.get('T6')?.priorityName).toBe('icebox')
   })
 
   test('draws its rows from what teamrig wrote: a waiting task\'s typed reasons and note, an open one\'s unfinished after', async () => {
@@ -137,7 +135,7 @@ describe('golden', () => {
     expect(GOLDEN.fixtures.map(fixture => fixture.name)).toEqual(['events-v0.jsonl', 'events-v1.jsonl', 'events-v2.jsonl'])
     for (const fixture of GOLDEN.fixtures) {
       const register = readRegister(fixture.events)
-      const rows = [...register.state.tasks.values()].map(task => rowOf(task, []))
+      const rows = [...register.state.tasks.values()].map(task => rowOf(task))
       const tree = treeOf(rows, GOLDEN.generatedAt)
       const lines = rows.map(row => listLine(row, tree)).sort()
       expect({ fixture: fixture.name, lines }).toEqual({ fixture: fixture.name, lines: linesOf(fixture.list) })

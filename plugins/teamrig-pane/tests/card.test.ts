@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TaskDetail, TaskRow } from '../types'
 import { cardRows, LABEL_CELLS } from '../hooks/card'
-import { readRegister, type PriorityConfig } from '../hooks/core/read/index'
+import { readRegister } from '../hooks/core/read/index'
 import { wrapRow } from '../hooks/layout'
 import { rowOf } from '../hooks/log'
 import { treeOf } from '../hooks/meta'
@@ -9,7 +9,6 @@ import type { Row } from '../hooks/rows'
 import { HOUR, NOW, createLine, statusLine, updateLine, verifyingLine, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
-const PRIORITIES: readonly PriorityConfig[] = [{ id: 2, name: 'correctness' }]
 /** Nothing read beyond the register: no quote, no goal item. */
 const UNREAD: TaskDetail = { ref: null, quotes: [], goals: [] }
 const GUIDE = '    │ '
@@ -22,7 +21,7 @@ const labelled = (label: string, value: string) => `${GUIDE}${label.padEnd(LABEL
 
 /** The rows teamrig's reader folds from event lines, in the order the tasks were created. */
 function rowsOf(lines: readonly string[]): TaskRow[] {
-  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task, PRIORITIES))
+  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task))
 }
 
 function taskOf(tasks: readonly TaskRow[], id: string): TaskRow {

@@ -3,7 +3,7 @@ import type { Snapshot, TaskRow, TaskStatus } from '../types'
 import { LABEL_CELLS } from '../hooks/card'
 import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
-import { indexMarks, readMarks, readRegister, TASK_STATUSES, type PriorityConfig } from '../hooks/core/read/index'
+import { indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
 import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, doneMoreText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
@@ -19,15 +19,9 @@ const DAY = 24 * HOUR
 
 const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', inboxDir: 'R/inbox' }
 
-/** A team config's priority names, as `register.priorities` lists them: it names some levels, not all. */
-const PRIORITIES: readonly PriorityConfig[] = [
-  { id: 2, name: 'correctness' },
-  { id: 7, name: 'polish' },
-]
-
 /** The rows the pane draws from event lines, read by teamrig's reader, in the order the tasks were created. */
-function rowsOf(lines: readonly string[], priorities: readonly PriorityConfig[] = []): TaskRow[] {
-  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task, priorities))
+function rowsOf(lines: readonly string[]): TaskRow[] {
+  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task))
 }
 
 function fold(...lines: string[]): TaskRow[] {
@@ -142,20 +136,6 @@ describe('log', () => {
     expect(tasks.length).toBe(1)
     expect(tasks[0]?.title).toBe('first')
     expect(readRegister(lines.join('\n')).state.orphans).toBe(2)
-  })
-
-  test('names each priority as the team config does; a level it does not name, or no config, leaves the number bare', async () => {
-    const lines = [
-      createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 2 }),
-      createLine('T2', { owner: 'po', by: 'po', at: NOW, priority: 7 }),
-      createLine('T3', { owner: 'po', by: 'po', at: NOW, priority: 4 }),
-    ]
-    expect(rowsOf(lines, PRIORITIES).map(task => [task.priority, task.priorityName])).toEqual([
-      [2, 'correctness'],
-      [7, 'polish'],
-      [4, null],
-    ])
-    expect(rowsOf(lines).map(task => task.priorityName)).toEqual([null, null, null])
   })
 
   test('a task with no ref and no week, a priority-only update and an old blocked status read as teamrig reads them: waiting, with no reasons', async () => {
@@ -275,9 +255,6 @@ describe('view', () => {
     const regoaled = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', goals: ['G11'] }))
     expect(sameView(base, { ...base, tasks: regoaled })).toBe(false)
     expect(sameView(base, { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, title: 'Renamed' })) })).toBe(false)
-    const named = rowsOf([createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', priority: 7 })], PRIORITIES)
-    const bare = rowsOf([createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', priority: 7 })])
-    expect(sameView({ ...base, tasks: bare }, { ...base, tasks: named })).toBe(false)
     const started = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' }), statusLine('T1', 'po', NOW, 'open', null, null, 'none'))
     expect(sameView(base, { ...base, tasks: started })).toBe(false)
     // A reason the clock clears redraws: its row then reads ready.
@@ -564,15 +541,12 @@ describe('rows', () => {
     expect(blocks.flatMap(b => b.rows).some(r => r.key.includes('-meta:'))).toBe(false)
   })
 
-  test("an open card shows its priority as a number, never the team config's name for it, each fact only when set", async () => {
-    const tasks = rowsOf(
-      [
-        createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, ref: null, week: null, goals: [], title: 'Bare' }),
-        createLine('T2', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 7, title: 'Named' }),
-        statusLine('T2', 'po', NOW, 'in-progress', 'halfway'),
-      ],
-      PRIORITIES,
-    )
+  test('an open card shows its priority as a number, each fact only when set', async () => {
+    const tasks = rowsOf([
+      createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, ref: null, week: null, goals: [], title: 'Bare' }),
+      createLine('T2', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 7, title: 'Named' }),
+      statusLine('T2', 'po', NOW, 'in-progress', 'halfway'),
+    ])
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [], goals: [] }, T2: { ref: 'docs/x.md', quotes: [], goals: [] } })
     expect(blockAt(blocks, 'next:T1')?.card?.map(textOf)).toEqual([
       cardLine('Status', 'not started since 13:00 by lead'),
@@ -1121,15 +1095,6 @@ describe('source', () => {
     expect(first?.problem).toBe('events.jsonl: 1 unreadable line(s), 1 line(s) from a newer teamrig, 1 event(s) naming no task')
     files.write(PATHS.events, good)
     expect((await source.poll({ claudeSession: S1, pinned: 'po', now: NOW }))?.problem).toBe(null)
-  })
-
-  test('names each task\'s priority from the team config it was given', async () => {
-    const files = new MemoryFiles()
-    files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 2 }))
-    const named = await new TaskRegisterSource(files, PATHS, PRIORITIES).poll({ claudeSession: S1, pinned: 'po', now: NOW })
-    expect(named?.tasks[0]?.priorityName).toBe('correctness')
-    const bare = await new TaskRegisterSource(files, PATHS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
-    expect(bare?.tasks[0]?.priorityName).toBe(null)
   })
 
   test('a pin wins over the inbox read, and missing files read as an empty register with no unread count', async () => {

@@ -24,7 +24,7 @@ function widthsOf(partial: Partial<Record<BarStatus, number>>, width: number): [
 }
 
 function rowsOf(...lines: string[]): TaskRow[] {
-  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task, []))
+  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task))
 }
 
 const snapshotOf = (tasks: TaskRow[], area: string | null, now = NOW): Snapshot => ({

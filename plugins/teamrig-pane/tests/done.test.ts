@@ -9,7 +9,7 @@ import { HOUR, NOW, createLine, statusLine } from './fixtures'
 
 /** The rows teamrig's reader folds from event lines. */
 function rowsOf(lines: readonly string[]): TaskRow[] {
-  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task, []))
+  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task))
 }
 
 /** A task of `owner` made a day before `at` and closed `status` at `at`. */

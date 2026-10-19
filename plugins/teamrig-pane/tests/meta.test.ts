@@ -9,7 +9,7 @@ const DAY = 24 * HOUR
 
 /** NOW is Tuesday 2026-10-13 14:00 UTC. */
 function tasksOf(...lines: string[]): TaskRow[] {
-  return [...readRegister(lines.join('\n')).state.tasks.values()].map(row => rowOf(row, []))
+  return [...readRegister(lines.join('\n')).state.tasks.values()].map(row => rowOf(row))
 }
 
 function taskOf(...lines: string[]): TaskRow {

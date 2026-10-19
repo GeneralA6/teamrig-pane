@@ -10,7 +10,7 @@ import { HOUR, NOW, createLine, statusLine } from './fixtures'
 
 /** The rows teamrig's reader folds from event lines. */
 function rowsOf(lines: readonly string[]): TaskRow[] {
-  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task, []))
+  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task))
 }
 
 /** po's pages, etl's feed and source, two of them finished today, one dropped. */

@@ -20,7 +20,6 @@ import {
   type EventLogRead,
   type LayoutPaths,
   type MarkLogRead,
-  type PriorityConfig,
   type RegisterSnapshot,
   type SnapshotRead,
 } from './core/read/index'
@@ -221,13 +220,10 @@ export class TaskRegisterSource {
   private lastArea: string | null = null
   private readonly files: Files
   private readonly paths: RegisterPaths
-  private readonly priorities: readonly PriorityConfig[]
 
-  /** `priorities`: what names each priority on a row (places.ts finds them); a priority none names shows as its number alone. */
-  constructor(files: Files, paths: RegisterPaths, priorities: readonly PriorityConfig[] = []) {
+  constructor(files: Files, paths: RegisterPaths) {
     this.files = files
     this.paths = paths
-    this.priorities = priorities
     this.register = new LayoutRegister(files, paths.events)
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
   }
@@ -237,7 +233,7 @@ export class TaskRegisterSource {
     const registerChanged = await this.register.refresh()
     if (registerChanged) {
       this.tasks = [...this.register.current.state.tasks.values()]
-        .map(task => rowOf(task, this.priorities))
+        .map(task => rowOf(task))
         .filter(task => isActive(task) || isHeldFinished(task, now))
         .sort((a, b) => taskNumber(a.id) - taskNumber(b.id))
     }

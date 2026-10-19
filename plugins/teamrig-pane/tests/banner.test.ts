@@ -8,7 +8,7 @@ import type { Row } from '../hooks/rows'
 import { HOUR, NOW, createLine, statusLine } from './fixtures'
 
 function rowsOf(lines: readonly string[]): TaskRow[] {
-  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task, []))
+  return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task))
 }
 
 function snapOf(lines: readonly string[], area: string | null = 'po'): Snapshot {

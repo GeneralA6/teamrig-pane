@@ -45,7 +45,7 @@ const ROADMAP = [
 function taskWith(ref: string, goals: string[] = ['G10.2']) {
   const task = readRegister(createLine('T9', { owner: 'po', by: 'lead', at: NOW, ref, goals })).state.tasks.get('T9')
   if (task === undefined) throw new Error('the fixture task did not read')
-  return rowOf(task, [])
+  return rowOf(task)
 }
 
 describe('details', () => {
