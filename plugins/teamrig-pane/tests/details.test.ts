@@ -6,6 +6,8 @@ import {
   candidatePaths,
   coversGoal,
   fileLabel,
+  inboxArea,
+  inboxFile,
   datedLines,
   anchoredLines,
   goalItem,
@@ -70,6 +72,12 @@ describe('details', () => {
     expect(candidatePaths('notes\\api\\t26.md', { ...PLACES, cwd: null })).toEqual(['C:/kit/teams/web/notes/api/t26.md'])
     expect(candidatePaths('docs/R.md', { ...PLACES, cwd: null, teamDir: null })).toEqual([])
     expect(candidatePaths('~/x.md', { ...PLACES, home: null })).toEqual([])
+  })
+
+  test("an area's inbox file names that area, so it is found in the inbox folder alone", () => {
+    expect(inboxArea(inboxFile('tr-pane'))).toBe('tr-pane')
+    expect(candidatePaths(inboxFile('po'), PLACES)).toEqual(['R/inbox/po.md'])
+    expect(candidatePaths(inboxFile('po'), { ...PLACES, inboxDir: null })).toEqual([])
   })
 
   test('a file reads as its folder and name', () => {

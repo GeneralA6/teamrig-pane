@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { RefFile, RefFileRead } from '../types'
-import { BLOCK_LINES, filePageBlocks, lineBlockKey } from '../hooks/file-page'
+import { BLOCK_LINES, filePageBlocks, lineBlockKey, unreadLine } from '../hooks/file-page'
 import type { Block } from '../hooks/rows'
 
 const BRIEF: RefFile = { file: 'notes/api/t26.md', line: null }
@@ -75,5 +75,29 @@ describe('lineBlockKey', () => {
     expect(lineBlockKey({ ...BRIEF, line: 2 }, { kind: 'missing', tried: [] })).toBe(null)
     expect(lineBlockKey({ ...BRIEF, line: 2 }, undefined)).toBe(null)
     expect(lineBlockKey({ ...BRIEF, line: 2 }, read(''))).toBe(null)
+  })
+})
+
+describe('unreadLine', () => {
+  // Five items, blank and spaces-only lines between them and a CRLF end, as teamrig's inboxLines counts them.
+  const inbox = read('- 10-18 one\r\n\r\n- 10-18 two\n   \n- 10-19 three\n- 10-19 four\n\n- 10-19 five\n')
+
+  test('lands on the first of the unread items, counted from the newest; blank lines count for no item', () => {
+    expect(unreadLine(inbox, 1)).toBe(8)
+    expect(unreadLine(inbox, 2)).toBe(6)
+    expect(unreadLine(inbox, 4)).toBe(3)
+    expect(unreadLine(inbox, 5)).toBe(1)
+  })
+
+  test('the newest item when none is unread, the first when more are unread than it holds (it changed since the count)', () => {
+    expect(unreadLine(inbox, 0)).toBe(8)
+    expect(unreadLine(inbox, 9)).toBe(1)
+  })
+
+  test('none for an inbox not read, or one with no item', () => {
+    expect(unreadLine({ kind: 'missing', tried: ['R/inbox/po.md'] }, 2)).toBe(null)
+    expect(unreadLine({ kind: 'unreadable', path: 'R/inbox/po.md', reason: 'too big' }, 2)).toBe(null)
+    expect(unreadLine(read(''), 0)).toBe(null)
+    expect(unreadLine(read('\n  \n'), 3)).toBe(null)
   })
 })

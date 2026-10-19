@@ -47,7 +47,7 @@ import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
-import { TaskDetails, type RefPlaces } from './details'
+import { inboxFile, TaskDetails, type RefPlaces } from './details'
 import { RefFileReader } from './ref-file'
 import { DEFAULT_REGISTER, TimeZone } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
@@ -89,7 +89,7 @@ import { weekSteps, weekOf } from './done'
 import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
 import { clockOf, machineZoneOf } from './zone'
-import { filePageBlocks, lineBlockKey } from './file-page'
+import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
 import { pageBlocks } from './page'
 import { searchTasks, topResult } from './search'
 import { searchBlocks } from './search-rows'
@@ -653,12 +653,23 @@ export const register: Register = on => {
       await update($, pages, current => ({ ...current, [id]: detail }))
       await go($, current => pushed(leavingList(current, from), { kind: 'task', id }))
     }
-    // A press on a reference file opens its page, read once as it opens (ref-file.ts); from the list, the list
-    // remembers `from` as openPage's does. With no reader yet the page says there was no folder to look in.
+    // A file's page is read once as it opens (ref-file.ts). With no reader yet it says there was no folder to look in.
+    const readFilePage = async (file: string): Promise<RefFileRead> => {
+      const found: RefFileRead = refFiles === null ? { kind: 'missing', tried: [] } : await refFiles.read(file)
+      await update($, filePages, current => ({ ...current, [file]: found }))
+      return found
+    }
+    // A press on a reference file opens its page; from the list, the list remembers `from` as openPage's does.
     const openFile = async (file: RefFile, from: string) => {
-      const found: RefFileRead = refFiles === null ? { kind: 'missing', tried: [] } : await refFiles.read(file.file)
-      await update($, filePages, current => ({ ...current, [file.file]: found }))
+      await readFilePage(file.file)
       await go($, current => pushed(leavingList(current, from), { kind: 'file', file: file.file, line: file.line }))
+    }
+    // A press on the header's inbox count opens the area's inbox as a file's page, landing on its first unread line
+    // (unreadLine). Reading it marks nothing read: the pane writes no inbox, the session's `teamrig inbox read` does.
+    const openInbox = async (area: string, from: string) => {
+      const file = inboxFile(area)
+      const found = await readFilePage(file)
+      await go($, current => pushed(leavingList(current, from), { kind: 'file', file, line: unreadLine(found, snap.unreadInbox ?? 0) }))
     }
     // A press on a session in the Log view's list opens its page, read now, at its end: the newest lines are last.
     // Back shows the list, read again, from its top.
@@ -691,9 +702,9 @@ export const register: Register = on => {
     )
     /**
      * A card's lines with no press as one Text; a line with one as a row of its pieces, each id a press that opens
-     * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, then where it
-     * is drawn (`from`, the card's element); a Changes file's row one press that opens or closes its diff, keyed
-     * `diff:`, then where it is drawn and the row.
+     * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, an inbox count
+     * one that opens the inbox's, keyed `goto:inbox:`, then where it is drawn (`from`, the card's element); a Changes
+     * file's row one press that opens or closes its diff, keyed `diff:`, then where it is drawn and the row.
      */
     const drawPart = (part: CardPart, wrap: Drawn['wrap'], from: string) => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
@@ -719,6 +730,12 @@ export const register: Register = on => {
                 return (
                   <Button key={`goto:file:${from}:${part.key}:${i}`} plain onPress={() => void openFile(piece.file, from)}>
                     {drawPress(piece.span, 'file')}
+                  </Button>
+                )
+              case 'inbox':
+                return (
+                  <Button key={`goto:inbox:${from}:${part.key}:${i}`} plain onPress={() => void openInbox(piece.area, from)}>
+                    {drawPress(piece.span, 'inbox')}
                   </Button>
                 )
             }
@@ -765,8 +782,15 @@ export const register: Register = on => {
     // A Button holds strings and Texts alone, so an open card (its links, its ids) draws under the task's Button, not
     // in it. A page's title is no press: its card is always open. A Text keeps no key (the engine keeps a Box's and
     // a Button's), so the block a step lands on, when it is words alone (a file page's paragraph), draws in a Box
-    // under its key for `$.ui.scroll` to find.
+    // under its key for `$.ui.scroll` to find. An element drawn as parts (the header, its inbox count a press) is a
+    // column Box of them, under its key.
     const drawBlock = (drawn: Drawn) => {
+      if (drawn.parts !== undefined)
+        return (
+          <Box key={drawn.key} flexDirection="column">
+            {drawn.parts.map(part => drawPart(part, drawn.wrap, drawn.key))}
+          </Box>
+        )
       const head = headOf(drawn)
       if (drawn.card === undefined) {
         if (drawn.key !== landingKey || drawn.toggle !== null || drawn.opens !== undefined || drawn.reads !== undefined) return head

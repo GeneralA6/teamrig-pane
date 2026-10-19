@@ -19,7 +19,8 @@ import { cells } from './width'
  * text color. With `href` the text is a link to that address (a card's Links row), never split across lines. With
  * `task` the text is that task's id in an open card (ids.ts), which a press on opens as a page; never split either.
  * With `file` the text names a file a card's Reference row lists (ref-file.ts), which a press on opens as a page too
- * (file-page.ts); never split. `underline` marks the words a search matched (search-rows.ts).
+ * (file-page.ts); never split. With `inbox` the text is the header's unread count, which a press on opens that area's
+ * inbox as a file's page; never split. `underline` marks the words a search matched (search-rows.ts).
  */
 export type Span = {
   text: string
@@ -30,6 +31,7 @@ export type Span = {
   href?: string
   task?: string
   file?: RefFile
+  inbox?: string
 }
 /**
  * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
@@ -197,7 +199,7 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   const activeTotal = view.verifying.length + view.working.length + view.upNext.length + waiting
   header.push({ text: `${activeTotal} active`, dim: true })
   if (snap.unreadInbox !== null)
-    header.push({ text: ` · inbox ${snap.unreadInbox} unread`, color: snap.unreadInbox > 0 ? 'warning' : 'subtle' })
+    header.push(SEPARATOR, { text: `inbox ${snap.unreadInbox} unread`, color: snap.unreadInbox > 0 ? 'warning' : 'subtle', inbox: view.area })
   const blocks: Block[] = [{ key: 'header', rows: [{ key: 'header', spans: header, rule: true }] }]
   // Filtered from the status bar, the header leads that status's tasks alone.
   if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
