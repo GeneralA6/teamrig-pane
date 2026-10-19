@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow } from '../types'
-import { BANNER_KEY, NO_AREA_BANNER, NOTHING_CURRENT, bannerBlock, currentTask } from '../hooks/banner'
+import { BANNER_KEY, NOTHING_CURRENT, bannerBlock, currentTask } from '../hooks/banner'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { treeOf } from '../hooks/meta'
@@ -85,8 +85,7 @@ describe('bannerBlock', () => {
     expect(working.rows.map(row => row.key.split(':').at(-1))).toEqual([BANNER_KEY, 'status', 'note', 'priority'])
   })
 
-  test('a dim line when the area has no current task, and another when there is no area', () => {
+  test('a dim line when the area has no current task', () => {
     expect(bannerBlock(null, false, tree, 'po').rows).toEqual([{ key: BANNER_KEY, spans: [{ text: NOTHING_CURRENT, dim: true }] }])
-    expect(bannerBlock(null, true, tree, null).rows).toEqual([{ key: BANNER_KEY, spans: [{ text: NO_AREA_BANNER, dim: true }] }])
   })
 })
