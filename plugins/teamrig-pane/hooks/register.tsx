@@ -19,12 +19,29 @@
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Context, Register } from 'claude-code'
-import type { BarStatus, ExpandedTasks, FilePages, FindField, Nav, PageDetails, PaneView, RequirementProblem, RingLandings, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
+import type {
+  BarStatus,
+  ExpandedTasks,
+  FilePages,
+  FindField,
+  Nav,
+  PageDetails,
+  PaneView,
+  RefFile,
+  RefFileRead,
+  RequirementProblem,
+  RingLandings,
+  Snapshot,
+  TaskDetail,
+  TaskRow,
+  ViewMode,
+} from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails, type RefPlaces } from './details'
+import { RefFileReader } from './ref-file'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { rowsOf, windowed, type Slot } from './window'
@@ -42,11 +59,12 @@ import {
   canGoForward,
   currentPlace,
   doneAt,
+  filesKept,
   forward,
+  isPage,
   landing,
   leavingList,
   leftSearch,
-  filesKept,
   pagesKept,
   placeLabel,
   pushed,
@@ -59,7 +77,7 @@ import {
 import { weekSteps, weekOf } from './done'
 import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
-import { lineBlockKey } from './file-page'
+import { filePageBlocks, lineBlockKey } from './file-page'
 import { pageBlocks } from './page'
 import { searchTasks, topResult } from './search'
 import { searchBlocks } from './search-rows'
@@ -218,6 +236,8 @@ export const register: Register = on => {
   let team: TeamLookup | null = null
   /** Reads what an open card's refs and goals point at; set when the session starts. */
   let details: TaskDetails | null = null
+  /** Reads the file a card's Reference row names for its page; set when the session starts. */
+  let refFiles: RefFileReader | null = null
   /** Draws and keeps the pane's size; set when the session starts. */
   let sizer: PaneSizer | null = null
   /** Reads the session's git changes; set when the session starts. */
@@ -277,6 +297,7 @@ export const register: Register = on => {
       goalsDoc: places.goalsDoc,
     }
     details = new TaskDetails(files, refPlaces)
+    refFiles = new RefFileReader(files, refPlaces)
     const started = new LiveRegister({
       source: 'missing' in paths ? paths : new TaskRegisterSource(files, paths, places.found ? places.priorities : []),
       sessionId: () => $.session.id(),
@@ -425,6 +446,8 @@ export const register: Register = on => {
     let open: ExpandedTasks = NOTHING_EXPANDED
     /** Where the tasks view is; the list in the Changes view and inline, where a page never shows. */
     let at: Nav = AT_LIST
+    /** What the file pages the places name read, drawn with the tasks view docked. */
+    let files: FilePages = NO_FILES
     /** The Find field's round (find-field.ts), drawn in the tasks view docked. */
     let field: FindField = FIRST_FIELD
     let landings: RingLandings = NO_LANDINGS
@@ -454,6 +477,7 @@ export const register: Register = on => {
         const missing = await read($, requirements)
         if (current === 'tasks' && !inline) {
           at = await read($, nav)
+          files = await read($, filePages)
           field = await read($, findField)
         }
         const place = currentPlace(at)
@@ -467,7 +491,9 @@ export const register: Register = on => {
               ? searchBlocks(snap, place.query)
               : place.kind === 'done'
                 ? doneBlocks(snap, shown, place.week)
-                : paneBlocks(snap, shown, open, bar?.filter ?? null)
+                : place.kind === 'file'
+                  ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
+                  : paneBlocks(snap, shown, open, bar?.filter ?? null)
         const viewBlocks = current === 'tasks' ? tasksBlocks : changesBlocks(changed, isGitMissing(missing))
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
@@ -499,6 +525,13 @@ export const register: Register = on => {
       const detail = await detailOf(task)
       await update($, pages, current => ({ ...current, [id]: detail }))
       await go($, current => pushed(leavingList(current, from), { kind: 'task', id }))
+    }
+    // A press on a reference file opens its page, read once as it opens (ref-file.ts); from the list, the list
+    // remembers `from` as openPage's does. With no reader yet the page says there was no folder to look in.
+    const openFile = async (file: RefFile, from: string) => {
+      const found: RefFileRead = refFiles === null ? { kind: 'missing', tried: [] } : await refFiles.read(file.file)
+      await update($, filePages, current => ({ ...current, [file.file]: found }))
+      await go($, current => pushed(leavingList(current, from), { kind: 'file', file: file.file, line: file.line }))
     }
     // Enter in the Find field opens the top result's page, the first active match, else the newest finished one, and
     // moves the ring onto the page's back step: left in the field, a new round's and empty, it would type the next
@@ -541,29 +574,39 @@ export const register: Register = on => {
         </Text>
       )
     }
-    /** A task id in a card: its text underlined, in its span's style. */
-    const drawId = (span: Span, key: string) => (
+    /** A press in a card (a task id, a reference file): its text underlined, in its span's style. */
+    const drawPress = (span: Span, key: string) => (
       <Text key={key} underline color={span.color} bold={span.bold} dimColor={span.dim}>
         {span.text}
       </Text>
     )
     /**
-     * A card's lines with no task id as one Text; a line with one as a row of its pieces, each id a press that opens
-     * its page, keyed `goto:<id>:` and where it is drawn (`from`, the card's element).
+     * A card's lines with no press as one Text; a line with one as a row of its pieces, each id a press that opens
+     * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, then where it
+     * is drawn (`from`, the card's element).
      */
     const drawPart = (part: CardPart, wrap: Drawn['wrap'], from: string) => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
       return (
         <Box key={part.key} flexDirection="row">
-          {part.pieces.map((piece, i) =>
-            piece.kind === 'words' ? (
-              drawText(piece.spans, wrap, String(i))
-            ) : (
-              <Button key={`goto:${piece.task}:${from}:${part.key}:${i}`} plain onPress={() => void openPage(piece.task, from)}>
-                {drawId(piece.span, 'id')}
-              </Button>
-            ),
-          )}
+          {part.pieces.map((piece, i) => {
+            switch (piece.kind) {
+              case 'words':
+                return drawText(piece.spans, wrap, String(i))
+              case 'id':
+                return (
+                  <Button key={`goto:${piece.task}:${from}:${part.key}:${i}`} plain onPress={() => void openPage(piece.task, from)}>
+                    {drawPress(piece.span, 'id')}
+                  </Button>
+                )
+              case 'file':
+                return (
+                  <Button key={`goto:file:${from}:${part.key}:${i}`} plain onPress={() => void openFile(piece.file, from)}>
+                    {drawPress(piece.span, 'file')}
+                  </Button>
+                )
+            }
+          })}
         </Box>
       )
     }
@@ -585,11 +628,24 @@ export const register: Register = on => {
         </Button>
       )
     }
+    // The key of the element a step lands on: back to the list, or into a file's page at its line.
+    const listed = currentPlace(at)
+    const landingKey =
+      listed.kind === 'list' ? listed.row : listed.kind === 'file' ? lineBlockKey({ file: listed.file, line: listed.line }, files[listed.file]) : null
     // A Button holds strings and Texts alone, so an open card (its links, its ids) draws under the task's Button, not
-    // in it. A page's title is no press: its card is always open.
+    // in it. A page's title is no press: its card is always open. A Text keeps no key (the engine keeps a Box's and
+    // a Button's), so the block a step lands on, when it is words alone (a file page's paragraph), draws in a Box
+    // under its key for `$.ui.scroll` to find.
     const drawBlock = (drawn: Drawn) => {
       const head = headOf(drawn)
-      if (drawn.card === undefined) return head
+      if (drawn.card === undefined) {
+        if (drawn.key !== landingKey || drawn.toggle !== null || drawn.opens !== undefined) return head
+        return (
+          <Box key={drawn.key} flexDirection="column">
+            {head}
+          </Box>
+        )
+      }
       const from = openKey(drawn.key)
       return (
         <Box key={from} flexDirection="column">
@@ -599,9 +655,7 @@ export const register: Register = on => {
       )
     }
     // Docked, the body is drawn windowed (window.ts): the elements near what the person sees, the one the keys are
-    // on and the one a step back to the list lands on, each run of the others one empty Box of their rows.
-    const listed = currentPlace(at)
-    const landingKey = listed.kind === 'list' ? listed.row : null
+    // on and the one a step lands on, each run of the others one empty Box of their rows.
     // The window's offset counts the rows above the body; the banner's, open as long as its card, are taken off it
     // so the rest above stays under the screenful window.ts assumes.
     const bannerRows = banner === null ? 0 : rowsOf(banner) + 1
@@ -845,7 +899,7 @@ export const register: Register = on => {
         </Box>
       )
     const pageHead =
-      place.kind === 'task' || place.kind === 'done' || canGoForward(at) ? (
+      isPage(place) || canGoForward(at) ? (
         <Box key="page-head" flexDirection="column">
           <Box flexDirection="row" columnGap={2}>
             {backStep}

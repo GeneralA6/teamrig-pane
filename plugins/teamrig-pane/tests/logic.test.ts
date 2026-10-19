@@ -798,6 +798,19 @@ describe('layout', () => {
     expect(merged([{ text: 'T1', task: 'T1' }, { text: 'T2', task: 'T2' }])).toHaveLength(2)
   })
 
+  test('a reference file is a press as a task id is: a piece of its own, never split, two side by side stay two', async () => {
+    const plan = { file: 'notes/api/plan.md', line: 4 }
+    const file: Span = { text: 'api/plan.md', file: plan }
+    expect(piecesOf([{ text: 'see ' }, file, { text: ' first' }])).toEqual([
+      { kind: 'words', spans: [{ text: 'see ' }] },
+      { kind: 'file', span: file, file: plan },
+      { kind: 'words', spans: [{ text: ' first' }] },
+    ])
+    expect(cardParts([[{ text: 'see ' }, file]]).map(part => part.kind)).toEqual(['line'])
+    expect(wrapRow({ key: 'r', spans: [{ text: 'see ' }, file], hang: { text: '  ' } }, 14)).toEqual([[{ text: 'see' }], [{ text: '  ' }, file]])
+    expect(merged([file, { ...file, file: { file: 'docs/x.md', line: null } }])).toHaveLength(2)
+  })
+
   test('docked, a block is one wrapped text that keeps its toggle, a section opening on a blank line', async () => {
     const blocks: Block[] = [
       { key: 'active:T1', toggle: 'T1', rows: [{ key: 'active:T1', spans: [{ text: '▸ ○ T1 ship the pane today' }], hang: UNDER }, { key: 'note', spans: [{ text: '    ↳ waits' }] }] },

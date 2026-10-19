@@ -111,6 +111,28 @@ describe('card', () => {
     expect(rowNamed(rows, 'note').spans[2]?.color).toBe(undefined)
     expect(rowNamed(rows, 'due').spans.find(span => span.text === 'late 2h')?.color).toBe('error')
     expect(rowNamed(rows, 'links').spans[2]).toEqual({ text: 'https://example.com/pr/7', href: 'https://example.com/pr/7' })
+    // Each reference file is a span of its own that names the file and line a press opens.
+    expect(rowNamed(rows, 'reference').spans[2]).toEqual({ text: 'inbox/po.md', file: { file: '~/team-notes/board/inbox/po.md', line: 4 } })
+    expect(rowNamed(rows, 'reference:1').spans[1]).toEqual({ text: 'docs/x.md', file: { file: 'docs/x.md', line: 9 } })
+  })
+
+  test('a Reference part keeps its words around the file it names, a T-id in them its own span; the same file at another line once', async () => {
+    const ref = 'owner, see (notes/api/t26.md#plan) for T5; notes/api/t26.md:40; notes/api/t26.md:52; in the meeting'
+    const tasks = rowsOf([
+      createLine('T5', { owner: 'etl', by: 'etl', at: NOW - DAY, source: 'etl' }),
+      createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'lead', ref, goals: [] }),
+    ])
+    const rows = cardOf(tasks, 'T1').filter(row => row.key.includes(':reference'))
+    expect(rows.map(textOf)).toEqual([labelled('Reference', 'owner, see (api/t26.md#plan) for T5'), `${UNDER}api/t26.md`, `${UNDER}in the meeting`])
+    const [first, second] = rows
+    expect(first?.spans.slice(2)).toEqual([
+      { text: 'owner, see (' },
+      { text: 'api/t26.md', file: { file: 'notes/api/t26.md', line: null } },
+      { text: '#plan) for ' },
+      { text: 'T5', task: 'T5' },
+    ])
+    // The first line it is listed at is the one a press lands on.
+    expect(second?.spans[1]).toEqual({ text: 'api/t26.md', file: { file: 'notes/api/t26.md', line: 40 } })
   })
 
   test('a row with no value is left out: a fresh task with no description, ref, goal, week or plan dependency shows its status, priority, who asked and when it was added', async () => {

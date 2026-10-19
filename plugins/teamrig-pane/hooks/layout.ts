@@ -3,19 +3,23 @@
 // `hang` (a task's title under its id, a card's value under its value column) rather than at the
 // pane's edge, and the root Box's gap spaces the blocks. Wrapping here instead of nesting a Box per row
 // keeps a block one element, the cost rows.ts explains; an open card is one more Text, but for each line that
-// holds a task id, drawn as a row of its pieces so the id can be a press of its own. A row can be cut
-// at a few lines, ending in `…`, and can carry an `end` drawn at its first line's right edge. A link or a
-// task id is never split: it starts a fresh line when that gives it more room, and one wider still is
+// holds a press (a task id, a reference file), drawn as a row of its pieces so the press can be one of its own. A
+// row can be cut at a few lines, ending in `…`, and can carry an `end` drawn at its first line's right edge. A link
+// or a press is never split: it starts a fresh line when that gives it more room, and one wider still is
 // shortened to its line, ending in `…`. Inline, above the prompt, each row is one truncated screen row and the rows
 // are capped. Widths are display cells (width.ts), so CJK and emoji sequences wrap where the terminal
 // wraps them and a cut never lands inside one.
+import type { RefFile } from '../types'
 import type { Block, Row, Span } from './rows'
 import { cells, graphemes } from './width'
 
-/** A piece of a card line that holds a task id: an id, the task it names, or the words between ids. */
-export type Piece = { kind: 'id'; span: Span; task: string } | { kind: 'words'; spans: Span[] }
 /**
- * A run of a card's lines: a Text of the lines that hold no task id (`text`), or one line that holds one
+ * A piece of a card line that holds a press: a task id and the task it names, a reference file and the file it
+ * names, or the words between them.
+ */
+export type Piece = { kind: 'id'; span: Span; task: string } | { kind: 'file'; span: Span; file: RefFile } | { kind: 'words'; spans: Span[] }
+/**
+ * A run of a card's lines: a Text of the lines that hold no press (`text`), or one line that holds one
  * (`line`), its pieces drawn side by side.
  */
 export type CardPart = { kind: 'text'; key: string; spans: Span[] } | { kind: 'line'; key: string; pieces: Piece[] }
@@ -61,9 +65,22 @@ function shortened(text: string, room: number): string {
   return `${parts.slice(0, fitting(parts, Math.max(0, room - cells(ELLIPSIS)))).join('')}${ELLIPSIS}`
 }
 
-/** One style, one link and one task id: two links, or two ids, side by side stay two. */
+/** One style, one link and one press: two links, two ids or two files side by side stay two. */
 function sameStyle(a: Span, b: Span): boolean {
-  return a.color === b.color && a.bold === b.bold && a.dim === b.dim && a.underline === b.underline && a.href === b.href && a.task === b.task
+  return (
+    a.color === b.color &&
+    a.bold === b.bold &&
+    a.dim === b.dim &&
+    a.underline === b.underline &&
+    a.href === b.href &&
+    a.task === b.task &&
+    a.file === b.file
+  )
+}
+
+/** Whether `span` is a press in a card: a task id or a reference file. */
+function isPress(span: Span): boolean {
+  return span.task !== undefined || span.file !== undefined
 }
 
 /** Spans with each run of one style joined into one span, so a block draws as few elements as it can. */
@@ -114,8 +131,8 @@ function fill(spans: readonly Span[], rowHang: Span | undefined, columns: number
     put(hang)
   }
   for (const span of spans) {
-    // A link or a task id stays whole, so a press on any of it opens the one address or page: on a fresh line when that has more room, shortened when even that is too narrow.
-    if (span.href !== undefined || span.task !== undefined) {
+    // A link or a press stays whole, so a press on any of it opens the one address or page: on a fresh line when that has more room, shortened when even that is too narrow.
+    if (span.href !== undefined || isPress(span)) {
       if (column > start && cells(span.text) > columns - column) breakLine()
       put({ ...span, text: shortened(span.text, columns - column) })
       continue
@@ -228,19 +245,20 @@ function joinedLines(lines: Lines): Span[] {
   return merged(lines.flatMap((line, i) => (i === 0 ? line : [NEW_LINE, ...line])))
 }
 
-/** A line's spans as pieces: each task id its own, each run of words between them one. */
+/** A line's spans as pieces: each task id and each reference file its own, each run of words between them one. */
 export function piecesOf(line: readonly Span[]): Piece[] {
   const pieces: Piece[] = []
   for (const span of line) {
     const last = pieces[pieces.length - 1]
     if (span.task !== undefined) pieces.push({ kind: 'id', span, task: span.task })
+    else if (span.file !== undefined) pieces.push({ kind: 'file', span, file: span.file })
     else if (last?.kind === 'words') last.spans.push(span)
     else pieces.push({ kind: 'words', spans: [span] })
   }
   return pieces
 }
 
-/** Wrapped card lines as parts: each run of lines with no task id one Text, each line with one a row of its pieces. */
+/** Wrapped card lines as parts: each run of lines with no press one Text, each line with one a row of its pieces. */
 export function cardParts(lines: Lines): CardPart[] {
   const parts: CardPart[] = []
   let run: (readonly Span[])[] = []
@@ -250,7 +268,7 @@ export function cardParts(lines: Lines): CardPart[] {
     run = []
   }
   for (const line of lines) {
-    if (!line.some(span => span.task !== undefined)) {
+    if (!line.some(isPress)) {
       run.push(line)
       continue
     }

@@ -8,18 +8,19 @@
 // active task of another owner that needs it, with its owner and due, the earliest due first. Goal: each goal's
 // roadmap item. From: who asked, or the GitHub issue it came from. Added: when it was written and by whom, as a
 // tracker's Created row. Owner: in another area's list. Reference: where the ask is written, each file by its
-// folder and name, other words as written (an issue ref is the first link instead). Evidence. Links (links.ts). The
-// register's fold keeps no parent, sub-tasks or history, so the card has no row for them. In the list each line
-// starts with a guide under the task's title; on a task's page (page.ts) the card has the body to itself and starts
-// at its edge. Pure: rows of spans that layout.ts wraps, each value's lines under the value column, and
-// register.tsx draws, a link as a link and a task id the snapshot holds (ids.ts) underlined, a press on it opening
-// that task's page.
+// folder and name (ref-file.ts), other words as written (an issue ref is the first link instead). Evidence. Links
+// (links.ts). The register's fold keeps no parent, sub-tasks or history, so the card has no row for them. In the list
+// each line starts with a guide under the task's title; on a task's page (page.ts) the card has the body to itself
+// and starts at its edge. Pure: rows of spans that layout.ts wraps, each value's lines under the value column, and
+// register.tsx draws, a link as a link, and a task id the snapshot holds (ids.ts) and a reference file underlined, a
+// press on one opening that task's or that file's page.
 import type { TaskDetail, TaskRow } from '../types'
 import type { TaskTree, WaitContext } from './core/read/index'
-import { lineRef, refLabel, refParts } from './details'
+import { fileLabel, refParts } from './details'
 import { idSpans } from './ids'
 import { issueOf, taskLinks } from './links'
 import { dayWords, dueWords, lateWords, neededByLines, STATUS_WORDS, waitingWords, whenWords } from './meta'
+import { refSegments } from './ref-file'
 import type { Row, Span } from './rows'
 
 /** Starts each card line in the list: the guide that ties the card to its task's title. */
@@ -130,10 +131,23 @@ function addedLines(task: TaskRow, now: number): Lines {
   return [[{ text: `${whenWords(task.createdAt, now)} by ${task.createdBy}` }]]
 }
 
-/** Where the ask is written: each file by its folder and name, other words as written; none for an issue's ref, a link already. */
+/**
+ * Where the ask is written, a line per ref part: each file by its folder and name, a press that opens its page, other
+ * words as written; a part that reads as one already listed (the same file at another line) once. None for an
+ * issue's ref, a link already.
+ */
 function referenceLines(task: TaskRow): Lines {
   const parts = issueOf(task) === null ? refParts(task.ref) : []
-  return [...new Set(parts.map(part => (lineRef(part) === null ? part : refLabel(part))))].map(text => [{ text }])
+  const lines = parts.map(part =>
+    refSegments(part).map((segment): Span => (segment.kind === 'words' ? { text: segment.text } : { text: fileLabel(segment.file.file), file: segment.file })),
+  )
+  const seen = new Set<string>()
+  return lines.filter(line => {
+    const words = line.map(span => span.text).join('')
+    if (seen.has(words)) return false
+    seen.add(words)
+    return true
+  })
 }
 
 /** Each link on its line: the address, a link layout.ts shortens to its line when it is wider. */
@@ -144,13 +158,14 @@ function linkLines(task: TaskRow): Lines {
 /**
  * A labelled row, its value's first line beside the dim label, each further line its own row under the value
  * column, and every wrapped line hanging there too (`hang`: the lead, then blank up to the value column). Each id
- * `isKnown` holds in a value's words is a span of its own (ids.ts); a link's address is left whole. No lines, no row.
+ * `isKnown` holds in a value's words is a span of its own (ids.ts); a link's address and a file's name are left
+ * whole. No lines, no row.
  */
 function labelled(key: string, label: string, lines: Lines, isKnown: (id: string) => boolean, lead: Span | null): Row[] {
   const hang: Span = { text: `${lead?.text ?? ''}${' '.repeat(LABEL_CELLS)}`, dim: true }
   const first = [...(lead === null ? [] : [lead]), { text: label.padEnd(LABEL_CELLS), dim: true }]
   return lines.map((spans, i) => {
-    const value = spans.flatMap(span => (span.href === undefined ? idSpans(span, isKnown) : [span]))
+    const value = spans.flatMap(span => (span.href === undefined && span.file === undefined ? idSpans(span, isKnown) : [span]))
     return { key: i === 0 ? key : `${key}:${i}`, spans: i === 0 ? [...first, ...value] : [hang, ...value], hang }
   })
 }

@@ -71,12 +71,6 @@ export function fileLabel(file: string): string {
   return slashed(file).split('/').slice(-2).join('/')
 }
 
-/** A ref part as a person reads it: its file's folder and name, no line numbers; a quote ref as written. */
-export function refLabel(part: string): string {
-  const file = lineRef(part)?.file
-  return file === undefined ? part : fileLabel(file)
-}
-
 /** A folder and each folder above it, nearest first. */
 function foldersUp(folder: string): string[] {
   const parts = slashed(folder).split('/')
