@@ -5,18 +5,32 @@
 // --teamrig is a teamrig git checkout: teamrig's package.json and src/ are copied from its history
 // at the pin (git cat-file), never from its working tree, into a scratch folder the CLI runs from.
 // Rerun it after each sync-core sync, so the capture always comes from the code the pane copied.
+// Each CLI run reads a fixed clock (golden-clock.ts, a minute after the last run's), so a rerun at the same pin
+// writes the same file.
 import { execFileSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { DEFAULT_REGISTER } from '../hooks/core/read/index.ts'
-import { GOLDEN_SESSION, goldenModule, underGoldenRoot, type GoldenRegister, type InboxState, type ListedFixture } from './golden-format.ts'
+import {
+  GOLDEN_CLOCK_VARIABLE,
+  GOLDEN_SESSION,
+  GoldenClock,
+  goldenModule,
+  realClockReads,
+  underGoldenRoot,
+  type GoldenRegister,
+  type InboxState,
+  type ListedFixture,
+} from './golden-format.ts'
 import { parsePin } from './vendor.ts'
 
 const USAGE = 'usage: golden.ts --teamrig <repo>'
 const TEAM = 'demo'
 const FIXTURES = ['events-v0.jsonl', 'events-v1.jsonl', 'events-v2.jsonl']
+/** Longer than any CLI run takes: a run past it (a lock wait that the fixed clock never ends) stops the capture. */
+const RUN_TIMEOUT_MS = 60_000
 const args = process.argv.slice(2)
 
 /** A capture that cannot go on, with the exit code to end on; thrown so the scratch folder is still removed. */
@@ -64,18 +78,24 @@ const eventsFile = join(state, 'events.jsonl')
 const marksFile = join(state, 'inbox-marks.jsonl')
 const inboxFile = join(state, 'inbox', 'alpha.md')
 const configFile = join(kit, 'teams', TEAM, 'config.json')
+const clock = new GoldenClock()
+const clockPreload = pathToFileURL(join(scriptsDir, 'golden-clock.ts')).href
 
 function git(gitArgs: readonly string[], input?: string): Buffer {
   return execFileSync('git', ['-C', teamrigDir, ...gitArgs], { input, maxBuffer: 256 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] })
 }
 
-/** Writes teamrig's package.json and src/ (its tests left out) at the pin under `cli`, read from git history. */
+/**
+ * Writes teamrig's package.json and src/ (its tests left out) at the pin under `cli`, read from git history. A source
+ * that reads the clock other than through Date.now stops the capture, as golden-clock.ts could not fix its runs.
+ */
 function copyTeamrig(): void {
   const paths = git(['ls-tree', '-r', '-z', '--name-only', pin, '--', 'package.json', 'src'])
     .toString('utf8')
     .split('\0')
     .filter(path => path !== '' && !path.endsWith('.test.ts'))
   const batch = git(['cat-file', '--batch'], `${paths.map(path => `${pin}:${path}`).join('\n')}\n`)
+  const clockReads: string[] = []
   let offset = 0
   for (const path of paths) {
     const headerEnd = batch.indexOf(10, offset)
@@ -83,10 +103,13 @@ function copyTeamrig(): void {
     const size = Number(header[2])
     if (header[1] !== 'blob' || !Number.isInteger(size)) fail(`REFUSED: git cat-file answered "${header.join(' ')}" for ${path}`, 1)
     const target = join(cli, ...path.split('/'))
+    const content = batch.subarray(headerEnd + 1, headerEnd + 1 + size)
+    if (path.endsWith('.ts')) clockReads.push(...realClockReads(content.toString('utf8')).map(line => `${path}:${line}`))
     mkdirSync(dirname(target), { recursive: true })
-    writeFileSync(target, batch.subarray(headerEnd + 1, headerEnd + 1 + size))
+    writeFileSync(target, content)
     offset = headerEnd + 1 + size + 1
   }
+  if (clockReads.length > 0) fail(`REFUSED: teamrig ${pin} reads the clock past Date.now, which golden-clock.ts cannot fix: ${clockReads.join(', ')}`, 1)
 }
 
 /** The environment without anything that points teamrig at a real team or session. */
@@ -94,15 +117,26 @@ const BASE_ENV = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith('TEAMRIG_') && key !== 'CLAUDE_CODE_SESSION_ID' && key !== 'CLAUDE_PROJECT_DIR'),
 )
 
-type Printed = { stdout: string; stderr: string }
+/** What a CLI run printed, and the instant its clock was fixed at. */
+type Printed = { stdout: string; stderr: string; at: number }
 
-/** Runs the copied teamrig CLI in the project folder against the scratch kit home; any exit but 0 stops the capture. */
-function teamrig(argv: readonly string[], claudeSession: string | null = null): Printed {
-  const env = { ...BASE_ENV, TEAMRIG_HOME: kit, ...(claudeSession === null ? {} : { CLAUDE_CODE_SESSION_ID: claudeSession }) }
+/** claudeSession: the Claude Code session it runs as; at: its clock's instant, else the capture clock's next. */
+type RunOptions = { claudeSession?: string; at?: number }
+
+/**
+ * Runs the copied teamrig CLI in the project folder against the scratch kit home, its clock fixed (golden-clock.ts);
+ * any exit but 0, or a run past RUN_TIMEOUT_MS, stops the capture.
+ */
+function teamrig(argv: readonly string[], options: RunOptions = {}): Printed {
+  const at = options.at ?? clock.next()
+  const session = options.claudeSession === undefined ? {} : { CLAUDE_CODE_SESSION_ID: options.claudeSession }
+  const env = { ...BASE_ENV, TEAMRIG_HOME: kit, [GOLDEN_CLOCK_VARIABLE]: String(at), ...session }
   const main = join(cli, 'src', 'cli', 'main.ts')
-  const ran = spawnSync(process.execPath, ['--disable-warning=ExperimentalWarning', main, ...argv], { cwd: project, env, encoding: 'utf8' })
+  const argvWithClock = ['--disable-warning=ExperimentalWarning', '--import', clockPreload, main, ...argv]
+  const ran = spawnSync(process.execPath, argvWithClock, { cwd: project, env, encoding: 'utf8', timeout: RUN_TIMEOUT_MS })
+  if (ran.error !== undefined) fail(`REFUSED: teamrig ${argv.join(' ')} did not finish: ${ran.error.message}`, 1)
   if (ran.status !== 0) fail(`REFUSED: teamrig ${argv.join(' ')} exited ${String(ran.status)}: ${ran.stderr}${ran.stdout}`, 1)
-  return { stdout: ran.stdout, stderr: ran.stderr }
+  return { stdout: ran.stdout, stderr: ran.stderr, at }
 }
 
 /** `teamrig <argv> --session <session>`: the command as that session runs it. */
@@ -167,7 +201,7 @@ try {
   // The inbox: read to its second line, one more line, then trimmed from the top, then rewritten.
   as('lead', 'inbox', 'add', '--to', 'alpha', '--text', 'first line')
   as('lead', 'inbox', 'add', '--to', 'alpha', '--text', 'second line')
-  teamrig(['inbox', 'read', '--session', 'alpha'], GOLDEN_SESSION)
+  teamrig(['inbox', 'read', '--session', 'alpha'], { claudeSession: GOLDEN_SESSION })
   as('lead', 'inbox', 'add', '--to', 'alpha', '--text', 'third line')
   const inbox = [inboxState('after a read and one more line')]
   writeFileSync(inboxFile, read(inboxFile).split('\n').slice(1).join('\n'))
@@ -177,10 +211,10 @@ try {
 
   // Lines teamrig skips: one from a newer teamrig, one torn, one naming no task.
   const events = read(eventsFile)
-  const newer = JSON.stringify({ v: 3, type: 'vote', id: 'T1', at: new Date().toISOString(), by: 'lead', choice: 'ship' })
+  const newer = JSON.stringify({ v: 3, type: 'vote', id: 'T1', at: new Date(clock.next()).toISOString(), by: 'lead', choice: 'ship' })
   writeFileSync(eventsFile, `${events}${newer}\n{"v":2,"type":"status","id":"T2"\n${orphanOf(events)}\n`)
   const listed = teamrig(['list', '--status', 'all', '--all'])
-  const generatedAt = Date.now()
+  const generatedAt = listed.at
   const files: Record<string, string> = {
     'kit/teams/demo/config.json': clean(read(configFile)),
     'kit/teams/demo/state/events.jsonl': clean(read(eventsFile)),
@@ -189,11 +223,11 @@ try {
     'proj/.teamrig.json': clean(read(join(project, '.teamrig.json'))),
   }
 
-  // teamrig's own register fixtures, listed by the same CLI.
+  // teamrig's own register fixtures, listed by the same CLI at the same instant, which the test reads them at.
   const fixtures: ListedFixture[] = FIXTURES.map(name => {
     const text = git(['cat-file', 'blob', `${pin}:src/register/testdata/${name}`]).toString('utf8')
     writeFileSync(eventsFile, text)
-    const printed = teamrig(['list', '--status', 'all', '--all'])
+    const printed = teamrig(['list', '--status', 'all', '--all'], { at: generatedAt })
     return { name, events: text, list: clean(printed.stdout), warn: clean(printed.stderr) }
   })
 

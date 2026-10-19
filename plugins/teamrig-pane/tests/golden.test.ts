@@ -6,7 +6,18 @@ import { treeOf, whenWords } from '../hooks/meta'
 import { findPlaces } from '../hooks/places'
 import { paneBlocks, type Block } from '../hooks/rows'
 import { registerPaths, skippedText, TaskRegisterSource } from '../hooks/source'
-import { GOLDEN_ROOT, GOLDEN_SESSION, goldenModule, underGoldenRoot, type GoldenRegister } from '../scripts/golden-format'
+import {
+  clockAt,
+  GOLDEN_CLOCK_VARIABLE,
+  GOLDEN_ROOT,
+  GOLDEN_SESSION,
+  GOLDEN_START,
+  GoldenClock,
+  goldenModule,
+  realClockReads,
+  underGoldenRoot,
+  type GoldenRegister,
+} from '../scripts/golden-format'
 import { MemoryFiles, treeAt } from './fixtures'
 import { GOLDEN } from './golden-register'
 
@@ -158,5 +169,21 @@ describe('golden capture', () => {
     const text = goldenModule(golden)
     expect(text.split('\n')[0]).toBe(`// Written by scripts/golden.ts from teamrig ${'a'.repeat(40)}: rerun it after a sync, never edit it by hand.`)
     expect(text).toContain(`export const GOLDEN: GoldenRegister = ${JSON.stringify(golden, null, 2)}\n`)
+  })
+
+  test('gives each CLI run the next fixed instant, a minute apart from the same start on every capture', () => {
+    const clock = new GoldenClock()
+    expect([clock.next(), clock.next(), clock.next()]).toEqual([GOLDEN_START, GOLDEN_START + 60_000, GOLDEN_START + 120_000])
+    expect(new GoldenClock().next()).toBe(GOLDEN_START)
+  })
+
+  test("reads a run's fixed instant from its variable, and refuses one missing or not a whole ms", () => {
+    expect(clockAt('1792235559957')).toBe(1792235559957)
+    for (const value of [undefined, '', ' ', 'soon', '1.5', '1e400']) expect(() => clockAt(value)).toThrow(GOLDEN_CLOCK_VARIABLE)
+  })
+
+  test('names the lines of teamrig source that read the clock other than through Date.now', () => {
+    expect(realClockReads('const at = Date.now()\nconst d = new Date(at)\nconst e = x.toDate()')).toEqual([])
+    expect(realClockReads('a\nconst d = new Date()\nconst t = performance.now()\nconst s = Date()\nprocess.hrtime.bigint()')).toEqual([2, 3, 4, 5])
   })
 })
