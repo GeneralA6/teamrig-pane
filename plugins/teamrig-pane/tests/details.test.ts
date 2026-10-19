@@ -5,6 +5,7 @@ import {
   TaskDetails,
   candidatePaths,
   coversGoal,
+  fileLabel,
   datedLines,
   anchoredLines,
   goalItem,
@@ -20,7 +21,7 @@ import { rowOf } from '../hooks/log'
 import { MemoryFiles, NOW, createLine } from './fixtures'
 
 const CREATED = '2026-10-13T12:00:00.000Z'
-const PLACES = { inboxDir: 'R/inbox', home: 'C:/Homes/a', cwd: 'C:/w/api', goalsDoc: 'docs/R.md' }
+const PLACES = { inboxDir: 'R/inbox', home: 'C:/Homes/a', cwd: 'C:/w/api', teamDir: 'C:/kit/teams/web', goalsDoc: 'docs/R.md' }
 
 /** A slice of the roadmap: goal items, their sub-bullets, a plain item, a week plan, and S-items and task lines under headings. */
 const ROADMAP = [
@@ -65,13 +66,20 @@ describe('details', () => {
     expect(refLabel('owner, in the meeting')).toBe('owner, in the meeting')
   })
 
-  test('finds inboxes in the inbox folder, ~/ under home, and a relative ref up from the session folder', async () => {
+  test('finds inboxes in the inbox folder, ~/ under home, and a relative ref up from the session folder, then in the team folder', async () => {
     expect(candidatePaths('~/team-notes/board/inbox/po.md', PLACES)).toEqual(['R/inbox/po.md'])
     expect(candidatePaths('~/team-notes/board/po.md', PLACES)).toEqual(['C:/Homes/a/team-notes/board/po.md'])
     expect(candidatePaths('D:\\x\\y.md', PLACES)).toEqual(['D:/x/y.md'])
-    expect(candidatePaths('docs/R.md', PLACES)).toEqual(['C:/w/api/docs/R.md', 'C:/w/docs/R.md', 'C:/docs/R.md'])
-    expect(candidatePaths('docs/R.md', { ...PLACES, cwd: null })).toEqual([])
+    expect(candidatePaths('docs/R.md', PLACES)).toEqual(['C:/w/api/docs/R.md', 'C:/w/docs/R.md', 'C:/docs/R.md', 'C:/kit/teams/web/docs/R.md'])
+    expect(candidatePaths('notes\\api\\t26.md', { ...PLACES, cwd: null })).toEqual(['C:/kit/teams/web/notes/api/t26.md'])
+    expect(candidatePaths('docs/R.md', { ...PLACES, cwd: null, teamDir: null })).toEqual([])
     expect(candidatePaths('~/x.md', { ...PLACES, home: null })).toEqual([])
+  })
+
+  test('a file reads as its folder and name', () => {
+    expect(fileLabel('~/.teamrig/teams/web/notes/api/t26-findings.md')).toBe('api/t26-findings.md')
+    expect(fileLabel('C:\\w\\README.md')).toBe('w/README.md')
+    expect(fileLabel('README.md')).toBe('README.md')
   })
 
   test('quotes as plain text, a long line cut', async () => {

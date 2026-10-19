@@ -12,7 +12,7 @@ const ALL_DIRS = { tasksDir: 'D:/t', inboxDir: 'D:/i' }
 /** Both folders as variables, so the settings file is the only thing left to fail. */
 const ALL_DIRS_ENV = { TEAMRIG_PANE_TASKS_DIR: 'D:/t', TEAMRIG_PANE_INBOX_DIR: 'D:/i' }
 /** The files naming the web team's sessions: its config and, in its state folder, its rename log. */
-const WEB_FILES: TeamFiles = { team: 'web', config: CONFIG, renames: `${STATE}/renames.jsonl` }
+const WEB_FILES: TeamFiles = { team: 'web', dir: `${KIT}/teams/web`, config: CONFIG, renames: `${STATE}/renames.jsonl` }
 /** The web team's folders where teamrig keeps them with no config file, which has teamrig's default priorities. */
 const TEAM_FOUND: Places = { found: true, dirs: { tasksDir: STATE, inboxDir: `${STATE}/inbox` }, priorities: DEFAULT_REGISTER.priorities, team: WEB_FILES, goalsDoc: null }
 
@@ -148,7 +148,7 @@ describe('places', () => {
       found: true,
       dirs: { tasksDir: `${KIT}/teams/ops/state`, inboxDir: `${KIT}/teams/ops/state/inbox` },
       priorities: DEFAULT_REGISTER.priorities,
-      team: { team: 'ops', config: `${KIT}/teams/ops/config.json`, renames: `${KIT}/teams/ops/state/renames.jsonl` },
+      team: { team: 'ops', dir: `${KIT}/teams/ops`, config: `${KIT}/teams/ops/config.json`, renames: `${KIT}/teams/ops/state/renames.jsonl` },
       goalsDoc: null,
     })
     expect(reads).toEqual([])

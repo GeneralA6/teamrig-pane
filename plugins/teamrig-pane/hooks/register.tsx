@@ -24,7 +24,7 @@ import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
-import { TaskDetails } from './details'
+import { TaskDetails, type RefPlaces } from './details'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { rowsOf, windowed, type Slot } from './window'
@@ -257,7 +257,14 @@ export const register: Register = on => {
     const places = await findPlaces({ env, files, home: home ?? null, cwd: e.cwd })
     const paths = places.found ? registerPaths(places.dirs) : { missing: places.problem }
     team = places.found && places.team !== null ? { files, paths: places.team } : null
-    details = new TaskDetails(files, { inboxDir: 'missing' in paths ? null : paths.inboxDir, home: home ?? null, cwd: e.cwd, goalsDoc: places.goalsDoc })
+    const refPlaces: RefPlaces = {
+      inboxDir: 'missing' in paths ? null : paths.inboxDir,
+      home: home ?? null,
+      cwd: e.cwd,
+      teamDir: places.found && places.team !== null ? places.team.dir : null,
+      goalsDoc: places.goalsDoc,
+    }
+    details = new TaskDetails(files, refPlaces)
     const started = new LiveRegister({
       source: 'missing' in paths ? paths : new TaskRegisterSource(files, paths, places.found ? places.priorities : []),
       sessionId: () => $.session.id(),

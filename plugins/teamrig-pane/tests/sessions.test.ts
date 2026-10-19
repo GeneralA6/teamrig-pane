@@ -4,7 +4,7 @@ import type { TeamFiles } from '../hooks/places'
 import { findSession, type TeamLookup } from '../hooks/sessions'
 
 const TEAM = 'C:/Homes/a/.teamrig/teams/web'
-const PATHS: TeamFiles = { team: 'web', config: `${TEAM}/config.json`, renames: `${TEAM}/state/renames.jsonl` }
+const PATHS: TeamFiles = { team: 'web', dir: TEAM, config: `${TEAM}/config.json`, renames: `${TEAM}/state/renames.jsonl` }
 const CONFIG = JSON.stringify({ sessions: ['lead', 'api', 'ui'], names: { api: 'web-backend' } })
 /** api, first called web-backend by the config, was renamed web-api. */
 const RENAMED = JSON.stringify({ v: 1, id: 'api', from: 'web-backend', to: 'web-api', at: '2026-10-15T08:00:00.000Z', by: 'api' })
