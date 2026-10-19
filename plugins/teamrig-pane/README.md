@@ -115,6 +115,10 @@ looks for the file where it looks for the lines a card quotes: an inbox in the i
 folder, a relative path in the session's folder and each folder above it, then in the team's folder. A file it does
 not find lists each path it looked at; one over 256 KiB, or not text, says why it is not shown.
 
+In the dock, a click on the header's `inbox 2 unread` opens the area's inbox the same way, as a file's page, at its
+first unread line, drawn bold (at the newest line when none is unread). Reading it there marks nothing read: the
+pane never writes an inbox, so the count drops only when the session runs `teamrig inbox read`.
+
 The dock always shows a Find field under its Tasks, Changes and Log switch; `s` or a click puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
 aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,

@@ -51,7 +51,7 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
   started; a click shows one status alone), then your tasks under Verifying, Working on, Up next,
   Waiting and Done today, each with a dim line saying why it stands there (what a waiting one waits for,
   what an open one comes after, which other session's task needs it); Waiting also holds what you asked of others, and the header counts your
-  unread inbox lines. `/teamrig-pane all` shows every owner's tasks, and `/teamrig-pane <session>`
+  unread inbox lines, a click on that count opening the inbox at its first unread line. `/teamrig-pane all` shows every owner's tasks, and `/teamrig-pane <session>`
   shows another session's, named by its id or its name.
 - **Details:** click a task, or press Enter on it, to open its card in place of its dim line: its
   description, status, note and proof, its priority, due date and week, the tasks it comes after and

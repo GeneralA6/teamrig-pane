@@ -279,7 +279,7 @@ function switchRow(shown: 'tasks' | 'changes'): string[] {
  */
 function tasksView(): string[] {
   const active = SECTIONS.flatMap((section) => section.tasks).filter((task) => task.owner === undefined).length;
-  const out = [...switchRow('tasks'), ...ruled(PANE_X, HEADER_Y, [span(`${active} active`, C.muted), span(` · inbox ${UNREAD} unread`, C.amber)])];
+  const out = [...switchRow('tasks'), ...ruled(PANE_X, HEADER_Y, [span(`${active} active · `, C.muted), span(`inbox ${UNREAD} unread`, C.amber)])];
   let y = HEADER_Y;
   const heading = (name: string, count: number): void => {
     y += LINE + 2 * BLANK;

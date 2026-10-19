@@ -108,6 +108,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
+| A click on the header's `inbox n unread` | In the dock: opens the area's inbox as a file's page, at its first unread line; it marks nothing read |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a session's Log page, back to the sessions |
 | `f` | Forward to the place back left, while there is one |
@@ -171,7 +172,10 @@ heading with its count; an empty section is left out:
 
 The header names the area only for a pin (`web (pinned) · 3 active · inbox 2 unread`); the session's own area
 goes unnamed, as its tab names the session. `inbox n unread` counts the lines in the area's inbox past its last
-`teamrig inbox read`; it is missing when the area never ran one.
+`teamrig inbox read`; it is missing when the area never ran one. In the dock a click on it opens the inbox as a
+file's page (see [A reference file's page](#a-reference-files-page)) at its first unread line, drawn bold, or at
+its newest line when none is unread. Reading it there marks nothing read: the pane never writes an inbox, so the
+count drops only when the session runs `teamrig inbox read`.
 
 **all** shows every owner's active tasks, grouped by owner, each heading with its counts
 (`api · 4 active · 1 waiting · 1 verifying`, a count with none left out), the verifying tasks first
