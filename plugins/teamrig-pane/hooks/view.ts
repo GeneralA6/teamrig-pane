@@ -101,16 +101,6 @@ export function ownerGroups(tasks: readonly TaskRow[], tree: TaskTree<TaskRow>):
     }))
 }
 
-/** "10-14" or "10-14 18:00": a due or week without its year. */
-export function shortDue(due: string): string {
-  return due.slice(5)
-}
-
-/** `10-13 12:19` from an ISO instant, in UTC as the due labels are. */
-export function shortTime(iso: string): string {
-  return `${iso.slice(5, 10)} ${iso.slice(11, 16)}`
-}
-
 /** Every TaskRow field, kept exhaustive by the compiler, so sameView compares all of them. */
 const TASK_FIELDS: { readonly [K in keyof TaskRow]-?: K } = {
   id: 'id',
