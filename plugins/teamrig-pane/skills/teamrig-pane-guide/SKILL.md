@@ -164,7 +164,7 @@ heading with its count; an empty section is left out:
 3. `Up next`: open, not started;
 4. `Waiting`: the area's waiting tasks, then the active tasks it asked of other sessions, the newest 8, each
    saying `on <owner>` (a dim line counts the rest, which **all** lists);
-5. `Done today`: its tasks done or dropped today, the UTC day the status bar counts, the newest 6, one dim line
+5. `Done today`: its tasks done or dropped today, the team's day the status bar counts, the newest 6, one dim line
    each with the time it closed. Past them a dim line says how many more, how many of those were dropped, and
    that `o` lists every one done today.
 
@@ -180,7 +180,7 @@ A task is two lines, its title and a dim meta line under it:
 
 ```text
 ◐ T12  Build the signup endpoint
-       p2 · due Sat 10-17 · in progress since 11:55
+       p2 · due Sat 10-17 · in progress since 11:55 IDT
 ```
 
 | Part | Meaning |
@@ -189,8 +189,8 @@ A task is two lines, its title and a dim meta line under it:
 | `T12`, the title | The id, bold, and the title, cut at two lines; whole while its card is open |
 | `p2` | Its priority |
 | `due Sat 10-17` | The date it works to: its own due, or an earlier one of an active task that needs it, which it names (`due Wed 10-14 (from T7)`); `verify by` while verifying |
-| `in progress since 11:55` | Since when it stands at its status (a time today, else a day); a verifying task's note follows, what will prove it |
-| `waiting since 14:00: decision owner, on T5 ready; the copy first` | In red: what a waiting task waits for (a decision, an approval, a task or a time, as `teamrig list` words it), a cleared one `ready`, then its note. An old `blocked` line reads as waiting, with only its note |
+| `in progress since 11:55 IDT` | Since when it stands at its status (a time today, else a day, on the team's clock); a verifying task's note follows, what will prove it |
+| `waiting since 14:00 IDT: decision owner, on T5 ready; the copy first` | In red: what a waiting task waits for (a decision, an approval, a task or a time, as `teamrig list` words it), a cleared one `ready`, then its note. An old `blocked` line reads as waiting, with only its note |
 | `after T5, T6` | A task not started: the tasks planned before it that are still unfinished |
 | `needed by T7 (beta, due Thu 10-22) +1` | Whom it holds up, as `teamrig list` says it: the active task of another session that needs it and is due first, its owner and due (left out when the due already says `(from T7)`), and how many more |
 | `on api` | In `Waiting`: a task asked of another session, and its owner |
@@ -216,7 +216,7 @@ Over **mine**, one row as wide as the pane shares its cells among the area's tas
 
 Under it, a dim line counts them, each behind its key (`o: 1 done today · v: 1 verifying · w: 2 working · i: 1 waiting`),
 leaving out a status with none; where the counts, keys included, are wider than the pane they wrap onto more lines.
-Today is the UTC day; tasks done on an earlier day, and dropped ones, are left out. The cells are shared by largest
+Today is the team's day; tasks done on an earlier day, and dropped ones, are left out. The cells are shared by largest
 remainder, and a status with any task gets at least one. With none of these tasks there is no bar, and **all** has
 none.
 
@@ -240,7 +240,7 @@ value:
 ```text
 ◐ T12  Build the signup endpoint
     │ Description  The signup endpoint, email first
-    │ Status       in progress since 11:55 by api
+    │ Status       in progress since 11:55 IDT by api
     │ Priority     2
     │ Due          Sat 10-17
     │ Week         Tue 10-13
@@ -376,7 +376,7 @@ pressed while the cursor is on one of its buttons.
 ### Archive
 
 `archive` (`h`), in the dock's mine and all row, opens the Archive page on this week (a week starts Monday 00:00
-UTC, as the register's week fields do): the view's tasks closed done or dropped, a day at a time, newest first, each
+on the team's clock and is named by that Monday, as the register's week fields are): the view's tasks closed done or dropped, a day at a time, newest first, each
 on one dim line with when it closed:
 
 ```text
@@ -390,7 +390,7 @@ Archive · po · 1 done · 0 dropped
 
 Tue 10-13
 
-✓ T7  Fix the loader                       12:00
+✓ T7  Fix the loader                   12:00 IDT
 ```
 
 | Part | What it does |
@@ -400,7 +400,7 @@ Tue 10-13
 | A day | A dim line, `Tue 10-13`, then the tasks closed that day, newest first |
 | A task | `✓` done or `✗` dropped, its id and title, when it closed (in all, its owner too); a click opens its page, and back returns to the week |
 | `3 more this week: search finds them` | Past 50 rows, the rest counted |
-| `The pane holds tasks finished since Mon 10-05 14:00; teamrig list --status done,dropped lists older ones.` | Ends the oldest week the pane holds |
+| `The pane holds tasks finished since Mon 10-05 14:00 IDT; teamrig list --status done,dropped lists older ones.` | Ends the oldest week the pane holds |
 
 The pane holds the tasks finished in the last 8 days, the days teamrig's own rotation keeps finished tasks in its
 working set, so the Archive page reaches back to the week those days start in, never further; `teamrig list --status

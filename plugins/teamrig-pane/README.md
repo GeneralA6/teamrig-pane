@@ -9,7 +9,9 @@ Docks the session's tasks from teamrig's task register (its tasks folder: `event
 `inbox-marks.jsonl` that `teamrig inbox read` writes; see Where the register is, below) on the right of
 Claude Code's fullscreen UI. It reads files only: a stat poll
 every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick moves the due/age
-labels on. No model calls, so no tokens. A switch over the list flips it to the session's git changes
+labels on. No model calls, so no tokens. Every time is on the team's clock and zone-marked
+(`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
+session's `TZ`, else the system's). A switch over the list flips it to the session's git changes
 (Tasks and Changes, below).
 
 - **mine**: the session's area, under its status bar (Status bar, below) and a header counting its
@@ -19,7 +21,7 @@ labels on. No model calls, so no tokens. A switch over the list flips it to the 
   that needs it) under a bold heading with its count, an empty one left out:
   `Verifying` (the nearest to done, so closing them comes first), `Working on`, `Up next`, `Waiting`
   (its own waiting tasks, then the newest 8 it asked of other sessions, each saying `on <owner>`) and
-  `Done today`, the UTC day the status bar counts (the newest 6, then a dim line saying how many more,
+  `Done today`, the team's day the status bar counts (the newest 6, then a dim line saying how many more,
   how many of those were dropped, and that `o` lists every one done today).
 - **all**: every owner's active tasks, each owner's heading with its counts, a count with none left
   out (`api · 4 active · 1 waiting · 1 verifying`), and the verifying tasks first in
@@ -27,14 +29,14 @@ labels on. No model calls, so no tokens. A switch over the list flips it to the 
 
 A task is two lines: its status mark, bold id and title (cut at two lines, whole while its card is open), then a dim meta line under
 the title. The mark is its status as `teamrig list` names it: `○` open, `◐` in progress, `◑` verifying,
-`■` waiting, `✓` done, `✗` dropped. The meta line reads `p2 · due Sat 10-17 · in progress since 11:55`:
+`■` waiting, `✓` done, `✗` dropped. The meta line reads `p2 · due Sat 10-17 · in progress since 11:55 IDT`:
 its priority, the date it works to (its own due, or an earlier one of an active task that needs it,
 which it names: `due Wed 10-14 (from T7)`; `verify by` while verifying), since when it stands at its status
 and why, whom it holds up, then what needs a look. A verifying task's change has landed and waits for what proves it works: its
-note says what that is (`verifying since 09:10: tests pass on main`). A waiting task waits on a
+note says what that is (`verifying since 09:10 IDT: tests pass on main`). A waiting task waits on a
 decision, an approval, another task or a time (`teamrig set --status waiting --waits`): in red, its line
-names each, a cleared one `ready`, then its note (`waiting since 14:00: decision owner, on T1 ready,
-until Fri 10-16 14:00; the copy first`). An old `blocked` line reads as waiting, with only its note. A
+names each, a cleared one `ready`, then its note (`waiting since 14:00 IDT: decision owner, on T1 ready,
+until Fri 10-16 14:00 IDT; the copy first`). An old `blocked` line reads as waiting, with only its note. A
 task not started names the tasks planned before it that are still unfinished (`after T1, T2`). A task the
 active task of another session needs says so, as `teamrig list` does: `needed by T7 (beta, due Thu 10-22) +1`,
 the one due first, its owner and due (left out when the due already says `(from T7)`), and how many more.
@@ -131,7 +133,7 @@ permission prompt, takes the keys, clicks and wheel scroll from the pane until i
 Code's rule, not the pane's.
 
 `archive` (`h`, in the dock's mine and all row) opens the Archive page on this week, a week starting
-Monday 00:00 UTC: the view's tasks closed done or dropped, a dim line a day, newest first, each task on one
+Monday 00:00 on the team's clock: the view's tasks closed done or dropped, a dim line a day, newest first, each task on one
 dim line with when it closed (in `all`, its owner too), at most 50 with a dim line counting the rest. Its
 head names whose tasks and how many were done and dropped. `‹ prev` (`p`) and `next ›` (`l`) step a
 week back and forward in place, so back returns to where the page was opened from; a click on a task
@@ -159,7 +161,7 @@ dock shows the whole list.
 
 Over the mine view's tasks, a row as wide as the pane shares its cells among the area's tasks by
 status, in this order: done today (green `█`), verifying (green `▓`), working, that is in progress
-(amber `█`), waiting (red `█`) and not started, that is open (dim `░`). Today is the UTC day, the one
+(amber `█`), waiting (red `█`) and not started, that is open (dim `░`). Today is the team's day, the one
 the due labels are in; tasks done on an earlier day, and dropped ones, are left out. The cells are
 shared by largest remainder, and a status with any task gets at least one. Under the row a dim line
 counts them, each behind its key (`o: 1 done today · v: 1 verifying · w: 2 working`), skipping a
