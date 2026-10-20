@@ -1,14 +1,14 @@
 // The Log view's reads: each team session's prompts and replies from the turn log teamrig writes:
 // `<team state>/turn-log/<session id>/<UTC hour>.jsonl`, one JSON line per entry, only ever appended to. teamrig
 // removes whole hour files past its kept hours, so the oldest file kept can still hold older lines: the pane hides
-// every line older than LOG_HOURS. A line of another version, one that does not parse (a torn last line) or one
-// missing a field is skipped, and fields the pane does not know are ignored. The list names the sessions with an
+// every line older than LOG_HOURS. Each line is read by teamrig's parseEntry: one of another version, one that does
+// not parse (a torn last line) or one missing a field is skipped, and fields the pane does not know are ignored. The list names the sessions with an
 // hour file of the last LOG_HOURS, the newest change first, with each one's newest prompt; a session's page holds
 // its newest lines, oldest first, up to LOG_PAGE_CHARS of text, reading its files newest first and none past that.
 // Each file read is kept with its size and mtime, so a poll reads again only a file that moved. While the Log view
 // shows, a POLL_MS poll reads what it shows again, writing only what changed. Reads files only: no git, no model.
-import type { LogList, LogPage, LogSession, TurnEntry, TurnKind } from '../types'
-import { SESSION_NAME } from './core/read/index'
+import type { LogList, LogPage, LogSession, TurnEntry } from '../types'
+import { parseEntry, SESSION_NAME } from './core/read/index'
 import { messageOf } from './errors'
 import { POLL_MS, type Timer } from './live'
 
@@ -17,8 +17,6 @@ export const LOG_HOURS = 24
 const HOUR_MS = 3_600_000
 /** The most text a session's page holds, its newest lines: as much as a file page shows (ref-file.ts MAX_PAGE_BYTES), so a busy day never lays out megabytes. */
 export const LOG_PAGE_CHARS = 256 * 1024
-/** The turn log's line format, the `v` of each line. */
-const TURN_LOG_VERSION = 1
 /** An hour's file, `2026-10-19T09.jsonl`: the names sort by time. */
 const HOUR_FILE = /^(\d{4}-\d{2}-\d{2}T\d{2})\.jsonl$/
 /** The most of a prompt's first line the list keeps: it draws two lines of it at most. */
@@ -40,31 +38,24 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function isKind(value: unknown): value is TurnKind {
-  return value === 'prompt' || value === 'reply' || value === 'clear'
-}
-
-/** One line as an entry; null for a line of another version, one that does not parse, or one missing a field. */
-export function parseTurnLine(line: string): TurnEntry | null {
-  let value: unknown
+/** A line's JSON object; null for one that does not parse, a torn last line among them, or one that is no object. */
+function recordOf(line: string): JsonRecord | null {
   try {
-    value = JSON.parse(line)
+    const value: unknown = JSON.parse(line)
+    return isRecord(value) ? value : null
   } catch {
     return null
   }
-  if (!isRecord(value) || value['v'] !== TURN_LOG_VERSION) return null
-  const { at, kind, text, claude } = value
-  if (typeof at !== 'string' || !isKind(kind) || typeof text !== 'string' || typeof claude !== 'string') return null
-  return { at, kind, text, claude, isCut: value['truncated'] === true }
 }
 
-/** A file's entries, oldest first: each line that parses, blank lines skipped. */
+/** A file's entries, oldest first: each line teamrig's parseEntry reads, blank lines skipped. */
 export function parseTurnLines(text: string): TurnEntry[] {
   return text.split('\n').flatMap(raw => {
     const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw
     if (line.trim() === '') return []
-    const entry = parseTurnLine(line)
-    return entry === null ? [] : [entry]
+    const record = recordOf(line)
+    const entry = record === null ? undefined : parseEntry(record)
+    return entry === undefined ? [] : [{ at: entry.at, kind: entry.kind, text: entry.text, claude: entry.claude, isCut: entry.truncated === true }]
   })
 }
 

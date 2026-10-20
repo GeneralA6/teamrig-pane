@@ -4,7 +4,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { LogList, LogPage } from '../types'
 import { POLL_MS } from '../hooks/live'
-import { LOG_PAGE_CHARS, LiveLog, TurnLogReader, parseTurnLine, parseTurnLines, type LogDirEntry, type LogFiles } from '../hooks/turn-log'
+import { LOG_PAGE_CHARS, LiveLog, TurnLogReader, parseTurnLines, type LogDirEntry, type LogFiles } from '../hooks/turn-log'
 
 const DIR = '/kit/teams/web/state/turn-log'
 const NOW = Date.parse('2026-10-19T20:30:00Z')
@@ -53,27 +53,24 @@ function fakeDisk() {
   }
 }
 
-describe('parseTurnLine', () => {
+describe('parseTurnLines', () => {
   test('reads a line of version 1, its cut mark included, and ignores fields it does not know', () => {
-    expect(parseTurnLine(line('2026-10-19T20:01:00Z', 'prompt', 'ship it', { upTo: 'x', extra: 1 }))).toEqual({
-      at: '2026-10-19T20:01:00Z',
-      kind: 'prompt',
-      text: 'ship it',
-      claude: 'c-1',
-      isCut: false,
-    })
-    expect(parseTurnLine(line('2026-10-19T20:02:00Z', 'reply', '…end', { truncated: true }))?.isCut).toBe(true)
-    expect(parseTurnLine(line('2026-10-19T20:03:00Z', 'clear', 'context compacted'))?.kind).toBe('clear')
+    expect(parseTurnLines(line('2026-10-19T20:01:00Z', 'prompt', 'ship it', { upTo: 'x', extra: 1 }))).toEqual([
+      { at: '2026-10-19T20:01:00Z', kind: 'prompt', text: 'ship it', claude: 'c-1', isCut: false },
+    ])
+    expect(parseTurnLines(line('2026-10-19T20:02:00Z', 'reply', '…end', { truncated: true }))[0]?.isCut).toBe(true)
+    expect(parseTurnLines(line('2026-10-19T20:03:00Z', 'clear', 'context compacted'))[0]?.kind).toBe('clear')
   })
 
-  test('skips a line of another version, a torn line, one missing a field, one of an unknown kind, and one that is no object', () => {
-    expect(parseTurnLine(JSON.stringify({ v: 2, at: 'a', kind: 'prompt', text: 't', claude: 'c' }))).toBeNull()
-    expect(parseTurnLine('{"v":1,"at":"2026-10-19T20:0')).toBeNull()
-    expect(parseTurnLine(JSON.stringify({ v: 1, at: 'a', kind: 'prompt', text: 't' }))).toBeNull()
-    expect(parseTurnLine(JSON.stringify({ v: 1, at: 'a', kind: 'prompt', text: 3, claude: 'c' }))).toBeNull()
-    expect(parseTurnLine(JSON.stringify({ v: 1, at: 'a', kind: 'tool', text: 't', claude: 'c' }))).toBeNull()
-    expect(parseTurnLine('[1]')).toBeNull()
-    expect(parseTurnLine('null')).toBeNull()
+  test('skips a line of another version or none, a torn line, one missing a field, one of an unknown kind, and one that is no object', () => {
+    expect(parseTurnLines(JSON.stringify({ v: 2, at: 'a', kind: 'prompt', text: 't', claude: 'c' }))).toEqual([])
+    expect(parseTurnLines(JSON.stringify({ at: 'a', kind: 'prompt', text: 't', claude: 'c' }))).toEqual([])
+    expect(parseTurnLines('{"v":1,"at":"2026-10-19T20:0')).toEqual([])
+    expect(parseTurnLines(JSON.stringify({ v: 1, at: 'a', kind: 'prompt', text: 't' }))).toEqual([])
+    expect(parseTurnLines(JSON.stringify({ v: 1, at: 'a', kind: 'prompt', text: 3, claude: 'c' }))).toEqual([])
+    expect(parseTurnLines(JSON.stringify({ v: 1, at: 'a', kind: 'tool', text: 't', claude: 'c' }))).toEqual([])
+    expect(parseTurnLines('[1]')).toEqual([])
+    expect(parseTurnLines('null')).toEqual([])
   })
 
   test("a file's lines, oldest first: CRLF ends, blank lines and a torn last line are skipped", () => {
