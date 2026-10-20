@@ -352,10 +352,12 @@ not shown. The page shows the file as it was when the page opened: open it again
 ### Find
 
 The dock always shows a Find field under its Tasks, Changes and Log switch. `s` or a click puts the cursor in it; it
-never takes the keys by itself, so the pane's other keys keep working. As you type, the body lists the tasks
-the pane holds that every word matches, the matched words underlined:
+never takes the keys by itself, so the pane's other keys keep working. As you type, the body counts the tasks
+the pane holds that every word matches, on a dim line, then lists them, the matched words underlined:
 
 ```text
+2 tasks match
+
 ○ T50  Load the feed
        on etl
 
@@ -369,12 +371,14 @@ the pane holds that every word matches, the matched words underlined:
 | An active result | Its title row, then a dim line of whose it is and the other fields a word matched in |
 | A finished result | One dim line with when it closed |
 | A click on a result | Opens its page; `‹ back` (`b`) returns to the results |
-| Enter | Opens the top result's page and moves the cursor onto its `‹ back`, so `b`, `f` and `s` work there |
+| Enter | With one match, opens its page and moves the cursor onto its `‹ back`, so `b`, `f` and `s` work there; with more, moves the cursor onto the first result |
+| Enter on a result | Opens its page; ↑↓ move to the next or the one before |
 | `clear` (shown while searching), or an empty field | Closes the search and shows the place before it; `clear` keeps the cursor in the field |
 
 The pane searches what it holds: every area's active tasks and those finished in the last 8 days, never older ones. The
-active matches come in plan order, then the finished ones, newest first. At most 30 show; a dim line counts the
-rest (`4 more: add a word`), and when nothing matches, one dim line says so. The trail names a search by its words
+active matches come in plan order, then the finished ones, newest first. The dim line over them counts every match
+(`2 tasks match`, `1 task matches`); at most 30 show, and past that the line says so (`34 tasks match, 30 shown: add
+a word to narrow them`). When nothing matches, one dim line says so. The trail names a search by its words
 (`Search "etl the"`). Esc hands the keys back to the prompt and leaves the results drawn. Above the prompt no page
 shows, so there is no search.
 
@@ -382,7 +386,9 @@ A line under the field says where your keys go now:
 
 | The line | Where the keys go |
 | --- | --- |
-| `Typing searches · Enter: open · Esc: to Claude` (bold) | Into the field: each key changes the search |
+| `Typing searches · Enter: open · Esc: to Claude` (bold) | Into the field, with one match or none: each key changes the search |
+| `Typing searches · Enter: to the results · Esc: to Claude` (bold) | Into the field, with more matches; Enter moves the cursor onto the first result |
+| `On a result · Enter: open · ↑↓: move · s: search · Esc: to Claude` | On a result of the search; `s` moves the keys back into the field |
 | `Keys on the pane · s: search · Esc: to Claude` | To the pane's keys; `s` moves them into the field |
 | `Keys go to Claude · click the field to search` | To Claude's prompt; a click on the field gives them back to it, the query kept |
 
