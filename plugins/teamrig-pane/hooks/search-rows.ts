@@ -9,6 +9,7 @@ import { treeOf, whenWords } from './meta'
 import { GLYPH, GLYPH_COLOR, indentOf, META_LINES, problemBlocks, readingBlock, SEPARATOR, single, TITLE_GAP, TITLE_LINES } from './rows'
 import type { Block, Row, Span } from './rows'
 import { fieldText, queryWords, searchTasks, type Hit, type Mark, type SearchedField } from './search'
+import { clockOf, type Clock } from './zone'
 
 /** The fields a result's title row does not show, in the order its meta line names them, each by its words. */
 const FIELD_WORDS: ReadonlyArray<readonly [field: Exclude<SearchedField, 'title' | 'owner'>, words: string]> = [
@@ -89,7 +90,7 @@ function activeBlock(hit: Hit): Block {
 }
 
 /** `✓ T4  title          14:02`: a finished match, dim, on one line with when it closed. */
-function doneBlock(hit: Hit, now: number): Block {
+function doneBlock(hit: Hit, clock: Clock): Block {
   const task = hit.task
   const key = `search:${task.id}`
   const color = GLYPH_COLOR[task.status]
@@ -103,7 +104,7 @@ function doneBlock(hit: Hit, now: number): Block {
       ...markedSpans(task.title, hit.marks.title, { dim: true }),
     ],
     hang: indentOf(task),
-    end: { text: whenWords(task.statusAt, now), dim: true },
+    end: { text: whenWords(task.statusAt, clock), dim: true },
     maxLines: 1,
   }
   return { key, opens: task.id, rows: [row] }
@@ -121,5 +122,5 @@ export function searchBlocks(snap: Snapshot, query: string): Block[] {
   const results = searchTasks(snap.tasks, query, treeOf(snap))
   if (results.active.length + results.done.length === 0) return [...problems, single('search-none', [{ text: NOTHING_FOUND, dim: true }])]
   const more = results.more > 0 ? [single('search-more', [{ text: `${results.more} more: add a word`, dim: true }])] : []
-  return [...problems, ...results.active.map(activeBlock), ...results.done.map(hit => doneBlock(hit, snap.now)), ...more]
+  return [...problems, ...results.active.map(activeBlock), ...results.done.map(hit => doneBlock(hit, clockOf(snap))), ...more]
 }

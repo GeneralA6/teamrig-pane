@@ -86,17 +86,17 @@ describe('card', () => {
     ])
     expect(rows.map(textOf)).toEqual([
       labelled('Description', '2026-10-13 lead: ship the pane'),
-      labelled('Status', 'waiting since 14:00 by po'),
+      labelled('Status', 'waiting since 14:00 UTC by po'),
       `${UNDER}decision owner, on T6`,
       labelled('Note', 'see https://example.com/pr/7.'),
       labelled('Priority', '2'),
-      labelled('Due', 'today 12:00 · late 2h'),
+      labelled('Due', 'today 12:00 UTC · late 2h'),
       labelled('Week', 'Tue 10-13'),
       labelled('After', 'T5 (done), T6 (not started)'),
       labelled('Goal', 'G10.2 The pane in fullscreen'),
       `${UNDER}G15`,
       labelled('From', 'owner'),
-      labelled('Added', '12:00 by lead'),
+      labelled('Added', '12:00 UTC by lead'),
       labelled('Reference', 'inbox/po.md'),
       `${UNDER}docs/x.md`,
       labelled('Evidence', 'abc123'),
@@ -136,10 +136,10 @@ describe('card', () => {
   test('a row with no value is left out: a fresh task with no description, ref, goal, week or plan dependency shows its status, priority, who asked and when it was added', async () => {
     const tasks = rowsOf([createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', ref: null, goals: [], week: null })])
     expect(cardOf(tasks, 'T2').map(textOf)).toEqual([
-      labelled('Status', 'not started since 13:00 by po'),
+      labelled('Status', 'not started since 13:00 UTC by po'),
       labelled('Priority', '3'),
       labelled('From', 'po'),
-      labelled('Added', '13:00 by po'),
+      labelled('Added', '13:00 UTC by po'),
     ])
   })
 
@@ -169,20 +169,20 @@ describe('card', () => {
       verifyingLine('T2', 'po', NOW, 'GET /health answers 200', 'deployed', 'abc123'),
     ])
     const working = cardOf(tasks, 'T1')
-    expect(working.slice(0, 3).map(textOf)).toEqual([labelled('Status', 'in progress since 13:00'), labelled('Note', 'halfway'), labelled('Priority', '1')])
+    expect(working.slice(0, 3).map(textOf)).toEqual([labelled('Status', 'in progress since 13:00 UTC'), labelled('Note', 'halfway'), labelled('Priority', '1')])
     const verifying = cardOf(tasks, 'T2')
     expect(verifying.slice(0, 5).map(textOf)).toEqual([
-      labelled('Status', 'verifying since 14:00 by po'),
+      labelled('Status', 'verifying since 14:00 UTC by po'),
       labelled('Note', 'deployed'),
       labelled('Proof', 'GET /health answers 200'),
       labelled('Priority', '3'),
-      labelled('Verify by', 'today 18:00'),
+      labelled('Verify by', 'today 18:00 UTC'),
     ])
     expect(rowNamed(verifying, 'proof').spans[2]?.color).toBe('success')
     // A task finished earlier on its day: when it closed, and its note.
     const done = rowsOf([createLine('T3', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po' }), statusLine('T3', 'po', NOW - HOUR, 'done', 'merged', 'def456')])
     expect(cardRows('done', taskOf(done, 'T3'), UNREAD, treeAt(done, NOW), 'po').slice(0, 2).map(textOf)).toEqual([
-      labelled('Status', 'done since 13:00 by po'),
+      labelled('Status', 'done since 13:00 UTC by po'),
       labelled('Note', 'merged'),
     ])
   })
@@ -223,9 +223,9 @@ describe('card', () => {
       statusLine('T2', 'po', NOW, 'in-progress', null),
     ])
     const rows = (id: string, viewer: string | null) => cardOf(tasks, id, UNREAD, viewer).filter(row => /:(from|added|owner)$/.test(row.key)).map(textOf)
-    expect(rows('T1', 'etl')).toEqual([labelled('From', 'lead'), labelled('Added', '13:00 by lead'), labelled('Owner', 'po')])
-    expect(rows('T1', 'po')).toEqual([labelled('From', 'lead'), labelled('Added', '13:00 by lead')])
-    expect(rows('T1', null)).toEqual([labelled('From', 'lead'), labelled('Added', '13:00 by lead')])
+    expect(rows('T1', 'etl')).toEqual([labelled('From', 'lead'), labelled('Added', '13:00 UTC by lead'), labelled('Owner', 'po')])
+    expect(rows('T1', 'po')).toEqual([labelled('From', 'lead'), labelled('Added', '13:00 UTC by lead')])
+    expect(rows('T1', null)).toEqual([labelled('From', 'lead'), labelled('Added', '13:00 UTC by lead')])
     expect(rows('T2', 'po')).toEqual([labelled('From', 'owner'), labelled('Added', 'Mon 10-12 by lead')])
   })
 

@@ -150,7 +150,8 @@ const REGISTER_ENV: Readonly<Record<string, string>> = {
 
 /**
  * Starts the plugin over a fake disk, store and git; `kept` is what $.store holds from earlier
- * sessions, `env` the environment the plugin reads, `version` what `$.session.version()` answers. Each repo the git knows is on the disk: its
+ * sessions, `env` the environment the plugin reads (its TZ UTC unless `env` names one, so every time prints in UTC
+ * whatever the machine's zone), `version` what `$.session.version()` answers. Each repo the git knows is on the disk: its
  * root's `.git`, and a file in each folder named in it (git never runs in a folder that is not there).
  */
 async function start(
@@ -160,7 +161,7 @@ async function start(
   env: Readonly<Record<string, string>> = REGISTER_ENV,
   version: Answer<SessionVersion> = NEW_ENOUGH,
 ) {
-  mock.env(on, env)
+  mock.env(on, { TZ: 'UTC', ...env })
   const store = fakeStore(on, kept)
   const runs = fakeGit(on, repos)
   const clock = mock.clock(on, { now: NOW })
@@ -213,7 +214,16 @@ test('the all view lists every owner, a waiting task saying why', async ($, on) 
 
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /Rotate the local URI/ })).toBeDefined()
-  expect(await pane.find({ text: /p1 · waiting since 14:00: needs owner paste/ })).toBeDefined()
+  expect(await pane.find({ text: /p1 · waiting since 14:00 UTC: needs owner paste/ })).toBeDefined()
+})
+
+test("with no team config, the session's TZ is the team's zone: every time prints on its clock, as teamrig's would", async ($, on) => {
+  await start(on, {}, { roots: {}, statuses: {} }, { ...REGISTER_ENV, TZ: 'Asia/Jerusalem' })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  await pane.press({ key: 'all' })
+  expect(await pane.find({ text: /p1 · waiting since 17:00 IDT: needs owner paste/ })).toBeDefined()
 })
 
 test("the area's Tasks view leads with a bar of its tasks by status and their counts; the all and Changes views draw none", async ($, on) => {
@@ -674,12 +684,12 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
   expect((await pane.find({ type: 'Text', text: CARD }))?.text.split('\n')).toEqual([
     cardLine('Description', '2026-10-13 12:40 lead: ship the pane with details'),
     `${CARD_UNDER}G10.1g Fix the formula with analytics`,
-    cardLine('Status', 'not started since 13:00 by lead'),
+    cardLine('Status', 'not started since 13:00 UTC by lead'),
     cardLine('Priority', '3'),
     cardLine('Week', 'Tue 10-13'),
     cardLine('Goal', 'G10.1g'),
     cardLine('From', 'owner'),
-    cardLine('Added', '13:00 by lead'),
+    cardLine('Added', '13:00 UTC by lead'),
   ])
   // Each reference file is a press, so its line is a row of its own under the card's text.
   const drawn = await pane.drawn()
@@ -708,19 +718,19 @@ test("an open card shows its priority as a number, never the team config's name 
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   await pane.press({ key: 'all' })
-  expect(await pane.find({ text: /^◐ T7  Ship the team register\n {6}p2 · in progress since 13:30$/ })).toBeDefined()
+  expect(await pane.find({ text: /^◐ T7  Ship the team register\n {6}p2 · in progress since 13:30 UTC$/ })).toBeDefined()
   expect(await pane.find({ text: /correctness/ })).toBeUndefined()
 
   await pane.press({ key: 'web:T7' })
   expect((await pane.find({ type: 'Text', text: CARD }))?.text.split('\n')).toEqual([
-    cardLine('Status', 'in progress since 13:30 by web'),
+    cardLine('Status', 'in progress since 13:30 UTC by web'),
     cardLine('Note', 'details drawn'),
     cardLine('Priority', '2'),
     cardLine('Week', 'Tue 10-13'),
     cardLine('Goal', 'G10.2'),
     `${CARD_UNDER}G15`,
     cardLine('From', 'owner'),
-    cardLine('Added', '13:00 by lead'),
+    cardLine('Added', '13:00 UTC by lead'),
   ])
   // The reference file, a press, draws on a row of its own, and the rows after it in a text of their own.
   const screen = screenOf(await pane.drawn())
@@ -735,12 +745,12 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /collapse/ })).toBeUndefined()
-  expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeDefined()
+  expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeDefined()
 
   await pane.press({ key: 'security:T2' })
   await pane.press({ key: 'po:T1' })
-  expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {7}waiting since 14:00 by security\n {4}│ Note {9}needs owner paste\n/ })).toBeDefined()
-  expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {7}waiting since 14:00 UTC by security\n {4}│ Note {9}needs owner paste\n/ })).toBeDefined()
+  expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeUndefined()
   // Each open card is a column Box, its reference file's line a row Box in it.
   expect(countType(await pane.drawn(), 'Box')).toBe(9)
   const collapse = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'collapse')
@@ -748,7 +758,7 @@ test('an open waiting card says since when it waits, its note on a row of its ow
 
   await pane.press({ key: 'collapse' })
   expect(await pane.find({ text: /│ (Status|From)/ })).toBeUndefined()
-  expect(await pane.find({ text: /waiting since 14:00: needs owner paste/ })).toBeDefined()
+  expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeDefined()
   expect(await pane.find({ text: /collapse/ })).toBeUndefined()
   expect(countType(await pane.drawn(), 'Box')).toBe(5)
 })
@@ -794,7 +804,7 @@ test('after a hot reload, open cards kept under another tag read as none open, a
   expect(await pane.find({ text: /p2 · due Wed 10-14 · new · asked by owner/ })).toBeDefined()
   isOldValueStored = false
   await pane.press({ key: 'next:T1' })
-  expect(await pane.find({ text: /^ {4}│ Status {7}not started since 13:00 by lead$/m })).toBeDefined()
+  expect(await pane.find({ text: /^ {4}│ Status {7}not started since 13:00 UTC by lead$/m })).toBeDefined()
 })
 
 test('inline above the prompt, it shows a few rows and points to the side dock', async ($, on) => {
@@ -1788,7 +1798,7 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
     '',
     ' Tue 10-13',
     '',
-    ' ✓ T7  Fix the loader                       12:00',
+    ' ✓ T7  Fix the loader                   12:00 UTC',
   ])
 
   // The week before: T9 dropped on Friday, and where the pane stops holding finished tasks.

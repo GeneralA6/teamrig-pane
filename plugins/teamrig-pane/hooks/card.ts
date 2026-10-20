@@ -19,9 +19,10 @@ import type { TaskTree, WaitContext } from './core/read/index'
 import { fileLabel, refParts } from './details'
 import { idSpans } from './ids'
 import { issueOf, taskLinks } from './links'
-import { dayWords, dueWords, lateWords, neededByLines, STATUS_WORDS, waitingWords, whenWords } from './meta'
+import { dueWords, lateWords, neededByLines, STATUS_WORDS, storedDayWords, waitingWords, whenWords } from './meta'
 import { refSegments } from './ref-file'
 import type { Row, Span } from './rows'
+import type { Clock } from './zone'
 
 /** Starts each card line in the list: the guide that ties the card to its task's title. */
 const GUIDE: Span = { text: '    │ ', dim: true }
@@ -77,13 +78,13 @@ function descriptionLines(task: TaskRow, detail: TaskDetail): Lines {
 }
 
 /**
- * `in progress since 11:55 by po`, then why a waiting task waits, in teamrig's words (its note has its own row). The
+ * `in progress since 11:55 IDT by po`, then why a waiting task waits, in teamrig's words (its note has its own row). The
  * fold keeps who wrote the task's newest event (`updatedBy`), not who set its status: the two are one only when that
  * event came at the status's own time, so only then does the card say who.
  */
 function statusLines(task: TaskRow, context: WaitContext): Lines {
   const by = task.updatedAt === task.statusAt ? ` by ${task.updatedBy}` : ''
-  const first: Span[] = [{ text: `${STATUS_WORDS[task.status]} since ${whenWords(task.statusAt, context.now)}${by}` }]
+  const first: Span[] = [{ text: `${STATUS_WORDS[task.status]} since ${whenWords(task.statusAt, context)}${by}` }]
   const why = task.status === 'waiting' ? waitingWords({ ...task, note: null }, context) : null
   return why === null ? [first] : [first, [{ text: why, color: 'error' }]]
 }
@@ -101,8 +102,7 @@ function dueLines(task: TaskRow, tree: TaskTree<TaskRow>): Lines {
 /** `Mon 10-12`: the first day of the planning week, as written when it cannot be read. */
 function weekLines(task: TaskRow): Lines {
   if (task.week === null) return []
-  const start = Date.parse(task.week)
-  return [[{ text: Number.isNaN(start) ? task.week : dayWords(start) }]]
+  return [[{ text: storedDayWords(task.week) ?? task.week }]]
 }
 
 /** `T1 (done), T2 (not started)`: the tasks planned first, each with its status when the snapshot holds it. */
@@ -126,9 +126,9 @@ function fromLines(task: TaskRow): Lines {
   return [[{ text: issue === null ? task.source : `GitHub issue #${issue.number}` }]]
 }
 
-/** `Tue 10-13 by lead`: when the task was written and who wrote it. */
-function addedLines(task: TaskRow, now: number): Lines {
-  return [[{ text: `${whenWords(task.createdAt, now)} by ${task.createdBy}` }]]
+/** `Tue 10-13 by lead`: when the task was written, at the clock in its zone, and who wrote it. */
+function addedLines(task: TaskRow, clock: Clock): Lines {
+  return [[{ text: `${whenWords(task.createdAt, clock)} by ${task.createdBy}` }]]
 }
 
 /**
@@ -203,7 +203,7 @@ export function cardRows(
     ...field('needed-by', 'Needed by', neededByLines(task, tree).map(text => [{ text }])),
     ...field('goal', 'Goal', goalLines(task, detail)),
     ...field('from', 'From', fromLines(task)),
-    ...field('added', 'Added', addedLines(task, context.now)),
+    ...field('added', 'Added', addedLines(task, context)),
     ...field('owner', 'Owner', viewer !== null && task.owner !== viewer ? [[{ text: task.owner }]] : []),
     ...field('reference', 'Reference', referenceLines(task)),
     ...field('evidence', 'Evidence', textLines(task.evidence)),

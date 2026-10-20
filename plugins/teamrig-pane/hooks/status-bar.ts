@@ -1,15 +1,17 @@
 // The status bar atop the Tasks view (mine): one line of colored blocks as wide as the body, each status
 // of the area's own tasks a segment sized by its share, and under it the counts, dim, each behind its
 // key and wrapped to the bar's width as drawn (drawnText). The statuses are done today, verifying,
-// working, waiting and not started; a task done on an earlier day and a dropped one are left out. "Today" is the UTC day of the snapshot's clock, as every
-// date the pane draws is UTC (a bare due date means the end of its UTC day). A press on a segment or
+// working, waiting and not started; a task done on an earlier day and a dropped one are left out. "Today" is the
+// team zone's day of the snapshot's clock, as every day the pane draws is the zone's (zone.ts). A press on a segment or
 // its count, or the count's key, filters the list to that status (rows.ts) and a second press clears
 // it; the filtered segment and count draw bold, a dim line under the counts says so. Pure data:
 // register.tsx draws the pieces and keeps the filter.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, Snapshot, TaskRow } from '../types'
+import type { TimeZone } from './core/read/index'
 import type { Span } from './rows'
 import { cells } from './width'
+import { clockOf, dayOf, type Clock } from './zone'
 
 /** The bar's statuses in the order they draw: what closed today, what is verifying, then what is left. */
 export const BAR_STATUSES: readonly BarStatus[] = ['done-today', 'verifying', 'working', 'waiting', 'not-started']
@@ -55,25 +57,23 @@ function noCounts(): Record<BarStatus, number> {
   return { 'done-today': 0, verifying: 0, working: 0, waiting: 0, 'not-started': 0 }
 }
 
-/** `2026-10-15`: the UTC day of an instant, the day the pane's due and time labels are in. */
-export function utcDay(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10)
+/**
+ * Done or dropped on `today`, a day of `zone` (zone.ts dayOf), by when it took that status (a later note or priority
+ * change does not finish it again): the one day the bar counts as done today and the list shows as finished today
+ * (view.ts), so the two agree and both turn over at the zone's midnight.
+ */
+export function isFinishedOn(task: TaskRow, today: string, zone: TimeZone): boolean {
+  return (task.status === 'done' || task.status === 'dropped') && dayOf(Date.parse(task.statusAt), zone) === today
 }
 
 /**
- * Done or dropped on `today`, a UTC day, by when it took that status (a later note or priority change does not
- * finish it again): the one day the bar counts as done today and the list shows as finished today (view.ts), so the
- * two agree and both turn over at UTC midnight.
+ * Where a task sits on the bar, `today` a day of `zone`; null for one done on an earlier day or dropped, which the
+ * bar leaves out.
  */
-export function isFinishedOn(task: TaskRow, today: string): boolean {
-  return (task.status === 'done' || task.status === 'dropped') && utcDay(Date.parse(task.statusAt)) === today
-}
-
-/** Where a task sits on the bar, `today` a UTC day; null for one done on an earlier day or dropped, which the bar leaves out. */
-export function barStatusOf(task: TaskRow, today: string): BarStatus | null {
+export function barStatusOf(task: TaskRow, today: string, zone: TimeZone): BarStatus | null {
   switch (task.status) {
     case 'done':
-      return isFinishedOn(task, today) ? 'done-today' : null
+      return isFinishedOn(task, today, zone) ? 'done-today' : null
     case 'verifying':
       return 'verifying'
     case 'in-progress':
@@ -87,12 +87,12 @@ export function barStatusOf(task: TaskRow, today: string): BarStatus | null {
   }
 }
 
-/** How many of the area's own tasks sit in each status of the bar, today being the UTC day of `now`. */
-export function barCounts(tasks: readonly TaskRow[], area: string, now: number): BarCounts {
-  const today = utcDay(now)
+/** How many of the area's own tasks sit in each status of the bar, today being the zone's day of the clock's `now`. */
+export function barCounts(tasks: readonly TaskRow[], area: string, { now, zone }: Clock): BarCounts {
+  const today = dayOf(now, zone)
   const counts = noCounts()
   for (const task of tasks) {
-    const status = task.owner === area ? barStatusOf(task, today) : null
+    const status = task.owner === area ? barStatusOf(task, today, zone) : null
     if (status !== null) counts[status]++
   }
   return counts
@@ -189,7 +189,7 @@ export function filterText(status: BarStatus): string {
  */
 export function statusBar(snap: Snapshot, filter: BarStatus | null, width: number): StatusBar | null {
   if (snap.area === null || snap.now === 0) return null
-  const counts = barCounts(snap.tasks, snap.area, snap.now)
+  const counts = barCounts(snap.tasks, snap.area, clockOf(snap))
   if (totalOf(counts) === 0) return null
   const columns = Math.max(1, width)
   const widths = barCells(counts, columns)

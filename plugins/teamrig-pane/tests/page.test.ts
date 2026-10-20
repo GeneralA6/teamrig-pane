@@ -5,7 +5,7 @@ import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { pageBlocks } from '../hooks/page'
 import type { Block, Row } from '../hooks/rows'
-import { HOUR, NOT_PICKED_UP_HOURS, NOW, createLine } from './fixtures'
+import { HOUR, NOW, TEAM_SETTINGS, createLine } from './fixtures'
 
 /** The rows teamrig's reader folds from event lines. */
 function rowsOf(lines: readonly string[]): TaskRow[] {
@@ -16,7 +16,7 @@ const TASKS = rowsOf([
   createLine('T58', { owner: 'etl', by: 'lead', at: NOW - HOUR, title: 'Load the feed' }),
   createLine('T50', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the pages', ref: 'docs/x.md:3', taskKeys: { after: ['T58'] } }),
 ])
-const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: 'pinned', unreadInbox: null, problem: null, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, now: NOW }
+const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: 'pinned', unreadInbox: null, problem: null, ...TEAM_SETTINGS, now: NOW }
 const textOf = (row: Row) => row.spans.map(span => span.text).join('')
 /** A card row's first line on a page: the label padded to the value column, then the value. */
 const labelled = (label: string, value: string) => `${label.padEnd(LABEL_CELLS)}${value}`
@@ -33,13 +33,13 @@ describe('page', () => {
     const card = block?.card ?? []
     expect(card.map(row => row.key.replace('page-card:T50:', ''))).toEqual(['status', 'priority', 'week', 'after', 'goal', 'from', 'added', 'reference'])
     expect(card.map(textOf)).toEqual([
-      labelled('Status', 'not started since 13:00 by lead'),
+      labelled('Status', 'not started since 13:00 UTC by lead'),
       labelled('Priority', '3'),
       labelled('Week', 'Tue 10-13'),
       labelled('After', 'T58 (not started)'),
       labelled('Goal', 'G10.2'),
       labelled('From', 'owner'),
-      labelled('Added', '13:00 by lead'),
+      labelled('Added', '13:00 UTC by lead'),
       labelled('Reference', 'docs/x.md'),
     ])
     expect(card.every(row => row.hang?.text === ' '.repeat(LABEL_CELLS))).toBe(true)

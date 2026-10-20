@@ -2,35 +2,40 @@
 // due: an earlier date of a task that needs it, naming that task), how long it has stood at its status and what
 // holds it (a waiting task's reasons, an open one's unfinished `after`), whom it holds up (the active tasks of other
 // sessions that need it), then what needs a look (late, new, not picked up). An open task's card (card.ts) shows it
-// in place of this line, in the same words. Every date and time is UTC, as teamrig writes them; "today" is the UTC
-// day of the snapshot's clock. Pure: the words change with the clock and the other tasks' statuses, so view.ts's
-// sameView compares them to know when a poll must redraw.
+// in place of this line, in the same words. Every time is on the team zone's clock, zone-marked (`11:55 IDT`), and
+// every day is the zone's, as teamrig prints them (zone.ts); "today" is the zone's day of the snapshot's clock. Pure:
+// the words change with the clock and the other tasks' statuses, so view.ts's sameView compares them to know when a
+// poll must redraw.
 import type { ThemeKey } from 'claude-code'
 import type { TaskRow, TaskStatus } from '../types'
-import { ACTIVE_STATUSES, priorityText, TaskTree, unfinishedAfter, waitText, type EffectiveDue, type WaitContext } from './core/read/index'
+import { ACTIVE_STATUSES, priorityText, TaskTree, TimeZone, unfinishedAfter, waitText, type EffectiveDue, type WaitContext } from './core/read/index'
 import type { Span } from './rows'
-import { utcDay } from './status-bar'
+import { dayOf, zoneNamed, type Clock } from './zone'
 
 const HOUR_MS = 3_600_000
 const DAY_MS = 24 * HOUR_MS
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const
 
 /** overdue: past its due; new: the owner has not touched it yet; unseen: still untouched past the team's hours. */
 export type Flag = 'overdue' | 'new' | 'unseen'
 
-/** What treeOf reads from a snapshot (types/index.d.ts Snapshot): its tasks, its clock and the team's NOT PICKED UP hours. */
-export type TreeSource = { readonly tasks: readonly TaskRow[]; readonly now: number; readonly notPickedUpAfterHours: number }
+/** What treeOf reads from a snapshot (types/index.d.ts Snapshot): its tasks, its clock, the team's NOT PICKED UP hours and zone. */
+export type TreeSource = {
+  readonly tasks: readonly TaskRow[]
+  readonly now: number
+  readonly notPickedUpAfterHours: number
+  readonly timeZone: string
+}
 
 /**
- * teamrig's dependency tree of the snapshot's tasks at its clock (core register/tree.ts), with how long a task may
- * stand untouched by its owner before teamrig's `register check` flags it NOT-PICKED-UP: the team config's
- * `register.check.notPickedUpAfterHours`.
+ * teamrig's dependency tree of the snapshot's tasks at its clock in the team's zone (core register/tree.ts), with how
+ * long a task may stand untouched by its owner before teamrig's `register check` flags it NOT-PICKED-UP: the team
+ * config's `register.check.notPickedUpAfterHours`.
  */
 export class PaneTree extends TaskTree<TaskRow> {
   readonly notPickedUpMs: number
 
-  constructor(tasks: ReadonlyMap<string, TaskRow>, now: Date, notPickedUpAfterHours: number) {
-    super(tasks, now)
+  constructor(tasks: ReadonlyMap<string, TaskRow>, now: Date, zone: TimeZone, notPickedUpAfterHours: number) {
+    super(tasks, now, zone)
     this.notPickedUpMs = notPickedUpAfterHours * HOUR_MS
   }
 }
@@ -50,7 +55,8 @@ const SAYS_SINCE: ReadonlySet<TaskStatus> = new Set<TaskStatus>(['in-progress', 
 
 /**
  * At `tree`'s clock, an active task past its effective due (teamrig's, core register/tree.ts: its own, or an earlier
- * one of an active task that needs it), a date-only due at the end of that UTC day, an unreadable one never.
+ * one of an active task that needs it), a date-only due at the end of that day in the team's zone, an unreadable one
+ * never.
  */
 function isOverdue(task: TaskRow, tree: TaskTree<TaskRow>): boolean {
   const due = tree.dueTime(task)
@@ -69,17 +75,32 @@ export function flagsOf(task: TaskRow, tree: PaneTree): Flag[] {
   return flags
 }
 
-/** `Tue 10-13`: a UTC day with its weekday. */
-export function dayWords(ms: number): string {
+/** `Tue 10-13`: the zone's day of an instant, with its weekday. */
+export function dayWords(ms: number, zone: TimeZone): string {
   const date = new Date(ms)
-  return `${WEEKDAYS[date.getUTCDay()] ?? ''} ${date.toISOString().slice(5, 10)}`
+  return `${zone.weekday(date)} ${zone.day(date).slice(5)}`
 }
 
-/** `11:55` when it happened on the UTC day of `now`, else `Tue 10-13`; an unreadable time as written. */
-export function whenWords(iso: string, now: number): string {
+/**
+ * `Mon 10-12`: a stored day (a task's `week`, the Archive's week: `YYYY-MM-DD`, a day of the team's zone as written)
+ * with its weekday; null when it cannot be read. A calendar day, not an instant: its UTC midnight is that day in UTC.
+ */
+export function storedDayWords(day: string): string | null {
+  const ms = Date.parse(day)
+  return Number.isNaN(ms) ? null : dayWords(ms, TimeZone.UTC)
+}
+
+/** `14:02 IDT`: an instant's time on the zone's clock, zone-marked as teamrig prints one; an unreadable time as written. */
+export function clockWords(iso: string, zone: TimeZone): string {
+  const ms = Date.parse(iso)
+  return Number.isNaN(ms) ? iso : zone.clock(new Date(ms))
+}
+
+/** `11:55 IDT` when it happened on the zone's day of the clock's `now`, else `Tue 10-13`; an unreadable time as written. */
+export function whenWords(iso: string, { now, zone }: Clock): string {
   const ms = Date.parse(iso)
   if (Number.isNaN(ms)) return iso
-  return utcDay(ms) === utcDay(now) ? new Date(ms).toISOString().slice(11, 16) : dayWords(ms)
+  return dayOf(ms, zone) === dayOf(now, zone) ? zone.clock(new Date(ms)) : dayWords(ms, zone)
 }
 
 /** The date the task works to, teamrig's effective due; a task the tree lacks keeps its own, as the tree's dueTime does. */
@@ -89,11 +110,14 @@ function effectiveDueOf(task: TaskRow, tree: TaskTree<TaskRow>): EffectiveDue | 
   return task.due === null || at === undefined ? undefined : { due: task.due, at, from: null }
 }
 
-/** `today 18:00`, `today`, `Fri 10-17 18:00` or `Fri 10-17`: a due at `now`, its time only when written with one. */
-function dateWords(due: EffectiveDue, now: number): string {
-  const day = utcDay(due.at) === utcDay(now) ? 'today' : dayWords(due.at)
-  // A bare day is due at its end, so only a due written with a time names one.
-  return due.due.trim().length > 10 ? `${day} ${new Date(due.at).toISOString().slice(11, 16)}` : day
+/**
+ * `today 18:00 IDT`, `today`, `Fri 10-17 18:00 IDT` or `Fri 10-17`: a due at the clock's `now`, on the zone's
+ * calendar and clock, its time only when written with one.
+ */
+function dateWords(due: EffectiveDue, { now, zone }: Clock): string {
+  const day = dayOf(due.at, zone) === dayOf(now, zone) ? 'today' : dayWords(due.at, zone)
+  // A bare day is due at its end there, so only a due written with a time names one.
+  return due.due.trim().length > 10 ? `${day} ${zone.clock(new Date(due.at))}` : day
 }
 
 /**
@@ -103,14 +127,14 @@ function dateWords(due: EffectiveDue, now: number): string {
 export function dueWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null {
   const due = effectiveDueOf(task, tree)
   if (due === undefined) return task.due === null ? null : task.due.slice(5)
-  const words = dateWords(due, tree.context.now)
+  const words = dateWords(due, tree.context)
   return due.from === null ? words : `${words} (from ${due.from})`
 }
 
 /** `T7 (beta, due Thu 10-22)`: a task that needs another, its owner, and its effective due when it has one. */
 function neederWords(needer: TaskRow, tree: TaskTree<TaskRow>, withDue = true): string {
   const due = withDue ? tree.effectiveDue(needer.id) : undefined
-  const facts = due === undefined ? [needer.owner] : [needer.owner, `due ${dateWords(due, tree.context.now)}`]
+  const facts = due === undefined ? [needer.owner] : [needer.owner, `due ${dateWords(due, tree.context)}`]
   return `${needer.id} (${facts.join(', ')})`
 }
 
@@ -155,15 +179,16 @@ export function lateWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null
  * as in teamrig.
  */
 export function treeOf(snap: TreeSource): PaneTree {
-  return new PaneTree(new Map(snap.tasks.map(task => [task.id, task])), new Date(snap.now), snap.notPickedUpAfterHours)
+  return new PaneTree(new Map(snap.tasks.map(task => [task.id, task])), new Date(snap.now), zoneNamed(snap.timeZone), snap.notPickedUpAfterHours)
 }
 
 /**
- * Why a waiting task waits: its reasons in teamrig's words (`decision owner`, `on T1 ready`, `until Fri 10-16 14:00`),
- * between commas as the meta line's parts take the dots, then its note after `; `. Null with neither.
+ * Why a waiting task waits: its reasons in teamrig's words (`decision owner`, `on T1 ready`,
+ * `until Fri 10-16 14:00 IDT`, a time in the context's zone), between commas as the meta line's parts take the dots,
+ * then its note after `; `. Null with neither.
  */
 export function waitingWords(task: TaskRow, context: WaitContext): string | null {
-  const reasons = task.waits.map(reason => waitText(reason, context)).join(', ')
+  const reasons = task.waits.map(reason => waitText(reason, context.zone, context)).join(', ')
   const words = [reasons, task.note ?? ''].filter(part => part !== '')
   return words.length === 0 ? null : words.join('; ')
 }
@@ -195,7 +220,7 @@ export function metaParts(task: TaskRow, tree: PaneTree, viewer: string | null):
     // Why a waiting task waits, what proves a verifying one; an in-progress note is the card's.
     const why = task.status === 'waiting' ? waitingWords(task, context) : task.status === 'verifying' ? task.note : null
     const color: ThemeKey | undefined = task.status === 'waiting' ? 'error' : undefined
-    parts.push({ text: `${STATUS_WORDS[task.status]} since ${whenWords(task.statusAt, now)}${why === null ? '' : `: ${why}`}`, color })
+    parts.push({ text: `${STATUS_WORDS[task.status]} since ${whenWords(task.statusAt, context)}${why === null ? '' : `: ${why}`}`, color })
   }
   // A plan dependency holds a task only until it starts, and only while one of its tasks is unfinished.
   const first = task.status === 'open' ? unfinishedAfter(task.after, context) : []

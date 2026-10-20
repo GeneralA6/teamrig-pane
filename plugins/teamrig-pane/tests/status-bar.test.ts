@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { BarStatus, Snapshot, TaskRow } from '../types'
-import { readRegister } from '../hooks/core/read/index'
+import { TimeZone, readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { NOTHING_EXPANDED, paneBlocks } from '../hooks/rows'
-import { BAR_LOOK, BAR_STATUSES, barCells, barCounts, drawnText, filterText, inlineBarRows, statusBar, utcDay, type BarCounts, type BarPiece } from '../hooks/status-bar'
+import { BAR_LOOK, BAR_STATUSES, barCells, barCounts, drawnText, filterText, inlineBarRows, statusBar, type BarCounts, type BarPiece } from '../hooks/status-bar'
 import { statusLines } from '../hooks/view'
 import { cells } from '../hooks/width'
-import { HOUR, NOT_PICKED_UP_HOURS, NOW, createLine, statusLine, treeAt, updateLine } from './fixtures'
+import { dayOf } from '../hooks/zone'
+import { HOUR, JERUSALEM, NOW, TEAM_SETTINGS, clockAt, createLine, statusLine, treeAt, updateLine } from './fixtures'
 
 const DAY = 24 * HOUR
 /** The start of NOW's UTC day. */
@@ -32,7 +33,7 @@ const snapshotOf = (tasks: TaskRow[], area: string | null, now = NOW): Snapshot 
   areaSource: 'inbox-read',
   unreadInbox: 0,
   problem: null,
-  notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+  ...TEAM_SETTINGS,
   now,
 })
 
@@ -121,20 +122,41 @@ describe('status bar counts', () => {
       statusLine('T6', 'po', NOW, 'dropped', 'not needed'),
       createLine('T7', { owner: 'etl', by: 'po', at: NOW - HOUR }),
     )
-    expect(barCounts(tasks, 'po', NOW)).toEqual(countsOf({ 'done-today': 1, verifying: 1, working: 1, waiting: 1, 'not-started': 1 }))
+    expect(barCounts(tasks, 'po', clockAt(NOW))).toEqual(countsOf({ 'done-today': 1, verifying: 1, working: 1, waiting: 1, 'not-started': 1 }))
   })
 
-  test('today is the UTC day of the clock: a task done a minute before midnight is not done today', async () => {
+  test("in UTC, today is the clock's UTC day: a task done a minute before midnight is not done today", async () => {
     const tasks = rowsOf(
       createLine('T1', { owner: 'po', by: 'po', at: MIDNIGHT - DAY }),
       statusLine('T1', 'po', MIDNIGHT - 60_000, 'done'),
       createLine('T2', { owner: 'po', by: 'po', at: MIDNIGHT - DAY }),
       statusLine('T2', 'po', MIDNIGHT + 60_000, 'done'),
     )
-    expect(utcDay(MIDNIGHT + 60_000)).toBe('2026-10-13')
-    expect(barCounts(tasks, 'po', MIDNIGHT + 30 * 60_000)['done-today']).toBe(1)
-    expect(barCounts(tasks, 'po', MIDNIGHT - 30_000)['done-today']).toBe(1)
-    expect(barCounts(tasks, 'po', MIDNIGHT + DAY)['done-today']).toBe(0)
+    expect(dayOf(MIDNIGHT + 60_000, TimeZone.UTC)).toBe('2026-10-13')
+    expect(barCounts(tasks, 'po', clockAt(MIDNIGHT + 30 * 60_000))['done-today']).toBe(1)
+    expect(barCounts(tasks, 'po', clockAt(MIDNIGHT - 30_000))['done-today']).toBe(1)
+    expect(barCounts(tasks, 'po', clockAt(MIDNIGHT + DAY))['done-today']).toBe(0)
+  })
+
+  test("in Jerusalem's zone, today turns over at its midnight, 21:00 UTC in summer time", async () => {
+    const jerusalemMidnight = MIDNIGHT - 3 * HOUR
+    const tasks = rowsOf(
+      createLine('T1', { owner: 'po', by: 'po', at: MIDNIGHT - DAY }),
+      statusLine('T1', 'po', jerusalemMidnight - 60_000, 'done'),
+      createLine('T2', { owner: 'po', by: 'po', at: MIDNIGHT - DAY }),
+      statusLine('T2', 'po', jerusalemMidnight + 60_000, 'done'),
+      createLine('T3', { owner: 'po', by: 'po', at: MIDNIGHT - DAY }),
+      statusLine('T3', 'po', MIDNIGHT + 60_000, 'done'),
+    )
+    expect(dayOf(jerusalemMidnight + 60_000, JERUSALEM)).toBe('2026-10-13')
+    expect(dayOf(jerusalemMidnight - 60_000, JERUSALEM)).toBe('2026-10-12')
+    // 00:30 UTC is 03:30 IDT: T2 and T3 are done today there, T3 alone in UTC.
+    expect(barCounts(tasks, 'po', clockAt(MIDNIGHT + 30 * 60_000, JERUSALEM))['done-today']).toBe(2)
+    expect(barCounts(tasks, 'po', clockAt(MIDNIGHT + 30 * 60_000))['done-today']).toBe(1)
+    // 20:59:30 UTC is 23:59:30 IDT, still Monday there: T1 alone.
+    expect(barCounts(tasks, 'po', clockAt(jerusalemMidnight - 30_000, JERUSALEM))['done-today']).toBe(1)
+    const bar = statusBar({ ...snapshotOf(tasks, 'po', MIDNIGHT + 30 * 60_000), timeZone: JERUSALEM.name }, null, 20)
+    expect(textOf(bar?.lines[1])).toBe('2 done today')
   })
 
   test('a task is done today by when it was done: a later update to one done yesterday leaves it out', async () => {
@@ -144,7 +166,7 @@ describe('status bar counts', () => {
       updateLine('T1', 'lead', NOW, { priority: 1 }, 'reprioritized after the fact'),
     )
     expect(tasks[0]?.updatedAt).not.toBe(tasks[0]?.statusAt)
-    expect(barCounts(tasks, 'po', NOW)['done-today']).toBe(0)
+    expect(barCounts(tasks, 'po', clockAt(NOW))['done-today']).toBe(0)
   })
 })
 

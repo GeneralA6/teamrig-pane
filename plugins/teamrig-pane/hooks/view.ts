@@ -4,7 +4,8 @@
 import type { BarStatus, Snapshot, TaskRow, TaskStatus } from '../types'
 import { ACTIVE_STATUSES, type TaskTree } from './core/read/index'
 import { metaText, treeOf, whenWords, type PaneTree } from './meta'
-import { barStatusOf, isFinishedOn, utcDay } from './status-bar'
+import { barStatusOf, isFinishedOn } from './status-bar'
+import { dayOf } from './zone'
 
 /** At most this many tasks done today are listed, and this many asked of others; the heading counts them all. */
 export const MAX_FINISHED = 6
@@ -23,7 +24,10 @@ export type AreaView = {
   waiting: TaskRow[]
   /** How many tasks wait: its own waiting ones and every one it asked of others. */
   waitingTotal: number
-  /** Its tasks done or dropped today, the UTC day of `now` (status-bar.ts isFinishedOn), newest first, at most MAX_FINISHED. */
+  /**
+   * Its tasks done or dropped today, the team zone's day of `now` (status-bar.ts isFinishedOn), newest first, at most
+   * MAX_FINISHED.
+   */
   doneToday: TaskRow[]
   doneTotal: number
   /** How many past the cap were dropped: the status bar's done-today filter lists the done ones alone. */
@@ -52,15 +56,19 @@ export function newestFirst(a: TaskRow, b: TaskRow): number {
   return Date.parse(b.statusAt) - Date.parse(a.statusAt)
 }
 
-/** The area's view of `tasks`, `tree` the dependency tree read over them (meta.ts treeOf), today its clock's UTC day. */
+/**
+ * The area's view of `tasks`, `tree` the dependency tree read over them (meta.ts treeOf), today its clock's day in the
+ * team's zone.
+ */
 export function areaView(tasks: readonly TaskRow[], area: string, tree: TaskTree<TaskRow>): AreaView {
   const planOrder = (a: TaskRow, b: TaskRow) => tree.byPlanOrder(a, b)
   const own = tasks.filter(t => t.owner === area && isActive(t)).sort(planOrder)
   const at = (status: TaskStatus) => own.filter(t => t.status === status)
   const waiting = at('waiting')
   const asked = tasks.filter(t => t.createdBy === area && t.owner !== area && isActive(t)).sort(planOrder)
-  const today = utcDay(tree.context.now)
-  const done = tasks.filter(t => t.owner === area && isFinishedOn(t, today)).sort(newestFirst)
+  const { now, zone } = tree.context
+  const today = dayOf(now, zone)
+  const done = tasks.filter(t => t.owner === area && isFinishedOn(t, today, zone)).sort(newestFirst)
   return {
     area,
     verifying: at('verifying'),
@@ -76,12 +84,13 @@ export function areaView(tasks: readonly TaskRow[], area: string, tree: TaskTree
 
 /**
  * The area's own tasks at one status of the status bar (status-bar.ts), as its filter lists them, today
- * the UTC day of `tree`'s clock: those done today newest first, the others in plan order on `tree`'s effective dues.
+ * the team zone's day of `tree`'s clock: those done today newest first, the others in plan order on `tree`'s effective dues.
  */
 export function statusLines(tasks: readonly TaskRow[], area: string, tree: TaskTree<TaskRow>, status: BarStatus): TaskRow[] {
-  const today = utcDay(tree.context.now)
+  const { now, zone } = tree.context
+  const today = dayOf(now, zone)
   const order = status === 'done-today' ? newestFirst : (a: TaskRow, b: TaskRow) => tree.byPlanOrder(a, b)
-  return tasks.filter(t => t.owner === area && barStatusOf(t, today) === status).sort(order)
+  return tasks.filter(t => t.owner === area && barStatusOf(t, today, zone) === status).sort(order)
 }
 
 /** Every owner with active tasks, by name, each list verifying first, then in plan order on `tree`'s effective dues. */
@@ -144,13 +153,15 @@ function sameValue(a: FieldValue, b: FieldValue): boolean {
  * `since` words (card.ts: an open task's too, which its meta line leaves out), whether a finished one is done today.
  */
 function timeLabel(task: TaskRow, tree: PaneTree): string {
-  const now = tree.context.now
-  return isActive(task) ? `${metaText(task, tree)} · ${whenWords(task.statusAt, now)}` : String(isFinishedOn(task, utcDay(now)))
+  const { now, zone } = tree.context
+  return isActive(task)
+    ? `${metaText(task, tree)} · ${whenWords(task.statusAt, tree.context)}`
+    : String(isFinishedOn(task, dayOf(now, zone), zone))
 }
 
 /**
  * Whether two snapshots draw the same pane: the same fields and tasks, and the same labels at
- * their own `now`. Each write of the snapshot redraws the pane, so one that draws the same is skipped.
+ * their own `now` in their own zone. Each write of the snapshot redraws the pane, so one that draws the same is skipped.
  */
 export function sameView(a: Snapshot, b: Snapshot): boolean {
   if (
@@ -158,7 +169,8 @@ export function sameView(a: Snapshot, b: Snapshot): boolean {
     a.areaSource !== b.areaSource ||
     a.unreadInbox !== b.unreadInbox ||
     a.problem !== b.problem ||
-    a.notPickedUpAfterHours !== b.notPickedUpAfterHours
+    a.notPickedUpAfterHours !== b.notPickedUpAfterHours ||
+    a.timeZone !== b.timeZone
   )
     return false
   if (a.tasks.length !== b.tasks.length) return false
