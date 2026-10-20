@@ -308,9 +308,9 @@ replies alone). Until there is one it says why: no team, no turn log yet (teamri
 
 A press on a session (a click, or Enter on it) opens its page under a `back` button (`b`): a head with the session and
 how many lines it shows, then its lines oldest first, so the newest is at the end, where the page opens. Each prompt and
-reply has a head line (`prompt · 20:05`, `reply · 20:06`, a time of an earlier day with its day) over its text, a long
+reply has a head line (`prompt · 20:05 IDT`, `reply · 20:06 IDT`, a time of an earlier day with its day) over its text, a long
 reply wrapped under its own indent; teamrig keeps a text's last 64,000 characters, and a cut one says `cut, its end
-kept`. A `/clear` is a dim rule, `── 20:07 · context cleared (/clear) ──`. The page holds the newest 256 KiB of text and
+kept`. A `/clear` is a dim rule, `── 20:07 IDT · context cleared (/clear) ──`. The page holds the newest 256 KiB of text and
 says when it left older lines out; a file it could not read is named in a `Not all read` line, and the rest still
 shows.
 

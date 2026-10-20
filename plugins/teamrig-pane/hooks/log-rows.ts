@@ -3,12 +3,13 @@
 // line; a press on a session opens its page. The page: the session's lines of the last LOG_HOURS, oldest first (the
 // view opens it at its end), each prompt and reply a head (what it is, when, whether teamrig cut it) over its text,
 // one block per paragraph as a file page splits them (file-page.ts), so the window draws only the paragraphs in
-// sight; a clear or compaction of the context is one dim rule. Times are UTC, as teamrig writes them. Pure.
+// sight; a clear or compaction of the context is one dim rule. teamrig writes UTC times; each prints on the team's
+// clock, zone-marked (zone.ts). Pure.
 import type { LogList, LogPage, LogSession, TurnEntry } from '../types'
 import { paragraphs, type Paragraph } from './file-page'
-import { dayWords } from './meta'
 import { SEPARATOR, single, type Block, type Row, type Span } from './rows'
 import { LOG_HOURS, LOG_PAGE_CHARS } from './turn-log'
+import { dayOf, type Clock } from './zone'
 
 const LIST = 'log'
 const PAGE = 'log-page'
@@ -20,12 +21,12 @@ export function sessionKey(id: string): string {
   return `${LIST}:session:${id}`
 }
 
-/** `21:04` on the UTC day of `now`, else `Mon 10-19 21:04`; an unreadable time as written. */
-function timeWords(iso: string, now: number): string {
+/** `21:04 IDT` on the zone's day of the clock's `now`, else `Mon 10-19 21:04 IDT`; an unreadable time as written. */
+function timeWords(iso: string, { now, zone }: Clock): string {
   const ms = Date.parse(iso)
   if (Number.isNaN(ms)) return iso
-  const time = new Date(ms).toISOString().slice(11, 16)
-  return new Date(ms).toISOString().slice(0, 10) === new Date(now).toISOString().slice(0, 10) ? time : `${dayWords(ms)} ${time}`
+  const date = new Date(ms)
+  return dayOf(ms, zone) === dayOf(now, zone) ? zone.clock(date) : zone.weekdayMinute(date)
 }
 
 function note(key: string, text: string): Block {
@@ -33,9 +34,9 @@ function note(key: string, text: string): Block {
 }
 
 /** A session's row: its id and when its log last changed, over its newest prompt; a press opens its page. */
-function sessionBlock(session: LogSession, now: number): Block {
+function sessionBlock(session: LogSession, clock: Clock): Block {
   const key = sessionKey(session.id)
-  const when = timeWords(new Date(session.changedAt).toISOString(), now)
+  const when = timeWords(new Date(session.changedAt).toISOString(), clock)
   const prompt = session.lastPrompt ?? `no prompt in the last ${LOG_HOURS} h`
   return {
     key,
@@ -47,8 +48,8 @@ function sessionBlock(session: LogSession, now: number): Block {
   }
 }
 
-/** The Log view's list at `now`, or why it has none. */
-export function logListBlocks(list: LogList, now: number): Block[] {
+/** The Log view's list at the clock, or why it has none. */
+export function logListBlocks(list: LogList, clock: Clock): Block[] {
   switch (list.kind) {
     case 'reading':
       return [note(`${LIST}:note`, 'Reading the turn logs…')]
@@ -62,7 +63,7 @@ export function logListBlocks(list: LogList, now: number): Block[] {
       if (list.sessions.length === 0) return [note(`${LIST}:note`, `No session wrote a prompt or a reply in the last ${LOG_HOURS} h.`)]
       return [
         note(`${LIST}:intro`, `Each session's prompts and replies of the last ${LOG_HOURS} h, the newest change first.`),
-        ...list.sessions.map(session => sessionBlock(session, now)),
+        ...list.sessions.map(session => sessionBlock(session, clock)),
       ]
   }
 }
@@ -82,8 +83,8 @@ const KIND_WORDS: Readonly<Record<'prompt' | 'reply', Span>> = {
 }
 
 /** One entry's blocks under `key`: a clear's rule, or a prompt's or reply's head with its first paragraph, then its other paragraphs. */
-function entryBlocks(entry: TurnEntry, key: string, now: number): Block[] {
-  const when = timeWords(entry.at, now)
+function entryBlocks(entry: TurnEntry, key: string, clock: Clock): Block[] {
+  const when = timeWords(entry.at, clock)
   if (entry.kind === 'clear') return [note(key, `── ${when} · ${entry.text} ──`)]
   const cut: Span[] = entry.isCut ? [SEPARATOR, { text: 'cut, its end kept', dim: true }] : []
   const head: Row = { key, spans: [KIND_WORDS[entry.kind], SEPARATOR, { text: when, dim: true }, ...cut] }
@@ -105,8 +106,8 @@ function entryKeys(entries: readonly TurnEntry[]): string[] {
   })
 }
 
-/** A session's page at `now`: its name and what it holds, a note for what it leaves out or could not read, then its lines. */
-export function logPageBlocks(page: LogPage, now: number): Block[] {
+/** A session's page at the clock: its name and what it holds, a note for what it leaves out or could not read, then its lines. */
+export function logPageBlocks(page: LogPage, clock: Clock): Block[] {
   const count = page.entries.length
   const title: Block = {
     key: PAGE,
@@ -119,5 +120,5 @@ export function logPageBlocks(page: LogPage, now: number): Block[] {
   const problem = page.problem === null ? [] : [single(`${PAGE}:problem`, [{ text: `Not all read: ${page.problem.replace(/\.$/, '')}.`, color: 'warning' }])]
   if (count === 0) return [title, ...problem, note(`${PAGE}:empty`, `Nothing in the last ${LOG_HOURS} h.`)]
   const keys = entryKeys(page.entries)
-  return [title, ...cut, ...problem, ...page.entries.flatMap((entry, i) => entryBlocks(entry, keys[i] ?? `${PAGE}:${i}`, now))]
+  return [title, ...cut, ...problem, ...page.entries.flatMap((entry, i) => entryBlocks(entry, keys[i] ?? `${PAGE}:${i}`, clock))]
 }

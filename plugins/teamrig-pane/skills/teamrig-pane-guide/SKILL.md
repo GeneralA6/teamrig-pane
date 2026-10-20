@@ -443,7 +443,7 @@ so a `/clear` or a compaction never takes away what a tab showed. With no team, 
 while the team's `turnLog.enabled` is off) or a folder it cannot read, the view says which.
 
 A press on a session (a click, or Enter on it) opens its page under `back` (`b`): its lines oldest first, the newest at
-the end where the page opens. Each prompt and reply is a head line (`prompt · 20:05`) over its text; a `/clear` is a dim
+the end where the page opens. Each prompt and reply is a head line (`prompt · 20:05 IDT`) over its text; a `/clear` is a dim
 rule. teamrig keeps a text's last 64,000 characters, and a cut one says `cut, its end kept`. The page holds the newest
 256 KiB of text and says when it left older lines out. Log, from a page or another view, shows the list; above the
 prompt the list shows, never a page.
