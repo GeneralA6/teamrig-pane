@@ -10,7 +10,7 @@ import type { BarStatus, ExpandedTasks, RefFile, Snapshot, TaskRow, TaskStatus, 
 import { cardRows } from './card'
 import { COMMAND } from './command'
 import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
-import { BAR_LOOK } from './status-bar'
+import { BAR_LOOK, type BarCounts } from './status-bar'
 import { areaView, ownerGroups, statusLines } from './view'
 import { cells } from './width'
 
@@ -137,13 +137,12 @@ function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: PaneTree, viewe
 }
 
 /**
- * The dim line under Done today when the cap cut `more` of its tasks: how many, how many of those were dropped,
- * and the key that lists today's done ones in full (the status bar's filter, which leaves the dropped ones out).
+ * The dim line under a section the cap cut `left` of (Waiting past the tasks asked of others, Done today; view.ts):
+ * how many, and the key of the status bar's filter, which lists every task the section holds.
  */
-export function doneMoreText(more: number, dropped: number): string {
-  const droppedText = dropped > 0 ? ` (${dropped} dropped)` : ''
-  const list = more > dropped ? `: press ${BAR_LOOK['done-today'].hotkey} to list today's done` : ''
-  return `${more} more${droppedText}${list}`
+export function moreText(status: BarStatus, left: number): string {
+  const more = status === 'waiting' ? `${left} more asked of others` : `${left} more`
+  return `${more}: press ${BAR_LOOK[status].hotkey} to list them all`
 }
 
 /** `── label ───────`, ruled to the body's edge, a blank line above it: a Changes view heading. */
@@ -156,24 +155,26 @@ function sectionHeading(key: string, name: Span, count: string): Block {
   return { key, opensSection: true, rows: [{ key, spans: [{ ...name, bold: true }, { text: count, dim: true }] }] }
 }
 
-/**
- * A section of tasks: its heading counting all `total`, its blocks, and a dim line naming how many the cap left out
- * and where they show (`moreText`). An empty section draws nothing.
- */
-function section(key: string, name: Span, total: number, blocks: Block[], moreText = (left: number) => `${left} more`): Block[] {
-  if (total === 0) return []
-  const left = total - blocks.length
-  const rest = left > 0 ? [single(`${key}-more`, [{ text: moreText(left), dim: true }])] : []
-  return [sectionHeading(key, name, ` (${total})`), ...blocks, ...rest]
-}
-
-/** The section a status bar filter's tasks are keyed by, as the full list keys them. */
-const FILTER_SECTION: Readonly<Record<BarStatus, string>> = {
+/** The key of each status's section: its tasks' blocks are keyed by it in the full list and in the status's filter. */
+const SECTION_KEY: Readonly<Record<BarStatus, string>> = {
   'done-today': 'done',
   verifying: 'verifying',
   working: 'working',
   waiting: 'waiting',
   'not-started': 'next',
+}
+
+/**
+ * The section of the tasks at `status`: its heading with the status bar's count of them (`counts`, view.ts areaView),
+ * its blocks, and a dim line naming how many the cap left out (moreText). An empty section draws nothing.
+ */
+function section(status: BarStatus, name: Span, counts: BarCounts, blocks: Block[]): Block[] {
+  const total = counts[status]
+  if (total === 0) return []
+  const key = SECTION_KEY[status]
+  const left = total - blocks.length
+  const rest = left > 0 ? [single(`${key}-more`, [{ text: moreText(status, left), dim: true }])] : []
+  return [sectionHeading(key, name, ` (${total})`), ...blocks, ...rest]
 }
 
 /** The area's tasks at the status the bar filters to, under no heading: what the filter's line names. */
@@ -182,12 +183,12 @@ function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expande
   const tasks = statusLines(snap.tasks, area, tree, filter)
   if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
   if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, tree, area))
-  return tasks.map(task => taskBlock(FILTER_SECTION[filter], task, expanded, tree, area))
+  return tasks.map(task => taskBlock(SECTION_KEY[filter], task, expanded, tree, area))
 }
 
 /**
  * The area's tasks in sections: Verifying (the ones to close first), Working on, Up next, Waiting (its waiting
- * tasks, then those it asked of others) and Done today.
+ * tasks, then those it asked of others) and Done today, one per status of the status bar, each heading its count.
  */
 function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null): Block[] {
   if (snap.area === null) return [single('no-area', [{ text: NO_AREA, dim: true }])]
@@ -204,15 +205,15 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   // Filtered from the status bar, the header leads that status's tasks alone.
   if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
-  const tasks = (key: string, list: readonly TaskRow[]) => list.map(task => taskBlock(key, task, expanded, tree, view.area))
+  const tasks = (status: BarStatus, list: readonly TaskRow[]) => list.map(task => taskBlock(SECTION_KEY[status], task, expanded, tree, view.area))
   const done = view.doneToday.map(task => doneBlock(task, expanded, tree, view.area))
   return [
     ...blocks,
-    ...section('verifying', { text: 'Verifying', color: 'success' }, view.verifying.length, tasks('verifying', view.verifying)),
-    ...section('working', { text: 'Working on' }, view.working.length, tasks('working', view.working)),
-    ...section('next', { text: 'Up next' }, view.upNext.length, tasks('next', view.upNext)),
-    ...section('waiting', { text: 'Waiting' }, view.waitingTotal, tasks('waiting', view.waiting), left => `${left} more asked of others: the all view lists them`),
-    ...section('done', { text: 'Done today' }, view.doneTotal, done, left => doneMoreText(left, view.doneMoreDropped)),
+    ...section('verifying', { text: 'Verifying', color: 'success' }, view.counts, tasks('verifying', view.verifying)),
+    ...section('working', { text: 'Working on' }, view.counts, tasks('working', view.working)),
+    ...section('not-started', { text: 'Up next' }, view.counts, tasks('not-started', view.upNext)),
+    ...section('waiting', { text: 'Waiting' }, view.counts, tasks('waiting', view.waiting)),
+    ...section('done-today', { text: 'Done today' }, view.counts, done),
   ]
 }
 

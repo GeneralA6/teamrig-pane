@@ -242,7 +242,7 @@ test("with no team config, the session's TZ is the team's zone: every time print
   expect(await pane.find({ text: /p1 · waiting since 17:00 IDT: needs owner paste/ })).toBeDefined()
 })
 
-test("the area's Tasks view leads with a bar of its tasks by status and their counts; the all and Changes views draw none", async ($, on) => {
+test("the area's Tasks view leads with a bar of its tasks by status and their counts, what it asked of others waiting; the all and Changes views draw none", async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' }),
@@ -257,12 +257,13 @@ test("the area's Tasks view leads with a bar of its tasks by status and their co
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
+  // T5, asked of security, is waiting, as its section is; T3, done on an earlier day, is left out.
   const segments = await pane.findAll({ type: 'Text', text: /^[█▓░]+$/ })
-  expect(segments.map(found => found.text)).toEqual(['█'.repeat(16), '▓'.repeat(16), '░'.repeat(16)])
-  expect(segments.map(found => found.props['color'])).toEqual(['success', 'success', undefined])
-  for (const count of ['1 done today', '1 verifying', '1 not started'])
+  expect(segments.map(found => found.text)).toEqual(['█'.repeat(12), '▓'.repeat(12), '█'.repeat(12), '░'.repeat(12)])
+  expect(segments.map(found => found.props['color'])).toEqual(['success', 'success', 'error', undefined])
+  for (const count of ['1 done today', '1 verifying', '1 waiting', '1 not started'])
     expect(await pane.find({ type: 'Text', text: count })).toBeDefined()
-  expect(await pane.find({ text: /working|waiting/ })).toBeUndefined()
+  expect(await pane.find({ text: /working/ })).toBeUndefined()
   // The bar sits between the switch and the tasks.
   const drawn = await pane.drawn()
   const rootKeys = childrenOf(drawn).map(child => propsOf(child)).map(props => (props !== null && 'key' in props ? props.key : null))

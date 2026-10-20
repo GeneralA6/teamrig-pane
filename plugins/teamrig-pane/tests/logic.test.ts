@@ -6,7 +6,7 @@ import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
 import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
-import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, doneMoreText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
+import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
@@ -222,7 +222,7 @@ describe('view', () => {
     const tasks = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 4 }), statusLine('T1', 'po', NOW, 'waiting', 'needs owner'), ...asked)
     const view = areaView(tasks, 'po', treeAt(tasks, NOW))
     expect(view.waiting.map(t => t.id)).toEqual(['T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17'])
-    expect(view.waitingTotal).toBe(11)
+    expect(view.counts.waiting).toBe(11)
   })
 
   test('done today is its tasks done or dropped on the UTC day of the clock, newest first, the day the bar counts', async () => {
@@ -239,9 +239,9 @@ describe('view', () => {
     )
     const view = areaView(tasks, 'po', treeAt(tasks, NOW))
     expect(view.doneToday.map(t => t.id)).toEqual(['T3', 'T1'])
-    expect([view.doneTotal, view.doneMoreDropped]).toEqual([2, 0])
-    expect(barCounts(tasks, 'po', clockAt(NOW))['done-today']).toBe(view.doneToday.filter(t => t.status === 'done').length)
-    expect(areaView(tasks, 'po', treeAt(tasks, Date.UTC(2026, 9, 14))).doneTotal).toBe(0)
+    expect(view.counts['done-today']).toBe(2)
+    expect(barCounts(tasks, 'po', clockAt(NOW))['done-today']).toBe(view.doneToday.length)
+    expect(areaView(tasks, 'po', treeAt(tasks, Date.UTC(2026, 9, 14))).counts['done-today']).toBe(0)
   })
 
   test('two snapshots draw the same pane unless a field, a task or a time label differs', async () => {
@@ -367,7 +367,7 @@ describe('rows', () => {
     expect(blockAt(blocks, 'done:T3')?.toggle).toBe('T3')
   })
 
-  test('done today names its total and, past the cap, how many it cut, the dropped ones, and the key listing the done ones', async () => {
+  test('done today names its total and, past the cap, how many it cut and the key whose filter lists them all, dropped ones too', async () => {
     // Seven done, then two dropped earlier: the newest six show; the seventh done and both dropped are cut.
     const lines = Array.from({ length: 9 }, (_, i) => [
       createLine(`T${i + 1}`, { owner: 'po', by: 'po', at: NOW - 2 * HOUR }),
@@ -379,10 +379,10 @@ describe('rows', () => {
     expect(textAt(blocks, 'done')).toBe('Done today (9)')
     const shown = Array.from({ length: 6 }, (_, i) => `done:T${i + 1}`)
     expect(blocks.map(b => b.key).slice(-7)).toEqual([...shown, 'done-more'])
-    expect(rowAt(blocks, 'done-more')?.spans).toEqual([{ text: "3 more (2 dropped): press o to list today's done", dim: true }])
-    // The status bar's done-today filter lists all seven done, uncapped.
+    expect(rowAt(blocks, 'done-more')?.spans).toEqual([{ text: '3 more: press o to list them all', dim: true }])
+    // The status bar's done-today filter lists all nine, uncapped.
     const filtered = paneBlocks(snapshotOf(tasks, 'po'), 'mine', NOTHING_EXPANDED, 'done-today')
-    expect(filtered.map(b => b.key)).toEqual(['header', ...shown, 'done:T7'])
+    expect(filtered.map(b => b.key)).toEqual(['header', ...shown, 'done:T7', 'done:T8', 'done:T9'])
     // Six finished draw no more line.
     expect(paneBlocks(snapshotOf(fold(...lines.slice(0, 12)), 'po'), 'mine').map(b => b.key)).not.toContain('done-more')
   })
@@ -443,10 +443,9 @@ describe('rows', () => {
     expect(dockLayout(paneBlocks({ ...snapshotOf(tasks, 'po'), unreadInbox: null }, 'mine'), 40)[0]?.parts).toBeUndefined()
   })
 
-  test('the more line names the key only when a done task is among the cut ones', async () => {
-    expect(doneMoreText(3, 0)).toBe("3 more: press o to list today's done")
-    expect(doneMoreText(3, 1)).toBe("3 more (1 dropped): press o to list today's done")
-    expect(doneMoreText(2, 2)).toBe('2 more (2 dropped)')
+  test("the more line names how many the cap cut and the key of the status bar's filter that lists them all", async () => {
+    expect(moreText('done-today', 3)).toBe('3 more: press o to list them all')
+    expect(moreText('waiting', 2)).toBe('2 more asked of others: press i to list them all')
   })
 
   test('the sections run Verifying, Working on, Up next, Waiting and Done today; an empty one draws nothing', async () => {
@@ -501,11 +500,14 @@ describe('rows', () => {
     const blocks = paneBlocks(snapshotOf(fold(...asked, ...done), 'po'), 'mine')
     expect(textAt(blocks, 'waiting')).toBe('Waiting (10)')
     expect(blocks.filter(b => b.key.startsWith('waiting:')).length).toBe(8)
-    expect(textAt(blocks, 'waiting-more')).toBe('2 more asked of others: the all view lists them')
+    expect(textAt(blocks, 'waiting-more')).toBe('2 more asked of others: press i to list them all')
     expect(textAt(blocks, 'done')).toBe('Done today (8)')
     expect(blocks.filter(b => b.key.startsWith('done:')).map(b => b.key)).toEqual(['done:T30', 'done:T31', 'done:T32', 'done:T33', 'done:T34', 'done:T35'])
-    expect(rowAt(blocks, 'done-more')?.spans).toEqual([{ text: "2 more: press o to list today's done", dim: true }])
+    expect(rowAt(blocks, 'done-more')?.spans).toEqual([{ text: '2 more: press o to list them all', dim: true }])
     expect(blocks.at(-1)?.key).toBe('done-more')
+    // The waiting filter lists all ten asked of others, in plan order (on one priority and no due, by id).
+    const filtered = paneBlocks(snapshotOf(fold(...asked, ...done), 'po'), 'mine', NOTHING_EXPANDED, 'waiting')
+    expect(filtered.map(b => b.key)).toEqual(['header', ...Array.from({ length: 10 }, (_, i) => `waiting:T${i + 10}`)])
   })
 
   test('a snapshot never read says the register is being read, not that the session has no area; a failed first read shows why', () => {
