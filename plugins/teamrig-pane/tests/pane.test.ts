@@ -1318,7 +1318,7 @@ test('a press on a session opens its page: its lines oldest first, under back, k
   expect(await pane.find({ text: /^lead · / })).toBeUndefined()
   expect(await drawnLines(pane)).toContain('last 24 h · 3 lines, the newest last')
   const lines = async () => (await drawnLines(pane)).filter(line => /^(prompt|reply) · |^── |^Ship|^Next/.test(line))
-  expect(await lines()).toEqual(['prompt · 13:20', 'Ship the log view', 'reply · 13:21', 'Shipped it', '── 13:22 · context cleared (/clear) ──'])
+  expect(await lines()).toEqual(['prompt · 13:20 UTC', 'Ship the log view', 'reply · 13:21 UTC', 'Shipped it', '── 13:22 UTC · context cleared (/clear) ──'])
 
   disk.write(`${WEB_LOG}/api/2026-10-13T13.jsonl`, [
     turnLine(40, 'prompt', 'Ship the log view'),

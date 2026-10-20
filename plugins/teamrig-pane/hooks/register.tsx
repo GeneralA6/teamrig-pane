@@ -608,8 +608,8 @@ export const register: Register = on => {
             : current === 'changes'
               ? changesBlocks(changed, isGitMissing(missing), await read($, diffs))
               : logShown === null
-                ? logListBlocks(await read($, logList), snap.now)
-                : logPageBlocks(logShown, snap.now)
+                ? logListBlocks(await read($, logList), clockOf(snap))
+                : logPageBlocks(logShown, clockOf(snap))
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
