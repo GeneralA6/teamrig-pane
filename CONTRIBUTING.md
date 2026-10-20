@@ -27,7 +27,9 @@ Every change ships tests, so the next change cannot break it unnoticed:
   fails on the old code: run it before the fix and watch it fail.
 - The plugin's tests live in `plugins/teamrig-pane/tests/` and run under Claude Code's plugin test
   runner, in the environment the plugin's hooks run in, with the engine's fakes for files, git, the
-  clock and the store: `npm run pane-test` (`claude plugin test plugins/teamrig-pane`).
+  clock and the store: `npm run pane-test` (`claude plugin test plugins/teamrig-pane`). That runner
+  refuses a dynamic `import()`, so a plugin script that acts only when imported (the golden capture's
+  `node --import` clock preload) is tested under node in `tools/pane-scripts/`.
 - The repository tools' tests live beside the code as `<name>.test.ts` under `tools/` (`node:test`):
   `npm test`. They run on Linux, Windows and macOS: build paths with `path.join`, never with literal
   separators.
