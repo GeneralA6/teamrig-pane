@@ -700,7 +700,9 @@ test('a title line leads the docked tasks, Changes and Log views: the session, i
   }
   // Above the prompt the band beside the pane names the session, so the pane spends no row of its few on it.
   await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
-  expect(keyedNode(await pane.drawn(), 'title')).toBeNull()
+  const inline = await pane.drawn()
+  expect(childrenOf(keyedNode(inline, 'controls'))[0]).toBe(keyedNode(inline, 'switch'))
+  expect(await pane.find({ text: /team web/ })).toBeUndefined()
 })
 
 test('the settings file in the kit home names the folders, ~/ under the home folder', async ($, on) => {
@@ -1048,9 +1050,11 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log'])
   // The strip is the switch alone: the title comes back with the pane.
-  expect(keyedNode(await pane.drawn(), 'title')).toBeNull()
+  expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(['minimized'])
   await pane.press({ key: 'tasks' })
-  expect(keyedNode(await pane.drawn(), 'title')).not.toBeNull()
+  const title = childrenOf(keyedNode(await pane.drawn(), 'controls'))[0]
+  expect(typeOf(title)).toBe('Text')
+  expect(screenOf(title)).toEqual(['po'])
   expect(buttonKeys(await pane.drawn())).not.toContain(BANNER_KEY)
   expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
 })
@@ -1573,6 +1577,7 @@ test("a task id in an open card opens that task's page: its title and card alone
 
   await pane.press({ key: gotoKey(drawn, 'T58') })
   expect(screenOf(await pane.drawn())).toEqual([
+    ' po',
     ' Tasks Changes Log',
     ' Find',
     ' Keys go to Claude · click the field to search',
@@ -1700,6 +1705,7 @@ test("a reference file in an open card opens as a page: its name, where it was r
 
   await pane.press({ key: toFile })
   expect(screenOf(await pane.drawn())).toEqual([
+    ' po',
     ' Tasks Changes Log',
     ' Find',
     ' Keys go to Claude · click the field to search',
@@ -1805,6 +1811,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   expect(drawnField(drawn)).toEqual({ key: 'find', value: '' })
   // The active matches in plan order, each a press with a dim line of whose it is; the Find field draws no words.
   expect(screenOf(drawn)).toEqual([
+    ' po',
     ' Tasks Changes Log',
     ' Find  clear',
     ' Keys go to Claude · click the field to search',
@@ -2005,6 +2012,7 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   expect(buttonKeys(drawn)).not.toContain('next')
   expect(await pane.find({ type: 'Text', text: /^next ›$/ })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(drawn)).toEqual([
+    ' po',
     ' Tasks Changes Log',
     ' Find',
     ' Keys go to Claude · click the field to search',
