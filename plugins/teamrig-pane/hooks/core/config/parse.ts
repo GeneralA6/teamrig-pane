@@ -1,7 +1,11 @@
 // Copied from teamrig's src/config/parse.ts by scripts/sync-core.ts: change it there, then run the sync.
+import { deployTargetsOf } from '../coordinator/targets.ts';
 import { isRecord, type JsonRecord } from '../core/guards.ts';
 import { NAME_PATTERN, NAME_RULE } from '../core/ids.ts';
-import { isTaskStatus, LEGACY_WAITING_HINT, LEGACY_WAITING_STATUS, SESSION_NAME, TASK_STATUSES, type TaskStatus } from '../register/model.ts';
+import { isMinuteInSpan, utcMinuteOf } from '../core/time.ts';
+import { TimeZone } from '../core/zone.ts';
+import { FOLLOWUP_STATUSES, isTaskStatus, LEGACY_WAITING_HINT, LEGACY_WAITING_STATUS, SESSION_NAME, TASK_STATUSES, type TaskStatus } from '../register/model.ts';
+import { PREFIX_PATTERN } from '../readonly-shell/rules.ts';
 import { CORE_RULE_KEYS, isCoreRuleKey } from '../rules/keys.ts';
 import {
   DEFAULT_ALERTS,
@@ -9,30 +13,45 @@ import {
   DEFAULT_BURST,
   DEFAULT_COMMITS,
   DEFAULT_CONTEXT_FILES,
+  DEFAULT_CLAIMS,
+  DEFAULT_COORDINATOR_WAIT,
+  DEFAULT_GATE_TIMEOUT_SECONDS,
   DEFAULT_GITHUB,
+  DEFAULT_HEAVY,
   DEFAULT_HIRING,
   DEFAULT_LOCK,
   DEFAULT_LEAD_BOUNDARY,
+  DEFAULT_TURN_LOG,
   DEFAULT_LOOPS,
   DEFAULT_MESSAGES,
   DEFAULT_OPEN,
   DEFAULT_OWNER_GATES,
+  DEFAULT_COMMIT_GUARD,
+  DEFAULT_PACKAGE_GUARD,
+  DEFAULT_PROMPTS,
   DEFAULT_PUSH_GUARD,
+  DEFAULT_READONLY_SHELL,
   DEFAULT_REFRESH,
   DEFAULT_REGISTER,
+  DEFAULT_SCALE_OUT,
   DEFAULT_SESSION_SHARE,
   DEFAULT_SKILLS,
+  DEFAULT_STATUS_LINE,
   DEFAULT_TESTS,
   DEFAULT_WAKE,
+  DEFAULT_WINDOWS,
+  HEAVY_TTL_MARGIN_MINUTES,
 } from './defaults.ts';
 import { isEffort, isModel } from './launch.ts';
 import { CONFIG_LIMITS, RULE_CONFLICT_LIMITS } from './limits.ts';
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
 import {
+  AD_HOC_RUNNERS,
   BURST_POLICIES,
   CONFLICT_WINNERS,
   ESCALATIONS,
   HIRING_POLICIES,
+  isAdHocRunners,
   isBurstPolicy,
   isCommitGate,
   isConflictWinner,
@@ -40,20 +59,30 @@ import {
   isEscalation,
   isHiringPolicy,
   isOverAction,
+  isHookAsks,
   isPushToProtected,
+  isSkipHooks,
   isTerminalChoice,
   isVerifyGate,
   isWeekday,
+  HOOK_ASKS,
   OVER_ACTIONS,
   PUSH_TO_PROTECTED,
+  SKIP_HOOKS,
   TERMINALS,
   type ContextFilesConfig,
   VERIFY_GATES,
   WEEKDAYS,
+  type AdHocRunners,
   type BudgetConfig,
   type BudgetLiftConfig,
   type BudgetReset,
   type BurstConfig,
+  type CoordinatorConfig,
+  type CoordinatorRepoConfig,
+  type HeavyConfig,
+  type RollConfig,
+  type RollGateConfig,
   type CommitsConfig,
   type GithubConfig,
   type HiringConfig,
@@ -64,14 +93,21 @@ import {
   type OpenConfig,
   type PathsConfig,
   type PushToProtected,
+  type HookAsks,
   type QuietHours,
+  type SkipHooks,
+  type ReadonlyShellConfig,
+  type ScaleOutConfig,
   type RefreshConfig,
   type RegisterConfig,
   type SessionBudget,
   type SkillsConfig,
+  type StatusLineConfig,
   type PriorityConfig,
   type TeamLink,
+  type TurnLogConfig,
   type WakeConfig,
+  type WindowsConfig,
 } from './types.ts';
 
 export interface ConfigParse {
@@ -82,6 +118,8 @@ export interface ConfigParse {
 
 const isSessionName: Check<string> = (name) =>
   SESSION_NAME.test(name) ? undefined : 'expected a lowercase name: a letter, then letters, digits or -, at most 32';
+
+const isTimeZone: Check<string> = (name) => (TimeZone.of(name) === undefined ? 'expected an IANA time zone name such as Asia/Jerusalem' : undefined);
 
 const isUtcTime: Check<string> = (time) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? undefined : 'expected a UTC time as HH:MM');
 
@@ -199,22 +237,20 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
   const names = readNames(read, read.section(raw, 'names', ''), sessions);
   const launch = readLaunch(read, read.section(raw, 'launch', ''), sessions);
   const team = readTeam(read, raw);
+  const timeZone = read.optionalString(raw, 'timeZone', '', isTimeZone);
 
   const messages = read.section(raw, 'messages', '');
   const pushGuard = read.section(raw, 'pushGuard', '');
-  const coordinator = read.section(raw, 'coordinator', '');
-  const schedule = read.section(coordinator, 'schedule', 'coordinator');
-  if (coordinator[MOVED_BUDGET_KEY] !== undefined) {
-    read.report(`coordinator.${MOVED_BUDGET_KEY}`, 'was moved: use the top-level budget block');
-  }
-  const heavyCutoffUtc = read.optionalString(schedule, 'heavyCutoffUtc', 'coordinator.schedule', isUtcTime);
   const alerts = read.section(raw, 'alerts', '');
   const lock = read.section(raw, 'lock', '');
   const tabStatus = read.section(raw, 'tabStatus', '');
+  const pickerGuard = read.section(raw, 'pickerGuard', '');
+  const budget = parseBudget(read, read.section(raw, 'budget', ''), sessions);
 
   const config: KitConfig = {
     configVersion: read.integer(raw, 'configVersion', '', 1, { min: 1 }),
     ...(team === undefined ? {} : { team }),
+    ...(timeZone === undefined ? {} : { timeZone }),
     sessions,
     names,
     roles: coordinatorOwner === undefined ? { lead } : { lead, coordinatorOwner },
@@ -257,16 +293,17 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
       ),
       pushToProtected: parsePushToProtected(read, pushGuard),
     },
+    packageGuard: { adHocRunners: parseAdHocRunners(read, read.section(raw, 'packageGuard', '')) },
+    commitGuard: { skipHooks: parseSkipHooks(read, read.section(raw, 'commitGuard', '')) },
+    prompts: { hookAsks: parseHookAsks(read, read.section(raw, 'prompts', '')) },
     commits: parseCommits(read, read.section(raw, 'commits', '')),
-    coordinator: {
-      schedule: heavyCutoffUtc === undefined ? {} : { heavyCutoffUtc },
-    },
-    budget: parseBudget(read, read.section(raw, 'budget', ''), sessions),
+    coordinator: parseCoordinator(read, read.section(raw, 'coordinator', '')),
+    budget,
     leadBoundary: parseLeadBoundary(read, read.section(raw, 'leadBoundary', '')),
     loops: {
       chainNudgeAt: read.integer(read.section(raw, 'loops', ''), 'chainNudgeAt', 'loops', DEFAULT_LOOPS.chainNudgeAt, CONFIG_LIMITS.chainNudgeAt),
     },
-    wake: parseWake(read, read.section(raw, 'wake', '')),
+    wake: parseWake(read, read.section(raw, 'wake', ''), budget.quietHours),
     tests: {
       maxFailureChars: read.integer(read.section(raw, 'tests', ''), 'maxFailureChars', 'tests', DEFAULT_TESTS.maxFailureChars, CONFIG_LIMITS.maxFailureChars),
     },
@@ -275,14 +312,26 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
       persistentFailureHours: read.integer(alerts, 'persistentFailureHours', 'alerts', DEFAULT_ALERTS.persistentFailureHours, CONFIG_LIMITS.persistentFailureHours),
     },
     tabStatus: { enabled: read.boolean(tabStatus, 'enabled', 'tabStatus', false) },
+    pickerGuard: { enabled: read.boolean(pickerGuard, 'enabled', 'pickerGuard', false) },
+    turnLog: parseTurnLog(read, read.section(raw, 'turnLog', '')),
+    readonlyShell: parseReadonlyShell(read, read.section(raw, 'readonlyShell', '')),
     refresh: parseRefresh(read, read.section(raw, 'refresh', '')),
     hiring: parseHiring(read, read.section(raw, 'hiring', '')),
     burst: parseBurst(read, read.section(raw, 'burst', '')),
     open: parseOpen(read, read.section(raw, 'open', '')),
+    statusLine: parseStatusLine(read, read.section(raw, 'statusLine', '')),
     launch,
     paths: parsePaths(read, read.section(raw, 'paths', '')),
   };
   return { config, issues: read.issues };
+}
+
+/** `turnLog`: kept from an hour to a week. */
+function parseTurnLog(read: ConfigReader, raw: JsonRecord): TurnLogConfig {
+  return {
+    enabled: read.boolean(raw, 'enabled', 'turnLog', DEFAULT_TURN_LOG.enabled),
+    keepHours: read.integer(raw, 'keepHours', 'turnLog', DEFAULT_TURN_LOG.keepHours, CONFIG_LIMITS.turnLogKeepHours),
+  };
 }
 
 /** `leadBoundary`: the lead's own paths are single lines; the search threshold is bounded like the chain nudge. */
@@ -294,14 +343,34 @@ function parseLeadBoundary(read: ConfigReader, raw: JsonRecord): LeadBoundaryCon
   };
 }
 
-/** `wake`: a priority as the register numbers them, and both waits bounded to a day at most. */
-function parseWake(read: ConfigReader, raw: JsonRecord): WakeConfig {
-  return {
+/** True when an `HH:MM` falls in the quiet hours, which may cross midnight. */
+function isInQuietHours(time: string, quiet: QuietHours): boolean {
+  const minute = utcMinuteOf(time);
+  const start = utcMinuteOf(quiet.startUtc);
+  const end = utcMinuteOf(quiet.endUtc);
+  return minute !== undefined && start !== undefined && end !== undefined && isMinuteInSpan(minute, start, end);
+}
+
+/**
+ * `wake`: a priority as the register numbers them, both waits bounded to a day at most, and a day start outside
+ * the budget's quiet hours, where it would wake no one.
+ */
+function parseWake(read: ConfigReader, raw: JsonRecord, quietHours: QuietHours | undefined): WakeConfig {
+  const wake: WakeConfig = {
     enabled: read.boolean(raw, 'enabled', 'wake', DEFAULT_WAKE.enabled),
     priority: read.integer(raw, 'priority', 'wake', DEFAULT_WAKE.priority, CONFIG_LIMITS.wakePriority),
     batchSeconds: read.integer(raw, 'batchSeconds', 'wake', DEFAULT_WAKE.batchSeconds, CONFIG_LIMITS.wakeBatchSeconds),
     minGapMinutes: read.integer(raw, 'minGapMinutes', 'wake', DEFAULT_WAKE.minGapMinutes, CONFIG_LIMITS.wakeMinGapMinutes),
   };
+  const dayStartUtc = read.optionalString(raw, 'dayStartUtc', 'wake', isUtcTime);
+  if (dayStartUtc === undefined) {
+    return wake;
+  }
+  if (quietHours !== undefined && isInQuietHours(dayStartUtc, quietHours)) {
+    read.report('wake.dayStartUtc', `is in the budget's quiet hours (${quietHours.startUtc} to ${quietHours.endUtc} UTC), where no session wakes`);
+    return wake;
+  }
+  return { ...wake, dayStartUtc };
 }
 
 /**
@@ -388,6 +457,159 @@ const RENAMED_PRIORITIES_KEY = 'tiers';
 /** The budget's old place, `coordinator.budget`; it moved to the top-level `budget` block, with no alias. */
 const MOVED_BUDGET_KEY = 'budget';
 
+const isPathText: Check<string> = (text) => (text.trim() === '' ? 'expected a path' : undefined);
+
+/** A repository's or a deploy target's name in the coordinator block. */
+const isCoordinatorName: Check<string> = (name) =>
+  /^[a-z0-9][a-z0-9._-]*$/.test(name) ? undefined : 'expected a name: lowercase letters, digits, ., _ or -, from a letter or digit';
+
+function parseCoordinator(read: ConfigReader, raw: JsonRecord): CoordinatorConfig {
+  const path = 'coordinator';
+  if (raw[MOVED_BUDGET_KEY] !== undefined) {
+    read.report(`${path}.${MOVED_BUDGET_KEY}`, 'was moved: use the top-level budget block');
+  }
+  const dir = read.optionalString(raw, 'dir', path, isPathText);
+  const schedule = read.section(raw, 'schedule', path);
+  const heavyCutoffUtc = read.optionalString(schedule, 'heavyCutoffUtc', `${path}.schedule`, isUtcTime);
+  const resetBlackoutHours = read.optionalInteger(schedule, 'resetBlackoutHours', `${path}.schedule`, CONFIG_LIMITS.resetBlackoutHours);
+  const wait = read.section(raw, 'wait', path);
+  const claims = read.section(raw, 'claims', path);
+  const repos = parseCoordinatorRepos(read, read.section(raw, 'repos', path));
+  return {
+    ...(dir === undefined ? {} : { dir }),
+    schedule: { ...(heavyCutoffUtc === undefined ? {} : { heavyCutoffUtc }), ...(resetBlackoutHours === undefined ? {} : { resetBlackoutHours }) },
+    heavy: parseHeavy(read, read.section(raw, 'heavy', path)),
+    wait: {
+      pollSeconds: read.integer(wait, 'pollSeconds', `${path}.wait`, DEFAULT_COORDINATOR_WAIT.pollSeconds, CONFIG_LIMITS.coordinatorPollSeconds),
+      maxMinutes: read.integer(wait, 'maxMinutes', `${path}.wait`, DEFAULT_COORDINATOR_WAIT.maxMinutes, CONFIG_LIMITS.coordinatorWaitMaxMinutes),
+    },
+    gateTimeoutSeconds: read.integer(raw, 'gateTimeoutSeconds', path, DEFAULT_GATE_TIMEOUT_SECONDS, CONFIG_LIMITS.gateTimeoutSeconds),
+    claims: { maxMinutes: read.integer(claims, 'maxMinutes', `${path}.claims`, DEFAULT_CLAIMS.maxMinutes, CONFIG_LIMITS.claimMaxMinutes) },
+    windows: parseWindows(read, read.section(raw, 'windows', path), deployTargetsOf(repos)),
+    repos,
+  };
+}
+
+/** When a deploy target's measurement is clean; a settle time for a target no repository deploys, or out of bounds, is reported and left out. */
+function parseWindows(read: ConfigReader, raw: JsonRecord, knownTargets: readonly string[]): WindowsConfig {
+  const path = 'coordinator.windows';
+  const targetSettleMinutes: Record<string, number> = {};
+  for (const [target, value] of Object.entries(read.section(raw, 'targetSettleMinutes', path))) {
+    const itemPath = `${path}.targetSettleMinutes.${target}`;
+    const badName = isCoordinatorName(target);
+    if (badName !== undefined) {
+      read.report(itemPath, badName);
+      continue;
+    }
+    if (!knownTargets.includes(target)) {
+      read.report(itemPath, `is not a target any repository deploys (known: ${knownTargets.join(', ') || 'none'})`);
+      continue;
+    }
+    const minutes = read.integerItem(value, itemPath, CONFIG_LIMITS.settleMinutes);
+    if (minutes !== undefined) {
+      targetSettleMinutes[target] = minutes;
+    }
+  }
+  return {
+    settleMinutes: read.integer(raw, 'settleMinutes', path, DEFAULT_WINDOWS.settleMinutes, CONFIG_LIMITS.settleMinutes),
+    targetSettleMinutes,
+    assumedRollMinutes: read.integer(raw, 'assumedRollMinutes', path, DEFAULT_WINDOWS.assumedRollMinutes, CONFIG_LIMITS.assumedRollMinutes),
+    minMinutes: read.integer(raw, 'minMinutes', path, DEFAULT_WINDOWS.minMinutes, CONFIG_LIMITS.windowMinMinutes),
+  };
+}
+
+/** The repositories `teamrig integrate` lands and `teamrig roll` deploys, by name; one with a bad name or no main checkout is reported and left out. */
+function parseCoordinatorRepos(read: ConfigReader, raw: JsonRecord): Record<string, CoordinatorRepoConfig> {
+  const repos: Record<string, CoordinatorRepoConfig> = {};
+  for (const [name, value] of Object.entries(raw)) {
+    const path = `coordinator.repos.${name}`;
+    const entry = read.objectItem(value, path);
+    if (entry === undefined) {
+      continue;
+    }
+    const badName = isCoordinatorName(name);
+    if (badName !== undefined) {
+      read.report(path, badName);
+      continue;
+    }
+    const mainCheckout = read.requiredString(entry, 'mainCheckout', path, isPathText);
+    if (mainCheckout === '') {
+      continue;
+    }
+    const roll = entry['roll'] === undefined ? undefined : parseRoll(read, entry['roll'], `${path}.roll`);
+    const dependencyGate = read.boolean(entry, 'dependencyGate', path, false);
+    const dependencyCheck = entry['dependencyCheck'] === undefined ? undefined : read.stringListItem(entry['dependencyCheck'], `${path}.dependencyCheck`, ROLL_ARGV_MAX_ITEMS);
+    if (dependencyCheck !== undefined && !dependencyGate) {
+      read.report(`${path}.dependencyCheck`, 'runs only with dependencyGate true, so it never runs');
+    }
+    repos[name] = {
+      mainCheckout,
+      deploysOnPush: read.stringList(entry, 'deploysOnPush', path, [], isCoordinatorName),
+      dependencyGate,
+      ...(dependencyCheck === undefined ? {} : { dependencyCheck }),
+      followMainCheckout: read.boolean(entry, 'followMainCheckout', path, false),
+      ...(roll === undefined ? {} : { roll }),
+    };
+  }
+  return repos;
+}
+
+/** A program's arguments in a roll hook, and the hooks of one kind, at most. */
+const ROLL_ARGV_MAX_ITEMS = 64;
+const ROLL_HOOKS_MAX_ITEMS = 16;
+
+/** A repository's roll; one with no usable command is reported and left out, so the repository is not rolled. */
+function parseRoll(read: ConfigReader, raw: unknown, path: string): RollConfig | undefined {
+  const entry = read.objectItem(raw, path);
+  if (entry === undefined) {
+    return undefined;
+  }
+  const command = read.stringListItem(entry['command'], `${path}.command`, ROLL_ARGV_MAX_ITEMS);
+  if (command === undefined) {
+    return undefined;
+  }
+  const dependencyInstall = entry['dependencyInstall'] === undefined ? undefined : read.stringListItem(entry['dependencyInstall'], `${path}.dependencyInstall`, ROLL_ARGV_MAX_ITEMS);
+  return {
+    targets: read.stringList(entry, 'targets', path, [], isCoordinatorName),
+    gates: read.list(entry, 'gates', path, [], (value, itemPath) => parseRollGate(read, value, itemPath), ROLL_HOOKS_MAX_ITEMS),
+    ...(dependencyInstall === undefined ? {} : { dependencyInstall }),
+    afterPull: read.list(entry, 'afterPull', path, [], (value, itemPath) => read.stringListItem(value, itemPath, ROLL_ARGV_MAX_ITEMS), ROLL_HOOKS_MAX_ITEMS),
+    command,
+  };
+}
+
+/** One roll gate; one with a bad name or no usable command is reported and left out. */
+function parseRollGate(read: ConfigReader, value: unknown, path: string): RollGateConfig | undefined {
+  const entry = read.objectItem(value, path);
+  if (entry === undefined) {
+    return undefined;
+  }
+  const name = read.stringItem(entry['name'], `${path}.name`, isCoordinatorName);
+  const command = read.stringListItem(entry['command'], `${path}.command`, ROLL_ARGV_MAX_ITEMS);
+  return name === undefined || command === undefined ? undefined : { name, command };
+}
+
+/** The host lock and a heavy step's limits; a step longer than the lock less its margin is cut to fit, so it never outlives its lock. */
+function parseHeavy(read: ConfigReader, raw: JsonRecord): HeavyConfig {
+  const path = 'coordinator.heavy';
+  const lockPath = read.optionalString(raw, 'lockPath', path, isPathText);
+  const lockTtlMinutes = read.integer(raw, 'lockTtlMinutes', path, DEFAULT_HEAVY.lockTtlMinutes, CONFIG_LIMITS.heavyLockTtlMinutes);
+  const longest = lockTtlMinutes - HEAVY_TTL_MARGIN_MINUTES;
+  const maxRunMinutes = read.integer(raw, 'maxRunMinutes', path, Math.min(DEFAULT_HEAVY.maxRunMinutes, longest), CONFIG_LIMITS.heavyMaxRunMinutes);
+  if (maxRunMinutes > longest) {
+    read.report(`${path}.maxRunMinutes`, `must be at most lockTtlMinutes less ${HEAVY_TTL_MARGIN_MINUTES} (${longest})`);
+  }
+  return {
+    ...(lockPath === undefined ? {} : { lockPath }),
+    lockTtlMinutes,
+    maxRunMinutes: Math.min(maxRunMinutes, longest),
+    waitMinutes: read.integer(raw, 'waitMinutes', path, DEFAULT_HEAVY.waitMinutes, CONFIG_LIMITS.heavyWaitMinutes),
+    memorySampleSeconds: read.integer(raw, 'memorySampleSeconds', path, DEFAULT_HEAVY.memorySampleSeconds, CONFIG_LIMITS.heavyMemorySampleSeconds),
+    memoryFloorMb: read.integer(raw, 'memoryFloorMb', path, DEFAULT_HEAVY.memoryFloorMb, CONFIG_LIMITS.heavyMemoryFloorMb),
+    smallReserveMb: read.integer(raw, 'smallReserveMb', path, DEFAULT_HEAVY.smallReserveMb, CONFIG_LIMITS.heavySmallReserveMb),
+  };
+}
+
 function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): BudgetConfig {
   const path = 'budget';
   const defaults = DEFAULT_BUDGET;
@@ -398,8 +620,9 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
   }
   const weeklyLimitW = read.optionalInteger(raw, 'weeklyLimitW', path, CONFIG_LIMITS.weeklyLimitW);
   const reset = parseBudgetReset(read, raw);
-  const dailyPct = read.optionalNumber(raw, 'dailyPct', path, CONFIG_LIMITS.dailyPct);
-  const maxDailyPct = read.optionalNumber(raw, 'maxDailyPct', path, CONFIG_LIMITS.maxDailyPct);
+  const why = "the team's daily budget is the pace, recomputed at every reading from what is left of the week";
+  read.dropped(raw, 'dailyPct', path, why);
+  read.dropped(raw, 'maxDailyPct', path, why);
   const overAction = read.string(raw, 'overAction', path, defaults.overAction, oneOf(OVER_ACTIONS));
   const escalate = read.string(raw, 'escalate', path, defaults.escalate, oneOf(ESCALATIONS));
   const quietHours = parseQuietHours(read, raw);
@@ -412,8 +635,6 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
     targetPct,
     reservePct,
     paceEndHoursBeforeReset: read.number(raw, 'paceEndHoursBeforeReset', path, defaults.paceEndHoursBeforeReset, CONFIG_LIMITS.paceEndHoursBeforeReset),
-    ...(dailyPct === undefined ? {} : { dailyPct }),
-    ...(maxDailyPct === undefined ? {} : { maxDailyPct }),
     sessions: parseSessionBudgets(read, read.section(raw, 'sessions', path), sessions),
     warnAtPct: read.list(
       raw,
@@ -468,7 +689,8 @@ function parseQuietHours(read: ConfigReader, raw: JsonRecord): QuietHours | unde
     read.report(`${path}.endUtc`, 'is the start time; quiet hours need a start and a different end');
     return undefined;
   }
-  return { startUtc, endUtc, action };
+  const paceWeight = read.optionalNumber(section, 'paceWeight', path, CONFIG_LIMITS.quietPaceWeight);
+  return { startUtc, endUtc, action, ...(paceWeight === undefined ? {} : { paceWeight }) };
 }
 
 /** `budget.lift`: the highest stop % of a lift, and of the reserve release; the reserve bound is never below the other. */
@@ -484,7 +706,7 @@ function parseBudgetLift(read: ConfigReader, raw: JsonRecord): BudgetLiftConfig 
   return { maxStopPct, reserveStopPct };
 }
 
-/** `budget.sessions`: a share and an optional fixed daily % for sessions on the team. */
+/** `budget.sessions`: a share for sessions on the team. */
 function parseSessionBudgets(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): Record<string, SessionBudget> {
   const budgets: Record<string, SessionBudget> = {};
   for (const [id, value] of Object.entries(raw)) {
@@ -497,11 +719,8 @@ function parseSessionBudgets(read: ConfigReader, raw: JsonRecord, sessions: read
       read.report(path, 'is not one of the sessions');
       continue;
     }
-    const dailyPct = read.optionalNumber(entry, 'dailyPct', path, CONFIG_LIMITS.sessionDailyPct);
-    budgets[id] = {
-      share: read.number(entry, 'share', path, DEFAULT_SESSION_SHARE, CONFIG_LIMITS.sessionShare),
-      ...(dailyPct === undefined ? {} : { dailyPct }),
-    };
+    read.dropped(entry, 'dailyPct', path, "a session's daily budget is its part of the team's, by its share and queued work");
+    budgets[id] = { share: read.number(entry, 'share', path, DEFAULT_SESSION_SHARE, CONFIG_LIMITS.sessionShare) };
   }
   return budgets;
 }
@@ -562,14 +781,24 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
       (value, itemPath) => parseStatus(read, value, itemPath),
       CONFIG_LIMITS.requireNoteOn.maxItems,
     ),
+    requireFollowupsOn: read.list(
+      raw,
+      'requireFollowupsOn',
+      path,
+      defaults.requireFollowupsOn,
+      (value, itemPath) => parseFollowupStatus(read, value, itemPath),
+      CONFIG_LIMITS.requireFollowupsOn.maxItems,
+    ),
     autoArchive: read.boolean(raw, 'autoArchive', path, defaults.autoArchive),
     requireProofOnVerifying: read.boolean(raw, 'requireProofOnVerifying', path, defaults.requireProofOnVerifying),
+    requireDecisionCard: read.boolean(raw, 'requireDecisionCard', path, defaults.requireDecisionCard),
     verifyGate: isVerifyGate(verifyGate) ? verifyGate : defaults.verifyGate,
     maxVerifying: read.integer(raw, 'maxVerifying', path, defaults.maxVerifying, CONFIG_LIMITS.maxVerifying),
     check: {
       staleAfterHours: read.integer(check, 'staleAfterHours', `${path}.check`, defaults.check.staleAfterHours, { min: 1 }),
       notPickedUpAfterHours: read.integer(check, 'notPickedUpAfterHours', `${path}.check`, defaults.check.notPickedUpAfterHours, { min: 1 }),
       prioritySkipAfterHours: read.integer(check, 'prioritySkipAfterHours', `${path}.check`, defaults.check.prioritySkipAfterHours, { min: 1 }),
+      maxSelfMadePerDay: read.integer(check, 'maxSelfMadePerDay', `${path}.check`, defaults.check.maxSelfMadePerDay, CONFIG_LIMITS.maxSelfMadePerDay),
       weekLengthDays: read.integer(check, 'weekLengthDays', `${path}.check`, defaults.check.weekLengthDays, { min: 1, max: 31 }),
       stopgapFiles: read.stringList(
         check,
@@ -604,6 +833,15 @@ function parseStatus(read: ConfigReader, value: unknown, path: string): TaskStat
   }
   const hint = value === LEGACY_WAITING_STATUS ? ` (${LEGACY_WAITING_HINT})` : '';
   read.report(path, `expected one of ${TASK_STATUSES.join(', ')}, got ${describe(value)}${hint}`);
+  return undefined;
+}
+
+/** A status that may need `--followups`: one of FOLLOWUP_STATUSES. */
+function parseFollowupStatus(read: ConfigReader, value: unknown, path: string): TaskStatus | undefined {
+  if (typeof value === 'string' && FOLLOWUP_STATUSES.some((status) => status === value)) {
+    return parseStatus(read, value, path);
+  }
+  read.report(path, `expected one of ${FOLLOWUP_STATUSES.join(', ')}, got ${describe(value)}`);
   return undefined;
 }
 
@@ -643,10 +881,48 @@ function parseOpen(read: ConfigReader, raw: JsonRecord): OpenConfig {
   return { terminal: isTerminalChoice(terminal) ? terminal : DEFAULT_OPEN.terminal };
 }
 
+function parseStatusLine(read: ConfigReader, raw: JsonRecord): StatusLineConfig {
+  const path = 'statusLine';
+  return {
+    folder: read.boolean(raw, 'folder', path, DEFAULT_STATUS_LINE.folder),
+    branch: read.boolean(raw, 'branch', path, DEFAULT_STATUS_LINE.branch),
+    resume: read.boolean(raw, 'resume', path, DEFAULT_STATUS_LINE.resume),
+  };
+}
+
 function parsePushToProtected(read: ConfigReader, raw: JsonRecord): PushToProtected {
   const fallback = DEFAULT_PUSH_GUARD.pushToProtected;
   const value = read.string(raw, 'pushToProtected', 'pushGuard', fallback, oneOf(PUSH_TO_PROTECTED));
   return isPushToProtected(value) ? value : fallback;
+}
+
+function parseAdHocRunners(read: ConfigReader, raw: JsonRecord): AdHocRunners {
+  const fallback = DEFAULT_PACKAGE_GUARD.adHocRunners;
+  const value = read.string(raw, 'adHocRunners', 'packageGuard', fallback, oneOf(AD_HOC_RUNNERS));
+  return isAdHocRunners(value) ? value : fallback;
+}
+
+function parseSkipHooks(read: ConfigReader, raw: JsonRecord): SkipHooks {
+  const fallback = DEFAULT_COMMIT_GUARD.skipHooks;
+  const value = read.string(raw, 'skipHooks', 'commitGuard', fallback, oneOf(SKIP_HOOKS));
+  return isSkipHooks(value) ? value : fallback;
+}
+
+function parseHookAsks(read: ConfigReader, raw: JsonRecord): HookAsks {
+  const fallback = DEFAULT_PROMPTS.hookAsks;
+  const value = read.string(raw, 'hookAsks', 'prompts', fallback, oneOf(HOOK_ASKS));
+  return isHookAsks(value) ? value : fallback;
+}
+
+const isShellPrefix: Check<string> = (value) =>
+  PREFIX_PATTERN.test(value) ? undefined : 'expected words of letters, digits and _ @ . / : = + -, one space apart, the first naming a program';
+
+function parseReadonlyShell(read: ConfigReader, raw: JsonRecord): ReadonlyShellConfig {
+  const { maxItems, maxLength } = CONFIG_LIMITS.readonlyShellPrefixes;
+  return {
+    enabled: read.boolean(raw, 'enabled', 'readonlyShell', DEFAULT_READONLY_SHELL.enabled),
+    allowPrefixes: read.stringList(raw, 'allowPrefixes', 'readonlyShell', DEFAULT_READONLY_SHELL.allowPrefixes, shortLine(maxLength, isShellPrefix), maxItems),
+  };
 }
 
 function parseCommits(read: ConfigReader, raw: JsonRecord): CommitsConfig {
@@ -695,26 +971,33 @@ function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
   };
 }
 
-/** `hiring`: a hire's own daily budget cannot pass what all hires may add up to. */
+/** `hiring`: who decides, the session cap, idle and review days, and when a rehire resumes. */
 function parseHiring(read: ConfigReader, raw: JsonRecord): HiringConfig {
   const path = 'hiring';
   const defaults = DEFAULT_HIRING;
   const policy = read.string(raw, 'policy', path, defaults.policy, oneOf(HIRING_POLICIES));
-  const maxDailyPct = read.number(raw, 'maxDailyPct', path, defaults.maxDailyPct, CONFIG_LIMITS.hiringMaxDailyPct);
-  let dailyPct = read.number(raw, 'dailyPct', path, defaults.dailyPct, CONFIG_LIMITS.hiringDailyPct);
-  if (dailyPct > maxDailyPct) {
-    read.report(`${path}.dailyPct`, `expected at most hiring.maxDailyPct (${maxDailyPct}), got ${dailyPct}`);
-    dailyPct = Math.min(defaults.dailyPct, maxDailyPct);
-  }
+  const why = "a hire's daily budget is its part of the team's, by its share and queued work; maxSessions bounds hiring";
+  read.dropped(raw, 'dailyPct', path, why);
+  read.dropped(raw, 'maxDailyPct', path, why);
   return {
     policy: isHiringPolicy(policy) ? policy : defaults.policy,
     maxSessions: read.integer(raw, 'maxSessions', path, defaults.maxSessions, CONFIG_LIMITS.hiringMaxSessions),
-    dailyPct,
-    maxDailyPct,
     idleHours: read.integer(raw, 'idleHours', path, defaults.idleHours, CONFIG_LIMITS.hiringIdleHours),
     reviewDays: read.integer(raw, 'reviewDays', path, defaults.reviewDays, CONFIG_LIMITS.hiringReviewDays),
     resumeMaxTokens: read.integer(raw, 'resumeMaxTokens', path, defaults.resumeMaxTokens, CONFIG_LIMITS.hiringResumeMaxTokens),
     resumeMaxIdleDays: read.integer(raw, 'resumeMaxIdleDays', path, defaults.resumeMaxIdleDays, CONFIG_LIMITS.hiringResumeMaxIdleDays),
+    scaleOut: parseScaleOut(read, read.section(raw, 'scaleOut', path)),
+  };
+}
+
+/** `hiring.scaleOut`: how `check` measures an area's pace against its dated work. */
+function parseScaleOut(read: ConfigReader, raw: JsonRecord): ScaleOutConfig {
+  const path = 'hiring.scaleOut';
+  const defaults = DEFAULT_SCALE_OUT;
+  return {
+    windowDays: read.integer(raw, 'windowDays', path, defaults.windowDays, CONFIG_LIMITS.scaleOutWindowDays),
+    minDone: read.integer(raw, 'minDone', path, defaults.minDone, CONFIG_LIMITS.scaleOutMinDone),
+    topPriorities: read.integer(raw, 'topPriorities', path, defaults.topPriorities, CONFIG_LIMITS.scaleOutTopPriorities),
   };
 }
 

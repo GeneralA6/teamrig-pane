@@ -3,7 +3,7 @@ import type { TaskStatus } from '../register/model.ts';
 import type { CoreRuleKey } from '../rules/keys.ts';
 
 /** The config format this code reads and writes. Older files are migrated in memory on load. */
-export const CONFIG_VERSION = 3;
+export const CONFIG_VERSION = 4;
 
 export interface RolesConfig {
   /** Owns priorities, team rules and the owner's decision queue; may re-prioritize and reassign tasks; hands the work itself to others (`leadBoundary`). */
@@ -25,6 +25,11 @@ export interface RegisterCheckConfig {
   readonly notPickedUpAfterHours: number;
   /** A session's in-progress task below its own open top-priority task this long is a PRIORITY-SKIP. */
   readonly prioritySkipAfterHours: number;
+  /**
+   * A session that added more tasks for itself (created by it, asked by no one else) in the last 24 h than this is a
+   * SELF-MADE; 0 turns the flag off.
+   */
+  readonly maxSelfMadePerDay: number;
   readonly weekLengthDays: number;
   /**
    * The files `check` scans for `stopgap T<id>` tags besides every skill: paths relative to the team's project
@@ -51,10 +56,20 @@ export interface RegisterConfig {
   /** Statuses that cannot be set without a note. */
   readonly requireNoteOn: readonly TaskStatus[];
   /**
+   * Statuses (of verifying, done and dropped) that cannot be set without `--followups`: the tasks the work leaves,
+   * such as a finding or a next step, or `none`. A finding written only in a notes file then cannot close unseen.
+   */
+  readonly requireFollowupsOn: readonly TaskStatus[];
+  /**
    * Whether a write archives the task list's log by itself once it is long (register/rotate.ts), as it does
    * after the first `teamrig compact`. Off, only `teamrig compact` archives it.
    */
   readonly autoArchive: boolean;
+  /**
+   * Whether `set --status waiting` on the owner's decision or approval needs a decision card (`--question`,
+   * `--options`, `--recommend`, `--default`; register/card.ts), so the owner decides from it alone.
+   */
+  readonly requireDecisionCard: boolean;
   /** Whether `set --status verifying` needs `--proof`, what will prove the shipped change works. */
   readonly requireProofOnVerifying: boolean;
   /** What `set --status in-progress` does while a task it needs is still verifying. */
@@ -133,6 +148,77 @@ export function isPushToProtected(value: unknown): value is PushToProtected {
   return PUSH_TO_PROTECTED.some((choice) => choice === value);
 }
 
+export interface PackageGuardConfig {
+  /** What a Bash or PowerShell call that runs a package ad hoc does. */
+  readonly adHocRunners: AdHocRunners;
+}
+
+/**
+ * An ad-hoc package run, one that fetches a package outside the project's lockfile and runs it at once (`npx` of a
+ * tool not in `node_modules/.bin`, `npm exec`, `npm create`/`init <x>`, `pnpm dlx`, `yarn dlx`, `bunx`): `deny`
+ * refuses it, `ask` asks the human, `allow` lets it run.
+ */
+export type AdHocRunners = 'deny' | 'ask' | 'allow';
+
+export interface CommitGuardConfig {
+  /** What a Bash or PowerShell call that runs git without the repository's hooks does. */
+  readonly skipHooks: SkipHooks;
+}
+
+/**
+ * A git command run without the repository's hooks: `--no-verify` (or `-n` for `git commit` and `git am`), `HUSKY`
+ * set for it, or a `core.hooksPath` that `-c`, a `GIT_CONFIG*` variable or `git config` sets or unsets: `deny`
+ * refuses it, `ask` asks the human, `allow` lets it run.
+ */
+export type SkipHooks = 'deny' | 'ask' | 'allow';
+
+/** The permission prompts teamrig's own hooks raise. */
+export interface PromptsConfig {
+  /** What a hook does with a call it would ask the human about. */
+  readonly hookAsks: HookAsks;
+}
+
+/**
+ * A call a teamrig hook would ask the human about (a push to a protected branch or one it cannot read, an ad-hoc
+ * package run, a git command without hooks, a helper over the budget, as their own keys set): `ask` raises the
+ * permission prompt; `refuse` refuses it instead, its reason telling the session to record the step as waiting for
+ * the owner's approval and take its next task, so no prompt holds a session while nobody is there to answer it.
+ */
+export type HookAsks = 'ask' | 'refuse';
+
+/**
+ * The opt-in hook that lets a Bash or PowerShell line run without a permission prompt when every command in it
+ * provably only reads (hook-readonly-allow.ts). It only ever allows: a line it cannot prove reads falls through to
+ * Claude Code's own permission check.
+ */
+export interface ReadonlyShellConfig {
+  readonly enabled: boolean;
+  /**
+   * Commands the team trusts with any arguments, each by its leading words (`npx tsc --noEmit`), such as the
+   * project's type check or test runner. The hook cannot read what such a command does, so a prefix vouches for
+   * every argument after it.
+   */
+  readonly allowPrefixes: readonly string[];
+}
+
+export const AD_HOC_RUNNERS: readonly AdHocRunners[] = ['deny', 'ask', 'allow'];
+
+export function isAdHocRunners(value: unknown): value is AdHocRunners {
+  return AD_HOC_RUNNERS.some((choice) => choice === value);
+}
+
+export const SKIP_HOOKS: readonly SkipHooks[] = ['deny', 'ask', 'allow'];
+
+export function isSkipHooks(value: unknown): value is SkipHooks {
+  return SKIP_HOOKS.some((choice) => choice === value);
+}
+
+export const HOOK_ASKS: readonly HookAsks[] = ['ask', 'refuse'];
+
+export function isHookAsks(value: unknown): value is HookAsks {
+  return HOOK_ASKS.some((choice) => choice === value);
+}
+
 export const COMMIT_GATES = ['off', 'warn', 'refuse'] as const;
 /** What a push to a protected branch does about commits over the size rule: nothing, list them, or refuse the push. */
 export type CommitGate = (typeof COMMIT_GATES)[number];
@@ -150,6 +236,17 @@ export interface MessagesConfig {
    * re-reads its whole context at full price. A send to a session idle this long is held once; 0 never holds.
    */
   readonly coldAfterMinutes: number;
+}
+
+/**
+ * Each session's prompts and replies, kept in a file the task pane shows (src/turn-log/), so a /clear or a
+ * compaction never takes away what the person was reading in the tab.
+ */
+export interface TurnLogConfig {
+  /** Off: nothing is written. */
+  readonly enabled: boolean;
+  /** How long each entry is kept, in hours; whole hours past it are removed at a session start. */
+  readonly keepHours: number;
 }
 
 /** How teamrig keeps the lead leading (T320): its own edits, tests and code searches are nudged and shown, never blocked. */
@@ -191,6 +288,12 @@ export interface WakeConfig {
   readonly batchSeconds: number;
   /** The least time between two wakes of one session; work handed meanwhile waits and wakes it once. */
   readonly minGapMinutes: number;
+  /**
+   * The day's start (`HH:MM` UTC, outside the budget's quiet hours): from then each session with work it can start,
+   * of any priority, that has had no turn since gets one wake that day, and a burst wakes its sessions the same way
+   * once it starts. Unset: no day-start wake, and a burst wakes no one.
+   */
+  readonly dayStartUtc?: string;
 }
 
 /** What `teamrig test` prints of a failed run. */
@@ -264,14 +367,17 @@ export interface QuietHours {
   readonly startUtc: string;
   readonly endUtc: string;
   readonly action: OverAction;
+  /**
+   * What a quiet minute counts on the pace line and in the daily budget, against 1 for any other minute (0..1).
+   * Unset: 0, the team sleeps, so the line stays flat through the night.
+   */
+  readonly paceWeight?: number;
 }
 
-/** One session's part of the team's daily allowance. */
+/** One session's weight in the split of the team's daily budget (`sessionBudgetPct`). */
 export interface SessionBudget {
-  /** Its weight: the session gets allowance × share / the sum of every session's share. */
+  /** Times its queued work: the session gets the team's budget × that / the sum over the sessions. */
   readonly share: number;
-  /** A fixed daily budget, in % of the week, in place of its share. */
-  readonly dailyPct?: number;
 }
 
 /**
@@ -307,10 +413,6 @@ export interface BudgetConfig {
   readonly reservePct: number;
   /** The pace line reaches `targetPct` this many hours before the reset. */
   readonly paceEndHoursBeforeReset: number;
-  /** The team's allowance per UTC day, in % of the week. Unset: what is left to the target, spread over the days left. */
-  readonly dailyPct?: number;
-  /** A ceiling on the team's daily allowance. Unset: none. */
-  readonly maxDailyPct?: number;
   /** Each session's part, by id; a session not listed has a share of 1. */
   readonly sessions: Readonly<Record<string, SessionBudget>>;
   /** The live warning shows a line as a session passes each of these % of its daily budget. */
@@ -330,11 +432,135 @@ export interface BudgetConfig {
 export interface ScheduleConfig {
   /** No heavy step starts on the host after this UTC time (HH:MM) until midnight. */
   readonly heavyCutoffUtc?: string;
+  /**
+   * No deploy (`teamrig integrate`) starts from this many hours before the weekly token reset until the reset, so
+   * nothing that may need a fix lands while the week has no budget left to fix it. Unset: no blackout.
+   */
+  readonly resetBlackoutHours?: number;
 }
 
-/** The deploy coordinator's settings; M1 reads only what the rule pack states. */
+/** `teamrig heavy`: one heavy step on the host at a time, each under the host lock. */
+export interface HeavyConfig {
+  /**
+   * The host lock file every heavy step takes; a relative path is in the team's folder. Unset: `<kit home>/host.lock`,
+   * one lock for every team on the host.
+   */
+  readonly lockPath?: string;
+  /** A taken host lock lasts this many minutes; past it, another step takes it over. */
+  readonly lockTtlMinutes: number;
+  /** A heavy step still running after this many minutes is killed with every process it started. */
+  readonly maxRunMinutes: number;
+  /** A heavy step waits this many minutes at most for the host lock, then is refused. */
+  readonly waitMinutes: number;
+  /**
+   * While a heavy step runs, its process tree's memory and the host's free memory are sampled this often, for its
+   * ledger record's `peakTreeMb` and `lowFreeMb`; 0 samples nothing.
+   */
+  readonly memorySampleSeconds: number;
+  /** A small step (`heavy --small`) shares the host only while it keeps this many MB free besides those held for the small steps. */
+  readonly memoryFloorMb: number;
+  /** The MB held for a small step with no ledger record of its peak yet. */
+  readonly smallReserveMb: number;
+}
+
+/** How a coordinator step waits. */
+export interface CoordinatorWaitConfig {
+  /** A waiting step looks again after this many seconds; the first in line for the host lock every 2 at most. */
+  readonly pollSeconds: number;
+  /** A deploy step (`teamrig integrate`) waits this many minutes at most for quiet claims and the host lock, then is refused. */
+  readonly maxMinutes: number;
+}
+
+/** A repository `teamrig integrate` lands branches of on its default branch. */
+export interface CoordinatorRepoConfig {
+  /** The repository's main checkout; a branch integrates from any worktree of it. A relative path is in the team's folder. */
+  readonly mainCheckout: string;
+  /**
+   * The deploy targets a push to the default branch deploys by itself (a host that builds on push): quiet claims on
+   * them hold the integrate, and the push is recorded as their deploy.
+   */
+  readonly deploysOnPush: readonly string[];
+  /**
+   * Refuse a branch (integrate) or a pushed range (roll) whose package files need a dependency install, so the main
+   * checkout's node_modules, which its worktrees link to, never changes unreviewed; `dependencyCheck` clears one for
+   * integrate, and with `roll.dependencyInstall` for roll.
+   */
+  readonly dependencyGate: boolean;
+  /**
+   * With `dependencyGate`, what clears a dependency change: a program and its arguments, run without a shell under the
+   * host lock with the base's package-lock.json in the file `TEAMRIG_BASELINE_LOCK` names (unset when the base has
+   * none). `teamrig integrate` runs it in the branch's checkout after the rebase and before the push, the default
+   * branch its base; `teamrig roll` in the main checkout after the pull, its old HEAD the base. Exit 0 lets the
+   * change go, anything else refuses it. Unset: the gate refuses every dependency change.
+   */
+  readonly dependencyCheck?: readonly string[];
+  /** After the push, fast-forward the main checkout to it: only a fast-forward, only on the default branch with no tracked changes. */
+  readonly followMainCheckout: boolean;
+  /** How `teamrig roll` deploys what landed on the default branch; unset: the repository is not rolled. */
+  readonly roll?: RollConfig;
+}
+
+/** A check `teamrig roll` asks before it rolls: a program and its arguments, run without a shell from the main checkout. */
+export interface RollGateConfig {
+  /** Names the gate in a wait or refusal, such as `flow`. */
+  readonly name: string;
+  /** Exit 0 lets the roll go, 75 makes it wait, 2 refuses it; anything else, or no answer in time, makes it wait. */
+  readonly command: readonly string[];
+}
+
+/** How `teamrig roll` deploys a repository's default branch from its main checkout, each command run without a shell. */
+export interface RollConfig {
+  /** The deploy targets the roll deploys: quiet claims on them hold it. */
+  readonly targets: readonly string[];
+  /** Asked in order before the host lock and again under it; the first that does not pass holds the roll. */
+  readonly gates: readonly RollGateConfig[];
+  /**
+   * Installs a pulled range's dependency change (package-lock.json, or package.json beyond its scripts), such as
+   * `npm ci --ignore-scripts`: run after the pull and the `dependencyCheck`, before `afterPull`. A failed install
+   * moves the main checkout back and runs again to restore its dependencies. With `dependencyGate`, a dependency
+   * change rolls only when this and `dependencyCheck` are set.
+   */
+  readonly dependencyInstall?: readonly string[];
+  /** Run in order after the pull, before `command`; one that fails ends the roll before it deploys. */
+  readonly afterPull: readonly (readonly string[])[];
+  /** Deploys what the pull brought: exit 0 rolled (a stdout line `no-roll`: nothing needed rolling), else failed. */
+  readonly command: readonly string[];
+}
+
+/** `teamrig claim`: quiet claims, which hold deploys of their targets while a session measures them. */
+export interface ClaimsConfig {
+  /** A claim lasts at most this many minutes. */
+  readonly maxMinutes: number;
+}
+
+/** `teamrig windows`: when a measurement of a deploy target is clean, between the deploys and heavy steps that disturb it. */
+export interface WindowsConfig {
+  /** A target measures cleanly this many minutes after a deploy rolled it. */
+  readonly settleMinutes: number;
+  /** Per deploy target, its own settle minutes in place of `settleMinutes`. */
+  readonly targetSettleMinutes: Readonly<Record<string, number>>;
+  /** How long a deploy is taken to have rolled before its ledger.md line when the ledger has no record of its start. */
+  readonly assumedRollMinutes: number;
+  /** The shortest clean window worth listing. */
+  readonly minMinutes: number;
+}
+
+/**
+ * The deploy coordinator: its folder, the heavy-step cutoff and the reset blackout, the host lock, how a step waits,
+ * quiet claims, clean measurement windows, and the repositories `teamrig integrate` lands branches of and `teamrig roll` deploys.
+ */
 export interface CoordinatorConfig {
+  /** The coordinator's folder, which holds its ledger; a relative path is in the team's folder. Unset: `<state>/deploys`. */
+  readonly dir?: string;
   readonly schedule: ScheduleConfig;
+  readonly heavy: HeavyConfig;
+  readonly wait: CoordinatorWaitConfig;
+  /** A roll's gate still running after this many seconds is stopped, and the roll waits. */
+  readonly gateTimeoutSeconds: number;
+  readonly claims: ClaimsConfig;
+  readonly windows: WindowsConfig;
+  /** By name, such as `api`. */
+  readonly repos: Readonly<Record<string, CoordinatorRepoConfig>>;
 }
 
 export interface AlertsConfig {
@@ -392,15 +618,24 @@ export function isHiringPolicy(value: unknown): value is HiringPolicy {
   return HIRING_POLICIES.some((policy) => policy === value);
 }
 
-/** Hiring temporary sessions: who decides, and the caps every hire stays within. */
+/** How `check` measures an area against its dated work for a SCALE-OUT flag (src/hiring/scale-out.ts). */
+export interface ScaleOutConfig {
+  /** Days back over which the tasks an area finished give its pace; at most the 8 days a register keeps finished tasks. */
+  readonly windowDays: number;
+  /** The fewest tasks an area must have finished in that window for its pace to count; below it the area is not measured. */
+  readonly minDone: number;
+  /** How many of the top priorities count: their dated tasks are the work an area must finish in time. */
+  readonly topPriorities: number;
+}
+
+/**
+ * Hiring temporary sessions: who decides, the cap every hire stays within, and when an area needs one. A hire has
+ * no fixed daily budget: its part of the team's follows its share and queued work, like any session's.
+ */
 export interface HiringConfig {
   readonly policy: HiringPolicy;
   /** Hired sessions on the team at once. */
   readonly maxSessions: number;
-  /** A hire's daily budget, in % of the week, unless the hire names its own. */
-  readonly dailyPct: number;
-  /** The most all hired sessions' daily budgets may add up to. */
-  readonly maxDailyPct: number;
   /** Hours a hired session may hold no open task before it is due to retire. */
   readonly idleHours: number;
   /** Days from a hire to its review date, unless the hire names one. */
@@ -409,6 +644,7 @@ export interface HiringConfig {
   readonly resumeMaxTokens: number;
   /** The most days that session may have been idle (its transcript unwritten) for `open --resume` to resume it. */
   readonly resumeMaxIdleDays: number;
+  readonly scaleOut: ScaleOutConfig;
 }
 
 /**
@@ -450,6 +686,16 @@ export function isTerminalChoice(value: unknown): value is TerminalChoice {
 
 export interface OpenConfig {
   readonly terminal: TerminalChoice;
+}
+
+/** What `teamrig statusline` shows beside the model and the plan's use of the week. */
+export interface StatusLineConfig {
+  /** The name of the session's folder. */
+  readonly folder: boolean;
+  /** The branch checked out there, or the commit of a detached HEAD. */
+  readonly branch: boolean;
+  /** The command that resumes the session: `claude --resume <session id>`. */
+  readonly resume: boolean;
 }
 
 /** Claude Code's effort levels, lowest first: what `claude --effort` and `/effort` take. */
@@ -499,6 +745,11 @@ export interface KitConfig {
   /** Unset in a config written before team trees: the team is then the root of its own tree. */
   readonly team?: TeamLink;
   /**
+   * The IANA time zone, such as `Asia/Jerusalem`, the kit shows people every time in (zone-marked: `09:00 IDT`)
+   * and reads the times they type in; unset, the machine's own. Stored times stay UTC.
+   */
+  readonly timeZone?: string;
+  /**
    * Every session id on the team, the lead included. Ids key every file and record (inboxes, read
    * marks, task owners), so they never change; a rename only appends to the team's rename log.
    */
@@ -520,6 +771,9 @@ export interface KitConfig {
   readonly contextFiles: ContextFilesConfig;
   readonly lock: LockConfig;
   readonly pushGuard: PushGuardConfig;
+  readonly packageGuard: PackageGuardConfig;
+  readonly commitGuard: CommitGuardConfig;
+  readonly prompts: PromptsConfig;
   readonly commits: CommitsConfig;
   readonly coordinator: CoordinatorConfig;
   readonly budget: BudgetConfig;
@@ -529,12 +783,27 @@ export interface KitConfig {
   readonly tests: TestsConfig;
   readonly github: GithubConfig;
   readonly alerts: AlertsConfig;
+  /**
+   * A colored circle before each tab's title for what its session is doing (hook-tab-status.ts). It also
+   * needs Claude Code's own title off (`CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`), else Claude Code writes over it.
+   */
   readonly tabStatus: { readonly enabled: boolean };
+  /**
+   * Refuses Claude Code's question picker (AskUserQuestion) to every session but the lead, which would stop the
+   * session until the person answers; the reason says to record the decision on its task and go on
+   * (hook-picker-guard.ts). Off by default.
+   */
+  readonly pickerGuard: { readonly enabled: boolean };
+  readonly turnLog: TurnLogConfig;
+  /** Lets a shell line that only reads run without a permission prompt; off by default. */
+  readonly readonlyShell: ReadonlyShellConfig;
   readonly refresh: RefreshConfig;
   readonly hiring: HiringConfig;
   readonly burst: BurstConfig;
   /** How `teamrig open` starts a session in a new terminal tab. */
   readonly open: OpenConfig;
+  /** What `teamrig statusline` shows. */
+  readonly statusLine: StatusLineConfig;
   /** Each session's Claude Code model and effort, by id; the lead's unset keys take `DEFAULT_LEAD_LAUNCH`. */
   readonly launch: Readonly<Record<string, LaunchConfig>>;
   readonly paths: PathsConfig;
