@@ -4,7 +4,7 @@ import { BANNER_KEY, NOTHING_CURRENT, bannerBlock, currentTask } from '../hooks/
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { treeOf } from '../hooks/meta'
-import type { Row } from '../hooks/rows'
+import { SEPARATOR, type Row } from '../hooks/rows'
 import { HOUR, NOW, NO_TEAM, TEAM_SETTINGS, createLine, statusLine, treeAt } from './fixtures'
 
 function rowsOf(lines: readonly string[]): TaskRow[] {
@@ -62,18 +62,19 @@ describe('bannerBlock', () => {
   const snap = snapOf(LINES)
   const tree = treeAt(snap.tasks, NOW)
 
-  test('closed, one row cut at one line: the task in progress, or the next one after a dim next', () => {
-    const now = bannerBlock(currentTask(snap, tree), false, tree, 'po')
+  test('closed, one row cut at one line led by the name: the task in progress, or the next one after a dim next', () => {
+    const now = bannerBlock(currentTask(snap, tree), false, tree, 'po', 'po')
     expect(now.key).toBe(BANNER_KEY)
-    expect(now.rows.map(textOf)).toEqual(['◐ T4  Started last'])
+    expect(now.rows.map(textOf)).toEqual(['po · ◐ T4  Started last'])
+    expect(now.rows[0]?.spans.slice(0, 2)).toEqual([{ text: 'po', bold: true }, SEPARATOR])
     expect(now.rows[0]?.maxLines).toBe(1)
-    const next = bannerBlock({ kind: 'next', task: taskOf(snap.tasks, 'T2') }, false, tree, 'po')
-    expect(next.rows.map(textOf)).toEqual(['next ○ T2  Open first'])
-    expect(next.rows[0]?.spans[0]).toEqual({ text: 'next ', dim: true })
+    const next = bannerBlock({ kind: 'next', task: taskOf(snap.tasks, 'T2') }, false, tree, 'po', 'po')
+    expect(next.rows.map(textOf)).toEqual(['po · next ○ T2  Open first'])
+    expect(next.rows[0]?.spans[2]).toEqual({ text: 'next ', dim: true })
   })
 
   test('open, the title whole and the facts the person reads first, each on its labelled row at the edge', () => {
-    const open = bannerBlock({ kind: 'next', task: taskOf(snap.tasks, 'T2') }, true, tree, 'po')
+    const open = bannerBlock({ kind: 'next', task: taskOf(snap.tasks, 'T2') }, true, tree, 'po', 'po')
     expect(open.rows[0]?.maxLines).toBeUndefined()
     expect(open.rows.slice(1).map(row => row.key)).toEqual([
       `${BANNER_KEY}-card:T2:description`,
@@ -81,11 +82,21 @@ describe('bannerBlock', () => {
       `${BANNER_KEY}-card:T2:priority`,
     ])
     expect(open.rows.map(textOf)[1]).toBe('Description  What and why')
-    const working = bannerBlock(currentTask(snap, tree), true, tree, 'po')
+    const working = bannerBlock(currentTask(snap, tree), true, tree, 'po', 'po')
     expect(working.rows.map(row => row.key.split(':').at(-1))).toEqual([BANNER_KEY, 'status', 'note', 'priority'])
   })
 
-  test('a dim line when the area has no current task', () => {
-    expect(bannerBlock(null, false, tree, 'po').rows).toEqual([{ key: BANNER_KEY, spans: [{ text: NOTHING_CURRENT, dim: true }] }])
+  test('a wrapped title lines up under the title, past the name and any next', () => {
+    const indent = '○ T2  '.length
+    const next = bannerBlock({ kind: 'next', task: taskOf(snap.tasks, 'T2') }, false, tree, 'po', 'acme-po')
+    expect(next.rows[0]?.hang?.text.length).toBe('acme-po · next '.length + indent)
+    const now = bannerBlock(currentTask(snap, tree), false, tree, 'po', 'acme-po')
+    expect(now.rows[0]?.hang?.text.length).toBe('acme-po · '.length + indent)
+  })
+
+  test('the name, then a dim line, when the area has no current task', () => {
+    expect(bannerBlock(null, false, tree, 'po', 'po').rows).toEqual([
+      { key: BANNER_KEY, spans: [{ text: 'po', bold: true }, SEPARATOR, { text: NOTHING_CURRENT, dim: true }] },
+    ])
   })
 })
