@@ -13,9 +13,11 @@
 // field says where the keys go (find-field.ts). The close mark (✕, ctrl+x x) minimizes it to a one-row strip
 // instead of closing it; a press on the strip or /teamrig-pane opens it again, and the size is kept for the next
 // session (size.ts). A switch row, first in every
-// state and width, the strip included, flips the body between the tasks and the Changes view: the
-// files changed in the git repos the session works in and their lines (changes.ts), counted as Δn on
-// the switch and in the tab title. The band above the prompt shows the task the session works on now
+// state and width, the strip included, flips the body between the tasks, the Changes view (the
+// files changed in the git repos the session works in and their lines, changes.ts, counted as Δn on
+// the switch and in the tab title) and the Log view: each team session's prompts and replies of the last 24 h
+// from the turn logs teamrig writes (turn-log.ts), a press on a session opening its page at its newest lines,
+// back (b) returning to the list. The band above the prompt shows the task the session works on now
 // (banner.ts), a press opening its card, whether the pane is open, minimized or never drawn. Reads
 // files and runs git (status, diff, grep; no model calls); /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
@@ -25,6 +27,8 @@ import type {
   ExpandedTasks,
   FilePages,
   FindField,
+  LogList,
+  LogPage,
   Nav,
   PageDetails,
   PaneView,
@@ -56,6 +60,8 @@ import { isGitMissing, requirementBlocks, requirementProblems } from './requirem
 import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from './changes'
 import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 import { LiveDiffs, NO_DIFFS } from './diff'
+import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
+import { logListBlocks, logPageBlocks } from './log-rows'
 import {
   AT_LIST,
   back,
@@ -145,6 +151,12 @@ const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KN
 /** The open diffs are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when FileDiff or DiffLine changes shape. */
 const DIFFS_SHAPE = 'diffs-v1'
 const diffs = atom({ plugin: 'teamrig-pane', key: 'diffs' } as const, NO_DIFFS, { shape: DIFFS_SHAPE })
+/** The Log view's list and page are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when LogList, LogPage or TurnEntry changes shape. */
+const LOG_SHAPE = 'log-v1'
+const LOG_READING: LogList = { kind: 'reading' }
+const logList = atom({ plugin: 'teamrig-pane', key: 'logList' } as const, LOG_READING, { shape: LOG_SHAPE })
+const AT_LOG_LIST: LogPage | null = null
+const logPage = atom({ plugin: 'teamrig-pane', key: 'logPage' } as const, AT_LOG_LIST, { shape: LOG_SHAPE })
 const NOTHING_MISSING: RequirementProblem[] = []
 /** What the pane lacks (requirements.ts); each session start checks again and writes it anew, a hot reload's too. */
 const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, NOTHING_MISSING)
@@ -305,6 +317,8 @@ export const register: Register = on => {
   let tracked: LiveChanges | null = null
   /** Opens, closes and reads again the Changes files' diffs; set when the session starts. */
   let diffing: LiveDiffs | null = null
+  /** Reads the Log view's list or page again while it shows; set when the session starts. */
+  let logging: LiveLog | null = null
   /** The tab title last asked for: `Tasks · Δn` (changes-rows.ts paneTitle). */
   let title = paneTitle(EMPTY_CHANGES)
   /**
@@ -324,6 +338,7 @@ export const register: Register = on => {
     })
     live?.stop()
     tracked?.stop()
+    logging?.stop()
     // A filter is a look for the moment, never kept: a new session, or a hot reload, lists every task again.
     await update($, barFilter, () => null)
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
@@ -417,9 +432,28 @@ export const register: Register = on => {
       knownSeed(seed, kept),
     )
     tracked = changesLive
+    // A missing folder lists as null (no turn logs yet); a locked or denied one throws, which the list shows.
+    const logFiles: LogFiles = {
+      list: path => unlessMissing(() => $.fs.list(path), () => $.fs.exists(path), null),
+      read: path => $.fs.read(path),
+    }
+    const logLive = new LiveLog({
+      reader: new TurnLogReader(logFiles, places.found && places.team !== null ? places.team.turnLog : null),
+      now: () => $.clock.now(),
+      isShown: async () => (await read($, view)) === 'log' && (await read($, size)) !== 'minimized',
+      shownPage: async () => (await read($, logPage))?.session ?? null,
+      publishList: async list => {
+        await update($, logList, () => list)
+      },
+      publishPage: async page => {
+        await update($, logPage, () => page)
+      },
+    })
+    logging = logLive
     await started.refresh()
     started.startTimers((ms, fn) => $.clock.every(ms, fn))
     changesLive.startTimers((ms, fn) => $.clock.every(ms, fn))
+    logLive.startTimers((ms, fn) => $.clock.every(ms, fn))
     void $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
     // Once per start: git --version and the engine's version, never on a poll. The check never rejects; a
     // failed write only leaves the lines out.
@@ -528,6 +562,8 @@ export const register: Register = on => {
     let field: FindField = FIRST_FIELD
     let landings: RingLandings = NO_LANDINGS
     let heldKey: string | null = null
+    /** The session whose Log page shows; null for the list or another view. */
+    let logSession: string | null = null
     let body: Drawn[] = []
     /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
     let barLines: BarPiece[][] = []
@@ -563,7 +599,17 @@ export const register: Register = on => {
                 : place.kind === 'file'
                   ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
                   : paneBlocks(snap, shown, open, bar?.filter ?? null)
-        const viewBlocks = current === 'tasks' ? tasksBlocks : changesBlocks(changed, isGitMissing(missing), await read($, diffs))
+        // Inline, the Log view shows its list alone: a page opens in the dock.
+        const logShown = current === 'log' && !inline ? await read($, logPage) : null
+        logSession = logShown?.session ?? null
+        const viewBlocks =
+          current === 'tasks'
+            ? tasksBlocks
+            : current === 'changes'
+              ? changesBlocks(changed, isGitMissing(missing), await read($, diffs))
+              : logShown === null
+                ? logListBlocks(await read($, logList), snap.now)
+                : logPageBlocks(logShown, snap.now)
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
@@ -601,6 +647,16 @@ export const register: Register = on => {
       const found: RefFileRead = refFiles === null ? { kind: 'missing', tried: [] } : await refFiles.read(file.file)
       await update($, filePages, current => ({ ...current, [file.file]: found }))
       await go($, current => pushed(leavingList(current, from), { kind: 'file', file: file.file, line: file.line }))
+    }
+    // A press on a session in the Log view's list opens its page, read now, at its end: the newest lines are last.
+    // Back shows the list, read again, from its top.
+    const openLog = async (session: string) => {
+      await logging?.open(session)
+      await $.ui.scroll({ to: 'end', in: PANE }).catch(() => undefined)
+    }
+    const closeLog = async () => {
+      await logging?.close()
+      await $.ui.scroll({ to: 'start', in: PANE }).catch(() => undefined)
     }
     // Enter in the Find field opens the top result's page, the first active match, else the newest finished one, and
     // moves the ring onto the page's back step: left in the field, a new round's and empty, it would type the next
@@ -658,12 +714,19 @@ export const register: Register = on => {
         </Box>
       )
     }
-    // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), or,
-    // inline, a Changes file's diff (`expands`), else words alone.
+    // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
+    // session's Log page (`reads`), or, inline, a Changes file's diff (`expands`), else words alone.
     const headOf = (drawn: Drawn) => {
       const id = drawn.toggle
       const opens = drawn.opens
+      const reads = drawn.reads
       const expands = drawn.expands
+      if (reads !== undefined)
+        return (
+          <Button key={drawn.key} plain onPress={() => void openLog(reads)}>
+            {drawText(drawn.spans, drawn.wrap)}
+          </Button>
+        )
       if (expands !== undefined)
         return (
           <Button key={drawn.key} plain onPress={() => void diffing?.toggle(expands)}>
@@ -694,7 +757,7 @@ export const register: Register = on => {
     const drawBlock = (drawn: Drawn) => {
       const head = headOf(drawn)
       if (drawn.card === undefined) {
-        if (drawn.key !== landingKey || drawn.toggle !== null || drawn.opens !== undefined) return head
+        if (drawn.key !== landingKey || drawn.toggle !== null || drawn.opens !== undefined || drawn.reads !== undefined) return head
         return (
           <Box key={drawn.key} flexDirection="column">
             {head}
@@ -719,15 +782,17 @@ export const register: Register = on => {
     }
     const drawSlot = (slot: Slot) => (slot.kind === 'drawn' ? drawBlock(slot.drawn) : <Box key={slot.key} height={slot.rows} />)
 
-    // The switch: first in every state, so the other view is always one press (or t / d) away, its
+    // The switch: first in every state, so another view is always one press (or t / d / g) away, its
     // buttons wrapping under each other in a dock too narrow for both. Minimized, it is the whole
     // pane, one row, and a press on either button opens the pane in full on that view.
-    // The Tasks button shows the list, from a page too, scrolled back to where the page was opened from.
+    // The Tasks button shows the list, from a page too, scrolled back to where the page was opened from; the Log
+    // button shows the sessions, from a session's page too.
     const switchTo = async (target: PaneView) => {
       await update($, view, () => target)
       await sizer?.set('open')
       if (target === 'tasks') await go($, current => reset(current, true))
       if (target === 'changes') await tracked?.refresh()
+      if (target === 'log') await logging?.close()
     }
     const switchRow = (
       <Box key="switch" flexDirection="row" flexWrap="wrap" columnGap={1}>
@@ -745,6 +810,7 @@ export const register: Register = on => {
           variant={current === 'changes' ? 'primary' : 'secondary'}
           onPress={() => void switchTo('changes')}
         />
+        <Button key="log" label="Log" hotkey="g" variant={current === 'log' ? 'primary' : 'secondary'} onPress={() => void switchTo('log')} />
         {isMinimized ? (
           <Text key="hint" dimColor wrap="truncate-end">
             minimized
@@ -941,10 +1007,19 @@ export const register: Register = on => {
           <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
         </Box>
       ) : null
+    // A Log page leads with back (b) to the list, then a rule.
+    const logHead =
+      logSession === null ? null : (
+        <Box key="log-head" flexDirection="column">
+          <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void closeLog()} />
+          <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
+        </Box>
+      )
     return (
       <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={inline ? 0 : 1}>
         {controls}
         {pageHead}
+        {logHead}
         {weekRow}
         {statusRows}
         {inline ? body.map(drawBlock) : windowed(body, bodyWindow).map(drawSlot)}

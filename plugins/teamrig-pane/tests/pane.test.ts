@@ -3,6 +3,7 @@ import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiF
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
 import { BANNER_KEY, NOTHING_CURRENT } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
+import { POLL_MS } from '../hooks/live'
 import { cells } from '../hooks/width'
 import { HOUR, NOW, S1, bigRegister, createLine, iso, markLine, statusLine, updateLine, verifyingLine } from './fixtures'
 
@@ -51,6 +52,21 @@ function fakeDisk(on: On) {
   on('fs.exists', async ($, e) => {
     if (locks.get(keyOf(e.path))?.isSeen === false) return { value: false }
     return { value: files.has(keyOf(e.path)) || inFolder(e.path).length > 0 }
+  })
+  /** What lies right under a folder: its files, and a folder for each deeper path; nothing there is ENOENT. */
+  on('fs.list', async ($, e) => {
+    const prefix = `${keyOf(e.path)}/`
+    const entries = new Map<string, FsEntry>()
+    for (const [path, file] of files) {
+      if (!path.startsWith(prefix)) continue
+      const [name = '', ...deeper] = path.slice(prefix.length).split('/')
+      const entry: FsEntry =
+        deeper.length > 0
+          ? { name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false }
+          : { name, kind: 'file', size: file.text.length, mtimeMs: file.mtimeMs, isLink: false }
+      entries.set(name, entry)
+    }
+    return entries.size === 0 ? { deny: `ENOENT: ${e.path}` } : { value: [...entries.values()] }
   })
   on('fs.read', async ($, e) => {
     reads.push(keyOf(e.path))
@@ -840,7 +856,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^WARN the pane could not draw: .*state store unavailable/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'find-key', 'mine', 'all', 'archive'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'find-key', 'mine', 'all', 'archive'])
 
   isStateDown = false
   await pane.redraw(PANE_PROPS)
@@ -912,7 +928,7 @@ test('a session starts minimized when the last one was left so: one row, docked 
   for (const props of [PANE_PROPS, { ...PANE_PROPS, bodyColumns: 23 }, { ...PANE_PROPS, placement: 'inline' as const }]) {
     await pane.redraw(props)
     expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(['minimized'])
-    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes'])
+    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log'])
   }
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
 
@@ -985,7 +1001,7 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   expect(await bannerText(band)).toMatch(/^next ○ T1 {2}Ship the task pane/)
 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log'])
   await pane.press({ key: 'tasks' })
   expect(buttonKeys(await pane.drawn())).not.toContain(BANNER_KEY)
   expect(await bannerText(band)).toMatch(/^next ○ T1 {2}Ship the task pane/)
@@ -1069,7 +1085,7 @@ function buttonLabel(node: unknown, key: string): string | null {
   return props !== null && 'label' in props && typeof props.label === 'string' ? props.label : null
 }
 
-test('the Tasks / Changes switch leads the pane in every view, width and placement, wrapping rather than clipping', async ($, on) => {
+test('the Tasks / Changes / Log switch leads the pane in every view, width and placement, wrapping rather than clipping', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
@@ -1077,9 +1093,9 @@ test('the Tasks / Changes switch leads the pane in every view, width and placeme
   for (const props of [PANE_PROPS, ...NARROW_AND_INLINE]) {
     await pane.redraw(props)
     const drawn = await pane.drawn()
-    expect(buttonKeys(keyedNode(drawn, 'switch'))).toEqual(['tasks', 'changes'])
+    expect(buttonKeys(keyedNode(drawn, 'switch'))).toEqual(['tasks', 'changes', 'log'])
     // Then the mode buttons, past the Find row the dock draws between them.
-    expect(buttonKeys(drawn).filter(key => key !== 'find-key').slice(0, 4)).toEqual(['tasks', 'changes', 'mine', 'all'])
+    expect(buttonKeys(drawn).filter(key => key !== 'find-key').slice(0, 5)).toEqual(['tasks', 'changes', 'log', 'mine', 'all'])
     const row = keyedProps(drawn, 'switch')
     expect(row !== null && 'flexWrap' in row ? row.flexWrap : null).toBe('wrap')
   }
@@ -1087,7 +1103,7 @@ test('the Tasks / Changes switch leads the pane in every view, width and placeme
   await pane.press({ key: 'changes' })
   for (const props of [PANE_PROPS, ...NARROW_AND_INLINE]) {
     await pane.redraw(props)
-    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes'])
+    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log'])
   }
 })
 
@@ -1239,7 +1255,117 @@ test('from the minimized strip, Changes opens the pane in full on the Changes vi
   await pane.press({ key: 'changes' })
   expect(store.get('paneSize')).toBe('open')
   expect(await pane.find({ text: /No git repo yet/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log'])
+})
+
+const WEB_LOG = '/Homes/tester/.teamrig/teams/web/state/turn-log'
+
+/** A turn log line as teamrig writes it, `minutes` before NOW. */
+function turnLine(minutes: number, kind: 'prompt' | 'reply' | 'clear', text: string): string {
+  return JSON.stringify({ v: 1, at: iso(NOW - minutes * 60_000), kind, text, claude: 'c-1' })
+}
+
+/** Every line the pane draws, each Text split at its line ends. */
+async function drawnLines(pane: Mounted<'Pane'>): Promise<string[]> {
+  return (await pane.findAll({ type: 'Text' })).flatMap(found => found.text.split('\n'))
+}
+
+/** A session of team web, its pointer file in /work, with turn logs for lead, then api, in the hour before NOW. */
+async function startWithLogs(on: On) {
+  const started = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  started.disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  started.disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
+    createLine('T7', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the team register' }),
+  ])
+  started.disk.write(`${WEB_LOG}/lead/2026-10-13T13.jsonl`, [turnLine(50, 'prompt', 'Plan the week'), turnLine(49, 'reply', 'Planned')])
+  started.disk.write(`${WEB_LOG}/api/2026-10-13T13.jsonl`, [
+    turnLine(40, 'prompt', 'Ship the log view'),
+    turnLine(39, 'reply', 'Shipped it'),
+    turnLine(38, 'clear', 'context cleared (/clear)'),
+  ])
+  return started
+}
+
+test("the Log view lists the team's sessions with a turn log of the last 24 h, the newest change first, each with its newest prompt", async ($, on) => {
+  const { clock, disk } = await startWithLogs(on)
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  await pane.press({ key: 'log' })
+  expect(await pane.find({ text: /Ship the team register/ })).toBeUndefined()
+  const sessions = async () => (await drawnLines(pane)).filter(line => /^(api|lead) · /.test(line)).map(line => line.slice(0, line.indexOf(' ')))
+  expect(await sessions()).toEqual(['api', 'lead'])
+  expect(await drawnLines(pane)).toContain('Ship the log view')
+  expect(await drawnLines(pane)).toContain('Plan the week')
+
+  // A new prompt moves its session up on the next poll; the Tasks view shows the tasks again.
+  disk.write(`${WEB_LOG}/lead/2026-10-13T13.jsonl`, [turnLine(50, 'prompt', 'Plan the week'), turnLine(1, 'prompt', 'Review the plan')])
+  await clock.advance(POLL_MS)
+  expect(await sessions()).toEqual(['lead', 'api'])
+  expect(await drawnLines(pane)).toContain('Review the plan')
+  await pane.press({ key: 'tasks' })
+  expect(await pane.find({ text: /Ship the team register/ })).toBeDefined()
+})
+
+test('a press on a session opens its page: its lines oldest first, under back, kept current; back returns to the list', async ($, on) => {
+  const { clock, disk } = await startWithLogs(on)
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  await pane.press({ key: 'log' })
+  await pane.press({ key: 'log:session:api' })
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'back'])
+  expect(await pane.find({ text: /^lead · / })).toBeUndefined()
+  expect(await drawnLines(pane)).toContain('last 24 h · 3 lines, the newest last')
+  const lines = async () => (await drawnLines(pane)).filter(line => /^(prompt|reply) · |^── |^Ship|^Next/.test(line))
+  expect(await lines()).toEqual(['prompt · 13:20', 'Ship the log view', 'reply · 13:21', 'Shipped it', '── 13:22 · context cleared (/clear) ──'])
+
+  disk.write(`${WEB_LOG}/api/2026-10-13T13.jsonl`, [
+    turnLine(40, 'prompt', 'Ship the log view'),
+    turnLine(39, 'reply', 'Shipped it'),
+    turnLine(38, 'clear', 'context cleared (/clear)'),
+    turnLine(2, 'prompt', 'Next step'),
+  ])
+  await clock.advance(POLL_MS)
+  expect((await lines()).at(-1)).toBe('Next step')
+
+  await pane.press({ key: 'back' })
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'log:session:api', 'log:session:lead'])
+
+  // Log from a page shows the list too, and inline the list shows alone.
+  await pane.press({ key: 'log:session:api' })
+  await pane.press({ key: 'log' })
+  expect(await pane.find({ text: /^lead · / })).toBeDefined()
+  await pane.press({ key: 'log:session:api' })
+  await pane.redraw({ ...PANE_PROPS, placement: 'inline', scroll: { offset: 0, bodyRows: 10 } })
+  expect(await pane.find({ text: /^lead · / })).toBeDefined()
+})
+
+test('the Log view says so when the session has no team', async ($, on) => {
+  await start(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  await pane.press({ key: 'log' })
+  expect(await pane.find({ text: /^No team found: the Log view shows/ })).toBeDefined()
+})
+
+test('the Log view reads no turn log while another view shows, and reads what moved when it shows again', async ($, on) => {
+  const { clock, disk } = await startWithLogs(on)
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  const logReads = () => disk.reads.filter(path => path.includes('/turn-log/'))
+
+  await pane.press({ key: 'log' })
+  await pane.press({ key: 'tasks' })
+  disk.reads.length = 0
+  disk.write(`${WEB_LOG}/api/2026-10-13T13.jsonl`, [turnLine(1, 'prompt', 'Unseen yet')])
+  await clock.advance(POLL_MS)
+  expect(logReads()).toEqual([])
+
+  await pane.press({ key: 'log' })
+  expect(logReads()).toEqual([`${WEB_LOG}/api/2026-10-13T13.jsonl`])
+  expect(await drawnLines(pane)).toContain('Unseen yet')
 })
 
 test('with Claude Code new enough and git there, it draws no requirement line and runs git --version once', async ($, on) => {
