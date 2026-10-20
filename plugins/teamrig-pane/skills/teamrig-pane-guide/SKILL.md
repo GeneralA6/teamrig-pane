@@ -1,6 +1,6 @@
 ---
 name: teamrig-pane-guide
-description: Use when a session runs the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes tab, where it finds the register and its requirements.
+description: Use when a session runs the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes and Log views, where it finds the register, requirements.
 ---
 
 # teamrig-pane guide
@@ -96,6 +96,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | --- | --- |
 | `t` | The Tasks view |
 | `d` | The Changes view |
+| `g` | The Log view: each team session's prompts and replies (see [The Log view](#the-log-view)) |
 | `m` | Tasks: this session's area (`mine`) |
 | `a` | Tasks: every owner (`all`) |
 | `o` | mine: only the tasks done today (the status bar's `done today`); again shows every task |
@@ -108,7 +109,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
-| `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead |
+| `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a session's Log page, back to the sessions |
 | `f` | Forward to the place back left, while there is one |
 | `s` | In the dock: puts the cursor in the Find field, always shown under the switch, that searches the tasks the pane holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
 | `h` | In the dock: `archive`, the Archive page of this week's finished tasks (see [Archive](#archive)) |
@@ -125,8 +126,8 @@ as the list does, whether the pane is open, minimized or never drawn. A click op
 status, note, proof, priority and due under it; a second click closes it. A survey takes the band while it is
 up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
-Minimized, the pane is one row: the `[Tasks] [Changes Δn]` switch and a `minimized` mark. A click on either
-button, `t` or `d`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
+Minimized, the pane is one row: the `[Tasks] [Changes Δn] [Log]` switch and a `minimized` mark. A click on any
+of its buttons, `t`, `d` or `g`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
 session.
 
 ## Where the pane sits
@@ -227,7 +228,7 @@ click or key again shows every task; another status switches to it. A shown stat
 `0 waiting`, so it can still be cleared, and the list says `Nothing waiting.` (`Nothing done today.`, `Nothing
 to verify.`, `Nothing in progress.`, `Nothing left to start.` for the others).
 
-The filter belongs to the pane: it holds while you switch to **all** (which it does not filter) or to Changes, and
+The filter belongs to the pane: it holds while you switch to **all** (which it does not filter) or to Changes or Log, and
 is never kept across a reload: a new session, `/reload-plugins` or a restart shows every task again.
 
 ### A task's card
@@ -335,7 +336,7 @@ not shown. The page shows the file as it was when the page opened: open it again
 
 ### Find
 
-The dock always shows a Find field under its Tasks and Changes switch. `s` or a click puts the cursor in it; it
+The dock always shows a Find field under its Tasks, Changes and Log switch. `s` or a click puts the cursor in it; it
 never takes the keys by itself, so the pane's other keys keep working. As you type, the body lists the tasks
 the pane holds that every word matches, the matched words underlined:
 
@@ -432,6 +433,23 @@ blocks a commit), and while it has changed files one `git diff HEAD --numstat -z
 `git grep --untracked -c` runs to count their lines: on the next 3 second poll after a write or a Bash or
 PowerShell call, every 60 seconds, and at once on a switch to Changes; each open diff is one more `git diff` then.
 A count git can't give is left out, with no warning, and git never runs in a folder that is gone.
+
+## The Log view
+
+`g`, or Log on the switch, lists the team's sessions that wrote a prompt or a reply in the last 24 hours, the one
+whose log changed last first: each its id, when its log last changed, and its newest prompt in two lines at most. It
+reads the turn log teamrig writes for every session of the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`),
+so a `/clear` or a compaction never takes away what a tab showed. With no team, no turn log yet (teamrig writes none
+while the team's `turnLog.enabled` is off) or a folder it cannot read, the view says which.
+
+A press on a session (a click, or Enter on it) opens its page under `back` (`b`): its lines oldest first, the newest at
+the end where the page opens. Each prompt and reply is a head line (`prompt · 20:05`) over its text; a `/clear` is a dim
+rule. teamrig keeps a text's last 64,000 characters, and a cut one says `cut, its end kept`. The page holds the newest
+256 KiB of text and says when it left older lines out. Log, from a page or another view, shows the list; above the
+prompt the list shows, never a page.
+
+While the view shows, it lists the session folders on each 3 second poll and reads an hour's file again only when
+its size or time moved; on another view, or minimized, it reads nothing.
 
 ## How it relates to the teamrig CLI
 

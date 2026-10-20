@@ -59,14 +59,17 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
   goals, who asked, when it was added and by whom, where its ask is written, its evidence and its links. `c` closes every card. A click on a task
   id in a card opens that task's page, and a click on a file it references opens the file at the line it names, with
   back and forward (`b`, `f`) and a trail of where you went.
-- **Find:** the dock always shows a Find field under its Tasks and Changes switch (`s` or a click puts the cursor in it) that lists, as you type, the
+- **Find:** the dock always shows a Find field under its Tasks, Changes and Log switch (`s` or a click puts the cursor in it) that lists, as you type, the
   tasks the pane holds whose id, title, owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.
   A line under it says where your keys go: into the search, to the pane's keys, or to Claude's prompt.
 - **Archive:** `h` lists the tasks finished this week, a day at a time; `p` and `l` step a week back
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.
 - **Changes:** the files changed in each git repo the session works in, each with its lines added and removed;
   a click on a file opens its diff under it, `+` lines green and `-` lines red.
-  Press the switch, or `t` and `d` while the pane holds the keyboard.
+- **Log:** each session's prompts and replies of the last 24 h, from the turn log teamrig writes, so a `/clear` or a
+  compaction never takes away what a tab showed: the team's sessions, the newest change first, each with its newest
+  prompt; a press opens one, its lines oldest first, kept current as it writes, and `b` goes back to the list.
+  Press the switch, or `t`, `d` and `g` while the pane holds the keyboard.
 
 ## How it reads teamrig
 
