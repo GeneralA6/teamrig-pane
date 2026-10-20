@@ -74,7 +74,7 @@ const failureOf = (answer: Promise<unknown>) =>
 describe('a rotated register', () => {
   test("folds the snapshot then the tail as teamrig's working-set read does, reading the snapshot first and no segment", async () => {
     const files = rotated()
-    const snap = await poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS))
+    const snap = await poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null))
     const register = await teamrigRead(rotated())
     expect([...register.state.tasks.keys()]).toEqual(['T2', 'T3'])
     expect(snap?.tasks.map(task => [task.id, task.status])).toEqual([
@@ -87,7 +87,7 @@ describe('a rotated register', () => {
 
   test('an append to the tail re-reads the tail alone', async () => {
     const files = rotated()
-    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS)
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)
     await poll(source)
     const before = files.reads.length
     files.write(PATHS.events, toJsonlLine(markerRecord(1, iso(NOW - 10 * DAY))) + lines(T3_CREATE, T3_DONE, T2_STARTED))
@@ -98,7 +98,7 @@ describe('a rotated register', () => {
 
   test('a snapshot it cannot use is counted as teamrig counts it, and the segments are folded instead, each read once', async () => {
     const files = rotated(DAMAGED)
-    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS)
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)
     const snap = await poll(source)
     const register = await teamrigRead(rotated(DAMAGED))
     expect(snap?.tasks.map(task => task.id)).toEqual(['T2', 'T3'])
@@ -111,7 +111,7 @@ describe('a rotated register', () => {
 
   test('a snapshot from a newer teamrig is counted as a newer line, and the history read instead', async () => {
     const files = rotated(`${JSON.stringify({ v: 9, type: 'snapshot' })}\n`)
-    const snap = await poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS))
+    const snap = await poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null))
     expect(snap?.tasks.map(task => task.id)).toEqual(['T2', 'T3'])
     expect(snap?.problem).toBe('events.jsonl: 0 unreadable line(s), 1 line(s) from a newer teamrig, 0 event(s) naming no task')
   })
@@ -120,7 +120,7 @@ describe('a rotated register', () => {
     const files = new MemoryFiles()
     const tail = toJsonlLine(markerRecord(1, iso(NOW - 10 * DAY))) + lines(T3_CREATE)
     files.write(PATHS.events, tail)
-    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS)
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)
     expect(await failureOf(poll(source))).toBe(`${SEGMENT} is missing: the register's archive is incomplete, so its tasks cannot be read`)
     files.write(SEGMENT, lines(T1_CREATE, T2_CREATE))
     expect((await poll(source))?.tasks.map(task => task.id)).toEqual(['T1', 'T2', 'T3'])
@@ -130,7 +130,7 @@ describe('a rotated register', () => {
   test('a segment over the 4 MiB one read allows is named with its size and never read', async () => {
     const files = rotated(null)
     files.write(SEGMENT, ' '.repeat(MAX_READ_BYTES + 2 ** 19))
-    expect(await failureOf(poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS)))).toBe(
+    expect(await failureOf(poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)))).toBe(
       'events-000001.jsonl is 4.50 MiB, over the 4 MiB a pane can read at once: it needs rotating',
     )
     expect(files.reads.includes(SEGMENT)).toBe(false)
@@ -139,7 +139,7 @@ describe('a rotated register', () => {
   test('a register never rotated is its tail alone, with no snapshot or segment read', async () => {
     const files = new MemoryFiles()
     files.write(PATHS.events, lines(T1_CREATE, T1_DONE, T2_CREATE))
-    const snap = await poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS))
+    const snap = await poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null))
     expect(snap?.tasks.map(task => task.id)).toEqual(['T2'])
     expect(files.reads).toEqual([PATHS.events])
   })

@@ -93,7 +93,7 @@ async function paneSnapshot(files: MemoryFiles): Promise<Snapshot> {
   // The machine's zone is UTC: the team config's, as teamrig read it, must win over it.
   const places = await findPlaces({ env: { TEAMRIG_HOME: KIT }, files, home: null, cwd: `${GOLDEN_ROOT}/proj`, machineZone: 'UTC' })
   if (!places.found) throw new Error(places.problem)
-  const snap = await new TaskRegisterSource(files, registerPaths(places.dirs), places.settings).poll({
+  const snap = await new TaskRegisterSource(files, registerPaths(places.dirs), places.settings, places.team).poll({
     claudeSession: GOLDEN_SESSION,
     pinned: null,
     now: GOLDEN.generatedAt,
@@ -134,6 +134,8 @@ describe('golden', () => {
   test('finds the session area from the mark teamrig inbox read wrote for the session', async () => {
     const snap = await paneSnapshot(goldenFiles())
     expect([snap.area, snap.areaSource]).toEqual(['alpha', 'inbox-read'])
+    // The config names no session, so alpha has the team's default name, as teamrig's Roster gives it.
+    expect([snap.team, snap.areaName]).toEqual(['demo', 'demo-alpha'])
   })
 
   test('counts unread inbox lines as teamrig inbox status does: after a read, a trim from the top and a rewrite', async () => {

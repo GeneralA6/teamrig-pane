@@ -5,7 +5,7 @@ import { rowOf } from '../hooks/log'
 import type { Block, Span } from '../hooks/rows'
 import { MAX_RESULTS, NO_RESULTS, queryWords, searchTasks, topResult, type Hit } from '../hooks/search'
 import { EXCERPT_LEAD, excerpt, markedSpans, NOTHING_FOUND, SEARCH_HINT, searchBlocks } from '../hooks/search-rows'
-import { HOUR, NOW, TEAM_SETTINGS, createLine, statusLine, treeAt } from './fixtures'
+import { HOUR, NOW, NO_TEAM, TEAM_SETTINGS, createLine, statusLine, treeAt } from './fixtures'
 
 /** The rows teamrig's reader folds from event lines. */
 function rowsOf(lines: readonly string[]): TaskRow[] {
@@ -22,7 +22,7 @@ const TASKS = rowsOf([
   createLine('T9', { owner: 'po', by: 'po', at: NOW - 5 * HOUR, title: 'Feed the pages' }),
   statusLine('T9', 'po', NOW - HOUR, 'dropped', 'folded into the feed'),
 ])
-const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, problem: null, ...TEAM_SETTINGS, now: NOW }
+const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
 
 /** What `query` finds among `tasks`, the active ones in plan order on their tree's effective dues. */
 const search = (tasks: readonly TaskRow[], query: string) => searchTasks(tasks, query, treeAt(tasks, NOW))
