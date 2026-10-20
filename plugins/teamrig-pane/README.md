@@ -11,8 +11,8 @@ Claude Code's fullscreen UI. It reads files only: a stat poll
 every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick moves the due/age
 labels on. No model calls, so no tokens. Every time is on the team's clock and zone-marked
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
-session's `TZ`, else the system's). A switch over the list flips it to the session's git changes
-(Tasks and Changes, below).
+session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
+to each team session's prompts and replies (Tasks, Changes and Log, below).
 
 - **mine**: the session's area, under its status bar (Status bar, below) and a header counting its
   active tasks and unread inbox lines (`3 active · inbox 1 unread`; a pin names the area first,
@@ -115,7 +115,7 @@ looks for the file where it looks for the lines a card quotes: an inbox in the i
 folder, a relative path in the session's folder and each folder above it, then in the team's folder. A file it does
 not find lists each path it looked at; one over 256 KiB, or not text, says why it is not shown.
 
-The dock always shows a Find field under its Tasks and Changes switch; `s` or a click puts the cursor in it, and
+The dock always shows a Find field under its Tasks, Changes and Log switch; `s` or a click puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
 aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
 evidence or ref (one that starts with a mark, `.md`, matches anywhere), and the body lists the matches as
@@ -175,7 +175,7 @@ cells and count turn bold, and a dim line under the counts reads `showing verify
 for all`. The same press again shows every task; one on another status switches to it. A shown status
 that empties keeps its count at 0 (`0 waiting`), so a press still clears it, and the list says so
 (`Nothing waiting.`). The filter is the pane's own state: it holds while you switch to all (which it
-does not filter) or to Changes, and is never kept across a reload; a new session, or a reload, shows
+does not filter) or to Changes or Log, and is never kept across a reload; a new session, or a reload, shows
 every task again.
 
 ## The banner
@@ -196,8 +196,8 @@ empty prompt.
 The close mark (`✕`, or `ctrl+x x`) minimizes the pane to a one-row strip instead of closing it, so a
 stray click never loses it. The close is refused (a `ui.close` veto), so the pane also keeps its place
 among the panes the person opened: a later open needs 110 columns, not the 144 an unasked open needs.
-The strip is the Tasks / Changes switch (below) and a `minimized` mark. To open it in full again, click
-either button, which opens the pane on that view, press `t` or `d` while the pane holds the keyboard
+The strip is the Tasks / Changes / Log switch (below) and a `minimized` mark. To open it in full again, click
+any of its buttons, which opens the pane on that view, press `t`, `d` or `g` while the pane holds the keyboard
 (`ctrl+x tab` or a click on it), or run `/teamrig-pane`. The size is kept in `$.store` (`paneSize`, one
 for the plugin), so the next session, after a restart or a hot reload too, opens as the last one was
 left. The plugin's own close and an unload still close it.
@@ -241,11 +241,11 @@ too), all of it once when the session starts. When nothing names the register, o
 the pointer file or the team config cannot be used, the pane draws one `WARN` line saying what to set
 or what is wrong.
 
-## Tasks and Changes
+## Tasks, Changes and Log
 
-The switch, `[Tasks] [Changes Δ3]`, leads the pane in every state: open, in a dock however narrow (its
-two buttons wrap under each other rather than clip), above the prompt, and as the minimized strip. While
-the pane holds the keyboard, `t` presses Tasks and `d` Changes (`c` already closes the cards).
+The switch, `[Tasks] [Changes Δ3] [Log]`, leads the pane in every state: open, in a dock however narrow (its
+buttons wrap under each other rather than clip), above the prompt, and as the minimized strip. While
+the pane holds the keyboard, `t` presses Tasks, `d` Changes and `g` Log (`c` already closes the cards).
 
 Changes lists the files changed in the git repos the session works in: the repo of the session's folder,
 and the repo of each file the session or one of its agents writes (Edit, Write, NotebookEdit; a file a
@@ -293,6 +293,30 @@ What the host draws and the mod can't change:
 - the tab strip, and so the title's `Δn`, shows only while more than one pane is open;
 - a mod can't show or focus the built-in Diff pane (`/diff`), so Changes is the plugin's own list of
   git's changes, and its own diff of each file under it.
+
+### Log
+
+Log shows each session's prompts and replies of the last 24 h, from the turn log teamrig writes for every session of
+the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`, one file an hour, its lines kept as long as the team's
+`turnLog.keepHours` says), so a `/clear` or a compaction never takes away what a tab showed. It reads files only and
+only while it shows: no model calls, no tokens.
+
+The view lists the team's sessions that wrote a line in the last 24 h, the one whose log changed last first: each its
+id and when its log last changed, over its newest prompt in two lines at most (`no prompt in the last 24 h` when it has
+replies alone). Until there is one it says why: no team, no turn log yet (teamrig writes none while the team's
+`turnLog.enabled` is off), a folder it could not read, or no session in the window.
+
+A press on a session (a click, or Enter on it) opens its page under a `back` button (`b`): a head with the session and
+how many lines it shows, then its lines oldest first, so the newest is at the end, where the page opens. Each prompt and
+reply has a head line (`prompt · 20:05`, `reply · 20:06`, a time of an earlier day with its day) over its text, a long
+reply wrapped under its own indent; teamrig keeps a text's last 64,000 characters, and a cut one says `cut, its end
+kept`. A `/clear` is a dim rule, `── 20:07 · context cleared (/clear) ──`. The page holds the newest 256 KiB of text and
+says when it left older lines out; a file it could not read is named in a `Not all read` line, and the rest still
+shows.
+
+While it shows, the list or the open page is read again on each 3 s poll: the session folders are listed, and an hour's
+file is read again only when its size or time moved. The Log button, from a page or another view, shows the list.
+Above the prompt the list shows, never a page.
 
 ## Reading the register
 
