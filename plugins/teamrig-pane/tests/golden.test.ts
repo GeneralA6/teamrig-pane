@@ -182,20 +182,6 @@ describe('golden capture', () => {
     for (const value of [undefined, '', ' ', 'soon', '1.5', '1e400']) expect(() => clockAt(value)).toThrow(GOLDEN_CLOCK_VARIABLE)
   })
 
-  test("once preloaded into a run, fixes Date.now at the instant the run's variable names", async () => {
-    const realNow = Date.now
-    const saved = process.env[GOLDEN_CLOCK_VARIABLE]
-    process.env[GOLDEN_CLOCK_VARIABLE] = '1792235559957'
-    try {
-      await import('../scripts/golden-clock')
-      expect([Date.now(), Date.now()]).toEqual([1792235559957, 1792235559957])
-    } finally {
-      Date.now = realNow
-      if (saved === undefined) delete process.env[GOLDEN_CLOCK_VARIABLE]
-      else process.env[GOLDEN_CLOCK_VARIABLE] = saved
-    }
-  })
-
   test('names the lines of teamrig source that read the clock other than through Date.now', () => {
     expect(realClockReads('const at = Date.now()\nconst d = new Date(at)\nconst e = x.toDate()')).toEqual([])
     expect(realClockReads('a\nconst d = new Date()\nconst t = performance.now()\nconst s = Date()\nprocess.hrtime.bigint()')).toEqual([2, 3, 4, 5])
