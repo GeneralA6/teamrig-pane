@@ -127,7 +127,7 @@ function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: PaneTree, viewe
     key,
     spans: [color === undefined ? { text: GLYPH[task.status], dim: true } : { text: GLYPH[task.status], color }, { text: ` ${task.id}${TITLE_GAP}${task.title}`, dim: true }],
     hang: indentOf(task),
-    end: { text: whenWords(task.statusAt, tree.context.now), dim: true },
+    end: { text: whenWords(task.statusAt, tree.context), dim: true },
     maxLines: detail === undefined ? 1 : undefined,
   }
   if (detail !== undefined) return { key, toggle: task.id, rows: [row], card: cardRows('done', task, detail, tree, viewer) }

@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow, WaitRow } from '../types'
-import { readRegister } from '../hooks/core/read/index'
+import { TimeZone, readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { ageWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, STATUS_WORDS, waitingWords, whenWords } from '../hooks/meta'
-import { HOUR, NOT_PICKED_UP_HOURS, NOW, createLine, iso, statusLine, treeAt, waitingLine } from './fixtures'
+import { ageWords, clockWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, STATUS_WORDS, storedDayWords, waitingWords, whenWords } from '../hooks/meta'
+import { HOUR, JERUSALEM, NOT_PICKED_UP_HOURS, NOW, clockAt, createLine, iso, statusLine, treeAt, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
@@ -21,30 +21,58 @@ function taskOf(...lines: string[]): TaskRow {
 /** The clock at NOW over a snapshot of no tasks: every task reason reads ready. */
 const AT_NOW = treeAt([], NOW)
 
+/** The same clock in Jerusalem's zone, where NOW is 17:00 IDT (summer time until 10-25). */
+const IN_JERUSALEM = treeAt([], NOW, NOT_PICKED_UP_HOURS, JERUSALEM.name)
+
 /** The meta line's words at `now`, the snapshot holding `tasks`. */
 const textOf = (task: TaskRow, viewer: string | null, now = NOW, tasks: readonly TaskRow[] = []) =>
   metaParts(task, treeAt(tasks, now), viewer).map(part => part.text)
 
 describe('meta words', () => {
-  test('a day is its UTC weekday and month-day; a time today is its hour, an older one its day', async () => {
-    expect(dayWords(NOW)).toBe('Tue 10-13')
-    expect(dayWords(Date.UTC(2026, 9, 18, 23, 59))).toBe('Sun 10-18')
-    expect(whenWords(iso(NOW - 2 * HOUR), NOW)).toBe('12:00')
-    expect(whenWords(iso(Date.UTC(2026, 9, 13, 0, 0)), NOW)).toBe('00:00')
-    expect(whenWords(iso(Date.UTC(2026, 9, 12, 23, 59)), NOW)).toBe('Mon 10-12')
-    expect(whenWords('not a time', NOW)).toBe('not a time')
+  test("a day is the zone's weekday and month-day; a time today is its zone-marked hour, an older one its day", async () => {
+    expect(dayWords(NOW, TimeZone.UTC)).toBe('Tue 10-13')
+    expect(dayWords(Date.UTC(2026, 9, 18, 23, 59), TimeZone.UTC)).toBe('Sun 10-18')
+    expect(whenWords(iso(NOW - 2 * HOUR), clockAt(NOW))).toBe('12:00 UTC')
+    expect(whenWords(iso(Date.UTC(2026, 9, 13, 0, 0)), clockAt(NOW))).toBe('00:00 UTC')
+    expect(whenWords(iso(Date.UTC(2026, 9, 12, 23, 59)), clockAt(NOW))).toBe('Mon 10-12')
+    expect(whenWords('not a time', clockAt(NOW))).toBe('not a time')
+  })
+
+  test("in Jerusalem's zone, a day turns over at its midnight, 21:00 UTC in summer time, and a time reads IDT", async () => {
+    const late = Date.UTC(2026, 9, 12, 23, 59)
+    expect(dayWords(late, JERUSALEM)).toBe('Tue 10-13')
+    expect(dayWords(Date.UTC(2026, 9, 18, 23, 59), JERUSALEM)).toBe('Mon 10-19')
+    expect(whenWords(iso(late), clockAt(NOW, JERUSALEM))).toBe('02:59 IDT')
+    expect(whenWords(iso(Date.UTC(2026, 9, 12, 20, 59)), clockAt(NOW, JERUSALEM))).toBe('Mon 10-12')
+    expect(clockWords(iso(NOW), JERUSALEM)).toBe('17:00 IDT')
+    expect(clockWords(iso(NOW), TimeZone.UTC)).toBe('14:00 UTC')
+    expect(clockWords('not a time', JERUSALEM)).toBe('not a time')
+  })
+
+  test('a stored day (a week tag) reads as the day written, in no zone; an unreadable one is null', async () => {
+    expect(storedDayWords('2026-10-12')).toBe('Mon 10-12')
+    expect(storedDayWords('2026-10-18')).toBe('Sun 10-18')
+    expect(storedDayWords('not a day')).toBe(null)
   })
 
   test('a due reads today or its day, with its time only when it was written with one', async () => {
     const due = (value: string | null) => dueWords(taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW, due: value })), AT_NOW)
     expect(due(null)).toBe(null)
     expect(due('2026-10-13')).toBe('today')
-    expect(due('2026-10-13 18:00')).toBe('today 18:00')
+    expect(due('2026-10-13 18:00')).toBe('today 18:00 UTC')
     expect(due('2026-10-16')).toBe('Fri 10-16')
-    expect(due('2026-10-16 09:30')).toBe('Fri 10-16 09:30')
+    expect(due('2026-10-16 09:30')).toBe('Fri 10-16 09:30 UTC')
     // teamrig's reader skips a create whose due it cannot read; a row built past it says the due as written.
     const odd = { ...taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW })), due: '2026-13-45' }
     expect(dueWords(odd, AT_NOW)).toBe('13-45')
+  })
+
+  test("in Jerusalem's zone, a stored minute (UTC) reads on its clock and a bare day ends at its midnight", async () => {
+    const due = (value: string) => dueWords(taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW, due: value })), IN_JERUSALEM)
+    expect(due('2026-10-13 18:00')).toBe('today 21:00 IDT')
+    expect(due('2026-10-13 22:00')).toBe('Wed 10-14 01:00 IDT')
+    expect(due('2026-10-13')).toBe('today')
+    expect(due('2026-10-16')).toBe('Fri 10-16')
   })
 
   test('an age is hours under a day, one at least, then whole days', async () => {
@@ -111,7 +139,7 @@ describe('meta effective due', () => {
       createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po', due: '2026-10-16' }),
       statusLine('T1', 'po', NOW - HOUR, 'verifying', 'one clean night'),
     )
-    expect(textOf(verifying, 'po', NOW, [verifying, needer])).toEqual(['p3', 'verify by Wed 10-14 (from T2)', 'verifying since 13:00: one clean night'])
+    expect(textOf(verifying, 'po', NOW, [verifying, needer])).toEqual(['p3', 'verify by Wed 10-14 (from T2)', 'verifying since 13:00 UTC: one clean night'])
   })
 })
 
@@ -175,7 +203,7 @@ describe('meta line', () => {
       createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, priority: 2, due: '2026-10-12' }),
       statusLine('T1', 'po', NOW - 2 * HOUR, 'in-progress', 'halfway'),
     )
-    expect(textOf(task, 'po')).toEqual(['p2', 'due Mon 10-12', 'in progress since 12:00', 'late 14h'])
+    expect(textOf(task, 'po')).toEqual(['p2', 'due Mon 10-12', 'in progress since 12:00 UTC', 'late 14h'])
     expect(metaParts(task, AT_NOW, 'po').map(part => part.color)).toEqual([undefined, undefined, undefined, 'error'])
   })
 
@@ -184,7 +212,7 @@ describe('meta line', () => {
     expect(textOf(task, 'po')).toEqual(['p3', 'waiting since Mon 10-12: waits on T58'])
     expect(metaParts(task, AT_NOW, 'po')[1]?.color).toBe('error')
     const bare = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY }), statusLine('T1', 'po', NOW, 'waiting'))
-    expect(textOf(bare, 'po')).toEqual(['p3', 'waiting since 14:00'])
+    expect(textOf(bare, 'po')).toEqual(['p3', 'waiting since 14:00 UTC'])
   })
 
   test('waiting on reasons: each in teamrig\'s words between commas, a cleared one ready, then the note', async () => {
@@ -195,15 +223,18 @@ describe('meta line', () => {
       waitingLine('T2', 'po', NOW, reasons, 'the copy first'),
     )
     if (first === undefined || waiting === undefined) throw new Error('no tasks')
-    expect(textOf(waiting, 'po', NOW, [first, waiting])).toEqual(['p3', 'waiting since 14:00: decision owner, on T1, until Fri 10-16 14:00; the copy first'])
+    expect(textOf(waiting, 'po', NOW, [first, waiting])).toEqual(['p3', 'waiting since 14:00 UTC: decision owner, on T1, until Fri 10-16 14:00 UTC; the copy first'])
     // T1 finished over HELD_DAYS ago, so the snapshot lacks it, and the time has come: both read ready; a decision never does.
     const later = Date.UTC(2026, 9, 16, 14, 0)
     expect(textOf(waiting, 'po', later, [waiting])).toEqual([
       'p3',
-      'waiting since Tue 10-13: decision owner, on T1 ready, until Fri 10-16 14:00 ready; the copy first',
+      'waiting since Tue 10-13: decision owner, on T1 ready, until Fri 10-16 14:00 UTC ready; the copy first',
     ])
     const approval = taskOf(createLine('T3', { owner: 'po', by: 'po', at: NOW - DAY }), waitingLine('T3', 'po', NOW, [{ kind: 'approval', who: 'lead' }]))
     expect(waitingWords(approval, AT_NOW.context)).toBe('approval lead')
+    const until = taskOf(createLine('T4', { owner: 'po', by: 'po', at: NOW - DAY }), waitingLine('T4', 'po', NOW, [{ kind: 'time', at: '2026-10-16 14:00' }]))
+    expect(waitingWords(until, IN_JERUSALEM.context)).toBe('until Fri 10-16 17:00 IDT')
+    expect(metaParts(until, IN_JERUSALEM, 'po').map(part => part.text)).toEqual(['p3', 'waiting since 17:00 IDT: until Fri 10-16 17:00 IDT'])
   })
 
   test('a task not yet started names the tasks it comes after that are unfinished; once started, none', async () => {
@@ -218,7 +249,7 @@ describe('meta line', () => {
     expect(textOf(three, 'po', NOW, [two, three])).toEqual(['p3', 'after T2'])
     expect(textOf(three, 'po', NOW, [three])).toEqual(['p3'])
     const started = taskOf(createLine('T3', after), statusLine('T3', 'po', NOW, 'in-progress'))
-    expect(textOf(started, 'po', NOW, [one, two, started])).toEqual(['p3', 'in progress since 14:00'])
+    expect(textOf(started, 'po', NOW, [one, two, started])).toEqual(['p3', 'in progress since 14:00 UTC'])
   })
 
   test('verifying: verify by its due, since when and what proves it', async () => {
@@ -226,7 +257,7 @@ describe('meta line', () => {
       createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY, due: '2026-10-15' }),
       statusLine('T1', 'po', NOW - HOUR, 'verifying', 'one clean night'),
     )
-    expect(textOf(task, 'po')).toEqual(['p3', 'verify by Thu 10-15', 'verifying since 13:00: one clean night'])
+    expect(textOf(task, 'po')).toEqual(['p3', 'verify by Thu 10-15', 'verifying since 13:00 UTC: one clean night'])
   })
 
   test('an open task someone else asked for is new to its owner and names who asked, then reads not picked up', async () => {
@@ -247,6 +278,6 @@ describe('meta line', () => {
 
   test('the words alone are the all view\'s, joined as the row draws them', async () => {
     const task = taskOf(createLine('T1', { owner: 'etl', by: 'po', at: NOW - HOUR, source: 'po', due: '2026-10-13 18:00' }))
-    expect(metaText(task, AT_NOW)).toBe('p3 · due today 18:00 · new · asked by po')
+    expect(metaText(task, AT_NOW)).toBe('p3 · due today 18:00 UTC · new · asked by po')
   })
 })

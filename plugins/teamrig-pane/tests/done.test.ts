@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow } from '../types'
-import { readRegister } from '../hooks/core/read/index'
+import { TimeZone, readRegister } from '../hooks/core/read/index'
 import { doneWeek, HELD_DAYS, heldSince, heldWeek, heldWeeks, isHeldFinished, MAX_DONE_ROWS, weekAfter, weekOf, weekSteps } from '../hooks/done'
 import { doneBlocks, heldText, OLDER_DONE_COMMAND, weekWords } from '../hooks/done-rows'
 import { rowOf } from '../hooks/log'
 import type { Block } from '../hooks/rows'
-import { HOUR, NOT_PICKED_UP_HOURS, NOW, createLine, statusLine } from './fixtures'
+import { HOUR, JERUSALEM, NOW, TEAM_SETTINGS, clockAt, createLine, statusLine } from './fixtures'
 
 /** The rows teamrig's reader folds from event lines. */
 function rowsOf(lines: readonly string[]): TaskRow[] {
@@ -19,6 +19,9 @@ function finished(id: string, owner: string, at: number, status: 'done' | 'dropp
 
 // NOW is Tue 2026-10-13 14:00 UTC: its week is the one of Mon 10-12, and the pane holds back to Mon 10-05 14:00.
 const MONDAY = Date.UTC(2026, 9, 12)
+/** NOW on UTC's clock, and on Jerusalem's (17:00 IDT, summer time until 10-25). */
+const AT_NOW = clockAt(NOW)
+const IN_JERUSALEM = clockAt(NOW, JERUSALEM)
 const TASKS = rowsOf([
   ...finished('T1', 'po', NOW - HOUR),
   ...finished('T2', 'po', MONDAY, 'dropped'),
@@ -35,25 +38,34 @@ function idsByDay(week: ReturnType<typeof doneWeek>): string[][] {
 }
 
 describe('weeks', () => {
-  test('a week starts Monday 00:00 UTC: Sunday 23:59 is the week before', () => {
-    expect(weekOf(MONDAY)).toBe('2026-10-12')
-    expect(weekOf(MONDAY - 60_000)).toBe('2026-10-05')
-    expect(weekOf(NOW)).toBe('2026-10-12')
-    expect(weekOf(Date.UTC(2026, 9, 18, 23, 59))).toBe('2026-10-12')
+  test('in UTC, a week starts Monday 00:00: Sunday 23:59 is the week before', () => {
+    expect(weekOf(MONDAY, TimeZone.UTC)).toBe('2026-10-12')
+    expect(weekOf(MONDAY - 60_000, TimeZone.UTC)).toBe('2026-10-05')
+    expect(weekOf(NOW, TimeZone.UTC)).toBe('2026-10-12')
+    expect(weekOf(Date.UTC(2026, 9, 18, 23, 59), TimeZone.UTC)).toBe('2026-10-12')
     // Across a month and a year.
-    expect(weekOf(Date.UTC(2026, 10, 1))).toBe('2026-10-26')
-    expect(weekOf(Date.UTC(2027, 0, 1))).toBe('2026-12-28')
+    expect(weekOf(Date.UTC(2026, 10, 1), TimeZone.UTC)).toBe('2026-10-26')
+    expect(weekOf(Date.UTC(2027, 0, 1), TimeZone.UTC)).toBe('2026-12-28')
     expect(weekAfter('2026-10-12', -1)).toBe('2026-10-05')
     expect(weekAfter('2026-12-28', 1)).toBe('2027-01-04')
   })
 
+  test("in Jerusalem's zone, a week starts at its Monday midnight, summer time or not", () => {
+    // Sunday 21:00 UTC is Monday 00:00 IDT; after summer time ends (10-25), Sunday 22:00 UTC is Monday 00:00 IST.
+    expect(weekOf(Date.UTC(2026, 9, 11, 21, 0), JERUSALEM)).toBe('2026-10-12')
+    expect(weekOf(Date.UTC(2026, 9, 11, 20, 59), JERUSALEM)).toBe('2026-10-05')
+    expect(weekOf(MONDAY - 60_000, JERUSALEM)).toBe('2026-10-12')
+    expect(weekOf(Date.UTC(2026, 9, 25, 22, 0), JERUSALEM)).toBe('2026-10-26')
+    expect(weekOf(Date.UTC(2026, 9, 25, 21, 59), JERUSALEM)).toBe('2026-10-19')
+  })
+
   test(`the pane holds finished tasks ${HELD_DAYS} days back: the newest week is now's, the oldest the one that reaches`, () => {
-    expect(heldWeeks(NOW)).toEqual({ newest: '2026-10-12', oldest: '2026-10-05' })
-    expect(heldWeek('2026-09-28', NOW)).toBe('2026-10-05')
-    expect(heldWeek('2026-10-19', NOW)).toBe('2026-10-12')
-    expect(heldWeek('2026-10-05', NOW)).toBe('2026-10-05')
-    expect(weekSteps('2026-10-12', NOW)).toEqual({ week: '2026-10-12', prev: '2026-10-05', next: null })
-    expect(weekSteps('2026-09-28', NOW)).toEqual({ week: '2026-10-05', prev: null, next: '2026-10-12' })
+    expect(heldWeeks(AT_NOW)).toEqual({ newest: '2026-10-12', oldest: '2026-10-05' })
+    expect(heldWeek('2026-09-28', AT_NOW)).toBe('2026-10-05')
+    expect(heldWeek('2026-10-19', AT_NOW)).toBe('2026-10-12')
+    expect(heldWeek('2026-10-05', AT_NOW)).toBe('2026-10-05')
+    expect(weekSteps('2026-10-12', AT_NOW)).toEqual({ week: '2026-10-12', prev: '2026-10-05', next: null })
+    expect(weekSteps('2026-09-28', AT_NOW)).toEqual({ week: '2026-10-05', prev: null, next: '2026-10-12' })
     // T6 closed a minute before the pane stops holding, T7 is open.
     expect(TASKS.filter(task => isHeldFinished(task, NOW)).map(task => task.id)).toEqual(['T1', 'T2', 'T3', 'T4', 'T5'])
   })
@@ -61,37 +73,46 @@ describe('weeks', () => {
 
 describe('doneWeek', () => {
   test("mine: the area's own, by day newest first, done and dropped counted", () => {
-    const week = doneWeek(TASKS, 'po', '2026-10-12', NOW)
+    const week = doneWeek(TASKS, 'po', '2026-10-12', AT_NOW)
     expect(idsByDay(week)).toEqual([['Tue 10-13', 'T1'], ['Mon 10-12', 'T2']])
     expect([week.done, week.dropped, week.more]).toEqual([1, 1, 0])
     expect([week.prev, week.next, week.heldFrom]).toEqual(['2026-10-05', null, null])
   })
 
   test("all: every owner's, newest first inside a day", () => {
-    const week = doneWeek(TASKS, null, '2026-10-12', NOW)
+    const week = doneWeek(TASKS, null, '2026-10-12', AT_NOW)
     expect(idsByDay(week)).toEqual([['Tue 10-13', 'T1'], ['Mon 10-12', 'T3', 'T2']])
     expect([week.done, week.dropped]).toEqual([2, 1])
   })
 
   test('the oldest week: Sunday 23:59 lands in it, no prev, and it says where the pane stops holding', () => {
-    const week = doneWeek(TASKS, 'po', '2026-10-05', NOW)
+    const week = doneWeek(TASKS, 'po', '2026-10-05', AT_NOW)
     // T6 closed a minute before the pane stops holding: not held, not listed.
     expect(idsByDay(week)).toEqual([['Sun 10-11', 'T4'], ['Fri 10-09', 'T5']])
     expect([week.prev, week.next, week.heldFrom]).toEqual([null, '2026-10-12', heldSince(NOW)])
   })
 
   test('a week outside the held ones reads as the nearest; an empty week has no days', () => {
-    expect(doneWeek(TASKS, 'po', '2026-01-05', NOW).week).toBe('2026-10-05')
-    const empty = doneWeek(TASKS, 'web', '2026-10-12', NOW)
+    expect(doneWeek(TASKS, 'po', '2026-01-05', AT_NOW).week).toBe('2026-10-05')
+    const empty = doneWeek(TASKS, 'web', '2026-10-12', AT_NOW)
     expect([empty.days, empty.done, empty.dropped, empty.more]).toEqual([[], 0, 0, 0])
   })
 
   test(`at most ${MAX_DONE_ROWS} rows, the rest counted`, () => {
     const many = rowsOf(Array.from({ length: MAX_DONE_ROWS + 3 }, (_, i) => finished(`T${i + 1}`, 'po', MONDAY + i * 60_000, i % 2 === 0 ? 'done' : 'dropped')).flat())
-    const week = doneWeek(many, 'po', '2026-10-12', NOW)
+    const week = doneWeek(many, 'po', '2026-10-12', AT_NOW)
     expect(week.days.flatMap(day => day.tasks).length).toBe(MAX_DONE_ROWS)
     expect(week.days[0]?.tasks[0]?.id).toBe(`T${MAX_DONE_ROWS + 3}`)
     expect([week.done, week.dropped, week.more]).toEqual([27, 26, 3])
+  })
+
+  test("in Jerusalem's zone, a task closed Sunday 23:59 UTC is Monday's there, and the days are its days", () => {
+    const week = doneWeek(TASKS, 'po', '2026-10-12', IN_JERUSALEM)
+    expect(idsByDay(week)).toEqual([['Tue 10-13', 'T1'], ['Mon 10-12', 'T2', 'T4']])
+    expect([week.done, week.dropped]).toEqual([2, 1])
+    const oldest = doneWeek(TASKS, 'po', '2026-10-05', IN_JERUSALEM)
+    expect(idsByDay(oldest)).toEqual([['Fri 10-09', 'T5']])
+    expect([oldest.prev, oldest.next, oldest.heldFrom]).toEqual([null, '2026-10-12', heldSince(NOW)])
   })
 })
 
@@ -106,27 +127,39 @@ function linesOf(blocks: readonly Block[]): string[] {
   )
 }
 
-const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, problem: null, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, now: NOW }
+const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, problem: null, ...TEAM_SETTINGS, now: NOW }
 
 describe('doneBlocks', () => {
   test("mine: the area's head and counts, each day dim, each row opening its page with when it closed", () => {
     expect(linesOf(doneBlocks(SNAP, 'mine', '2026-10-12'))).toEqual([
       'Archive · po · 1 done · 1 dropped',
       'Tue 10-13',
-      '>T1 ✓ T1  Task T1 | 13:00',
+      '>T1 ✓ T1  Task T1 | 13:00 UTC',
       'Mon 10-12',
-      '>T2 ✗ T2  Task T2 | 00:00',
+      '>T2 ✗ T2  Task T2 | 00:00 UTC',
     ])
   })
 
   test('all: every owner, each row naming its owner', () => {
-    expect(linesOf(doneBlocks(SNAP, 'all', '2026-10-12'))).toContain('>T3 ✓ T3  Task T3 | etl 02:00')
+    expect(linesOf(doneBlocks(SNAP, 'all', '2026-10-12'))).toContain('>T3 ✓ T3  Task T3 | etl 02:00 UTC')
+  })
+
+  test("in the team's zone, each row's time and each day are on its clock", () => {
+    expect(linesOf(doneBlocks({ ...SNAP, timeZone: JERUSALEM.name }, 'mine', '2026-10-12'))).toEqual([
+      'Archive · po · 2 done · 1 dropped',
+      'Tue 10-13',
+      '>T1 ✓ T1  Task T1 | 16:00 IDT',
+      'Mon 10-12',
+      '>T2 ✗ T2  Task T2 | 03:00 IDT',
+      '>T4 ✓ T4  Task T4 | 02:59 IDT',
+    ])
   })
 
   test('the oldest week ends with where the pane stops holding and the command that lists older ones', () => {
     const lines = linesOf(doneBlocks(SNAP, 'mine', '2026-10-05'))
-    expect(lines.at(-1)).toBe(heldText(heldSince(NOW)))
-    expect(heldText(heldSince(NOW))).toBe(`The pane holds tasks finished since Mon 10-05 14:00; ${OLDER_DONE_COMMAND} lists older ones.`)
+    expect(lines.at(-1)).toBe(heldText(heldSince(NOW), TimeZone.UTC))
+    expect(heldText(heldSince(NOW), TimeZone.UTC)).toBe(`The pane holds tasks finished since Mon 10-05 14:00 UTC; ${OLDER_DONE_COMMAND} lists older ones.`)
+    expect(heldText(heldSince(NOW), JERUSALEM)).toBe(`The pane holds tasks finished since Mon 10-05 17:00 IDT; ${OLDER_DONE_COMMAND} lists older ones.`)
   })
 
   test('an empty week says so; past the cap a dim line counts the rest', () => {
