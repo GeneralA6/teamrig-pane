@@ -112,16 +112,16 @@ function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, tree
   const indent = indentOf(task)
   const key = `${section}:${task.id}`
   const title = titleRow(key, task, detail === undefined ? TITLE_LINES : undefined)
-  if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: cardRows(section, task, detail, tree, viewer) }
+  if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: cardRows(section, task, detail, tree) }
   const meta: Row = { key: `${section}-meta:${task.id}`, spans: [indent, ...metaSpans(task, tree, viewer)], hang: indent, maxLines: META_LINES }
   return { key, toggle: task.id, rows: [title, meta] }
 }
 
 /**
  * `✓ T4  title          14:02`: a task done or dropped today, dim, on one line with when it closed; with its card
- * open (card.ts), the title shows whole and the card follows. `tree` and `viewer` as taskBlock takes them.
+ * open (card.ts), the title shows whole and the card follows. `tree` as taskBlock takes it.
  */
-function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: PaneTree, viewer: string): Block {
+function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: PaneTree): Block {
   const detail = expanded[task.id]
   const key = `done:${task.id}`
   const color = GLYPH_COLOR[task.status]
@@ -132,7 +132,7 @@ function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: PaneTree, viewe
     end: { text: whenWords(task.statusAt, tree.context), dim: true },
     maxLines: detail === undefined ? 1 : undefined,
   }
-  if (detail !== undefined) return { key, toggle: task.id, rows: [row], card: cardRows('done', task, detail, tree, viewer) }
+  if (detail !== undefined) return { key, toggle: task.id, rows: [row], card: cardRows('done', task, detail, tree) }
   return { key, toggle: task.id, rows: [row] }
 }
 
@@ -182,7 +182,7 @@ function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expande
   const tree = treeOf(snap)
   const tasks = statusLines(snap.tasks, area, tree, filter)
   if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
-  if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, tree, area))
+  if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, tree))
   return tasks.map(task => taskBlock(SECTION_KEY[filter], task, expanded, tree, area))
 }
 
@@ -206,7 +206,7 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
   const tasks = (status: BarStatus, list: readonly TaskRow[]) => list.map(task => taskBlock(SECTION_KEY[status], task, expanded, tree, view.area))
-  const done = view.doneToday.map(task => doneBlock(task, expanded, tree, view.area))
+  const done = view.doneToday.map(task => doneBlock(task, expanded, tree))
   return [
     ...blocks,
     ...section('verifying', { text: 'Verifying', color: 'success' }, view.counts, tasks('verifying', view.verifying)),

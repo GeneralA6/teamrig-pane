@@ -3,11 +3,12 @@
 // Description: what the task is and why, as written (`teamrig add --description`, a GitHub issue's body); a task
 // written before teamrig kept one shows the ask quoted from its ref (details.ts) instead. Status: since when, who
 // set it when that is known, then why a waiting task waits. Note: the newest status note. Proof: what proves a
-// verifying task. Priority, Due (Verify by while verifying; a date taken from a task that needs it names that task;
-// late in red) and Week, each on its own row. After: the tasks planned first, with their status. Needed by: each
-// active task of another owner that needs it, with its owner and due, the earliest due first. Goal: each goal's
-// roadmap item. From: who asked, or the GitHub issue it came from. Added: when it was written and by whom, as a
-// tracker's Created row. Owner: in another area's list. Reference: where the ask is written, each file by its
+// verifying task. Owner: the session that owns it, on every card. Priority, Due (Verify by while verifying; a date
+// taken from a task that needs it names that task; late in red) and Planned (its week plan against the team's week:
+// this week, next week, the week of a day, or none), each on its own row. After: the tasks planned first, with their
+// status. Needed by: each active task of another owner that needs it, with its owner and due, the earliest due first.
+// Goal: each goal's roadmap item. Origin: who asked (or the GitHub issue it came from), who wrote it and when, as a
+// tracker's Created row. Reference: where the ask is written, each file by its
 // folder and name (ref-file.ts), other words as written (an issue ref is the first link instead). Evidence. Links
 // (links.ts). The register's fold keeps no parent, sub-tasks or history, so the card has no row for them. In the list
 // each line starts with a guide under the task's title; on a task's page (page.ts) the card has the body to itself
@@ -15,14 +16,14 @@
 // register.tsx draws, a link as a link, and a task id the snapshot holds (ids.ts) and a reference file underlined, a
 // press on one opening that task's or that file's page.
 import type { TaskDetail, TaskRow } from '../types'
-import type { TaskTree, WaitContext } from './core/read/index'
+import { TimeZone, type TaskTree, type WaitContext } from './core/read/index'
 import { fileLabel, refParts } from './details'
 import { idSpans } from './ids'
 import { issueOf, taskLinks } from './links'
 import { dueWords, lateWords, neededByLines, STATUS_WORDS, storedDayWords, waitingWords, whenWords } from './meta'
 import { refSegments } from './ref-file'
 import type { Row, Span } from './rows'
-import type { Clock } from './zone'
+import { weekAfter, weekOf, type Clock } from './zone'
 
 /** Starts each card line in the list: the guide that ties the card to its task's title. */
 const GUIDE: Span = { text: '    │ ', dim: true }
@@ -40,15 +41,14 @@ export type CardField =
   | 'status'
   | 'note'
   | 'proof'
+  | 'owner'
   | 'priority'
   | 'due'
-  | 'week'
+  | 'planned'
   | 'after'
   | 'needed-by'
   | 'goal'
-  | 'from'
-  | 'added'
-  | 'owner'
+  | 'origin'
   | 'reference'
   | 'evidence'
   | 'links'
@@ -99,10 +99,20 @@ function dueLines(task: TaskRow, tree: TaskTree<TaskRow>): Lines {
   return [joined(parts)]
 }
 
-/** `Mon 10-12`: the first day of the planning week, as written when it cannot be read. */
-function weekLines(task: TaskRow): Lines {
-  if (task.week === null) return []
-  return [[{ text: storedDayWords(task.week) ?? task.week }]]
+/**
+ * `this week`, `next week` or `week of Mon 10-26`: the week plan the task is in, against the week the clock is in on
+ * the team's calendar (a stored week is a day, its week the one that day falls in); `not in a week plan` for none, and
+ * a week that cannot be read as written.
+ */
+function plannedLines(task: TaskRow, clock: Clock): Lines {
+  if (task.week === null) return [[{ text: 'not in a week plan' }]]
+  const day = Date.parse(task.week)
+  if (Number.isNaN(day)) return [[{ text: `week of ${task.week}` }]]
+  const week = weekOf(day, TimeZone.UTC)
+  const current = weekOf(clock.now, clock.zone)
+  if (week === current) return [[{ text: 'this week' }]]
+  if (week === weekAfter(current, 1)) return [[{ text: 'next week' }]]
+  return [[{ text: `week of ${storedDayWords(week) ?? week}` }]]
 }
 
 /** `T1 (done), T2 (not started)`: the tasks planned first, each with its status when the snapshot holds it. */
@@ -120,15 +130,16 @@ function goalLines(task: TaskRow, detail: TaskDetail): Lines {
   return task.goals.map(goal => [{ text: detail.goals.find(item => item.goal === goal)?.text ?? goal }])
 }
 
-/** `owner`, the session that asked, or `GitHub issue #12` for a task teamrig opened from that issue. */
-function fromLines(task: TaskRow): Lines {
+/**
+ * `Asked by owner, added by lead Tue 10-13`: who asked, then who wrote the task and when, at the clock in its zone;
+ * `Asked and added by lead ...` when one session did both, `GitHub issue #12, added by ...` for a task teamrig opened
+ * from that issue.
+ */
+function originLines(task: TaskRow, clock: Clock): Lines {
+  const added = `added by ${task.createdBy} ${whenWords(task.createdAt, clock)}`
   const issue = issueOf(task)
-  return [[{ text: issue === null ? task.source : `GitHub issue #${issue.number}` }]]
-}
-
-/** `Tue 10-13 by lead`: when the task was written, at the clock in its zone, and who wrote it. */
-function addedLines(task: TaskRow, clock: Clock): Lines {
-  return [[{ text: `${whenWords(task.createdAt, clock)} by ${task.createdBy}` }]]
+  if (issue !== null) return [[{ text: `GitHub issue #${issue.number}, ${added}` }]]
+  return [[{ text: task.source === task.createdBy ? `Asked and ${added}` : `Asked by ${task.source}, ${added}` }]]
 }
 
 /**
@@ -172,7 +183,7 @@ function labelled(key: string, label: string, lines: Lines, isKnown: (id: string
 
 /**
  * The card's rows, keyed `<section>-card:<id>:<row>`. `detail` is what was read when it opened (details.ts),
- * `tree` the snapshot's (meta.ts treeOf), `viewer` the area whose list it is (null in the all view). An id
+ * `tree` the snapshot's (meta.ts treeOf). An id
  * in its words is a span of its own, marked with its task, when the snapshot holds that task. `lead` starts each
  * line: the guide under the task's title in the list, none on a task's page. `only` keeps those facts alone (the
  * banner's, banner.ts); null keeps every one.
@@ -182,7 +193,6 @@ export function cardRows(
   task: TaskRow,
   detail: TaskDetail,
   tree: TaskTree<TaskRow>,
-  viewer: string | null,
   lead: Span | null = GUIDE,
   only: ReadonlySet<CardField> | null = null,
 ): Row[] {
@@ -196,15 +206,14 @@ export function cardRows(
     ...field('status', 'Status', statusLines(task, context)),
     ...field('note', 'Note', textLines(task.note)),
     ...field('proof', 'Proof', textLines(task.proof, { color: 'success' })),
+    ...field('owner', 'Owner', [[{ text: task.owner }]]),
     ...field('priority', 'Priority', [[{ text: String(task.priority) }]]),
     ...field('due', task.status === 'verifying' ? 'Verify by' : 'Due', dueLines(task, tree)),
-    ...field('week', 'Week', weekLines(task)),
+    ...field('planned', 'Planned', plannedLines(task, context)),
     ...field('after', 'After', afterLines(task, context)),
     ...field('needed-by', 'Needed by', neededByLines(task, tree).map(text => [{ text }])),
     ...field('goal', 'Goal', goalLines(task, detail)),
-    ...field('from', 'From', fromLines(task)),
-    ...field('added', 'Added', addedLines(task, context)),
-    ...field('owner', 'Owner', viewer !== null && task.owner !== viewer ? [[{ text: task.owner }]] : []),
+    ...field('origin', 'Origin', originLines(task, context)),
     ...field('reference', 'Reference', referenceLines(task)),
     ...field('evidence', 'Evidence', textLines(task.evidence)),
     ...field('links', 'Links', linkLines(task)),
