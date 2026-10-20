@@ -192,7 +192,7 @@ describe('golden capture', () => {
     expect(FixedDate.now()).toBe(GOLDEN_START)
     expect(new FixedDate().getTime()).toBe(GOLDEN_START)
     expect(FixedDate()).toBe(new Date(GOLDEN_START).toString())
-    expect(new FixedDate() instanceof Date).toBe(true)
+    expect([new FixedDate() instanceof Date, new Date(0) instanceof FixedDate]).toEqual([true, true])
     expect(new FixedDate(0).getTime()).toBe(0)
     expect(new FixedDate('2030-01-09T10:00:00Z').getTime()).toBe(Date.UTC(2030, 0, 9, 10))
     expect(new FixedDate(2030, 0, 9).getFullYear()).toBe(2030)
