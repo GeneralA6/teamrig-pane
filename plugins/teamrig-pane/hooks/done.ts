@@ -1,13 +1,12 @@
 // The finished tasks the pane holds (source.ts: those done or dropped within HELD_DAYS, teamrig's own retention), a
 // week at a time: the Archive page (done-rows.ts) shows one week, newest week first, its days newest first and inside a
-// day the newest first. A week starts Monday 00:00 in the team's zone, its days the zone's (zone.ts), and is named by
-// that Monday's date as the register's `week` fields are (`2026-10-12`). The newest week is the one `now` falls in, the oldest the one HELD_DAYS before it: the paging stays inside them, the oldest
-// week cut where the pane stops holding. At most MAX_DONE_ROWS rows a week, with how many more there are. Pure.
+// day the newest first. A week and its days are the team zone's (zone.ts weekOf). The newest week is the one `now`
+// falls in, the oldest the one HELD_DAYS before it: the paging stays inside them, the oldest week cut where the pane
+// stops holding. At most MAX_DONE_ROWS rows a week, with how many more there are. Pure.
 import type { TaskRow } from '../types'
-import type { TimeZone } from './core/read/index'
 import { dayWords } from './meta'
 import { newestFirst } from './view'
-import { dayOf, type Clock } from './zone'
+import { dayOf, weekAfter, weekOf, type Clock } from './zone'
 
 /** Most rows the Archive page lists for a week; past it a dim line counts the rest. */
 export const MAX_DONE_ROWS = 50
@@ -17,7 +16,6 @@ export const MAX_DONE_ROWS = 50
  */
 export const HELD_DAYS = 8
 const DAY_MS = 24 * 60 * 60 * 1000
-const WEEK_DAYS = 7
 
 /** Done or dropped. */
 export function isFinished(task: TaskRow): boolean {
@@ -32,21 +30,6 @@ export function heldSince(now: number): number {
 /** A finished task the pane holds: finished at `heldSince(now)` or later. */
 export function isHeldFinished(task: TaskRow, now: number): boolean {
   return isFinished(task) && Date.parse(task.statusAt) >= heldSince(now)
-}
-
-/**
- * The `YYYY-MM-DD` Monday of the week `ms` falls in, on the zone's calendar: the zone's day of `ms`, then back to its
- * Monday by calendar days (a day's UTC midnight stands for the day itself).
- */
-export function weekOf(ms: number, zone: TimeZone): string {
-  const day = Date.parse(dayOf(ms, zone))
-  const sinceMonday = (new Date(day).getUTCDay() + WEEK_DAYS - 1) % WEEK_DAYS
-  return new Date(day - sinceMonday * DAY_MS).toISOString().slice(0, 10)
-}
-
-/** The week `weeks` weeks after `week` (before it when negative). */
-export function weekAfter(week: string, weeks: number): string {
-  return new Date(Date.parse(week) + weeks * WEEK_DAYS * DAY_MS).toISOString().slice(0, 10)
 }
 
 /** The weeks the pane holds finished tasks in: the newest (`now`'s) and the oldest (HELD_DAYS before it). */

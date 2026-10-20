@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { TimeZone } from '../hooks/core/read/index'
-import { clockOf, dayOf, machineZoneOf, zoneNamed } from '../hooks/zone'
+import { clockOf, dayOf, machineZoneOf, weekAfter, weekOf, zoneNamed } from '../hooks/zone'
 import { JERUSALEM, NOW } from './fixtures'
 
-// NOW is Tue 2026-10-13 14:00 UTC: 17:00 IDT in Jerusalem (summer time until 10-25).
+// NOW is Tue 2026-10-13 14:00 UTC: 17:00 IDT in Jerusalem (summer time until 10-25), in the week of Mon 10-12.
+const MONDAY = Date.UTC(2026, 9, 12)
 describe('zone', () => {
   test('a name reads as one TimeZone, made on first use; a name the system does not know reads as UTC', () => {
     expect(zoneNamed('Asia/Jerusalem')).toBe(JERUSALEM)
@@ -30,5 +31,26 @@ describe('zone', () => {
     expect(dayOf(midnight, TimeZone.UTC)).toBe('2026-10-13')
     expect(dayOf(midnight, JERUSALEM)).toBe('2026-10-14')
     expect(dayOf(midnight - 60_000, JERUSALEM)).toBe('2026-10-13')
+  })
+
+  test('in UTC, a week starts Monday 00:00: Sunday 23:59 is the week before', () => {
+    expect(weekOf(MONDAY, TimeZone.UTC)).toBe('2026-10-12')
+    expect(weekOf(MONDAY - 60_000, TimeZone.UTC)).toBe('2026-10-05')
+    expect(weekOf(NOW, TimeZone.UTC)).toBe('2026-10-12')
+    expect(weekOf(Date.UTC(2026, 9, 18, 23, 59), TimeZone.UTC)).toBe('2026-10-12')
+    // Across a month and a year.
+    expect(weekOf(Date.UTC(2026, 10, 1), TimeZone.UTC)).toBe('2026-10-26')
+    expect(weekOf(Date.UTC(2027, 0, 1), TimeZone.UTC)).toBe('2026-12-28')
+    expect(weekAfter('2026-10-12', -1)).toBe('2026-10-05')
+    expect(weekAfter('2026-12-28', 1)).toBe('2027-01-04')
+  })
+
+  test("in Jerusalem's zone, a week starts at its Monday midnight, summer time or not", () => {
+    // Sunday 21:00 UTC is Monday 00:00 IDT; after summer time ends (10-25), Sunday 22:00 UTC is Monday 00:00 IST.
+    expect(weekOf(Date.UTC(2026, 9, 11, 21, 0), JERUSALEM)).toBe('2026-10-12')
+    expect(weekOf(Date.UTC(2026, 9, 11, 20, 59), JERUSALEM)).toBe('2026-10-05')
+    expect(weekOf(MONDAY - 60_000, JERUSALEM)).toBe('2026-10-12')
+    expect(weekOf(Date.UTC(2026, 9, 25, 22, 0), JERUSALEM)).toBe('2026-10-26')
+    expect(weekOf(Date.UTC(2026, 9, 25, 21, 59), JERUSALEM)).toBe('2026-10-19')
   })
 })

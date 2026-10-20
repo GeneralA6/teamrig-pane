@@ -1,9 +1,13 @@
 // The team's time zone as the pane draws in it (teamrig's core/zone.ts): the snapshot keeps its IANA name, since
 // $.state holds plain data and a TimeZone holds formatters, and a drawing reads the TimeZone back by that name. A
 // stored instant is UTC; the pane prints it on the zone's clock, zone-marked (`14:02 IDT`), and "today" is the
-// zone's day of the snapshot's clock, as in teamrig. Pure.
+// zone's day of the snapshot's clock, as in teamrig. A week starts Monday 00:00 in the zone and is named by that
+// Monday's date, as the register's `week` fields are (`2026-10-12`). Pure.
 import type { Snapshot } from '../types'
 import { TimeZone } from './core/read/index'
+
+const DAY_MS = 24 * 60 * 60 * 1000
+const WEEK_DAYS = 7
 
 /** The instant a drawing is at and the zone it prints in: a tree's WaitContext is one. */
 export type Clock = { readonly now: number; readonly zone: TimeZone }
@@ -39,4 +43,19 @@ export function clockOf(snap: Pick<Snapshot, 'now' | 'timeZone'>): Clock {
 /** `2026-10-15`: the zone's day of an instant, the day the pane's "today", due and time labels are in. */
 export function dayOf(ms: number, zone: TimeZone): string {
   return zone.day(new Date(ms))
+}
+
+/**
+ * The `YYYY-MM-DD` Monday of the week `ms` falls in, on the zone's calendar: the zone's day of `ms`, then back to its
+ * Monday by calendar days (a day's UTC midnight stands for the day itself).
+ */
+export function weekOf(ms: number, zone: TimeZone): string {
+  const day = Date.parse(dayOf(ms, zone))
+  const sinceMonday = (new Date(day).getUTCDay() + WEEK_DAYS - 1) % WEEK_DAYS
+  return new Date(day - sinceMonday * DAY_MS).toISOString().slice(0, 10)
+}
+
+/** The week `weeks` weeks after `week` (before it when negative). */
+export function weekAfter(week: string, weeks: number): string {
+  return new Date(Date.parse(week) + weeks * WEEK_DAYS * DAY_MS).toISOString().slice(0, 10)
 }
