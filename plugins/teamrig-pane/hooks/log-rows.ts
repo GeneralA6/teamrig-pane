@@ -1,14 +1,14 @@
-// The Log view as blocks of rows (rows.ts). The list: each team session with a turn log file of the last LOG_HOURS
-// (turn-log.ts), the newest change first, its id bold and when its log last changed, over its newest prompt's first
-// line; a press on a session opens its page. The page: the session's lines of the last LOG_HOURS, oldest first (the
-// view opens it at its end), each prompt and reply a head (what it is, when, whether teamrig cut it) over its text,
-// one block per paragraph as a file page splits them (file-page.ts), so the window draws only the paragraphs in
-// sight; a clear or compaction of the context is one dim rule. teamrig writes UTC times; each prints on the team's
-// clock, zone-marked (zone.ts). Pure.
+// The Log view as blocks of rows (rows.ts). The list: each team session with a turn log file of the hours teamrig
+// keeps it (turn-log.ts), the newest change first, its id bold and when its log last changed, over its newest
+// prompt's first line; a press on a session opens its page. The page: the session's lines of those hours, oldest
+// first (the view opens it at its end), each prompt and reply a head (what it is, when, whether teamrig cut it) over
+// its text, one block per paragraph as a file page splits them (file-page.ts), so the window draws only the
+// paragraphs in sight; a clear or compaction of the context is one dim rule. teamrig writes UTC times; each prints on
+// the team's clock, zone-marked (zone.ts). Pure.
 import type { LogList, LogPage, LogSession, TurnEntry } from '../types'
 import { paragraphs, type Paragraph } from './file-page'
 import { SEPARATOR, single, type Block, type Row, type Span } from './rows'
-import { LOG_HOURS, LOG_PAGE_CHARS } from './turn-log'
+import { LOG_PAGE_CHARS } from './turn-log'
 import { dayOf, type Clock } from './zone'
 
 const LIST = 'log'
@@ -33,11 +33,11 @@ function note(key: string, text: string): Block {
   return single(key, [{ text, dim: true }])
 }
 
-/** A session's row: its id and when its log last changed, over its newest prompt; a press opens its page. */
-function sessionBlock(session: LogSession, clock: Clock): Block {
+/** A session's row: its id and when its log last changed, over its newest prompt of the last `hours`; a press opens its page. */
+function sessionBlock(session: LogSession, hours: number, clock: Clock): Block {
   const key = sessionKey(session.id)
   const when = timeWords(new Date(session.changedAt).toISOString(), clock)
-  const prompt = session.lastPrompt ?? `no prompt in the last ${LOG_HOURS} h`
+  const prompt = session.lastPrompt ?? `no prompt in the last ${hours} h`
   return {
     key,
     rows: [
@@ -55,15 +55,17 @@ export function logListBlocks(list: LogList, clock: Clock): Block[] {
       return [note(`${LIST}:note`, 'Reading the turn logs…')]
     case 'no-team':
       return [note(`${LIST}:note`, "No team found: the Log view shows a team's turn logs, which teamrig writes for each session.")]
+    case 'no-config':
+      return [note(`${LIST}:note`, 'No turn logs: the team has no config file, and teamrig writes turn logs only for a team with one.')]
     case 'no-log':
       return [note(`${LIST}:note`, "No turn logs yet: a teamrig with the turn log writes each session's prompts and replies, unless the team config sets turnLog.enabled to false.")]
     case 'failed':
       return [single(`${LIST}:note`, [{ text: `The turn logs could not be read: ${list.reason.replace(/\.$/, '')}.`, color: 'warning' }])]
     case 'sessions':
-      if (list.sessions.length === 0) return [note(`${LIST}:note`, `No session wrote a prompt or a reply in the last ${LOG_HOURS} h.`)]
+      if (list.sessions.length === 0) return [note(`${LIST}:note`, `No session wrote a prompt or a reply in the last ${list.hours} h.`)]
       return [
-        note(`${LIST}:intro`, `Each session's prompts and replies of the last ${LOG_HOURS} h, the newest change first.`),
-        ...list.sessions.map(session => sessionBlock(session, clock)),
+        note(`${LIST}:intro`, `Each session's prompts and replies of the last ${list.hours} h, the newest change first.`),
+        ...list.sessions.map(session => sessionBlock(session, list.hours, clock)),
       ]
   }
 }
@@ -113,12 +115,12 @@ export function logPageBlocks(page: LogPage, clock: Clock): Block[] {
     key: PAGE,
     rows: [
       { key: PAGE, spans: [{ text: page.session, bold: true }] },
-      { key: `${PAGE}:what`, spans: [{ text: `last ${LOG_HOURS} h · ${count} ${count === 1 ? 'line' : 'lines'}, the newest last`, dim: true }] },
+      { key: `${PAGE}:what`, spans: [{ text: `last ${page.hours} h · ${count} ${count === 1 ? 'line' : 'lines'}, the newest last`, dim: true }] },
     ],
   }
   const cut = page.isCut ? [note(`${PAGE}:cut`, `Older lines left out: the page holds the newest ${LOG_PAGE_CHARS / 1024} KiB of text.`)] : []
   const problem = page.problem === null ? [] : [single(`${PAGE}:problem`, [{ text: `Not all read: ${page.problem.replace(/\.$/, '')}.`, color: 'warning' }])]
-  if (count === 0) return [title, ...problem, note(`${PAGE}:empty`, `Nothing in the last ${LOG_HOURS} h.`)]
+  if (count === 0) return [title, ...problem, note(`${PAGE}:empty`, `Nothing in the last ${page.hours} h.`)]
   const keys = entryKeys(page.entries)
   return [title, ...cut, ...problem, ...page.entries.flatMap((entry, i) => entryBlocks(entry, keys[i] ?? `${PAGE}:${i}`, clock))]
 }

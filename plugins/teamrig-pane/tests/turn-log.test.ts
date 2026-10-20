@@ -1,12 +1,14 @@
-// The Log view's reads (hooks/turn-log.ts): a turn log line read into an entry, the sessions listed with their
-// newest prompt, a session's page of the last 24 h under its cap, each file read again only when it moved, and the
-// poll that writes the list or the page only when it changed, over a fake disk.
+// The Log view's reads (hooks/turn-log.ts): a turn log line read into an entry by teamrig's parseEntry, the sessions
+// listed with their newest prompt, a session's page of the team's kept hours under its cap, each file read again
+// only when it moved, and the poll that writes the list or the page only when it changed, over a fake disk.
 import { describe, expect, test } from 'claude-code/testing'
 import type { LogList, LogPage } from '../types'
 import { POLL_MS } from '../hooks/live'
-import { LOG_PAGE_CHARS, LiveLog, TurnLogReader, parseTurnLines, type LogDirEntry, type LogFiles } from '../hooks/turn-log'
+import { LOG_PAGE_CHARS, LiveLog, TurnLogReader, parseTurnLines, type LogDirEntry, type LogFiles, type TurnLogPlace } from '../hooks/turn-log'
 
 const DIR = '/kit/teams/web/state/turn-log'
+/** The team's turn log, kept teamrig's default 24 h. */
+const LOG: TurnLogPlace = { dir: DIR, keepHours: 24 }
 const NOW = Date.parse('2026-10-19T20:30:00Z')
 const MINUTE = 60_000
 
@@ -80,12 +82,11 @@ describe('parseTurnLines', () => {
 })
 
 describe('TurnLogReader.list', () => {
-  test('says when there is no team, no turn log folder, or the folder could not be read', async () => {
+  test('says when there is no turn log folder, or the folder could not be read', async () => {
     const disk = fakeDisk()
-    expect(await new TurnLogReader(disk.ports, null).list(NOW)).toEqual({ kind: 'no-team' })
-    expect(await new TurnLogReader(disk.ports, DIR).list(NOW)).toEqual({ kind: 'no-log' })
+    expect(await new TurnLogReader(disk.ports, LOG).list(NOW)).toEqual({ kind: 'no-log' })
     disk.fail.set(DIR, new Error('EPERM: operation not permitted, scandir'))
-    expect(await new TurnLogReader(disk.ports, DIR).list(NOW)).toEqual({ kind: 'failed', reason: 'EPERM: operation not permitted, scandir' })
+    expect(await new TurnLogReader(disk.ports, LOG).list(NOW)).toEqual({ kind: 'failed', reason: 'EPERM: operation not permitted, scandir' })
   })
 
   test('lists the sessions with an hour file of the last 24 h, the newest change first, each with its newest prompt of the window', async () => {
@@ -98,9 +99,10 @@ describe('TurnLogReader.list', () => {
     disk.put('notes.txt')
     disk.put('lead/notes.txt')
 
-    const list = await new TurnLogReader(disk.ports, DIR).list(NOW)
+    const list = await new TurnLogReader(disk.ports, LOG).list(NOW)
     expect(list).toEqual({
       kind: 'sessions',
+      hours: 24,
       sessions: [
         { id: 'lead', changedAt: 1_003, lastPrompt: 'plan the week' },
         { id: 'api', changedAt: 1_001, lastPrompt: null },
@@ -110,11 +112,26 @@ describe('TurnLogReader.list', () => {
     expect(disk.reads).not.toContain('old/2026-10-18T19.jsonl')
   })
 
+  test("the window is the team's kept hours: a session whose files end before it is left out, and its older lines off the page", async () => {
+    const disk = fakeDisk()
+    disk.write('api', '2026-10-19T17', [line('2026-10-19T17:50:00Z', 'prompt', 'before the window')])
+    disk.write('lead', '2026-10-19T18', [line('2026-10-19T18:10:00Z', 'prompt', 'too old'), line('2026-10-19T18:40:00Z', 'prompt', 'in time')])
+    disk.write('lead', '2026-10-19T20', [line('2026-10-19T20:05:00Z', 'reply', 'done')])
+    // Kept 2 h, the window at NOW starts at 18:30.
+    const reader = new TurnLogReader(disk.ports, { dir: DIR, keepHours: 2 })
+
+    expect(await reader.list(NOW)).toEqual({ kind: 'sessions', hours: 2, sessions: [{ id: 'lead', changedAt: 1_002, lastPrompt: 'in time' }] })
+    const page = await reader.page('lead', NOW)
+    expect(page.hours).toBe(2)
+    expect(page.entries.map(entry => entry.text)).toEqual(['in time', 'done'])
+    expect(disk.reads).not.toContain('api/2026-10-19T17.jsonl')
+  })
+
   test("cuts a long prompt's first line, and reads again only a file that moved", async () => {
     const disk = fakeDisk()
     disk.write('lead', '2026-10-19T19', [line('2026-10-19T19:05:00Z', 'prompt', 'x'.repeat(500))])
     disk.write('api', '2026-10-19T20', [line('2026-10-19T20:05:00Z', 'prompt', 'first')])
-    const reader = new TurnLogReader(disk.ports, DIR)
+    const reader = new TurnLogReader(disk.ports, LOG)
 
     const first = await reader.list(NOW)
     expect(first.kind === 'sessions' ? first.sessions.map(session => session.lastPrompt?.length) : []).toEqual([5, 200])
@@ -138,8 +155,9 @@ describe('TurnLogReader.page', () => {
     disk.write('lead', '2026-10-18T20', [line('2026-10-18T20:29:00Z', 'prompt', 'just before'), line('2026-10-18T20:31:00Z', 'reply', 'just in')])
     disk.write('lead', '2026-10-19T20', [line('2026-10-19T20:00:00Z', 'clear', 'context compacted'), line('2026-10-19T20:01:00Z', 'prompt', 'next')])
 
-    const page = await new TurnLogReader(disk.ports, DIR).page('lead', NOW)
+    const page = await new TurnLogReader(disk.ports, LOG).page('lead', NOW)
     expect(page.session).toBe('lead')
+    expect(page.hours).toBe(24)
     expect(page.entries.map(entry => `${entry.kind}:${entry.text}`)).toEqual(['reply:just in', 'clear:context compacted', 'prompt:next'])
     expect(page.isCut).toBe(false)
     expect(page.problem).toBeNull()
@@ -154,39 +172,38 @@ describe('TurnLogReader.page', () => {
     disk.write('lead', '2026-10-19T18', [line('2026-10-19T18:00:00Z', 'prompt', 'oldest'), line('2026-10-19T18:01:00Z', 'reply', big)])
     disk.write('lead', '2026-10-19T19', [line('2026-10-19T19:00:00Z', 'reply', big), line('2026-10-19T19:01:00Z', 'prompt', 'newest')])
 
-    const page = await new TurnLogReader(disk.ports, DIR).page('lead', NOW)
+    const page = await new TurnLogReader(disk.ports, LOG).page('lead', NOW)
     expect(page.entries.map(entry => entry.text.slice(0, 6))).toEqual(['yyyyyy', 'yyyyyy', 'newest'])
     expect(page.isCut).toBe(true)
     expect(disk.reads).toEqual(['lead/2026-10-19T19.jsonl', 'lead/2026-10-19T18.jsonl'])
 
-    const huge = new TurnLogReader(disk.ports, DIR)
+    const huge = new TurnLogReader(disk.ports, LOG)
     disk.write('lead', '2026-10-19T20', [line('2026-10-19T20:00:00Z', 'reply', 'z'.repeat(LOG_PAGE_CHARS + 1))])
     const alone = await huge.page('lead', NOW)
     expect(alone.entries.map(entry => entry.text.length)).toEqual([LOG_PAGE_CHARS + 1])
     expect(alone.isCut).toBe(true)
   })
 
-  test("a file that fails to read is named, the others' lines still shown; a gone folder or no team shows none", async () => {
+  test("a file that fails to read is named, the others' lines still shown; a gone folder shows none", async () => {
     const disk = fakeDisk()
     disk.write('lead', '2026-10-19T19', [line('2026-10-19T19:00:00Z', 'prompt', 'kept')])
     disk.write('lead', '2026-10-19T20', [line('2026-10-19T20:00:00Z', 'prompt', 'locked')])
     disk.fail.set(`${DIR}/lead/2026-10-19T20.jsonl`, new Error('EBUSY: resource busy or locked'))
 
-    const page = await new TurnLogReader(disk.ports, DIR).page('lead', NOW)
+    const page = await new TurnLogReader(disk.ports, LOG).page('lead', NOW)
     expect(page.entries.map(entry => entry.text)).toEqual(['kept'])
     expect(page.problem).toBe(`${DIR}/lead/2026-10-19T20.jsonl: EBUSY: resource busy or locked`)
 
-    expect(await new TurnLogReader(disk.ports, DIR).page('gone', NOW)).toEqual({ session: 'gone', entries: [], isCut: false, problem: null })
-    expect((await new TurnLogReader(disk.ports, null).page('lead', NOW)).problem).toBe('The pane found no team, so no turn log.')
+    expect(await new TurnLogReader(disk.ports, LOG).page('gone', NOW)).toEqual({ session: 'gone', hours: 24, entries: [], isCut: false, problem: null })
     disk.fail.set(`${DIR}/lead`, new Error('EPERM: operation not permitted'))
-    expect((await new TurnLogReader(disk.ports, DIR).page('lead', NOW)).problem).toBe('EPERM: operation not permitted')
+    expect((await new TurnLogReader(disk.ports, LOG).page('lead', NOW)).problem).toBe('EPERM: operation not permitted')
   })
 
   test('answers the same page while nothing moved, reading nothing; a write or a line leaving the window gives a new one', async () => {
     const disk = fakeDisk()
     disk.write('lead', '2026-10-18T20', [line('2026-10-18T20:40:00Z', 'prompt', 'early')])
     disk.write('lead', '2026-10-19T20', [line('2026-10-19T20:00:00Z', 'prompt', 'late')])
-    const reader = new TurnLogReader(disk.ports, DIR)
+    const reader = new TurnLogReader(disk.ports, LOG)
 
     const first = await reader.page('lead', NOW)
     disk.reads.length = 0
@@ -211,7 +228,7 @@ function fakeLive(disk: ReturnType<typeof fakeDisk>) {
   const pages: (LogPage | null)[] = []
   let failWrites = false
   const live = new LiveLog({
-    reader: new TurnLogReader(disk.ports, DIR),
+    reader: new TurnLogReader(disk.ports, LOG),
     now: async () => NOW,
     isShown: async () => shown.view,
     shownPage: async () => shown.page,

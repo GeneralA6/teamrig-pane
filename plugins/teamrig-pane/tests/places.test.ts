@@ -11,8 +11,13 @@ const TEAM_RULE = 'a lowercase letter, then lowercase letters, digits or -, at m
 const ALL_DIRS = { tasksDir: 'D:/t', inboxDir: 'D:/i' }
 /** Both folders as variables, so the settings file is the only thing left to fail. */
 const ALL_DIRS_ENV = { TEAMRIG_PANE_TASKS_DIR: 'D:/t', TEAMRIG_PANE_INBOX_DIR: 'D:/i' }
-/** The files naming the web team's sessions: its config and, in its state folder, its rename log. */
-const WEB_FILES: TeamFiles = { team: 'web', dir: `${KIT}/teams/web`, config: CONFIG, renames: `${STATE}/renames.jsonl`, turnLog: `${STATE}/turn-log` }
+/**
+ * The files naming the web team's sessions: its config and, in its state folder, its rename log. With no config file
+ * teamrig refuses the team and writes no turn log, so it has none.
+ */
+const WEB_FILES: TeamFiles = { team: 'web', dir: `${KIT}/teams/web`, config: CONFIG, renames: `${STATE}/renames.jsonl`, turnLog: null }
+/** The web team's files with a config file: its turn log, kept the config's turnLog.keepHours, teamrig's 24 by default. */
+const WEB_LOGGED: TeamFiles = { ...WEB_FILES, turnLog: { dir: `${STATE}/turn-log`, keepHours: 24 } }
 /** The web team's folders where teamrig keeps them with no config file. */
 const TEAM_FOUND: Places = {
   found: true,
@@ -164,7 +169,7 @@ describe('places', () => {
     expect(found).toEqual({
       found: true,
       dirs: { tasksDir: `${KIT}/teams/ops/state`, inboxDir: `${KIT}/teams/ops/state/inbox` },
-      team: { team: 'ops', dir: `${KIT}/teams/ops`, config: `${KIT}/teams/ops/config.json`, renames: `${KIT}/teams/ops/state/renames.jsonl`, turnLog: `${KIT}/teams/ops/state/turn-log` },
+      team: { team: 'ops', dir: `${KIT}/teams/ops`, config: `${KIT}/teams/ops/config.json`, renames: `${KIT}/teams/ops/state/renames.jsonl`, turnLog: null },
       settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
@@ -176,7 +181,7 @@ describe('places', () => {
     expect(both.found).toEqual({
       found: true,
       dirs: { tasksDir: `${KIT}/teams/web/data`, inboxDir: 'D:/inbox' },
-      team: { ...WEB_FILES, renames: `${KIT}/teams/web/data/renames.jsonl`, turnLog: `${KIT}/teams/web/data/turn-log` },
+      team: { ...WEB_FILES, renames: `${KIT}/teams/web/data/renames.jsonl`, turnLog: { dir: `${KIT}/teams/web/data/turn-log`, keepHours: 24 } },
       settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
@@ -184,7 +189,7 @@ describe('places', () => {
     expect(stateOnly.found).toEqual({
       found: true,
       dirs: { tasksDir: '/srv/state', inboxDir: '/srv/state/inbox' },
-      team: { ...WEB_FILES, renames: '/srv/state/renames.jsonl', turnLog: '/srv/state/turn-log' },
+      team: { ...WEB_FILES, renames: '/srv/state/renames.jsonl', turnLog: { dir: '/srv/state/turn-log', keepHours: 24 } },
       settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
@@ -193,10 +198,10 @@ describe('places', () => {
   test('with both folders named, the session’s team is still looked for, for its files, and a team it cannot find or read leaves none', async () => {
     // A config whose priorities teamrig cannot use still names the team: its files stay found for session lookups.
     const cases: ReadonlyArray<readonly [Readonly<Record<string, string>>, Options, TeamFiles | null]> = [
-      [{ [POINTER]: json({ team: 'web' }), [CONFIG]: '{}' }, {}, WEB_FILES],
+      [{ [POINTER]: json({ team: 'web' }), [CONFIG]: '{}' }, {}, WEB_LOGGED],
       [{}, {}, null],
       [{ [POINTER]: 'nope' }, {}, null],
-      [{ [POINTER]: json({ team: 'web' }), [CONFIG]: json({ register: { priorities: 'none' } }) }, {}, WEB_FILES],
+      [{ [POINTER]: json({ team: 'web' }), [CONFIG]: json({ register: { priorities: 'none' } }) }, {}, WEB_LOGGED],
       [{ [POINTER]: json({ team: 'web' }) }, { locked: [CONFIG] }, null],
       [{}, { home: null }, null],
     ]
@@ -209,17 +214,24 @@ describe('places', () => {
   test("the team config's register.check.notPickedUpAfterHours is when a task reads NOT PICKED UP, folders named or not", async () => {
     const files = { [POINTER]: json({ team: 'web' }), [CONFIG]: json({ register: { check: { notPickedUpAfterHours: 48 } } }) }
     const settings = { ...TEAM_SETTINGS, notPickedUpAfterHours: 48 }
-    expect((await places({}, files)).found).toEqual({ ...TEAM_FOUND, settings })
+    expect((await places({}, files)).found).toEqual({ ...TEAM_FOUND, team: WEB_LOGGED, settings })
     const named = (await places(ALL_DIRS_ENV, files)).found
-    expect(named).toEqual({ found: true, dirs: ALL_DIRS, team: WEB_FILES, settings, goalsDoc: null })
+    expect(named).toEqual({ found: true, dirs: ALL_DIRS, team: WEB_LOGGED, settings, goalsDoc: null })
+  })
+
+  test("the team config's turnLog.keepHours is how long its turn log is kept, the Log view's window, folders named or not", async () => {
+    const files = { [POINTER]: json({ team: 'web' }), [CONFIG]: json({ turnLog: { keepHours: 2 } }) }
+    const team = { ...WEB_FILES, turnLog: { dir: `${STATE}/turn-log`, keepHours: 2 } }
+    expect((await places({}, files)).found).toEqual({ ...TEAM_FOUND, team })
+    expect((await places(ALL_DIRS_ENV, files)).found).toEqual({ found: true, dirs: ALL_DIRS, team, settings: TEAM_SETTINGS, goalsDoc: null })
   })
 
   test("the team config's timeZone is the team's zone, folders named or not; with none set, the machine's", async () => {
     const machine = { machineZone: 'Europe/Berlin' }
     const zoned = { [POINTER]: json({ team: 'web' }), [CONFIG]: json({ timeZone: 'Asia/Jerusalem' }) }
     const jerusalem = { ...TEAM_SETTINGS, timeZone: 'Asia/Jerusalem' }
-    expect((await places({}, zoned, machine)).found).toEqual({ ...TEAM_FOUND, settings: jerusalem })
-    expect((await places(ALL_DIRS_ENV, zoned, machine)).found).toEqual({ found: true, dirs: ALL_DIRS, team: WEB_FILES, settings: jerusalem, goalsDoc: null })
+    expect((await places({}, zoned, machine)).found).toEqual({ ...TEAM_FOUND, team: WEB_LOGGED, settings: jerusalem })
+    expect((await places(ALL_DIRS_ENV, zoned, machine)).found).toEqual({ found: true, dirs: ALL_DIRS, team: WEB_LOGGED, settings: jerusalem, goalsDoc: null })
     const berlin = { ...TEAM_SETTINGS, timeZone: 'Europe/Berlin' }
     expect((await places({}, { [POINTER]: json({ team: 'web' }) }, machine)).found).toEqual({ ...TEAM_FOUND, settings: berlin })
     expect((await places(ALL_DIRS_ENV, {}, machine)).found).toEqual({ found: true, dirs: ALL_DIRS, team: null, settings: berlin, goalsDoc: null })

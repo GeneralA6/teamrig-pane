@@ -1270,10 +1270,14 @@ async function drawnLines(pane: Mounted<'Pane'>): Promise<string[]> {
   return (await pane.findAll({ type: 'Text' })).flatMap(found => found.text.split('\n'))
 }
 
-/** A session of team web, its pointer file in /work, with turn logs for lead, then api, in the hour before NOW. */
-async function startWithLogs(on: On) {
+/**
+ * A session of team web, its pointer file in /work and its config keeping the turn log 2 h, with turn logs for lead,
+ * then api, in the hour before NOW; `withConfig` false leaves the config file out.
+ */
+async function startWithLogs(on: On, withConfig = true) {
   const started = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   started.disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  if (withConfig) started.disk.write('/Homes/tester/.teamrig/teams/web/config.json', [JSON.stringify({ turnLog: { keepHours: 2 } })])
   started.disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
     createLine('T7', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the team register' }),
   ])
@@ -1286,7 +1290,7 @@ async function startWithLogs(on: On) {
   return started
 }
 
-test("the Log view lists the team's sessions with a turn log of the last 24 h, the newest change first, each with its newest prompt", async ($, on) => {
+test("the Log view lists the team's sessions with a turn log of its kept hours, the newest change first, each with its newest prompt", async ($, on) => {
   const { clock, disk } = await startWithLogs(on)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
@@ -1319,7 +1323,7 @@ test('a press on a session opens its page: its lines oldest first, under back, k
   await pane.press({ key: 'log:session:api' })
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'back'])
   expect(await pane.find({ text: /^lead · / })).toBeUndefined()
-  expect(await drawnLines(pane)).toContain('last 24 h · 3 lines, the newest last')
+  expect(await drawnLines(pane)).toContain('last 2 h · 3 lines, the newest last')
   const lines = async () => (await drawnLines(pane)).filter(line => /^(prompt|reply) · |^── |^Ship|^Next/.test(line))
   expect(await lines()).toEqual(['prompt · 13:20 UTC', 'Ship the log view', 'reply · 13:21 UTC', 'Shipped it', '── 13:22 UTC · context cleared (/clear) ──'])
 
@@ -1351,6 +1355,16 @@ test('the Log view says so when the session has no team', async ($, on) => {
 
   await pane.press({ key: 'log' })
   expect(await pane.find({ text: /^No team found: the Log view shows/ })).toBeDefined()
+})
+
+test('the Log view says so when the team has no config file, reading no turn log: teamrig writes it none', async ($, on) => {
+  const { disk } = await startWithLogs(on, false)
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  await pane.press({ key: 'log' })
+  expect(await pane.find({ text: /^No turn logs: the team has no config file/ })).toBeDefined()
+  expect(disk.reads.filter(path => path.includes('/turn-log/'))).toEqual([])
 })
 
 test('the Log view reads no turn log while another view shows, and reads what moved when it shows again', async ($, on) => {

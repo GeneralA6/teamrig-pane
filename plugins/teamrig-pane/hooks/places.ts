@@ -4,10 +4,12 @@
 // `paths.inbox`, read by teamrig's own reader). The goals document comes from its variable or the
 // settings file, else none. The team's config and rename log, read again by sessions.ts at each
 // `/teamrig-pane <session>`, name its sessions. The team config also sets how long a task may stand untouched by its
-// owner before it reads NOT PICKED UP, and the team's zone (its `timeZone`, else the machine's, as teamrig resolves it).
+// owner before it reads NOT PICKED UP, the team's zone (its `timeZone`, else the machine's, as teamrig resolves it)
+// and how many hours teamrig keeps its turn log, the Log view's window.
 import type { TeamSettings } from '../types'
 import { DEFAULT_REGISTER, parseConfigText, TimeZone, type ConfigRead, type KitConfig } from './core/read/index'
 import { slashed, type Files, type RegisterDirs } from './source'
+import type { TurnLogPlace } from './turn-log'
 
 /** The variables the pane reads. */
 export const PANE_ENV = {
@@ -44,10 +46,11 @@ type DirKey = Exclude<SettingKey, 'goalsDoc'>
 
 /**
  * The session's team and where teamrig keeps it: its folder (which holds the team's notes, read for a card's
- * reference files), the files that name its sessions, its config and its rename log, and the folder of its sessions'
- * turn logs (turn-log.ts); any may not be there.
+ * reference files), the files that name its sessions, its config and its rename log, and its sessions' turn log
+ * (turn-log.ts): its folder and the config's `turnLog.keepHours`, null with no config file, a team teamrig refuses and
+ * writes no turn log for; any file may not be there.
  */
-export type TeamFiles = { team: string; dir: string; config: string; renames: string; turnLog: string }
+export type TeamFiles = { team: string; dir: string; config: string; renames: string; turnLog: TurnLogPlace | null }
 
 /**
  * The register's folders, the session's team's files (null when no team was found) and its settings (teamSettings:
@@ -195,12 +198,13 @@ async function teamFolders(
   }
   const paths = read?.config.paths ?? {}
   const state = inTeamHome(paths.state) ?? `${teamHome}/state`
+  const turnLog = read === null ? null : { dir: `${state}/turn-log`, keepHours: read.config.turnLog.keepHours }
   return {
     ok: true,
     value: {
       state,
       inbox: inTeamHome(paths.inbox) ?? `${state}/inbox`,
-      files: { team: team.value, dir: teamHome, config: configPath, renames: `${state}/renames.jsonl`, turnLog: `${state}/turn-log` },
+      files: { team: team.value, dir: teamHome, config: configPath, renames: `${state}/renames.jsonl`, turnLog },
       settings: teamSettings(read?.config ?? null, input.machineZone),
     },
   }

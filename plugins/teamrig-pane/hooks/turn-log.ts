@@ -1,19 +1,18 @@
 // The Log view's reads: each team session's prompts and replies from the turn log teamrig writes:
 // `<team state>/turn-log/<session id>/<UTC hour>.jsonl`, one JSON line per entry, only ever appended to. teamrig
-// removes whole hour files past its kept hours, so the oldest file kept can still hold older lines: the pane hides
-// every line older than LOG_HOURS. Each line is read by teamrig's parseEntry: one of another version, one that does
-// not parse (a torn last line) or one missing a field is skipped, and fields the pane does not know are ignored. The list names the sessions with an
-// hour file of the last LOG_HOURS, the newest change first, with each one's newest prompt; a session's page holds
-// its newest lines, oldest first, up to LOG_PAGE_CHARS of text, reading its files newest first and none past that.
-// Each file read is kept with its size and mtime, so a poll reads again only a file that moved. While the Log view
-// shows, a POLL_MS poll reads what it shows again, writing only what changed. Reads files only: no git, no model.
+// removes whole hour files past the team's kept hours (its config's `turnLog.keepHours`), so the oldest file kept
+// can still hold older lines: the pane hides every line older than those hours. Each line is read by teamrig's
+// parseEntry: one of another version, one that does not parse (a torn last line) or one missing a field is
+// skipped, and fields the pane does not know are ignored. The list names the sessions with an hour file of the
+// kept hours, the newest change first, with each one's newest prompt; a session's page holds its newest lines,
+// oldest first, up to LOG_PAGE_CHARS of text, reading its files newest first and none past that. Each file read
+// is kept with its size and mtime, so a poll reads again only a file that moved. While the Log view shows, a
+// POLL_MS poll reads what it shows again, writing only what changed. Reads files only: no git, no model.
 import type { LogList, LogPage, LogSession, TurnEntry } from '../types'
 import { parseEntry, SESSION_NAME } from './core/read/index'
 import { messageOf } from './errors'
 import { POLL_MS, type Timer } from './live'
 
-/** How far back the view shows: teamrig's default kept hours. */
-export const LOG_HOURS = 24
 const HOUR_MS = 3_600_000
 /** The most text a session's page holds, its newest lines: as much as a file page shows (ref-file.ts MAX_PAGE_BYTES), so a busy day never lays out megabytes. */
 export const LOG_PAGE_CHARS = 256 * 1024
@@ -24,6 +23,9 @@ const PROMPT_CHARS = 200
 
 /** A folder's entry as the reader needs it: the engine's `$.fs.list` answers these. */
 export type LogDirEntry = { name: string; kind: 'file' | 'dir' | 'other'; size: number; mtimeMs: number }
+
+/** A team's turn log: its folder, and the hours teamrig keeps it (the team config's `turnLog.keepHours`), the view's window. */
+export type TurnLogPlace = { dir: string; keepHours: number }
 
 /** What the reader needs of the disk. */
 export type LogFiles = {
@@ -59,9 +61,9 @@ export function parseTurnLines(text: string): TurnEntry[] {
   })
 }
 
-/** When the window of the last LOG_HOURS starts, at `now`. */
-function windowStart(now: number): number {
-  return now - LOG_HOURS * HOUR_MS
+/** When the window of the last `hours` starts, at `now`. */
+function windowStart(now: number, hours: number): number {
+  return now - hours * HOUR_MS
 }
 
 /** True when the entry falls in the window that starts at `start`; one with an unreadable time never does. */
@@ -86,28 +88,27 @@ type FileRead = { stamp: string; entries: readonly TurnEntry[] }
 type PromptRead = { stamp: string; prompt: { at: number; line: string } | null }
 
 /**
- * Reads the team's turn logs for the Log view. Each file it reads is kept with its stamp: the list keeps each file's
- * newest prompt, the page the entries of the session it shows, and both drop what a read no longer lists.
+ * Reads a team's turn log for the Log view, over the hours teamrig keeps it. Each file it reads is kept with its
+ * stamp: the list keeps each file's newest prompt, the page the entries of the session it shows, and both drop what
+ * a read no longer lists.
  */
 export class TurnLogReader {
   private readonly files: LogFiles
-  /** The team's turn log folder; null when the pane found no team. */
-  private readonly dir: string | null
+  private readonly log: TurnLogPlace
   private prompts = new Map<string, PromptRead>()
   private pageReads = new Map<string, FileRead>()
   /** The page it last read, and what it was read from: an unmoved read answers that same page. */
   private lastPage: { page: LogPage; from: string } | null = null
 
-  constructor(files: LogFiles, dir: string | null) {
+  constructor(files: LogFiles, log: TurnLogPlace) {
     this.files = files
-    this.dir = dir
+    this.log = log
   }
 
   /** The sessions with an hour file in the window at `now`, the newest change first. */
   async list(now: number): Promise<LogList> {
-    const dir = this.dir
-    if (dir === null) return { kind: 'no-team' }
-    const start = windowStart(now)
+    const { dir, keepHours } = this.log
+    const start = windowStart(now, keepHours)
     try {
       const entries = await this.files.list(dir)
       if (entries === null) return { kind: 'no-log' }
@@ -121,7 +122,7 @@ export class TurnLogReader {
         sessions.push({ id, changedAt: newest.changedAt, lastPrompt: await this.lastPrompt(hours, start, kept) })
       }
       this.prompts = kept
-      return { kind: 'sessions', sessions: sessions.sort((a, b) => b.changedAt - a.changedAt || a.id.localeCompare(b.id)) }
+      return { kind: 'sessions', hours: keepHours, sessions: sessions.sort((a, b) => b.changedAt - a.changedAt || a.id.localeCompare(b.id)) }
     } catch (error) {
       return { kind: 'failed', reason: messageOf(error) }
     }
@@ -129,14 +130,13 @@ export class TurnLogReader {
 
   /** The session's newest lines of the window at `now`, oldest first, up to LOG_PAGE_CHARS of text. */
   async page(session: string, now: number): Promise<LogPage> {
-    const dir = this.dir
-    if (dir === null) return { session, entries: [], isCut: false, problem: 'The pane found no team, so no turn log.' }
-    const start = windowStart(now)
+    const { dir, keepHours } = this.log
+    const start = windowStart(now, keepHours)
     let hours: HourFile[]
     try {
       hours = await this.hours(dir, session, start)
     } catch (error) {
-      return { session, entries: [], isCut: false, problem: messageOf(error) }
+      return { session, hours: keepHours, entries: [], isCut: false, problem: messageOf(error) }
     }
     const kept = new Map<string, FileRead>()
     const newestFirst: TurnEntry[] = []
@@ -168,7 +168,7 @@ export class TurnLogReader {
     // The window moves on with `now`, so what was read is the files' stamps and the first line shown.
     const from = [session, problem, ...[...kept.entries()].map(([path, read]) => `${path}@${read.stamp}`), entries[0]?.at, entries.length].join('|')
     if (this.lastPage?.from === from) return this.lastPage.page
-    const page: LogPage = { session, entries, isCut, problem }
+    const page: LogPage = { session, hours: keepHours, entries, isCut, problem }
     this.lastPage = { page, from }
     return page
   }
@@ -230,6 +230,7 @@ export type LogPorts = {
 function sameList(a: LogList, b: LogList): boolean {
   if (a.kind !== 'sessions' || b.kind !== 'sessions') return JSON.stringify(a) === JSON.stringify(b)
   return (
+    a.hours === b.hours &&
     a.sessions.length === b.sessions.length &&
     a.sessions.every((session, i) => {
       const other = b.sessions[i]
