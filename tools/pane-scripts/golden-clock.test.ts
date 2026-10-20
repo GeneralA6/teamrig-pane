@@ -12,14 +12,14 @@ const PRELOAD = new URL('../../plugins/teamrig-pane/scripts/golden-clock.ts', im
 const AT = 1_792_235_559_957;
 
 describe('the golden capture clock preload', () => {
-  it("fixes the clock at the instant the run's variable names", async () => {
+  it("fixes the Date clock at the instant the run's variable names", async () => {
     const RealDate = globalThis.Date;
     const realNow = RealDate.now;
     const saved = process.env[GOLDEN_CLOCK_VARIABLE];
     process.env[GOLDEN_CLOCK_VARIABLE] = String(AT);
     try {
       await import(PRELOAD);
-      assert.deepEqual([Date.now(), Date.now()], [AT, AT]);
+      assert.deepEqual([Date.now(), new Date().getTime()], [AT, AT]);
     } finally {
       globalThis.Date = RealDate;
       RealDate.now = realNow;

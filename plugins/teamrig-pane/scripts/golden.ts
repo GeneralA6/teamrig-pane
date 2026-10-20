@@ -87,7 +87,7 @@ function git(gitArgs: readonly string[], input?: string): Buffer {
 
 /**
  * Writes teamrig's package.json and src/ (its tests left out) at the pin under `cli`, read from git history. A source
- * that reads the clock other than through Date.now stops the capture, as golden-clock.ts could not fix its runs.
+ * that reads a timer clock stops the capture, as golden-clock.ts fixes the Date clock alone.
  */
 function copyTeamrig(): void {
   const paths = git(['ls-tree', '-r', '-z', '--name-only', pin, '--', 'package.json', 'src'])
@@ -109,7 +109,7 @@ function copyTeamrig(): void {
     writeFileSync(target, content)
     offset = headerEnd + 1 + size + 1
   }
-  if (clockReads.length > 0) fail(`REFUSED: teamrig ${pin} reads the clock past Date.now, which golden-clock.ts cannot fix: ${clockReads.join(', ')}`, 1)
+  if (clockReads.length > 0) fail(`REFUSED: teamrig ${pin} reads a timer clock, which golden-clock.ts cannot fix: ${clockReads.join(', ')}`, 1)
 }
 
 /** The environment without anything that points teamrig at a real team or session. */
