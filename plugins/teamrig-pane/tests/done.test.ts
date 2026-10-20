@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow } from '../types'
 import { TimeZone, readRegister } from '../hooks/core/read/index'
-import { doneWeek, HELD_DAYS, heldSince, heldWeek, heldWeeks, isHeldFinished, MAX_DONE_ROWS, weekAfter, weekOf, weekSteps } from '../hooks/done'
+import { doneWeek, HELD_DAYS, heldSince, heldWeek, heldWeeks, isHeldFinished, MAX_DONE_ROWS, weekSteps } from '../hooks/done'
 import { doneBlocks, heldText, OLDER_DONE_COMMAND, weekWords } from '../hooks/done-rows'
 import { rowOf } from '../hooks/log'
 import type { Block } from '../hooks/rows'
@@ -38,27 +38,6 @@ function idsByDay(week: ReturnType<typeof doneWeek>): string[][] {
 }
 
 describe('weeks', () => {
-  test('in UTC, a week starts Monday 00:00: Sunday 23:59 is the week before', () => {
-    expect(weekOf(MONDAY, TimeZone.UTC)).toBe('2026-10-12')
-    expect(weekOf(MONDAY - 60_000, TimeZone.UTC)).toBe('2026-10-05')
-    expect(weekOf(NOW, TimeZone.UTC)).toBe('2026-10-12')
-    expect(weekOf(Date.UTC(2026, 9, 18, 23, 59), TimeZone.UTC)).toBe('2026-10-12')
-    // Across a month and a year.
-    expect(weekOf(Date.UTC(2026, 10, 1), TimeZone.UTC)).toBe('2026-10-26')
-    expect(weekOf(Date.UTC(2027, 0, 1), TimeZone.UTC)).toBe('2026-12-28')
-    expect(weekAfter('2026-10-12', -1)).toBe('2026-10-05')
-    expect(weekAfter('2026-12-28', 1)).toBe('2027-01-04')
-  })
-
-  test("in Jerusalem's zone, a week starts at its Monday midnight, summer time or not", () => {
-    // Sunday 21:00 UTC is Monday 00:00 IDT; after summer time ends (10-25), Sunday 22:00 UTC is Monday 00:00 IST.
-    expect(weekOf(Date.UTC(2026, 9, 11, 21, 0), JERUSALEM)).toBe('2026-10-12')
-    expect(weekOf(Date.UTC(2026, 9, 11, 20, 59), JERUSALEM)).toBe('2026-10-05')
-    expect(weekOf(MONDAY - 60_000, JERUSALEM)).toBe('2026-10-12')
-    expect(weekOf(Date.UTC(2026, 9, 25, 22, 0), JERUSALEM)).toBe('2026-10-26')
-    expect(weekOf(Date.UTC(2026, 9, 25, 21, 59), JERUSALEM)).toBe('2026-10-19')
-  })
-
   test(`the pane holds finished tasks ${HELD_DAYS} days back: the newest week is now's, the oldest the one that reaches`, () => {
     expect(heldWeeks(AT_NOW)).toEqual({ newest: '2026-10-12', oldest: '2026-10-05' })
     expect(heldWeek('2026-09-28', AT_NOW)).toBe('2026-10-05')

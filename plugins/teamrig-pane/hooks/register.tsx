@@ -86,10 +86,10 @@ import {
   type Landing,
   wentTo,
 } from './nav'
-import { weekSteps, weekOf } from './done'
+import { weekSteps } from './done'
 import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
-import { clockOf, machineZoneOf } from './zone'
+import { clockOf, machineZoneOf, weekOf } from './zone'
 import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
 import { pageBlocks } from './page'
 import { matchCount, NO_RESULTS, searchTasks, topResult, type SearchResults } from './task-search'
