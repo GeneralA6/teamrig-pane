@@ -20,9 +20,10 @@ to each team session's prompts and replies (Tasks, Changes and Log, below).
   then the date it works to with undated last, then id: its own due, or an earlier one of an active task
   that needs it) under a bold heading with its count, an empty one left out:
   `Verifying` (the nearest to done, so closing them comes first), `Working on`, `Up next`, `Waiting`
-  (its own waiting tasks, then the newest 8 it asked of other sessions, each saying `on <owner>`) and
-  `Done today`, the team's day the status bar counts (the newest 6, then a dim line saying how many more,
-  how many of those were dropped, and that `o` lists every one done today).
+  (its own waiting tasks, then the first 8 it asked of other sessions, each saying `on <owner>`) and
+  `Done today` (its tasks done or dropped on the team's day, the newest 6). A heading's count is the
+  status bar's count for its section, the tasks past a cap included; under a capped section a dim line
+  says how many more and the key that lists them all (`i`, `o`).
 - **all**: every owner's active tasks, each owner's heading with its counts, a count with none left
   out (`api · 4 active · 1 waiting · 1 verifying`), and the verifying tasks first in
   each group.
@@ -163,10 +164,12 @@ dock shows the whole list.
 
 ## Status bar
 
-Over the mine view's tasks, a row as wide as the pane shares its cells among the area's tasks by
-status, in this order: done today (green `█`), verifying (green `▓`), working, that is in progress
-(amber `█`), waiting (red `█`) and not started, that is open (dim `░`). Today is the team's day, the one
-the due labels are in; tasks done on an earlier day, and dropped ones, are left out. The cells are
+Over the mine view's tasks, a row as wide as the pane shares its cells among the tasks of its sections,
+a status for each, in this order: done today (green `█`), verifying (green `▓`), working, that is in
+progress (amber `█`), waiting (red `█`: its own waiting tasks and those it asked of other sessions) and
+not started, that is open (dim `░`). Today is the team's day, the one the due labels are in: a task done
+or dropped today is done today, one closed on an earlier day is left out. Each count is the one its
+section's heading names. The cells are
 shared by largest remainder, and a status with any task gets at least one. Under the row a dim line
 counts them, each behind its key (`o: 1 done today · v: 1 verifying · w: 2 working`), skipping a
 status with none; where the counts, keys included, are wider than the pane they wrap onto more lines.
@@ -174,7 +177,8 @@ An area with none of these tasks draws no bar, and the all view has none.
 
 A press on a status's cells or its count, or its key while the pane holds the keyboard (`o` done
 today, `v` verifying, `w` working, `i` waiting, `n` not started), shows only that status's tasks
-under the header: done today newest first, the others in plan order, every other section hidden. Its
+under the header, every one its count names: done today newest first, the others in plan order (the
+waiting ones the area's own first), every other section hidden. Its
 cells and count turn bold, and a dim line under the counts reads `showing verifying only, click again
 for all`. The same press again shows every task; one on another status switches to it. A shown status
 that empties keeps its count at 0 (`0 waiting`), so a press still clears it, and the list says so
