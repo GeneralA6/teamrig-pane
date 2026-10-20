@@ -1,14 +1,15 @@
-// The search's body, drawn under its Find field (register.tsx): each active match as the list draws a task, its
-// title row and under it a dim line of whose it is and the other fields a word matched in, then each finished one
-// dim on one line with when it closed; the words that matched underlined. Past the cap (task-search.ts MAX_RESULTS), a dim
-// line asks for another word; when nothing matches, one dim line says so. A press on a result opens its page
-// (`opens`). Pure: blocks of rows (rows.ts) that layout.ts wraps.
+// The Tasks view's search body, drawn under its Find field (register.tsx) on the shared search view (search-view.ts):
+// the count of the matches, then each active match as the list draws a task, its title row and under it a dim line of
+// whose it is and the other fields a word matched in, then each finished one dim on one line with when it closed; the
+// words that matched underlined. Past the cap (task-search.ts MAX_RESULTS), the count says how many are shown and asks
+// for another word. A press on a result opens its page (`opens`). Pure: blocks of rows (rows.ts) that layout.ts wraps.
 import type { Snapshot } from '../types'
 import { HELD_DAYS } from './done'
 import { treeOf, whenWords } from './meta'
-import { GLYPH, GLYPH_COLOR, indentOf, META_LINES, problemBlocks, readingBlock, SEPARATOR, single, TITLE_GAP, TITLE_LINES } from './rows'
+import { GLYPH, GLYPH_COLOR, indentOf, META_LINES, problemBlocks, readingBlock, SEPARATOR, TITLE_GAP, TITLE_LINES } from './rows'
 import type { Block, Row, Span } from './rows'
-import { marksOf, queryWords, type Mark } from './search'
+import { marksOf } from './search'
+import { excerpt, markedSpans, searchViewBlocks, type Noun } from './search-view'
 import { fieldText, searchTasks, type SearchedField, type TaskHit } from './task-search'
 import { clockOf, type Clock } from './zone'
 
@@ -21,35 +22,13 @@ const FIELD_WORDS: ReadonlyArray<readonly [field: Exclude<SearchedField, 'title'
   ['evidence', 'evidence'],
   ['ref', 'ref'],
 ]
-/** A matched field's text starts at most this many characters before its first match, cut there with `…`. */
-export const EXCERPT_LEAD = 20
-const ELLIPSIS = '…'
-
 /** What an empty Find field shows. */
 export const SEARCH_HINT = 'Type words to find a task by its id, title, owner, who asked, goals, week, note, evidence or ref.'
 /** What a query no held task matches shows. */
 export const NOTHING_FOUND = `Nothing matches. The pane searches the active tasks and those finished in the last ${HELD_DAYS} days.`
 
-/** `text` as spans in `style`, the `marks` runs underlined. */
-export function markedSpans(text: string, marks: readonly Mark[], style: Omit<Span, 'text'>): Span[] {
-  const spans: Span[] = []
-  let at = 0
-  for (const mark of marks) {
-    spans.push({ ...style, text: text.slice(at, mark.start) }, { ...style, text: text.slice(mark.start, mark.end), underline: true })
-    at = mark.end
-  }
-  spans.push({ ...style, text: text.slice(at) })
-  return spans.filter(span => span.text !== '')
-}
-
-/** A field's text from EXCERPT_LEAD characters before its first match, `…` where it was cut, its marks moved with it. */
-export function excerpt(text: string, marks: readonly Mark[]): { text: string; marks: Mark[] } {
-  const first = marks[0]
-  if (first === undefined || first.start <= EXCERPT_LEAD) return { text, marks: [...marks] }
-  const cut = first.start - EXCERPT_LEAD
-  const shift = ELLIPSIS.length - cut
-  return { text: `${ELLIPSIS}${text.slice(cut)}`, marks: marks.map(mark => ({ start: mark.start + shift, end: mark.end + shift })) }
-}
+/** A Tasks search counts tasks. */
+export const TASK_NOUN: Noun = { one: 'task', many: 'tasks' }
 
 /** The task's id, in `style`, underlined when a word named it. */
 function idSpan(hit: TaskHit, style: Omit<Span, 'text'>): Span {
@@ -112,16 +91,15 @@ function doneBlock(hit: TaskHit, clock: Clock): Block {
 }
 
 /**
- * The search's body for `query` over the snapshot's tasks: the register's problem, if any, then the matches, or the
- * hint while the query has no word, or the line that says nothing matched. A snapshot never read says so instead.
+ * The search's body for `query` over the snapshot's tasks: the register's problem, if any, then the search view of
+ * the matches (the hint while the query has no word, the line that says nothing matched, else the count and the
+ * results). A snapshot never read says so instead.
  */
 export function searchBlocks(snap: Snapshot, query: string): Block[] {
   const reading = readingBlock(snap)
   if (reading !== null) return [reading]
-  const problems = problemBlocks(snap)
-  if (queryWords(query).length === 0) return [...problems, single('search-hint', [{ text: SEARCH_HINT, dim: true }])]
   const results = searchTasks(snap.tasks, query, treeOf(snap))
-  if (results.active.length + results.done.length === 0) return [...problems, single('search-none', [{ text: NOTHING_FOUND, dim: true }])]
-  const more = results.more > 0 ? [single('search-more', [{ text: `${results.more} more: add a word`, dim: true }])] : []
-  return [...problems, ...results.active.map(activeBlock), ...results.done.map(hit => doneBlock(hit, clockOf(snap))), ...more]
+  const shown = [...results.active.map(activeBlock), ...results.done.map(hit => doneBlock(hit, clockOf(snap)))]
+  const view = { key: 'search', query, hint: SEARCH_HINT, nothing: NOTHING_FOUND, noun: TASK_NOUN, results: shown, total: shown.length + results.more }
+  return [...problemBlocks(snap), ...searchViewBlocks(view)]
 }

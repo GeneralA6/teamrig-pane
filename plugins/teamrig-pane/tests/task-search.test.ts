@@ -5,7 +5,7 @@ import { rowOf } from '../hooks/log'
 import type { Block, Span } from '../hooks/rows'
 import { marksOf } from '../hooks/search'
 import { MAX_RESULTS, NO_RESULTS, searchTasks, topResult, type TaskHit } from '../hooks/task-search'
-import { EXCERPT_LEAD, excerpt, markedSpans, NOTHING_FOUND, SEARCH_HINT, searchBlocks } from '../hooks/search-rows'
+import { NOTHING_FOUND, SEARCH_HINT, searchBlocks } from '../hooks/search-rows'
 import { HOUR, NOW, NO_TEAM, TEAM_SETTINGS, createLine, statusLine, treeAt } from './fixtures'
 
 /** The rows teamrig's reader folds from event lines. */
@@ -122,22 +122,24 @@ describe('search', () => {
 })
 
 describe('search rows', () => {
-  test('an active result is its title row, then whose it is and the fields a word matched in, the matches underlined', async () => {
+  test('the count leads; an active result is its title row, then whose it is and the fields a word matched in, the matches underlined', async () => {
     const blocks = searchBlocks(SNAP, 'load etl')
     expect(blocks.map(block => [block.key, block.opens])).toEqual([
+      ['search-count', undefined],
       ['search:T50', 'T50'],
       ['search:T7', 'T7'],
     ])
-    expect(rowsIn(blocks)).toEqual(['○ T50  [Load] the feed', '       on [etl]', '✓ T7  Fix the [load]er'])
-    expect(rowsIn(searchBlocks(SNAP, 'docs/feed'))).toEqual(['○ T50  Load the feed', '       on etl · ref [docs/feed].md:12'])
+    expect(rowsIn(blocks)).toEqual(['2 tasks match', '○ T50  [Load] the feed', '       on [etl]', '✓ T7  Fix the [load]er'])
+    expect(rowsIn(searchBlocks(SNAP, 'docs/feed'))).toEqual(['1 task matches', '○ T50  Load the feed', '       on etl · ref [docs/feed].md:12'])
     expect(rowsIn(searchBlocks(SNAP, '10-12 g11.4 lead'))).toEqual([
+      '1 task matches',
       '○ T52  Draw the pages',
       '       on po · asked by [lead] · goals [G11.4] · week 2026-[10-12]',
     ])
   })
 
   test('a finished result is one dim line with when it closed; a dropped one has a dim mark', async () => {
-    const [block] = searchBlocks(SNAP, 'T9')
+    const [, block] = searchBlocks(SNAP, 'T9')
     const row = block?.rows[0]
     expect(row?.spans.every(span => span.dim === true)).toBe(true)
     expect(marked(row?.spans ?? [])).toBe('✗ [T9]  Feed the pages')
@@ -145,18 +147,14 @@ describe('search rows', () => {
   })
 
   test('the id a word named is underlined, the title row bold on it', async () => {
-    const [block] = searchBlocks(SNAP, '52 draw')
+    const [, block] = searchBlocks(SNAP, '52 draw')
     expect(rowsIn(block === undefined ? [] : [block])).toEqual(['○ [T52]  [Draw] the pages', '       on po'])
     expect(block?.rows[0]?.spans.find(span => span.text === 'T52')).toEqual({ text: 'T52', bold: true, underline: true })
   })
 
-  test('a long field shows from a little before its match', async () => {
-    const [, meta] = searchBlocks(SNAP, 'column')[0]?.rows ?? []
+  test('a finished result whose note matched is still its one line', async () => {
+    const [, meta] = searchBlocks(SNAP, 'column')[1]?.rows ?? []
     expect(meta).toBeUndefined()
-    const note = 'x'.repeat(40) + ' the column'
-    expect(excerpt(note, [{ start: 45, end: 51 }])).toEqual({ text: `…${note.slice(45 - EXCERPT_LEAD)}`, marks: [{ start: 21, end: 27 }] })
-    expect(excerpt('short note', [{ start: 6, end: 10 }])).toEqual({ text: 'short note', marks: [{ start: 6, end: 10 }] })
-    expect(excerpt('no marks', [])).toEqual({ text: 'no marks', marks: [] })
   })
 
   test('a note match on an active task names the note, cut before its match', async () => {
@@ -164,29 +162,21 @@ describe('search rows', () => {
       createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Ship it' }),
       statusLine('T3', 'po', NOW - HOUR, 'in-progress', 'waiting for the second review from the owner'),
     ])
-    const [block] = searchBlocks({ ...SNAP, tasks }, 'owner')
+    const [, block] = searchBlocks({ ...SNAP, tasks }, 'owner')
     expect(rowsIn(block === undefined ? [] : [block])).toEqual(['◐ T3  Ship it', '      on po · asked by [owner] · note …ond review from the [owner]'])
   })
 
-  test('marks split a text into plain and underlined spans in one style', async () => {
-    expect(markedSpans('Load the feed', [{ start: 0, end: 4 }], { dim: true })).toEqual([
-      { dim: true, text: 'Load', underline: true },
-      { dim: true, text: ' the feed' },
-    ])
-    expect(markedSpans('feed', [], {})).toEqual([{ text: 'feed' }])
-  })
-
-  test(`past the cap a dim line asks for another word; nothing matched says so; no word yet shows the hint`, async () => {
+  test(`past the cap the count says how many are shown and asks for another word; nothing matched says so; no word yet shows the hint`, async () => {
     const lines = Array.from({ length: 33 }, (_, i) => createLine(`T${100 + i}`, { owner: 'bulk', by: 'po', at: NOW - HOUR }))
     const blocks = searchBlocks({ ...SNAP, tasks: rowsOf(lines) }, 'bulk')
     expect(blocks.length).toBe(MAX_RESULTS + 1)
-    expect(rowsIn(blocks.slice(-1))).toEqual(['3 more: add a word'])
+    expect(rowsIn(blocks.slice(0, 1))).toEqual(['33 tasks match, 30 shown: add a word to narrow them'])
     expect(rowsIn(searchBlocks(SNAP, 'nothing-here'))).toEqual([NOTHING_FOUND])
     expect(rowsIn(searchBlocks(SNAP, ' '))).toEqual([SEARCH_HINT])
   })
 
   test("leads with the register's problem, and says it is reading before the first read", async () => {
-    expect(searchBlocks({ ...SNAP, problem: 'events.jsonl: locked' }, 'feed').map(block => block.key)).toEqual(['problem', 'search:T50', 'search:T9'])
+    expect(searchBlocks({ ...SNAP, problem: 'events.jsonl: locked' }, 'feed').map(block => block.key)).toEqual(['problem', 'search-count', 'search:T50', 'search:T9'])
     expect(searchBlocks({ ...SNAP, problem: 'events.jsonl: locked' }, '').map(block => block.key)).toEqual(['problem', 'search-hint'])
     expect(searchBlocks({ ...SNAP, problem: 'locked' }, 'nothing-here').map(block => block.key)).toEqual(['problem', 'search-none'])
     expect(searchBlocks({ ...SNAP, now: 0 }, 'feed').map(block => block.key)).toEqual(['reading'])

@@ -1,7 +1,7 @@
 // The pane's search, for any kind of row (task-search.ts holds the Tasks view's): the rows a query names. Each word of
 // the query must match, case aside, the row's id whole (`T52`, or its number `52`) when the spec gives rows an id, or
 // the start of a word in one of the spec's fields. A word that starts with a mark (`.md`, `/docs`) matches anywhere in
-// a field. Each hit keeps where its words matched so a drawing (search-rows.ts) underlines them. One pass over the
+// a field. Each hit keeps where its words matched so a drawing (search-view.ts) underlines them. One pass over the
 // rows a query, each row's fields read once. Pure.
 
 /** Where a word matched in a field's text: from `start` up to `end`, as string indexes. */

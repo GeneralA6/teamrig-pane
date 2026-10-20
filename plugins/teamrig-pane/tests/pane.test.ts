@@ -1809,13 +1809,16 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   drawn = await pane.drawn()
   // Typing never draws the field again: the same key, the same empty text, so the engine keeps every key typed in it.
   expect(drawnField(drawn)).toEqual({ key: 'find', value: '' })
-  // The active matches in plan order, each a press with a dim line of whose it is; the Find field draws no words.
+  // The count, then the active matches in plan order, each a press with a dim line of whose it is; the Find field draws
+  // no words.
   expect(screenOf(drawn)).toEqual([
     ' po',
     ' Tasks Changes Log',
     ' Find  clear',
     ' Keys go to Claude · click the field to search',
     ' mine all archive',
+    '',
+    ' 2 tasks match',
     '',
     ' ○ T50  Load the feed\n       on etl',
     '',
