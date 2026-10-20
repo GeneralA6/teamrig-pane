@@ -129,15 +129,16 @@ evidence or ref (one that starts with a mark, `.md`, matches anywhere), and the 
 you type, the matched words underlined: an active task as its title and a dim line of whose it is and the
 fields matched, a finished one on one dim line with when it closed. It searches what the pane holds, every
 area's active tasks and those finished in the last 8 days, never older ones: the active ones in plan order, then
-the finished ones newest first, at most 30, with a dim line counting the rest. A click on a result opens
-its page, Enter opens the top one's, and back returns to the results; the trail names the search by its
-words. Emptying the field or `clear` (shown while searching) closes the search, the cursor staying in the field;
-Enter moves the cursor onto the page's `‹ back`, so `b`, `f` and `s` work there. Esc only hands the keys back.
+the finished ones newest first, at most 30, under a dim line counting them. A click on a result opens
+its page, and back returns to the results; the trail names the search by its words. Enter with one match
+opens its page and moves the cursor onto the page's `‹ back`, so `b`, `f` and `s` work there; with more, it
+moves the cursor onto the first result, where Enter opens it and ↑↓ move on. Emptying the field or `clear`
+(shown while searching) closes the search, the cursor staying in the field. Esc only hands the keys back.
 A line under the field says where the keys go: `Typing searches` (bold) while they type into it,
-`Keys on the pane` while the pane's keys answer (`s` moves them into the field), and `Keys go to Claude` while
-Claude's prompt has them (a click on the field gives them back, the query kept). A Claude dialog, such as a
-permission prompt, takes the keys, clicks and wheel scroll from the pane until it is answered: that is Claude
-Code's rule, not the pane's.
+`On a result` while the cursor is on one, `Keys on the pane` while the pane's keys answer (`s` moves them into
+the field), and `Keys go to Claude` while Claude's prompt has them (a click on the field gives them back, the
+query kept). A Claude dialog, such as a permission prompt, takes the keys, clicks and wheel scroll from the pane
+until it is answered: that is Claude Code's rule, not the pane's.
 
 `archive` (`h`, in the dock's mine and all row) opens the Archive page on this week, a week starting
 Monday 00:00 on the team's clock: the view's tasks closed done or dropped, a dim line a day, newest first, each task on one
