@@ -29,8 +29,9 @@ export type CardPart =
   | { kind: 'press'; key: string; spans: Span[]; expands: string }
 /**
  * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, its
- * page when `opens` does (a search result), or, inline, a Changes file's diff when `expands` does. `card`, set
- * while that card is open, is the card's own parts, drawn under the Button and outside it.
+ * page when `opens` does (a search result), a session's Log page when `reads` does (docked only), or, inline, a
+ * Changes file's diff when `expands` does. `card`, set while that card is open, is the card's own parts, drawn under
+ * the Button and outside it.
  */
 export type Drawn = {
   key: string
@@ -38,6 +39,7 @@ export type Drawn = {
   wrap: 'wrap' | 'truncate-end'
   toggle: string | null
   opens?: string
+  reads?: string
   expands?: string
   card?: CardPart[]
 }
@@ -328,6 +330,7 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps:
       wrap: 'wrap',
       toggle: block.toggle ?? null,
       ...(block.opens === undefined ? {} : { opens: block.opens }),
+      ...(block.reads === undefined ? {} : { reads: block.reads }),
     }
     return block.card === undefined ? drawn : { ...drawn, card: rowParts(block.card, row => wraps.wrap(row, columns)) }
   })
