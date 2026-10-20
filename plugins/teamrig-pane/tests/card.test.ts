@@ -31,9 +31,9 @@ function taskOf(tasks: readonly TaskRow[], id: string): TaskRow {
 
 const textOf = (row: Row) => row.spans.map(span => span.text).join('')
 
-/** The card of `id` among `tasks`, in the `po` list's waiting section unless said otherwise. */
-function cardOf(tasks: readonly TaskRow[], id: string, detail: TaskDetail = UNREAD, viewer: string | null = 'po', now = NOW): Row[] {
-  return cardRows('waiting', taskOf(tasks, id), detail, treeAt(tasks, now), viewer)
+/** The card of `id` among `tasks`, in the waiting section, at `now` on the team's clock in `timeZone`. */
+function cardOf(tasks: readonly TaskRow[], id: string, detail: TaskDetail = UNREAD, now = NOW, timeZone = 'UTC'): Row[] {
+  return cardRows('waiting', taskOf(tasks, id), detail, treeAt(tasks, now, undefined, timeZone))
 }
 
 /** The first line of the row keyed `row` in a card, or an empty row when the card has none. */
@@ -71,14 +71,14 @@ describe('card', () => {
       'status',
       'status:1',
       'note',
+      'owner',
       'priority',
       'due',
-      'week',
+      'planned',
       'after',
       'goal',
       'goal:1',
-      'from',
-      'added',
+      'origin',
       'reference',
       'reference:1',
       'evidence',
@@ -89,14 +89,14 @@ describe('card', () => {
       labelled('Status', 'waiting since 14:00 UTC by po'),
       `${UNDER}decision owner, on T6`,
       labelled('Note', 'see https://example.com/pr/7.'),
+      labelled('Owner', 'po'),
       labelled('Priority', '2'),
       labelled('Due', 'today 12:00 UTC · late 2h'),
-      labelled('Week', 'Tue 10-13'),
+      labelled('Planned', 'this week'),
       labelled('After', 'T5 (done), T6 (not started)'),
       labelled('Goal', 'G10.2 The pane in fullscreen'),
       `${UNDER}G15`,
-      labelled('From', 'owner'),
-      labelled('Added', '12:00 UTC by lead'),
+      labelled('Origin', 'Asked by owner, added by lead 12:00 UTC'),
       labelled('Reference', 'inbox/po.md'),
       `${UNDER}docs/x.md`,
       labelled('Evidence', 'abc123'),
@@ -133,13 +133,14 @@ describe('card', () => {
     expect(second?.spans[1]).toEqual({ text: 'api/t26.md', file: { file: 'notes/api/t26.md', line: 40 } })
   })
 
-  test('a row with no value is left out: a fresh task with no description, ref, goal, week or plan dependency shows its status, priority, who asked and when it was added', async () => {
+  test('a row with no value is left out: a fresh task with no description, ref, goal or plan dependency shows its status, owner, priority, that no week plan holds it, and its origin', async () => {
     const tasks = rowsOf([createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', ref: null, goals: [], week: null })])
     expect(cardOf(tasks, 'T2').map(textOf)).toEqual([
       labelled('Status', 'not started since 13:00 UTC by po'),
+      labelled('Owner', 'po'),
       labelled('Priority', '3'),
-      labelled('From', 'po'),
-      labelled('Added', '13:00 UTC by po'),
+      labelled('Planned', 'not in a week plan'),
+      labelled('Origin', 'Asked and added by po 13:00 UTC'),
     ])
   })
 
@@ -169,19 +170,25 @@ describe('card', () => {
       verifyingLine('T2', 'po', NOW, 'GET /health answers 200', 'deployed', 'abc123'),
     ])
     const working = cardOf(tasks, 'T1')
-    expect(working.slice(0, 3).map(textOf)).toEqual([labelled('Status', 'in progress since 13:00 UTC'), labelled('Note', 'halfway'), labelled('Priority', '1')])
+    expect(working.slice(0, 4).map(textOf)).toEqual([
+      labelled('Status', 'in progress since 13:00 UTC'),
+      labelled('Note', 'halfway'),
+      labelled('Owner', 'po'),
+      labelled('Priority', '1'),
+    ])
     const verifying = cardOf(tasks, 'T2')
-    expect(verifying.slice(0, 5).map(textOf)).toEqual([
+    expect(verifying.slice(0, 6).map(textOf)).toEqual([
       labelled('Status', 'verifying since 14:00 UTC by po'),
       labelled('Note', 'deployed'),
       labelled('Proof', 'GET /health answers 200'),
+      labelled('Owner', 'po'),
       labelled('Priority', '3'),
       labelled('Verify by', 'today 18:00 UTC'),
     ])
     expect(rowNamed(verifying, 'proof').spans[2]?.color).toBe('success')
     // A task finished earlier on its day: when it closed, and its note.
     const done = rowsOf([createLine('T3', { owner: 'po', by: 'po', at: NOW - DAY, source: 'po' }), statusLine('T3', 'po', NOW - HOUR, 'done', 'merged', 'def456')])
-    expect(cardRows('done', taskOf(done, 'T3'), UNREAD, treeAt(done, NOW), 'po').slice(0, 2).map(textOf)).toEqual([
+    expect(cardRows('done', taskOf(done, 'T3'), UNREAD, treeAt(done, NOW)).slice(0, 2).map(textOf)).toEqual([
       labelled('Status', 'done since 13:00 UTC by po'),
       labelled('Note', 'merged'),
     ])
@@ -216,20 +223,37 @@ describe('card', () => {
     expect(rowNamed(cardOf(tasks, 'T2'), 'needed-by')).toBe(NO_ROW)
   })
 
-  test("From says who asked, Added when and by whom it was written; Owner only in another area's list", async () => {
+  test('Owner names the owning session on every card; Origin who asked, then who wrote the task and when, once when one session did both', async () => {
     const tasks = rowsOf([
       createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'lead' }),
-      createLine('T2', { owner: 'po', by: 'lead', at: NOW - DAY, source: 'owner' }),
-      statusLine('T2', 'po', NOW, 'in-progress', null),
+      createLine('T2', { owner: 'etl', by: 'lead', at: NOW - DAY, source: 'owner' }),
+      statusLine('T2', 'etl', NOW, 'in-progress', null),
     ])
-    const rows = (id: string, viewer: string | null) => cardOf(tasks, id, UNREAD, viewer).filter(row => /:(from|added|owner)$/.test(row.key)).map(textOf)
-    expect(rows('T1', 'etl')).toEqual([labelled('From', 'lead'), labelled('Added', '13:00 UTC by lead'), labelled('Owner', 'po')])
-    expect(rows('T1', 'po')).toEqual([labelled('From', 'lead'), labelled('Added', '13:00 UTC by lead')])
-    expect(rows('T1', null)).toEqual([labelled('From', 'lead'), labelled('Added', '13:00 UTC by lead')])
-    expect(rows('T2', 'po')).toEqual([labelled('From', 'owner'), labelled('Added', 'Mon 10-12 by lead')])
+    const rows = (id: string) => cardOf(tasks, id).filter(row => /:(owner|origin)$/.test(row.key)).map(textOf)
+    expect(rows('T1')).toEqual([labelled('Owner', 'po'), labelled('Origin', 'Asked and added by lead 13:00 UTC')])
+    expect(rows('T2')).toEqual([labelled('Owner', 'etl'), labelled('Origin', 'Asked by owner, added by lead Mon 10-12')])
   })
 
-  test('a task a GitHub issue opened says so in From and links to its issue first, each link on its own line; its ref is no Reference', async () => {
+  test("Planned reads the task's week plan against the team's week: this week, next week, another week by its Monday, or none", async () => {
+    const weeks: Record<string, string | null> = { T1: '2026-10-12', T2: '2026-10-21', T3: '2026-10-26', T4: '2026-10-05', T5: null }
+    const tasks = rowsOf(Object.entries(weeks).map(([id, week]) => createLine(id, { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', week })))
+    const planned = (id: string, now = NOW, timeZone = 'UTC') => textOf(rowNamed(cardOf(tasks, id, UNREAD, now, timeZone), 'planned'))
+    expect(Object.keys(weeks).map(id => planned(id))).toEqual([
+      labelled('Planned', 'this week'),
+      labelled('Planned', 'next week'),
+      labelled('Planned', 'week of Mon 10-26'),
+      labelled('Planned', 'week of Mon 10-05'),
+      labelled('Planned', 'not in a week plan'),
+    ])
+    // Sun 10-18 22:00 UTC is already Monday on the team's clock in Jerusalem: the week of 10-19 has begun there.
+    const sundayNight = Date.UTC(2026, 9, 18, 22, 0)
+    expect([planned('T2', sundayNight), planned('T2', sundayNight, 'Asia/Jerusalem')]).toEqual([labelled('Planned', 'next week'), labelled('Planned', 'this week')])
+    // A week the register holds in a form no date reads is named as written.
+    const unread: TaskRow = { ...taskOf(tasks, 'T1'), week: 'soon' }
+    expect(textOf(rowNamed(cardRows('waiting', unread, UNREAD, treeAt(tasks, NOW)), 'planned'))).toBe(labelled('Planned', 'week of soon'))
+  })
+
+  test('a task a GitHub issue opened says so in Origin and links to its issue first, each link on its own line; its ref is no Reference', async () => {
     const tasks = rowsOf([
       createLine('T1', { owner: 'po', by: 'github', at: NOW - HOUR, source: 'github', ref: 'gh:acme/app#12', goals: [] }),
       statusLine('T1', 'po', NOW, 'in-progress', 'review https://example.com/pr/7', 'https://ci.example/run/9'),
@@ -242,7 +266,7 @@ describe('card', () => {
       `${UNDER}https://ci.example/run/9`,
     ])
     expect(links.map(row => row.spans.at(-1)?.href)).toEqual(['https://github.com/acme/app/issues/12', 'https://example.com/pr/7', 'https://ci.example/run/9'])
-    expect(textOf(rowNamed(card, 'from'))).toBe(labelled('From', 'GitHub issue #12'))
+    expect(textOf(rowNamed(card, 'origin'))).toBe(labelled('Origin', 'GitHub issue #12, added by github 13:00 UTC'))
     expect(card.some(row => row.key.includes(':reference'))).toBe(false)
   })
 

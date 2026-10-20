@@ -658,7 +658,7 @@ export const register: Register = on => {
         // With no bar there is nothing to filter by, and the list shows every task.
         const tasksBlocks =
           place.kind === 'task'
-            ? pageBlocks(snap, shown, place.id, await read($, pages))
+            ? pageBlocks(snap, place.id, await read($, pages))
             : place.kind === 'search'
               ? searchBlocks(snap, place.query, found)
               : place.kind === 'done'
@@ -1139,7 +1139,7 @@ export const register: Register = on => {
     const tree = treeOf(snap)
     const isOpen = await read($, bannerOpen)
     const name = sessionName(snap.area, snap.areaName)
-    const [banner] = dockLayout([bannerBlock(currentTask(snap, tree), isOpen, tree, snap.area, name)], e.props.bodyColumns, bannerWraps)
+    const [banner] = dockLayout([bannerBlock(currentTask(snap, tree), isOpen, tree, name)], e.props.bodyColumns, bannerWraps)
     if (banner === undefined) return next(e)
     return (
       <Box>

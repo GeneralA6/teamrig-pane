@@ -24,46 +24,45 @@ const rowsIn = (blocks: readonly Block[]) => blocks.flatMap(block => [...block.r
 
 describe('page', () => {
   test("a task's page is its title whole, then its card at the body's edge: no guide, values under the label column", async () => {
-    const [block, ...rest] = pageBlocks(SNAP, 'mine', 'T50', {})
+    const [block, ...rest] = pageBlocks(SNAP, 'T50', {})
     expect(rest).toEqual([])
     expect(block?.key).toBe('page:T50')
     expect(block?.toggle).toBe(undefined)
     expect(block?.rows.map(textOf)).toEqual(['○ T50  Ship the pages'])
     expect(block?.rows[0]?.maxLines).toBe(undefined)
     const card = block?.card ?? []
-    expect(card.map(row => row.key.replace('page-card:T50:', ''))).toEqual(['status', 'priority', 'week', 'after', 'goal', 'from', 'added', 'reference'])
+    expect(card.map(row => row.key.replace('page-card:T50:', ''))).toEqual(['status', 'owner', 'priority', 'planned', 'after', 'goal', 'origin', 'reference'])
     expect(card.map(textOf)).toEqual([
       labelled('Status', 'not started since 13:00 UTC by lead'),
+      labelled('Owner', 'po'),
       labelled('Priority', '3'),
-      labelled('Week', 'Tue 10-13'),
+      labelled('Planned', 'this week'),
       labelled('After', 'T58 (not started)'),
       labelled('Goal', 'G10.2'),
-      labelled('From', 'owner'),
-      labelled('Added', '13:00 UTC by lead'),
+      labelled('Origin', 'Asked by owner, added by lead 13:00 UTC'),
       labelled('Reference', 'docs/x.md'),
     ])
     expect(card.every(row => row.hang?.text === ' '.repeat(LABEL_CELLS))).toBe(true)
     expect(card.find(row => row.key.endsWith(':after'))?.spans.find(span => span.task !== undefined)).toEqual({ text: 'T58', task: 'T58' })
   })
 
-  test('what the page read for its task quotes the ask; in the mine view another area’s task names its owner, in the all view none does', async () => {
+  test('what the page read for its task quotes the ask, and it names the owner of any area’s task', async () => {
     const detail: TaskDetail = { ref: 'docs/x.md', quotes: [{ ref: 'docs/x.md', lines: ['load it nightly'] }], goals: [] }
-    const mine = rowsIn(pageBlocks(SNAP, 'mine', 'T58', { T58: detail })).map(textOf)
-    expect(mine).toContain(labelled('Description', 'load it nightly'))
-    expect(mine).toContain(labelled('Owner', 'etl'))
-    expect(rowsIn(pageBlocks(SNAP, 'all', 'T58', { T58: detail })).map(textOf).some(text => text.startsWith('Owner'))).toBe(false)
+    const page = rowsIn(pageBlocks(SNAP, 'T58', { T58: detail })).map(textOf)
+    expect(page).toContain(labelled('Description', 'load it nightly'))
+    expect(page).toContain(labelled('Owner', 'etl'))
   })
 
   test('a task the snapshot no longer holds says it closed over 8 days ago, one dim line', async () => {
-    expect(pageBlocks(SNAP, 'mine', 'T9', {})).toEqual([
+    expect(pageBlocks(SNAP, 'T9', {})).toEqual([
       { key: 'page:T9', rows: [{ key: 'page:T9', spans: [{ text: "T9 left the pane's tasks: it closed over 8 days ago.", dim: true }], hang: undefined }] },
     ])
   })
 
   test('the register’s problem leads the page; a snapshot never read says it is being read, as the list does', async () => {
-    const failed = pageBlocks({ ...SNAP, problem: 'events.jsonl: locked' }, 'mine', 'T50', {})
+    const failed = pageBlocks({ ...SNAP, problem: 'events.jsonl: locked' }, 'T50', {})
     expect(failed.map(block => block.key)).toEqual(['problem', 'page:T50'])
-    expect(pageBlocks({ ...SNAP, problem: 'events.jsonl: locked' }, 'mine', 'T9', {}).map(block => block.key)).toEqual(['problem', 'page:T9'])
-    expect(pageBlocks({ ...SNAP, now: 0 }, 'mine', 'T50', {}).map(block => rowsIn([block]).map(textOf))).toEqual([['Reading the register…']])
+    expect(pageBlocks({ ...SNAP, problem: 'events.jsonl: locked' }, 'T9', {}).map(block => block.key)).toEqual(['problem', 'page:T9'])
+    expect(pageBlocks({ ...SNAP, now: 0 }, 'T50', {}).map(block => rowsIn([block]).map(textOf))).toEqual([['Reading the register…']])
   })
 })

@@ -96,8 +96,8 @@ const PANE_PROPS = {
 /** A dock wide enough that a requirement's WARN line is one drawn line, so a test can match all of it. */
 const WIDE = { ...PANE_PROPS, bodyColumns: 200 } as const
 
-/** An open card: its Status row first, its Who row further down. */
-const CARD = /^ {4}│ (Description|Status) [\s\S]*│ Added /
+/** An open card: its Status row first, its Origin row further down. */
+const CARD = /^ {4}│ (Description|Status) [\s\S]*│ Origin /
 /** Where a card value's further lines start: the guide, then blank up to the value column. */
 const CARD_UNDER = `    │ ${' '.repeat(LABEL_CELLS)}`
 /** A card row's first line in the list: the guide, the label padded to the value column, the value. */
@@ -748,11 +748,11 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
     cardLine('Description', '2026-10-13 12:40 lead: ship the pane with details'),
     `${CARD_UNDER}G10.1g Fix the formula with analytics`,
     cardLine('Status', 'not started since 13:00 UTC by lead'),
+    cardLine('Owner', 'po'),
     cardLine('Priority', '3'),
-    cardLine('Week', 'Tue 10-13'),
+    cardLine('Planned', 'this week'),
     cardLine('Goal', 'G10.1g'),
-    cardLine('From', 'owner'),
-    cardLine('Added', '13:00 UTC by lead'),
+    cardLine('Origin', 'Asked by owner, added by lead 13:00 UTC'),
   ])
   // Each reference file is a press, so its line is a row of its own under the card's text.
   const drawn = await pane.drawn()
@@ -788,12 +788,12 @@ test("an open card shows its priority as a number, never the team config's name 
   expect((await pane.find({ type: 'Text', text: CARD }))?.text.split('\n')).toEqual([
     cardLine('Status', 'in progress since 13:30 UTC by web'),
     cardLine('Note', 'details drawn'),
+    cardLine('Owner', 'web'),
     cardLine('Priority', '2'),
-    cardLine('Week', 'Tue 10-13'),
+    cardLine('Planned', 'this week'),
     cardLine('Goal', 'G10.2'),
     `${CARD_UNDER}G15`,
-    cardLine('From', 'owner'),
-    cardLine('Added', '13:00 UTC by lead'),
+    cardLine('Origin', 'Asked by owner, added by lead 13:00 UTC'),
   ])
   // The reference file, a press, draws on a row of its own, and the rows after it in a text of their own.
   const screen = screenOf(await pane.drawn())
@@ -1589,12 +1589,12 @@ test("a task id in an open card opens that task's page: its title and card alone
     '',
     ' ○ T58  Read the source',
     ' Status       not started since Sat 10-10 by lead',
-    ' Priority     3',
-    ' Week         Tue 10-13',
-    ' Goal         G10.2',
-    ' From         owner',
-    ' Added        Sat 10-10 by lead',
     ' Owner        etl',
+    ' Priority     3',
+    ' Planned      this week',
+    ' Goal         G10.2',
+    ' Origin       Asked by owner, added by lead Sat',
+    '              10-10',
     ' Reference    docs/x.md',
   ])
 })
