@@ -1,6 +1,6 @@
 // The search's body, drawn under its Find field (register.tsx): each active match as the list draws a task, its
 // title row and under it a dim line of whose it is and the other fields a word matched in, then each finished one
-// dim on one line with when it closed; the words that matched underlined. Past the cap (search.ts MAX_RESULTS), a dim
+// dim on one line with when it closed; the words that matched underlined. Past the cap (task-search.ts MAX_RESULTS), a dim
 // line asks for another word; when nothing matches, one dim line says so. A press on a result opens its page
 // (`opens`). Pure: blocks of rows (rows.ts) that layout.ts wraps.
 import type { Snapshot } from '../types'
@@ -8,7 +8,8 @@ import { HELD_DAYS } from './done'
 import { treeOf, whenWords } from './meta'
 import { GLYPH, GLYPH_COLOR, indentOf, META_LINES, problemBlocks, readingBlock, SEPARATOR, single, TITLE_GAP, TITLE_LINES } from './rows'
 import type { Block, Row, Span } from './rows'
-import { fieldText, queryWords, searchTasks, type Hit, type Mark, type SearchedField } from './search'
+import { marksOf, queryWords, type Mark } from './search'
+import { fieldText, searchTasks, type SearchedField, type TaskHit } from './task-search'
 import { clockOf, type Clock } from './zone'
 
 /** The fields a result's title row does not show, in the order its meta line names them, each by its words. */
@@ -51,26 +52,26 @@ export function excerpt(text: string, marks: readonly Mark[]): { text: string; m
 }
 
 /** The task's id, in `style`, underlined when a word named it. */
-function idSpan(hit: Hit, style: Omit<Span, 'text'>): Span {
-  return hit.isId ? { ...style, text: hit.task.id, underline: true } : { ...style, text: hit.task.id }
+function idSpan(hit: TaskHit, style: Omit<Span, 'text'>): Span {
+  return hit.isId ? { ...style, text: hit.row.id, underline: true } : { ...style, text: hit.row.id }
 }
 
 /** `on etl · note …matched words…`: whose the task is, then each field not on the title row that a word matched in. */
-function matchedParts(hit: Hit): Span[] {
-  const { task, marks } = hit
-  const parts: Span[][] = [[{ text: 'on ', dim: true }, ...markedSpans(task.owner, marks.owner, { dim: true })]]
+function matchedParts(hit: TaskHit): Span[] {
+  const task = hit.row
+  const parts: Span[][] = [[{ text: 'on ', dim: true }, ...markedSpans(task.owner, marksOf(hit, 'owner'), { dim: true })]]
   for (const [field, words] of FIELD_WORDS) {
     const text = fieldText(task, field)
-    if (text === null || marks[field].length === 0) continue
-    const shown = excerpt(text, marks[field])
+    if (text === null || marksOf(hit, field).length === 0) continue
+    const shown = excerpt(text, marksOf(hit, field))
     parts.push([{ text: `${words} `, dim: true }, ...markedSpans(shown.text, shown.marks, { dim: true })])
   }
   return parts.flatMap((part, i) => (i === 0 ? part : [SEPARATOR, ...part]))
 }
 
 /** `◐ T12  title`, its title cut at TITLE_LINES lines, and under it the dim line of matchedParts, cut at META_LINES. */
-function activeBlock(hit: Hit): Block {
-  const task = hit.task
+function activeBlock(hit: TaskHit): Block {
+  const task = hit.row
   const indent = indentOf(task)
   const key = `search:${task.id}`
   const title: Row = {
@@ -80,7 +81,7 @@ function activeBlock(hit: Hit): Block {
       { text: ' ' },
       idSpan(hit, { bold: true }),
       { text: TITLE_GAP },
-      ...markedSpans(task.title, hit.marks.title, {}),
+      ...markedSpans(task.title, marksOf(hit, 'title'), {}),
     ],
     hang: indent,
     maxLines: TITLE_LINES,
@@ -90,8 +91,8 @@ function activeBlock(hit: Hit): Block {
 }
 
 /** `✓ T4  title          14:02`: a finished match, dim, on one line with when it closed. */
-function doneBlock(hit: Hit, clock: Clock): Block {
-  const task = hit.task
+function doneBlock(hit: TaskHit, clock: Clock): Block {
+  const task = hit.row
   const key = `search:${task.id}`
   const color = GLYPH_COLOR[task.status]
   const row: Row = {
@@ -101,7 +102,7 @@ function doneBlock(hit: Hit, clock: Clock): Block {
       { text: ' ', dim: true },
       idSpan(hit, { dim: true }),
       { text: TITLE_GAP, dim: true },
-      ...markedSpans(task.title, hit.marks.title, { dim: true }),
+      ...markedSpans(task.title, marksOf(hit, 'title'), { dim: true }),
     ],
     hang: indentOf(task),
     end: { text: whenWords(task.statusAt, clock), dim: true },

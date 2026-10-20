@@ -165,7 +165,7 @@ describe('the pane guide states the limits the code holds', () => {
     ['One git run', [constant('register.tsx', 'GIT_TIMEOUT_MS') / 1000]],
     ['Quoted ref', [constant('details.ts', 'MAX_QUOTED_LINES'), constant('details.ts', 'MAX_QUOTE_CHARS')]],
     ['Card links', [constant('links.ts', 'MAX_LINKS'), constant('links.ts', 'MAX_ADDRESS_CHARS')]],
-    ['Search results', [constant('search.ts', 'MAX_RESULTS')]],
+    ['Search results', [constant('task-search.ts', 'MAX_RESULTS')]],
     ['Log', [Number(captured('core/config/defaults.ts', /DEFAULT_TURN_LOG\b[^=]*= \{[^}]*\bkeepHours: (\d+)/)), constant('turn-log.ts', 'LOG_PAGE_CHARS')]],
     ['Archive', [constant('done.ts', 'MAX_DONE_ROWS'), constant('done.ts', 'HELD_DAYS')]],
   ];

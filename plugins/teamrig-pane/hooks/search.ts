@@ -1,29 +1,18 @@
-// The pane's search: the tasks it holds (the snapshot's: every area's active tasks and those finished in the last HELD_DAYS, done.ts) that a
-// query names. Each word of the query must match, case aside, a task's id whole (`T52`, or its number `52`) or the
-// start of a word in one of its fields: its title, description, owner, who asked (`source`), goals, week, note,
-// proof, evidence or ref. A word that starts with a mark (`.md`, `/docs`) matches anywhere in a field. The active matches come in teamrig's
-// plan order, as the list orders them, then the finished ones, newest first; at most MAX_RESULTS are kept, with how
-// many more matched, and each keeps where its words matched so the drawing (search-rows.ts) underlines them. One
-// pass over the held tasks a query. Older weeks' finished tasks are not held, so not searched. Pure.
-import type { TaskRow } from '../types'
-import type { TaskTree } from './core/read/index'
-import { isActive, newestFirst } from './view'
+// The pane's search, for any kind of row (task-search.ts holds the Tasks view's): the rows a query names. Each word of
+// the query must match, case aside, the row's id whole (`T52`, or its number `52`) when the spec gives rows an id, or
+// the start of a word in one of the spec's fields. A word that starts with a mark (`.md`, `/docs`) matches anywhere in
+// a field. Each hit keeps where its words matched so a drawing (search-rows.ts) underlines them. One pass over the
+// rows a query, each row's fields read once. Pure.
 
-/** Most results kept for a query; how many more matched is counted. */
-export const MAX_RESULTS = 30
-
-/** The fields a word can match the start of a word in, beside the id. */
-export const SEARCHED = ['title', 'description', 'owner', 'source', 'goals', 'week', 'note', 'proof', 'evidence', 'ref'] as const
-export type SearchedField = (typeof SEARCHED)[number]
-
-/** Where a word matched in a field's text (fieldText): from `start` up to `end`, as string indexes. */
+/** Where a word matched in a field's text: from `start` up to `end`, as string indexes. */
 export type Mark = { start: number; end: number }
-/** A task the query names: whether a word named its id, and where words matched in each field, in order, none overlapping. */
-export type Hit = { task: TaskRow; isId: boolean; marks: Readonly<Record<SearchedField, readonly Mark[]>> }
-/** The active matches in plan order, then the finished ones newest first, MAX_RESULTS at most, and how many more matched. */
-export type SearchResults = { active: Hit[]; done: Hit[]; more: number }
-
-export const NO_RESULTS: SearchResults = { active: [], done: [], more: 0 }
+/** What a kind of row is searched by: its fields, each by name with its text (null when the row has none), and its id when it has one. */
+export type SearchSpec<R, F extends string> = {
+  fields: ReadonlyArray<{ name: F; text: (row: R) => string | null }>
+  id?: (row: R) => string
+}
+/** A row the query names: whether a word named its id, and where words matched in each field, in order, none overlapping. */
+export type Hit<R, F extends string> = { row: R; isId: boolean; marks: ReadonlyMap<F, readonly Mark[]> }
 
 /** A letter or a digit: a word starts where one follows anything else. */
 const WORD_CHAR = /[\p{L}\p{N}]/u
@@ -36,12 +25,12 @@ export function queryWords(query: string): string[] {
     .filter(word => word !== '')
 }
 
-/** A field's text as it is searched and drawn: the goals joined by `, `; null when the task has none. */
-export function fieldText(task: TaskRow, field: SearchedField): string | null {
-  return field === 'goals' ? (task.goals.length === 0 ? null : task.goals.join(', ')) : task[field]
+/** Where words matched in the hit's `field`, in order; none when no word matched there. */
+export function marksOf<R, F extends string>(hit: Hit<R, F>, field: F): readonly Mark[] {
+  return hit.marks.get(field) ?? []
 }
 
-/** `word` names the task id `id`: the id whole, or its number alone (`52` for `T52`). */
+/** `word` names the id `id`: the id whole, or its number alone (`52` for `T52`). */
 function namesId(id: string, word: string): boolean {
   const lower = id.toLowerCase()
   return lower === word || lower.replace(/^\D+/, '') === word
@@ -74,53 +63,34 @@ function joined(marks: readonly Mark[]): Mark[] {
 /** A query word and the pattern that finds it. */
 type Term = { word: string; pattern: RegExp }
 
-/** No marks in any field, each list its own to fill. */
-function noMarks(): Record<SearchedField, Mark[]> {
-  return { title: [], description: [], owner: [], source: [], goals: [], week: [], note: [], proof: [], evidence: [], ref: [] }
-}
-
-/** The task as a hit when every term matches its id or one of its fields; null when one does not. */
-function hitOf(task: TaskRow, terms: readonly Term[]): Hit | null {
-  const marks = noMarks()
+/** The row as a hit when every term matches its id or one of its fields; null when one does not. */
+function hitOf<R, F extends string>(row: R, terms: readonly Term[], spec: SearchSpec<R, F>): Hit<R, F> | null {
+  const id = spec.id?.(row) ?? null
+  const texts = spec.fields.map(field => ({ name: field.name, text: field.text(row) }))
+  const found = new Map<F, Mark[]>()
   let isId = false
   for (const { word, pattern } of terms) {
-    let isMatched = namesId(task.id, word)
+    let isMatched = id !== null && namesId(id, word)
     isId ||= isMatched
-    for (const field of SEARCHED) {
-      const text = fieldText(task, field)
-      const found = text === null ? [] : marksIn(text, word, pattern)
-      marks[field].push(...found)
-      isMatched ||= found.length > 0
+    for (const { name, text } of texts) {
+      const marks = text === null ? [] : marksIn(text, word, pattern)
+      if (marks.length === 0) continue
+      found.set(name, [...(found.get(name) ?? []), ...marks])
+      isMatched = true
     }
     if (!isMatched) return null
   }
-  for (const field of SEARCHED) marks[field] = joined(marks[field])
-  return { task, isId, marks }
+  return { row, isId, marks: new Map(Array.from(found, ([name, marks]) => [name, joined(marks)])) }
 }
 
-/**
- * The held tasks `query` names, in one pass over them: the active ones in plan order on the effective dues of `tree`
- * (the tree read over `tasks`, meta.ts treeOf), then the finished ones newest first, MAX_RESULTS in all at most, the
- * active first, and how many more matched. A blank query names none.
- */
-export function searchTasks(tasks: readonly TaskRow[], query: string, tree: TaskTree<TaskRow>): SearchResults {
-  const words = queryWords(query)
-  if (words.length === 0) return NO_RESULTS
-  const terms = words.map((word): Term => ({ word, pattern: patternOf(word) }))
-  const active: Hit[] = []
-  const done: Hit[] = []
-  for (const task of tasks) {
-    const hit = hitOf(task, terms)
-    if (hit !== null) (isActive(task) ? active : done).push(hit)
+/** The rows `query` names, as hits in the rows' order; a blank query names none. */
+export function matchRows<R, F extends string>(rows: readonly R[], query: string, spec: SearchSpec<R, F>): Hit<R, F>[] {
+  const terms = queryWords(query).map((word): Term => ({ word, pattern: patternOf(word) }))
+  if (terms.length === 0) return []
+  const hits: Hit<R, F>[] = []
+  for (const row of rows) {
+    const hit = hitOf(row, terms, spec)
+    if (hit !== null) hits.push(hit)
   }
-  active.sort((a, b) => tree.byPlanOrder(a.task, b.task))
-  done.sort((a, b) => newestFirst(a.task, b.task))
-  const keptActive = active.slice(0, MAX_RESULTS)
-  const keptDone = done.slice(0, MAX_RESULTS - keptActive.length)
-  return { active: keptActive, done: keptDone, more: active.length + done.length - keptActive.length - keptDone.length }
-}
-
-/** The result Enter opens: the first active match, else the newest finished one; null when none matched. */
-export function topResult(results: SearchResults): TaskRow | null {
-  return (results.active[0] ?? results.done[0])?.task ?? null
+  return hits
 }

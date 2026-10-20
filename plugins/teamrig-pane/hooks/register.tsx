@@ -92,7 +92,7 @@ import { treeOf } from './meta'
 import { clockOf, machineZoneOf } from './zone'
 import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
 import { pageBlocks } from './page'
-import { searchTasks, topResult } from './search'
+import { searchTasks, topResult } from './task-search'
 import { searchBlocks } from './search-rows'
 import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldKey, keysAt, keysHint, landedOn, type KeysAt } from './find-field'
 
