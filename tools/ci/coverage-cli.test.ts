@@ -76,6 +76,14 @@ describe('coverage-cli', () => {
     assert.match(skipped.output, /1 skipped and 0 todo test\(s\)/);
   });
 
+  it('fails a suite whose body throws before any of its tests runs, which node counts as no failure', () => {
+    const thrown = gate({
+      'tools/sign.test.ts': `${FULL_TEST}import { describe } from 'node:test';\ndescribe('built wrong', () => {\n  throw new Error('a constant moved');\n});\n`,
+    });
+    assert.equal(thrown.status, 1, thrown.output);
+    assert.match(thrown.output, /1 suite\(s\) failed outside any test, which the run counted as no failure \(the error is above\): built wrong/);
+  });
+
   it('exits 2 on an invalid or missing policy', () => {
     const invalid = gate({ 'tools/ci/coverage.json': JSON.stringify({ ...POLICY, totals: {} }) });
     assert.equal(invalid.status, 2, invalid.output);
