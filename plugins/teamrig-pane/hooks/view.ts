@@ -1,17 +1,20 @@
 // What the pane shows, as plain data: pure functions over the folded tasks, so the drawing in
 // register.tsx only lays them out. The order and the due are teamrig's own: plan order on the effective due, read
 // from the snapshot's dependency tree (meta.ts treeOf, core register/tree.ts).
-import type { BarStatus, Snapshot, TaskRow, TaskStatus } from '../types'
+import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, type TaskTree } from './core/read/index'
 import { metaText, treeOf, whenWords, type PaneTree } from './meta'
-import { barStatusOf, isFinishedOn } from './status-bar'
+import { barCounts, barStatusOf, isFinishedOn, type BarCounts } from './status-bar'
 import { dayOf } from './zone'
 
 /** At most this many tasks done today are listed, and this many asked of others; the heading counts them all. */
 export const MAX_FINISHED = 6
 export const MAX_ASKED = 8
 
-/** The area's own tasks and those it asked of others, each section in teamrig's plan order (priority, effective due, id). */
+/**
+ * The area's list: a section per status of the status bar (status-bar.ts barStatusOf), each in the order statusLines
+ * gives, so the bar's filter lists a section's tasks as the section does.
+ */
 export type AreaView = {
   area: string
   /** Verifying (shipped, the proof still to come): the ones to close first. */
@@ -22,16 +25,13 @@ export type AreaView = {
   upNext: TaskRow[]
   /** Its waiting tasks, then up to MAX_ASKED active tasks it asked of other sessions. */
   waiting: TaskRow[]
-  /** How many tasks wait: its own waiting ones and every one it asked of others. */
-  waitingTotal: number
-  /**
-   * Its tasks done or dropped today, the team zone's day of `now` (status-bar.ts isFinishedOn), newest first, at most
-   * MAX_FINISHED.
-   */
+  /** Its tasks done or dropped today, the team zone's day of `now` (status-bar.ts isFinishedOn), at most MAX_FINISHED. */
   doneToday: TaskRow[]
-  doneTotal: number
-  /** How many past the cap were dropped: the status bar's done-today filter lists the done ones alone. */
-  doneMoreDropped: number
+  /**
+   * How many tasks each section holds, those past a cap too: the status bar's counts (barCounts) over the same tasks
+   * and clock, so a section's heading names the number its count does.
+   */
+  counts: BarCounts
 }
 
 /** An owner's active tasks, those verifying first, and how many of them are waiting or verifying. */
@@ -61,36 +61,32 @@ export function newestFirst(a: TaskRow, b: TaskRow): number {
  * team's zone.
  */
 export function areaView(tasks: readonly TaskRow[], area: string, tree: TaskTree<TaskRow>): AreaView {
-  const planOrder = (a: TaskRow, b: TaskRow) => tree.byPlanOrder(a, b)
-  const own = tasks.filter(t => t.owner === area && isActive(t)).sort(planOrder)
-  const at = (status: TaskStatus) => own.filter(t => t.status === status)
-  const waiting = at('waiting')
-  const asked = tasks.filter(t => t.createdBy === area && t.owner !== area && isActive(t)).sort(planOrder)
-  const { now, zone } = tree.context
-  const today = dayOf(now, zone)
-  const done = tasks.filter(t => t.owner === area && isFinishedOn(t, today, zone)).sort(newestFirst)
+  const lines = (status: BarStatus) => statusLines(tasks, area, tree, status)
+  const waiting = lines('waiting')
+  const ownWaiting = waiting.filter(t => t.owner === area).length
   return {
     area,
-    verifying: at('verifying'),
-    working: at('in-progress'),
-    upNext: at('open'),
-    waiting: [...waiting, ...asked.slice(0, MAX_ASKED)],
-    waitingTotal: waiting.length + asked.length,
-    doneToday: done.slice(0, MAX_FINISHED),
-    doneTotal: done.length,
-    doneMoreDropped: done.slice(MAX_FINISHED).filter(t => t.status === 'dropped').length,
+    verifying: lines('verifying'),
+    working: lines('working'),
+    upNext: lines('not-started'),
+    waiting: waiting.slice(0, ownWaiting + MAX_ASKED),
+    doneToday: lines('done-today').slice(0, MAX_FINISHED),
+    counts: barCounts(tasks, area, tree.context),
   }
 }
 
 /**
- * The area's own tasks at one status of the status bar (status-bar.ts), as its filter lists them, today
- * the team zone's day of `tree`'s clock: those done today newest first, the others in plan order on `tree`'s effective dues.
+ * Every task of the area's list at one status of the status bar (status-bar.ts barStatusOf), in the order its section
+ * and the bar's filter list them, today the team zone's day of `tree`'s clock: those done today newest first; the
+ * others the area's own first (the waiting ones before those it asked of others), each in plan order on `tree`'s
+ * effective dues.
  */
 export function statusLines(tasks: readonly TaskRow[], area: string, tree: TaskTree<TaskRow>, status: BarStatus): TaskRow[] {
   const { now, zone } = tree.context
   const today = dayOf(now, zone)
-  const order = status === 'done-today' ? newestFirst : (a: TaskRow, b: TaskRow) => tree.byPlanOrder(a, b)
-  return tasks.filter(t => t.owner === area && barStatusOf(t, today, zone) === status).sort(order)
+  const lines = tasks.filter(t => barStatusOf(t, area, today, zone) === status)
+  const ownFirst = (a: TaskRow, b: TaskRow) => Number(b.owner === area) - Number(a.owner === area) || tree.byPlanOrder(a, b)
+  return lines.sort(status === 'done-today' ? newestFirst : ownFirst)
 }
 
 /** Every owner with active tasks, by name, each list verifying first, then in plan order on `tree`'s effective dues. */

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { TimeZone, readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { NOTHING_EXPANDED, paneBlocks } from '../hooks/rows'
+import { NOTHING_EXPANDED, paneBlocks, type Block } from '../hooks/rows'
 import { BAR_LOOK, BAR_STATUSES, barCells, barCounts, drawnText, filterText, inlineBarRows, statusBar, type BarCounts, type BarPiece } from '../hooks/status-bar'
 import { statusLines } from '../hooks/view'
 import { cells } from '../hooks/width'
@@ -107,7 +107,7 @@ describe('status bar cells', () => {
 })
 
 describe('status bar counts', () => {
-  test('counts the area\'s own tasks by status, today\'s done ones only, never dropped ones or other owners\'', async () => {
+  test("counts each section of the area's list: its own tasks by status, those done or dropped today, and what it asked of others as waiting", async () => {
     const tasks = rowsOf(
       createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR }),
       createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR }),
@@ -121,8 +121,12 @@ describe('status bar counts', () => {
       createLine('T6', { owner: 'po', by: 'po', at: NOW - HOUR }),
       statusLine('T6', 'po', NOW, 'dropped', 'not needed'),
       createLine('T7', { owner: 'etl', by: 'po', at: NOW - HOUR }),
+      // Another owner's task po did not ask for, and one it asked for that is done: neither is on po's list.
+      createLine('T8', { owner: 'etl', by: 'etl', at: NOW - HOUR }),
+      createLine('T9', { owner: 'etl', by: 'po', at: NOW - HOUR }),
+      statusLine('T9', 'etl', NOW, 'done'),
     )
-    expect(barCounts(tasks, 'po', clockAt(NOW))).toEqual(countsOf({ 'done-today': 1, verifying: 1, working: 1, waiting: 1, 'not-started': 1 }))
+    expect(barCounts(tasks, 'po', clockAt(NOW))).toEqual(countsOf({ 'done-today': 2, verifying: 1, working: 1, waiting: 2, 'not-started': 1 }))
   })
 
   test("in UTC, today is the clock's UTC day: a task done a minute before midnight is not done today", async () => {
@@ -300,5 +304,54 @@ describe('status bar filter', () => {
 
   test('the all view takes no filter', async () => {
     expect(keysOf(paneBlocks(snap, 'all', NOTHING_EXPANDED, 'verifying'))).toEqual(keysOf(paneBlocks(snap, 'all')))
+  })
+})
+
+describe('status bar and sections', () => {
+  // Past both caps: ten tasks asked of others after po's own waiting one (8 of them listed), and nine closed today,
+  // two of them dropped (6 listed); a task asked of others and done, one done days ago and another owner's never count.
+  const tasks = rowsOf(
+    createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR }),
+    createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR }),
+    statusLine('T2', 'po', NOW, 'in-progress'),
+    createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR }),
+    statusLine('T3', 'po', NOW, 'verifying', 'health check passes'),
+    createLine('T4', { owner: 'po', by: 'po', at: NOW - HOUR }),
+    statusLine('T4', 'po', NOW, 'waiting', 'waits on the owner'),
+    ...Array.from({ length: 10 }, (_, i) => createLine(`T${i + 10}`, { owner: 'etl', by: 'po', at: NOW - HOUR })),
+    createLine('T20', { owner: 'etl', by: 'po', at: NOW - HOUR }),
+    statusLine('T20', 'etl', NOW, 'done'),
+    ...Array.from({ length: 9 }, (_, i) => [
+      createLine(`T${i + 30}`, { owner: 'po', by: 'po', at: NOW - 2 * HOUR }),
+      statusLine(`T${i + 30}`, 'po', NOW - (i + 1) * 60_000, i < 7 ? 'done' : 'dropped'),
+    ]).flat(),
+    createLine('T40', { owner: 'po', by: 'po', at: NOW - 72 * HOUR }),
+    statusLine('T40', 'po', NOW - 48 * HOUR, 'done'),
+    createLine('T41', { owner: 'etl', by: 'etl', at: NOW - HOUR }),
+  )
+  const snap = snapshotOf(tasks, 'po')
+  const counts = barCounts(tasks, 'po', clockAt(NOW))
+  /** The key of each status's section heading in the mine view. */
+  const HEADING: Readonly<Record<BarStatus, string>> = { 'done-today': 'done', verifying: 'verifying', working: 'working', waiting: 'waiting', 'not-started': 'next' }
+
+  /** The count a section's heading names, 11 for `Waiting (11)`; null with no heading under `key`. */
+  function headingCount(blocks: readonly Block[], key: string): number | null {
+    const text = blocks.find(block => block.key === key)?.rows[0]?.spans.map(span => span.text).join('')
+    const count = text === undefined ? undefined : /\((\d+)\)$/.exec(text)?.[1]
+    return count === undefined ? null : Number(count)
+  }
+
+  test("each section's heading names the count the bar shows for its status, the tasks past a cap included", async () => {
+    expect(counts).toEqual(countsOf({ 'done-today': 9, verifying: 1, working: 1, waiting: 11, 'not-started': 1 }))
+    expect(textOf(statusBar(snap, null, 200)?.lines[1])).toBe('9 done today · 1 verifying · 1 working · 11 waiting · 1 not started')
+    const blocks = paneBlocks(snap, 'mine')
+    expect(BAR_STATUSES.map(status => headingCount(blocks, HEADING[status]))).toEqual(BAR_STATUSES.map(status => counts[status]))
+  })
+
+  test("each status's filter lists every task its count names", async () => {
+    for (const status of BAR_STATUSES) {
+      const listed = paneBlocks(snap, 'mine', NOTHING_EXPANDED, status).filter(block => block.key !== 'header')
+      expect({ status, listed: listed.length }).toEqual({ status, listed: counts[status] })
+    }
   })
 })
