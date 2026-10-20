@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { FindField, Nav, RingLandings } from '../types'
-import { FIND, FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldKey, fieldText, isFieldKey, keysAt, keysHint, landedOn } from '../hooks/find-field'
+import { FIND, FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldKey, fieldText, isFieldKey, keysAt, keysHint, landedOn, submitWords } from '../hooks/find-field'
 import { AT_LIST, pushed, searched } from '../hooks/nav'
 
 const page = (nav: Nav, id: string): Nav => pushed(nav, { kind: 'task', id })
@@ -46,36 +46,50 @@ describe('where the keys go', () => {
     expect(['find-key', 'finder', 'mine', ''].map(isFieldKey)).toEqual([false, false, false, false])
   })
 
-  test("each landing counts, on the field or off it; one of the engine's own stops is off it", () => {
+  test('each landing counts with what it was on: the field, a result of the search, else another element', () => {
     const onField = landedOn(NO_LANDINGS, 'find:3')
-    expect(onField).toEqual({ count: 1, onField: true })
-    expect(landedOn(onField, 'mine')).toEqual({ count: 2, onField: false })
-    expect(landedOn(onField, undefined)).toEqual({ count: 2, onField: false })
+    expect(onField).toEqual({ count: 1, on: 'field' })
+    expect(landedOn(onField, 'search:T50')).toEqual({ count: 2, on: 'result' })
+    expect(landedOn(onField, 'search-count')).toEqual({ count: 2, on: 'other' })
+    expect(landedOn(onField, 'mine')).toEqual({ count: 2, on: 'other' })
+    // One of the engine's own stops.
+    expect(landedOn(onField, undefined)).toEqual({ count: 2, on: 'other' })
   })
 
   test('the memo records the landings only as the keys go, never again while they stay away', () => {
-    const lost = drawnWith(FIRST_MEMO, false, { count: 2, onField: true })
+    const lost = drawnWith(FIRST_MEMO, false, { count: 2, on: 'field' })
     expect(lost).toEqual({ wasHeld: false, lostAt: 2 })
     // A landing while still drawn without the keys (the click that hands them back) is not counted as let go.
-    expect(drawnWith(lost, false, { count: 3, onField: true })).toBe(lost)
-    const back = drawnWith(lost, true, { count: 3, onField: true })
+    expect(drawnWith(lost, false, { count: 3, on: 'field' })).toBe(lost)
+    const back = drawnWith(lost, true, { count: 3, on: 'field' })
     expect(back).toEqual({ wasHeld: true, lostAt: 2 })
-    expect(drawnWith(back, true, { count: 4, onField: false })).toBe(back)
+    expect(drawnWith(back, true, { count: 4, on: 'other' })).toBe(back)
   })
 
-  test("Claude's without the keys; the field's after a landing on it since they came; else the pane's", () => {
+  test("Claude's without the keys; the field's or a result's after a landing on it since they came; else the pane's", () => {
     const memo = { wasHeld: true, lostAt: 2 }
-    const onField: RingLandings = { count: 3, onField: true }
-    expect(keysAt(false, onField, memo)).toBe('claude')
-    expect(keysAt(true, onField, memo)).toBe('search')
-    // The ring was on the field as the keys went; given back, the ring is clear.
-    expect(keysAt(true, { count: 2, onField: true }, memo)).toBe('pane')
-    expect(keysAt(true, { count: 3, onField: false }, memo)).toBe('pane')
+    const onField: RingLandings = { count: 3, on: 'field' }
+    const onResult: RingLandings = { count: 3, on: 'result' }
+    expect(keysAt(false, onField, memo, true)).toBe('claude')
+    expect(keysAt(true, onField, memo, true)).toBe('search')
+    expect(keysAt(true, onResult, memo, true)).toBe('result')
+    // The search closed under the ring: what was a result is another element now.
+    expect(keysAt(true, onResult, memo, false)).toBe('pane')
+    // The ring was on the field or a result as the keys went; given back, the ring is clear.
+    expect(keysAt(true, { count: 2, on: 'field' }, memo, true)).toBe('pane')
+    expect(keysAt(true, { count: 2, on: 'result' }, memo, true)).toBe('pane')
+    expect(keysAt(true, { count: 3, on: 'other' }, memo, true)).toBe('pane')
+  })
+
+  test('Enter in the field opens the one match, else moves to the results', () => {
+    expect([0, 1, 2, 30].map(submitWords)).toEqual(['open', 'open', 'to the results', 'to the results'])
   })
 
   test('the line names where the keys go and the key or click that moves them', () => {
-    expect(keysHint('search')).toBe('Typing searches · Enter: open · Esc: to Claude')
-    expect(keysHint('pane')).toBe('Keys on the pane · s: search · Esc: to Claude')
-    expect(keysHint('claude')).toBe('Keys go to Claude · click the field to search')
+    expect(keysHint('search', 1)).toBe('Typing searches · Enter: open · Esc: to Claude')
+    expect(keysHint('search', 2)).toBe('Typing searches · Enter: to the results · Esc: to Claude')
+    expect(keysHint('result', 2)).toBe('On a result · Enter: open · ↑↓: move · s: search · Esc: to Claude')
+    expect(keysHint('pane', 0)).toBe('Keys on the pane · s: search · Esc: to Claude')
+    expect(keysHint('claude', 0)).toBe('Keys go to Claude · click the field to search')
   })
 })
