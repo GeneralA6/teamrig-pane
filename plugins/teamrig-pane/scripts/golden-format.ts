@@ -42,13 +42,15 @@ export function clockAt(value: string | undefined): number {
 /**
  * `real`, its clock fixed at `at`: `Date.now()`, `new Date()` and `Date()` read `at`; a Date of a given instant or
  * fields is the real one's. golden-clock.ts puts it in place of the global Date in each CLI run of a capture.
+ * The proxy's target is a bound copy of `real`, which owns none of its properties: a proxy may not report another
+ * value for a property its target holds fixed, and a Date may hold `now` so (the engine's test runner's does).
  */
 export function fixedDate(at: number, real: DateConstructor): DateConstructor {
   const now = (): number => at
-  return new Proxy(real, {
-    construct: (target, args, newTarget) => Reflect.construct(target, args.length === 0 ? [at] : args, newTarget),
-    apply: target => new target(at).toString(),
-    get: (target, property, receiver) => (property === 'now' ? now : Reflect.get(target, property, receiver)),
+  return new Proxy(real.bind(null), {
+    construct: (_target, args, newTarget) => Reflect.construct(real, args.length === 0 ? [at] : args, newTarget),
+    apply: () => new real(at).toString(),
+    get: (_target, property) => (property === 'now' ? now : Reflect.get(real, property)),
   })
 }
 
