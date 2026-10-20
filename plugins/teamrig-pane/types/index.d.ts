@@ -184,8 +184,48 @@ export type RequirementProblem =
   | { kind: 'git-unstartable'; reason: string }
   | { kind: 'check-failed'; requirement: 'Claude Code'; reason: string }
 
-/** What the pane's body shows, picked with the switch over it: the register's tasks, or the session's git changes (hooks/changes.ts). */
-export type PaneView = 'tasks' | 'changes'
+/**
+ * What the pane's body shows, picked with the switch over it: the register's tasks, the session's git changes
+ * (hooks/changes.ts), or the team sessions' prompts and replies (hooks/turn-log.ts).
+ */
+export type PaneView = 'tasks' | 'changes' | 'log'
+
+/** What a turn log line records: a prompt the person sent, a reply the session showed, or a clear or compaction of its context. */
+export type TurnKind = 'prompt' | 'reply' | 'clear'
+
+/**
+ * One line of a session's turn log (hooks/turn-log.ts), as teamrig writes it: when, what, its text (secret shapes
+ * redacted, at most 64k characters), the Claude Code session it came from (a /clear starts a new one in the same
+ * tab), and whether teamrig cut its text, keeping the end.
+ */
+export type TurnEntry = {
+  readonly at: string
+  readonly kind: TurnKind
+  readonly text: string
+  readonly claude: string
+  readonly isCut: boolean
+}
+
+/** A session the Log view lists: its id, when its newest turn log file changed, and its newest prompt's first line (null for none). */
+export type LogSession = { readonly id: string; readonly changedAt: number; readonly lastPrompt: string | null }
+
+/**
+ * The Log view's list (hooks/turn-log.ts): the sessions with a turn log file of the last LOG_HOURS, newest first;
+ * or that it is not read yet, that the pane found no team, that the team has no turn log folder (teamrig writes
+ * none before its turn log version or with turnLog.enabled false), or why the folder could not be read.
+ */
+export type LogList =
+  | { readonly kind: 'sessions'; readonly sessions: readonly LogSession[] }
+  | { readonly kind: 'reading' }
+  | { readonly kind: 'no-team' }
+  | { readonly kind: 'no-log' }
+  | { readonly kind: 'failed'; readonly reason: string }
+
+/**
+ * A session's page in the Log view: its newest lines of the last LOG_HOURS, oldest first, at most LOG_PAGE_CHARS
+ * of text (`isCut` when older lines are left out), and why a file of it could not be read (null when all were).
+ */
+export type LogPage = { readonly session: string; readonly entries: readonly TurnEntry[]; readonly isCut: boolean; readonly problem: string | null }
 
 /**
  * A place the tasks view shows (hooks/nav.ts): the list, remembering the key of the element a page was opened from
@@ -231,7 +271,7 @@ export type BarStatus = 'done-today' | 'verifying' | 'working' | 'waiting' | 'no
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads and the open diffs are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs and the Log view's list and page are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -242,6 +282,10 @@ declare module 'claude-code' {
       known: Shaped<KnownChanges>
       /** The Changes files whose diffs are open (hooks/diff.ts), as git last read them. */
       diffs: Shaped<OpenDiffs>
+      /** The sessions the Log view lists (hooks/turn-log.ts), as last read. */
+      logList: Shaped<LogList>
+      /** The session page the Log view shows, as last read; null while it shows the list. */
+      logPage: Shaped<LogPage | null>
       requirements: RequirementProblem[]
       /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
       filter: BarStatus | null

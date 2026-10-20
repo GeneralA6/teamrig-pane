@@ -12,7 +12,7 @@ const ALL_DIRS = { tasksDir: 'D:/t', inboxDir: 'D:/i' }
 /** Both folders as variables, so the settings file is the only thing left to fail. */
 const ALL_DIRS_ENV = { TEAMRIG_PANE_TASKS_DIR: 'D:/t', TEAMRIG_PANE_INBOX_DIR: 'D:/i' }
 /** The files naming the web team's sessions: its config and, in its state folder, its rename log. */
-const WEB_FILES: TeamFiles = { team: 'web', dir: `${KIT}/teams/web`, config: CONFIG, renames: `${STATE}/renames.jsonl` }
+const WEB_FILES: TeamFiles = { team: 'web', dir: `${KIT}/teams/web`, config: CONFIG, renames: `${STATE}/renames.jsonl`, turnLog: `${STATE}/turn-log` }
 /** The web team's folders where teamrig keeps them with no config file. */
 const TEAM_FOUND: Places = {
   found: true,
@@ -164,7 +164,7 @@ describe('places', () => {
     expect(found).toEqual({
       found: true,
       dirs: { tasksDir: `${KIT}/teams/ops/state`, inboxDir: `${KIT}/teams/ops/state/inbox` },
-      team: { team: 'ops', dir: `${KIT}/teams/ops`, config: `${KIT}/teams/ops/config.json`, renames: `${KIT}/teams/ops/state/renames.jsonl` },
+      team: { team: 'ops', dir: `${KIT}/teams/ops`, config: `${KIT}/teams/ops/config.json`, renames: `${KIT}/teams/ops/state/renames.jsonl`, turnLog: `${KIT}/teams/ops/state/turn-log` },
       settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
@@ -176,7 +176,7 @@ describe('places', () => {
     expect(both.found).toEqual({
       found: true,
       dirs: { tasksDir: `${KIT}/teams/web/data`, inboxDir: 'D:/inbox' },
-      team: { ...WEB_FILES, renames: `${KIT}/teams/web/data/renames.jsonl` },
+      team: { ...WEB_FILES, renames: `${KIT}/teams/web/data/renames.jsonl`, turnLog: `${KIT}/teams/web/data/turn-log` },
       settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
@@ -184,7 +184,7 @@ describe('places', () => {
     expect(stateOnly.found).toEqual({
       found: true,
       dirs: { tasksDir: '/srv/state', inboxDir: '/srv/state/inbox' },
-      team: { ...WEB_FILES, renames: '/srv/state/renames.jsonl' },
+      team: { ...WEB_FILES, renames: '/srv/state/renames.jsonl', turnLog: '/srv/state/turn-log' },
       settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
