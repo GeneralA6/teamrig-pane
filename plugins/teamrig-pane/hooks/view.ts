@@ -163,6 +163,8 @@ export function sameView(a: Snapshot, b: Snapshot): boolean {
   if (
     a.area !== b.area ||
     a.areaSource !== b.areaSource ||
+    a.team !== b.team ||
+    a.areaName !== b.areaName ||
     a.unreadInbox !== b.unreadInbox ||
     a.problem !== b.problem ||
     a.notPickedUpAfterHours !== b.notPickedUpAfterHours ||

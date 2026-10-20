@@ -72,6 +72,14 @@ export type Snapshot = {
   tasks: TaskRow[]
   area: string | null
   areaSource: AreaSource | null
+  /** The session's team, as the pane found it (hooks/places.ts TeamFiles); null when it found none. */
+  team: string | null
+  /**
+   * The area's name on its team, what teamrig's commands message it by: teamrig's Roster over the team's config and
+   * rename log (hooks/source.ts), so a rename shows on the next poll. Null with no area, no team or no config file
+   * teamrig reads, or an area that is not on the team.
+   */
+  areaName: string | null
   /** Unread lines in `<inbox>/<area>.md`, past its read mark as teamrig finds it; null when the area never ran `inbox read`. */
   unreadInbox: number | null
   /** What the pane could not read: a failed load (the last good tasks stay drawn), or the lines teamrig's reader skipped. */

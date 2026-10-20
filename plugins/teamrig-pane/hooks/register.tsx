@@ -119,6 +119,8 @@ const EMPTY_SNAPSHOT: Snapshot = {
   tasks: [],
   area: null,
   areaSource: null,
+  team: null,
+  areaName: null,
   unreadInbox: null,
   problem: null,
   notPickedUpAfterHours: DEFAULT_REGISTER.check.notPickedUpAfterHours,
@@ -131,7 +133,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
  * value reads as absent (the empty snapshot, until the reload's first poll). Bump it whenever the
  * Snapshot or TaskRow type in ../types changes shape.
  */
-const SNAPSHOT_SHAPE = 'register-v6'
+const SNAPSHOT_SHAPE = 'register-v7'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */
@@ -383,7 +385,10 @@ export const register: Register = on => {
     details = new TaskDetails(files, refPlaces)
     refFiles = new RefFileReader(files, refPlaces)
     const started = new LiveRegister({
-      source: 'missing' in registerAt ? registerAt : new TaskRegisterSource(files, registerAt.paths, registerAt.settings),
+      source:
+        'missing' in registerAt
+          ? registerAt
+          : new TaskRegisterSource(files, registerAt.paths, registerAt.settings, places.found ? places.team : null),
       sessionId: () => $.session.id(),
       now: () => $.clock.now(),
       publish: async change => {

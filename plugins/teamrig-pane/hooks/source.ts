@@ -10,22 +10,28 @@ import {
   inboxLines,
   layoutPaths,
   MissingSegmentError,
+  parseConfigText,
   readEvents,
   readMarks,
   readRegister,
+  readRenames,
   readSnapshotText,
+  Roster,
   taskNumber,
   unreadOf,
   workingSetPlan,
+  type ConfigRead,
   type EventLogRead,
   type LayoutPaths,
   type MarkLogRead,
   type RegisterSnapshot,
+  type Rename,
   type SnapshotRead,
 } from './core/read/index'
 import { lineHash } from './line-hash'
 import { isHeldFinished } from './done'
 import { rowOf } from './log'
+import type { TeamFiles } from './places'
 import { isActive } from './view'
 
 export type FileStamp = { mtimeMs: number; size: number }
@@ -150,6 +156,39 @@ class WatchedFile<T> {
 }
 
 /**
+ * The team's session names, as teamrig's Roster gives them over the team's config and rename log, each file re-read
+ * only when its stamp moves, so a rename shows on the next poll. A missing config, or one teamrig refuses, names no
+ * session (places.ts already refused the pane for a config it cannot read).
+ */
+class TeamNames {
+  readonly team: string
+  private readonly config: WatchedFile<ConfigRead | null>
+  private readonly renames: WatchedFile<readonly Rename[]>
+  private roster: Roster | null = null
+
+  constructor(files: Files, team: TeamFiles) {
+    this.team = team.team
+    this.config = new WatchedFile<ConfigRead | null>(files, team.config, text => parseConfigText(text), null)
+    this.renames = new WatchedFile<readonly Rename[]>(files, team.renames, text => readRenames(text).renames, [])
+  }
+
+  /** True when the names may have changed: the config or the rename log moved. */
+  async refresh(): Promise<boolean> {
+    const configMoved = await this.config.refresh()
+    const renamesMoved = await this.renames.refresh()
+    if (!configMoved && !renamesMoved) return false
+    const read = this.config.current
+    this.roster = read?.status === 'loaded' ? new Roster(read.config, this.team, this.renames.current) : null
+    return true
+  }
+
+  /** The name teamrig messages the session by; null with no config read, or for an id that is not on the team. */
+  nameOf(id: string): string | null {
+    return this.roster?.nameOf(id) ?? null
+  }
+}
+
+/**
  * The register as teamrig's working-set read puts it together (core register/layout.ts): the snapshot,
  * the archive segments it does not cover, then the tail. A register never rotated has neither snapshot nor
  * segments, so it is its tail alone, as before rotation. The snapshot is refreshed before the tail, as
@@ -222,13 +261,16 @@ export class TaskRegisterSource {
   private readonly paths: RegisterPaths
   /** The team config's settings each snapshot carries (places.ts teamSettings), read once when the session starts. */
   private readonly settings: TeamSettings
+  /** The team's session names, for the area's name; null when the pane found no team. */
+  private readonly names: TeamNames | null
 
-  constructor(files: Files, paths: RegisterPaths, settings: TeamSettings) {
+  constructor(files: Files, paths: RegisterPaths, settings: TeamSettings, team: TeamFiles | null) {
     this.files = files
     this.paths = paths
     this.settings = settings
     this.register = new LayoutRegister(files, paths.events)
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
+    this.names = team === null ? null : new TeamNames(files, team)
   }
 
   /** A new snapshot when anything it draws from changed since the last poll (or `force`), else null. */
@@ -249,7 +291,8 @@ export class TaskRegisterSource {
     if (areaChanged) this.inbox = area === null ? null : new WatchedFile(this.files, `${this.paths.inboxDir}/${area}.md`, inboxLines, [])
     this.lastArea = area
     const inboxChanged = this.inbox ? await this.inbox.refresh() : false
-    if (!force && !registerChanged && !marksChanged && !areaChanged && !inboxChanged) return null
+    const namesChanged = this.names ? await this.names.refresh() : false
+    if (!force && !registerChanged && !marksChanged && !areaChanged && !inboxChanged && !namesChanged) return null
 
     // An area that never ran `inbox read` has no mark: its count is unknown, not everything.
     const mark = area === null ? undefined : byArea.get(area)
@@ -257,6 +300,8 @@ export class TaskRegisterSource {
       tasks: this.tasks,
       area,
       areaSource,
+      team: this.names?.team ?? null,
+      areaName: area === null ? null : (this.names?.nameOf(area) ?? null),
       unreadInbox: area !== null && this.inbox && mark !== undefined ? unreadOf(area, this.inbox.current, mark, lineHash).lines.length : null,
       problem: skippedText(this.paths, this.register.current, this.marks.current),
       ...this.settings,

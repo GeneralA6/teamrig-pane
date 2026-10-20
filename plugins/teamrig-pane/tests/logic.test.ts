@@ -12,7 +12,8 @@ import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
 import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
 import { HELD_DAYS } from '../hooks/done'
-import { HOUR, MemoryFiles, NOT_PICKED_UP_HOURS, NOW, S1, S2, S3, TEAM_SETTINGS, bigRegister, clockAt, createLine, iso, markLine, statusLine, treeAt, updateLine, waitingLine, verifyingLine } from './fixtures'
+import type { TeamFiles } from '../hooks/places'
+import { HOUR, MemoryFiles, NOT_PICKED_UP_HOURS, NOW, NO_TEAM, S1, S2, S3, TEAM_SETTINGS, bigRegister, clockAt, createLine, iso, markLine, statusLine, treeAt, updateLine, waitingLine, verifyingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
@@ -246,7 +247,7 @@ describe('view', () => {
 
   test('two snapshots draw the same pane unless a field, a task or a time label differs', async () => {
     const tasks = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' }))
-    const base: Snapshot = { tasks, area: 'po', areaSource: 'pinned', unreadInbox: 0, problem: null, ...TEAM_SETTINGS, now: NOW }
+    const base: Snapshot = { tasks, area: 'po', areaSource: 'pinned', unreadInbox: 0, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
     expect(sameView(base, { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' })) })).toBe(true)
     expect(sameView(base, { ...base, now: NOW + HOUR / 2 })).toBe(true)
     expect(sameView(base, { ...base, now: NOW + 2 * HOUR })).toBe(false)
@@ -327,6 +328,7 @@ describe('rows', () => {
     areaSource: 'inbox-read',
     unreadInbox: 2,
     problem: null,
+    ...NO_TEAM,
     ...TEAM_SETTINGS,
     now: NOW,
   })
@@ -1050,7 +1052,7 @@ describe('source', () => {
     files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW }))
     files.write(PATHS.marks, markLine('po', 2, S1, NOW, 'b'))
     files.write(`${PATHS.inboxDir}/po.md`, 'a\nb\n\nc\n')
-    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS)
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)
 
     const first = await source.poll({ claudeSession: S1, pinned: null, now: NOW })
     expect(first?.area).toBe('po')
@@ -1072,7 +1074,7 @@ describe('source', () => {
     const inbox = `${PATHS.inboxDir}/po.md`
     files.write(inbox, 'one\ntwo\nthree\n')
     files.write(PATHS.marks, markLine('po', 2, S1, NOW, 'two'))
-    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS)
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)
     const unread = async () => (await source.poll({ claudeSession: S1, pinned: null, now: NOW, force: true }))?.unreadInbox
     expect(await unread()).toBe(1)
     // Appended: the lines past the mark.
@@ -1107,13 +1109,13 @@ describe('source', () => {
       createLine('T7', { owner: 'po', by: 'po', at: NOW - 10 * DAY }),
       statusLine('T7', 'po', NOW - HELD_DAYS * DAY - 60_000, 'done'),
     ].join('\n'))
-    const snap = await new TaskRegisterSource(files, PATHS, TEAM_SETTINGS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
+    const snap = await new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null).poll({ claudeSession: S1, pinned: 'po', now: NOW })
     // T2 and T6 finished days ago, within HELD_DAYS: the Archive page and search show them. T7 finished a minute before.
     expect(snap?.tasks.map(task => task.id)).toEqual(['T1', 'T2', 'T3', 'T4', 'T5', 'T6'])
 
     const big = new MemoryFiles()
     big.write(PATHS.events, bigRegister(20_000).join('\n'))
-    const all = await new TaskRegisterSource(big, PATHS, TEAM_SETTINGS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
+    const all = await new TaskRegisterSource(big, PATHS, TEAM_SETTINGS, null).poll({ claudeSession: S1, pinned: 'po', now: NOW })
     // po's 408 and the last task, its done line past the 20,000th; none of the 3,673 finished a month ago.
     expect(all?.tasks.length).toBe(409)
     expect(all?.problem).toBe(null)
@@ -1123,7 +1125,7 @@ describe('source', () => {
     const files = new MemoryFiles()
     const good = createLine('T1', { owner: 'po', by: 'lead', at: NOW })
     files.write(PATHS.events, [good, '{"v":2', createLine('T2', { owner: 'po', by: 'lead', at: NOW, lineKeys: { v: 3 } }), statusLine('T9', 'po', NOW, 'done')].join('\n'))
-    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS)
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)
     const first = await source.poll({ claudeSession: S1, pinned: 'po', now: NOW })
     expect(first?.tasks.map(task => task.id)).toEqual(['T1'])
     expect(first?.problem).toBe('events.jsonl: 1 unreadable line(s), 1 line(s) from a newer teamrig, 1 event(s) naming no task')
@@ -1132,29 +1134,55 @@ describe('source', () => {
   })
 
   test('a pin wins over the inbox read, and missing files read as an empty register with no unread count', async () => {
-    const source = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS)
+    const source = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, null)
     const snap = await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW })
-    expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, problem: null, ...TEAM_SETTINGS, now: NOW })
+    expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW })
   })
 
   test("each snapshot carries the team config's settings the source was made with: its NOT PICKED UP hours and zone", async () => {
     const settings = { notPickedUpAfterHours: 48, timeZone: 'Asia/Jerusalem' }
-    const source = new TaskRegisterSource(new MemoryFiles(), PATHS, settings)
+    const source = new TaskRegisterSource(new MemoryFiles(), PATHS, settings, null)
     const settingsOf = (snap: Snapshot | null) => (snap === null ? null : { notPickedUpAfterHours: snap.notPickedUpAfterHours, timeZone: snap.timeZone })
     expect(settingsOf(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW }))).toEqual(settings)
     expect(settingsOf(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW + HOUR, force: true }))).toEqual(settings)
+  })
+
+  /** Team web, whose config calls api web-backend and gives ui the team's default name. */
+  const WEB: TeamFiles = { team: 'web', dir: 'K/teams/web', config: 'K/teams/web/config.json', renames: 'R/tasks/renames.jsonl', turnLog: null }
+  const WEB_CONFIG = JSON.stringify({ sessions: ['lead', 'api', 'ui'], names: { api: 'web-backend' } })
+  const namesOf = (snap: Snapshot | null) => (snap === null ? null : { team: snap.team, areaName: snap.areaName })
+
+  test("names the area as teamrig's commands do, from the team's config and rename log, a rename on the next poll", async () => {
+    const files = new MemoryFiles()
+    files.write(WEB.config, WEB_CONFIG)
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, WEB)
+    expect(namesOf(await source.poll({ claudeSession: S1, pinned: 'api', now: NOW }))).toEqual({ team: 'web', areaName: 'web-backend' })
+    expect(await source.poll({ claudeSession: S1, pinned: 'api', now: NOW })).toBe(null)
+
+    files.write(WEB.renames, `${JSON.stringify({ v: 1, id: 'api', from: 'web-backend', to: 'web-api', at: iso(NOW), by: 'api' })}\n`)
+    expect(namesOf(await source.poll({ claudeSession: S1, pinned: 'api', now: NOW }))).toEqual({ team: 'web', areaName: 'web-api' })
+    expect(namesOf(await source.poll({ claudeSession: S1, pinned: 'ui', now: NOW }))).toEqual({ team: 'web', areaName: 'web-ui' })
+    // An area the config does not list is not on the team, so it has no name there.
+    expect(namesOf(await source.poll({ claudeSession: S1, pinned: 'ops', now: NOW }))).toEqual({ team: 'web', areaName: null })
+  })
+
+  test('a team with no config file names no session, and with no team found neither the team nor a name shows', async () => {
+    const noConfig = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, WEB)
+    expect(namesOf(await noConfig.poll({ claudeSession: S1, pinned: 'api', now: NOW }))).toEqual({ team: 'web', areaName: null })
+    const noTeam = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, null)
+    expect(namesOf(await noTeam.poll({ claudeSession: S1, pinned: 'api', now: NOW }))).toEqual(NO_TEAM)
   })
 })
 
 
 /** Ports over a MemoryFiles register, recording what the class publishes and pins; `clock.now` moves its time. */
 function livePorts(files: MemoryFiles, ids: string[]) {
-  let current: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, problem: null, ...TEAM_SETTINGS, now: 0 }
+  let current: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: 0 }
   let writes = 0
   const clock = { now: NOW }
   const pins = new Map<string, string>()
   const ports: LivePorts = {
-    source: new TaskRegisterSource(files, PATHS, TEAM_SETTINGS),
+    source: new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null),
     sessionId: async () => ids[0] ?? 'none',
     now: async () => clock.now,
     publish: async change => {

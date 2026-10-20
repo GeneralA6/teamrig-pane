@@ -4,7 +4,7 @@ import { lineHash } from '../hooks/line-hash'
 import { treeOf, type PaneTree } from '../hooks/meta'
 import type { FileStamp, Files } from '../hooks/source'
 import { zoneNamed, type Clock } from '../hooks/zone'
-import type { TaskRow, TeamSettings, WaitRow } from '../types'
+import type { Snapshot, TaskRow, TeamSettings, WaitRow } from '../types'
 
 export const NOW = Date.UTC(2026, 9, 13, 14, 0)
 export const HOUR = 3_600_000
@@ -13,6 +13,7 @@ export const NOT_PICKED_UP_HOURS = DEFAULT_REGISTER.check.notPickedUpAfterHours
 
 /** What a team whose config sets neither the hours nor a zone reads with, on a machine whose zone is UTC. */
 export const TEAM_SETTINGS: TeamSettings = { notPickedUpAfterHours: NOT_PICKED_UP_HOURS, timeZone: TimeZone.UTC.name }
+/** A snapshot's team fields when the pane found no team: no team name and no session name. */export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName'> = { team: null, areaName: null }
 
 /** A team zone ahead of UTC, three hours on NOW (Israel's summer time, `IDT`): what a UTC clock cannot tell apart. */
 export const JERUSALEM = zoneNamed('Asia/Jerusalem')
