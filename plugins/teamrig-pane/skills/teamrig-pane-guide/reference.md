@@ -78,8 +78,8 @@ the next poll.
 | --- | --- |
 | One file read | 4 MiB, about 13,500 register events |
 | Polls | a file stat every 3 seconds; a 60 second tick for due and age labels and for Changes |
-| `Waiting`, asked of others | the newest 8 asked of other sessions, after the area's own waiting tasks; the heading counts them all, a dim line the rest |
-| `Done today` | done or dropped on the team's day, the newest 6; the heading names the total, a dim line the rest |
+| `Waiting`, asked of others | the first 8 asked of other sessions, after the area's own waiting tasks; the heading and the status bar count them all, a dim line the rest |
+| `Done today` | done or dropped on the team's day, the newest 6; the heading and the status bar count them all, a dim line the rest |
 | `not picked up` | untouched by its owner 24 hours after it was assigned |
 | Above the prompt | 6 rows, the last saying how many it left out; the status bar takes those past the list's 4 |
 | Dock | asks for 58 columns; the side dock needs a terminal of 110 |

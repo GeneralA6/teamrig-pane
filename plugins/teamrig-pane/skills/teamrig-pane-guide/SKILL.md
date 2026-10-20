@@ -164,11 +164,12 @@ heading with its count; an empty section is left out:
 1. `Verifying`: the change landed, its proof is still to come; these lead, because closing them comes first;
 2. `Working on`: in progress;
 3. `Up next`: open, not started;
-4. `Waiting`: the area's waiting tasks, then the active tasks it asked of other sessions, the newest 8, each
-   saying `on <owner>` (a dim line counts the rest, which **all** lists);
-5. `Done today`: its tasks done or dropped today, the team's day the status bar counts, the newest 6, one dim line
-   each with the time it closed. Past them a dim line says how many more, how many of those were dropped, and
-   that `o` lists every one done today.
+4. `Waiting`: the area's waiting tasks, then the active tasks it asked of other sessions, the first 8, each
+   saying `on <owner>` (a dim line counts the rest, which `i` lists);
+5. `Done today`: its tasks done or dropped today, the team's day, the newest 6, one dim line each with the time it
+   closed. Past them a dim line says how many more, which `o` lists.
+
+A heading's count is the status bar's count for its section, the tasks past a cap included.
 
 The header names the area only for a pin (`web (pinned) · 3 active · inbox 2 unread`); the session's own area
 goes unnamed, as its tab names the session. `inbox n unread` counts the lines in the area's inbox past its last
@@ -209,24 +210,27 @@ A task done today is one dim line, `✓ T11  Signup API`, the time it closed at 
 
 ### The status bar
 
-Over **mine**, one row as wide as the pane shares its cells among the area's tasks by status, in this order:
+Over **mine**, one row as wide as the pane shares its cells among the tasks of its sections, a status for each, in
+this order:
 
 | Cells | Count | Tasks |
 | --- | --- | --- |
-| green `█` | `done today` | done today |
+| green `█` | `done today` | done or dropped today |
 | green `▓` | `verifying` | shipped, its proof still to come |
 | amber `█` | `working` | in progress |
-| red `█` | `waiting` | waiting on a decision, an approval, a task or a time |
+| red `█` | `waiting` | its own, waiting on a decision, an approval, a task or a time, and those it asked of other sessions |
 | dim `░` | `not started` | open |
 
 Under it, a dim line counts them, each behind its key (`o: 1 done today · v: 1 verifying · w: 2 working · i: 1 waiting`),
 leaving out a status with none; where the counts, keys included, are wider than the pane they wrap onto more lines.
-Today is the team's day; tasks done on an earlier day, and dropped ones, are left out. The cells are shared by largest
+Today is the team's day; tasks closed on an earlier day are left out. Each count is the one its section's heading
+names. The cells are shared by largest
 remainder, and a status with any task gets at least one. With none of these tasks there is no bar, and **all** has
 none.
 
 A click on a status's cells or its count, or its key (`o`, `v`, `w`, `i`, `n`), shows that status's tasks alone
-under the header: today's done ones newest first, the others in plan order; the other sections hide. Its cells and
+under the header, every one its count names: today's done ones newest first, the others in plan order (the waiting
+ones the area's own first); the other sections hide. Its cells and
 count turn bold, and a dim line under the counts reads `showing verifying only, click again for all`. The same
 click or key again shows every task; another status switches to it. A shown status that empties keeps its count,
 `0 waiting`, so it can still be cleared, and the list says `Nothing waiting.` (`Nothing done today.`, `Nothing
