@@ -1573,7 +1573,7 @@ test('back, forward and the trail step through the places; the list keeps the he
   await pane.press({ key: 'crumb:1' })
   expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed$/ })).toBeDefined()
 
-  // The Tasks crumb: the list, its bar and T52's card as they were, back dim and forward a press away.
+  // The Tasks crumb: the list, its bar, the header's inbox count and T52's card as they were, back dim and forward a press away.
   await pane.press({ key: 'crumb:0' })
   drawn = await pane.drawn()
   expect(buttonKeys(drawn)).toEqual([
@@ -1590,6 +1590,7 @@ test('back, forward and the trail step through the places; the list keeps the he
     'crumb:2',
     'bar:not-started',
     'count:not-started',
+    gotoKey(drawn, 'inbox'),
     'next:T52',
     gotoKey(drawn, 'T50'),
     fileKey(drawn),
