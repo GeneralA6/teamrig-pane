@@ -89,7 +89,7 @@ the next poll.
 | Quoted ref | 3 lines, 320 characters a line |
 | Card links | 5 a card; an address over 2048 characters, once percent-encoded, is left out |
 | Pages | 20 places kept, the oldest dropped first; the trail names the last 4 |
-| Log | the last 24 hours of each session's turn log; a session's page holds the newest 256 KiB of text and notes the older lines it left out |
+| Log | each session's turn log over the hours teamrig keeps it (the team config's `turnLog.keepHours`, 24 by default); a session's page holds the newest 256 KiB of text and notes the older lines it left out |
 | A reference file's page | 256 KiB, read whole as the page opens; a larger file, or one that is not text, says why it is not shown |
 | Search results | 30 shown, the active first; a dim line counts the rest |
 | A Claude dialog (a permission prompt, a question) | while it is open, Claude Code sends the pane no keys, clicks or wheel scroll, and tells it nothing: answer the dialog first |

@@ -296,15 +296,16 @@ What the host draws and the mod can't change:
 
 ### Log
 
-Log shows each session's prompts and replies of the last 24 h, from the turn log teamrig writes for every session of
-the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`, one file an hour, its lines kept as long as the team's
-`turnLog.keepHours` says), so a `/clear` or a compaction never takes away what a tab showed. It reads files only and
-only while it shows: no model calls, no tokens.
+Log shows each session's prompts and replies of the hours teamrig keeps them, from the turn log it writes for every
+session of the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`, one file an hour, kept the team config's
+`turnLog.keepHours`, 24 by default), so a `/clear` or a compaction never takes away what a tab showed. It reads each
+line with teamrig's own reader, and files only, only while it shows: no model calls, no tokens.
 
-The view lists the team's sessions that wrote a line in the last 24 h, the one whose log changed last first: each its
+The view lists the team's sessions that wrote a line in those hours, the one whose log changed last first: each its
 id and when its log last changed, over its newest prompt in two lines at most (`no prompt in the last 24 h` when it has
-replies alone). Until there is one it says why: no team, no turn log yet (teamrig writes none while the team's
-`turnLog.enabled` is off), a folder it could not read, or no session in the window.
+replies alone, with the team's hours). Until there is one it says why: no team, a team with no config file (teamrig
+writes no turn log for one), no turn log yet (teamrig writes none while the team's `turnLog.enabled` is off), a
+folder it could not read, or no session in the window.
 
 A press on a session (a click, or Enter on it) opens its page under a `back` button (`b`): a head with the session and
 how many lines it shows, then its lines oldest first, so the newest is at the end, where the page opens. Each prompt and

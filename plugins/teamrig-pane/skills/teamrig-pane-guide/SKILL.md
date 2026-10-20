@@ -436,11 +436,12 @@ A count git can't give is left out, with no warning, and git never runs in a fol
 
 ## The Log view
 
-`g`, or Log on the switch, lists the team's sessions that wrote a prompt or a reply in the last 24 hours, the one
-whose log changed last first: each its id, when its log last changed, and its newest prompt in two lines at most. It
-reads the turn log teamrig writes for every session of the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`),
-so a `/clear` or a compaction never takes away what a tab showed. With no team, no turn log yet (teamrig writes none
-while the team's `turnLog.enabled` is off) or a folder it cannot read, the view says which.
+`g`, or Log on the switch, lists the team's sessions that wrote a prompt or a reply in the hours teamrig keeps their
+turn log (the team config's `turnLog.keepHours`, 24 by default), the one whose log changed last first: each its id,
+when its log last changed, and its newest prompt in two lines at most. It reads the turn log teamrig writes for every
+session of the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`), so a `/clear` or a compaction never takes
+away what a tab showed. With no team, a team with no config file (teamrig writes no turn log for one), no turn log yet
+(teamrig writes none while the team's `turnLog.enabled` is off) or a folder it cannot read, the view says which.
 
 A press on a session (a click, or Enter on it) opens its page under `back` (`b`): its lines oldest first, the newest at
 the end where the page opens. Each prompt and reply is a head line (`prompt · 20:05 IDT`) over its text; a `/clear` is a dim
