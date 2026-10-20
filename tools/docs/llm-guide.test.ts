@@ -115,7 +115,8 @@ describe('the pane guide documents the keys', () => {
     const register = read(`${PLUGIN}/hooks/register.tsx`);
     const fixed = Array.from(register.matchAll(/hotkey="([a-z])"/g), (match) => match[1] ?? '');
     const counts = Array.from(read(`${PLUGIN}/hooks/status-bar.ts`).matchAll(/hotkey: '([a-z])'/g), (match) => match[1] ?? '');
-    const bound = [...fixed, ...counts].sort();
+    // A key two views bind, each in its own view (b: back on a task page and on a Log page), is one row.
+    const bound = [...new Set([...fixed, ...counts])].sort();
     const documented = rowsStarting(skill, /^`[a-z]`$/).map((cell) => cell.slice(1, -1)).sort();
     assert.ok(fixed.length > 0, 'register.tsx binds hotkeys');
     assert.ok(counts.length > 0, 'status-bar.ts gives each count a key');
