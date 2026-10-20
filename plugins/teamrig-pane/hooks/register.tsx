@@ -310,6 +310,49 @@ function drawSpans(components: SpanComponents, spans: readonly Span[], wrap: Dra
   )
 }
 
+/** The components a view's Find row and the line under it draw with. */
+type FindComponents = Pick<Components, 'Box' | 'Button' | 'Input' | 'Text'>
+
+/** What a view's Find row draws (find-field.ts): its round's field, and the steps of the view's search. */
+type FindRow = {
+  /** The field's key in its round (fieldKey). */
+  key: string
+  placeholder: string
+  /** What the round started with (fieldText): the query of the search shown, else nothing. */
+  text: string
+  /** What Enter in the field does (submitWords). */
+  submitLabel: string
+  /** `s: Find`: moves the focus ring into the field. */
+  onFind: () => void
+  onInput: (value: string) => void
+  onSubmit: (value: string) => void
+  /** Closes the search shown; null while none shows, so no clear is drawn. */
+  onClear: (() => void) | null
+}
+
+/** `s: Find`, the field, then clear while a search shows, in one row that wraps in a narrow dock. */
+function drawFindRow({ Box, Button, Input }: FindComponents, row: FindRow) {
+  return (
+    <Box key="find-row" flexDirection="row" flexWrap="wrap" columnGap={1}>
+      <Button key="find-key" label="Find" plain hotkey="s" onPress={row.onFind} />
+      <Input key={row.key} placeholder={row.placeholder} value={row.text} submitLabel={row.submitLabel} onInput={row.onInput} onSubmit={row.onSubmit} />
+      {row.onClear === null ? null : <Button label="clear" variant="secondary" onPress={row.onClear} />}
+    </Box>
+  )
+}
+
+/** The line under the Find field, `text` saying where the keys go (keysHint): bold while typing searches, else dim. */
+function drawKeysLine({ Text }: FindComponents, keys: KeysAt, text: string) {
+  return keys === 'search' ? (
+    <Text key="keys-hint" bold>
+      {text}
+    </Text>
+  ) : (
+    <Text key="keys-hint" dimColor>
+      {text}
+    </Text>
+  )
+}
 
 export const register: Register = on => {
   let live: LiveRegister | null = null
@@ -564,7 +607,8 @@ export const register: Register = on => {
   /** The rows the last docked layout wrapped: a drawing re-wraps only the rows that changed since. */
   const wraps = new WrapCache()
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button, Link, Input } = $.ui.resolve(e)
+    const components = $.ui.resolve(e)
+    const { Box, Text, Button, Link } = components
     const inline = e.props.placement === 'inline'
     // A read or a layout that throws draws one error line under the buttons: unguarded, the engine
     // would skip this hook and draw the pane with no tasks and no word of why.
@@ -908,40 +952,30 @@ export const register: Register = on => {
 
     // The Find field, under the switch in the dock whatever it shows: the first change opens a search (a place, so back
     // from a result's page returns to it), each change shows the results for its words, Enter opens the one match's page
-    // or moves the ring onto the first of more, and an empty field or clear closes the search. It is drawn under its round's key, holding what the round started
-    // with (find-field.ts): the query of the search shown, else nothing; never the person's typing, which the engine
-    // would drop on each redraw. `s: Find` before it moves the focus ring into it, and clear moves it back in; the
-    // field never takes the focus by itself, as it would then hold every key the pane's hotkeys answer. Esc hands the
-    // keys back and leaves the results drawn.
-    const findRow = inline ? null : (
-      <Box key="find-row" flexDirection="row" flexWrap="wrap" columnGap={1}>
-        <Button key="find-key" label="Find" plain hotkey="s" onPress={() => void focusFind($)} />
-        <Input
-          key={fieldKey(field)}
-          placeholder="id, title, owner, note…"
-          value={field.text}
-          submitLabel={submitWords(matchCount(found))}
-          onInput={value => void go($, current => searched(current, value), 'typing')}
-          onSubmit={value => void submit(value)}
-        />
-        {place.kind === 'search' ? <Button label="clear" variant="secondary" onPress={() => void clearSearch($)} /> : null}
-      </Box>
-    )
+    // or moves the ring onto the first of more, and an empty field or clear closes the search. It is drawn under its
+    // round's key, holding what the round started with (find-field.ts): the query of the search shown, else nothing;
+    // never the person's typing, which the engine would drop on each redraw. `s: Find` before it moves the focus ring
+    // into it, and clear moves it back in; the field never takes the focus by itself, as it would then hold every key
+    // the pane's hotkeys answer. Esc hands the keys back and leaves the results drawn.
+    const findRow = inline
+      ? null
+      : drawFindRow(components, {
+          key: fieldKey(field),
+          placeholder: 'id, title, owner, note…',
+          text: field.text,
+          submitLabel: submitWords(matchCount(found)),
+          onFind: () => void focusFind($),
+          onInput: value => void go($, current => searched(current, value), 'typing'),
+          onSubmit: value => void submit(value),
+          onClear: place.kind === 'search' ? () => void clearSearch($) : null,
+        })
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
-    // hotkeys or to Claude's prompt, and the key or the click that moves them; bold while typing searches, wrapped in a narrow dock.
+    // hotkeys or to Claude's prompt, and the key or the click that moves them, wrapped in a narrow dock.
     const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo, place.kind === 'search')
     const keysText = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, matchCount(found)) }] }, columns)
       .map(line => line.map(span => span.text).join(''))
       .join('\n')
-    const keysLine = inline ? null : keys === 'search' ? (
-      <Text key="keys-hint" bold>
-        {keysText}
-      </Text>
-    ) : (
-      <Text key="keys-hint" dimColor>
-        {keysText}
-      </Text>
-    )
+    const keysLine = inline ? null : drawKeysLine(components, keys, keysText)
     // In the tasks view the Find row and its line sit right under the switch, then the mode buttons, in the same block.
     // The field comes before every element that shows or hides with the place (collapse, clear, a page's steps): the
     // engine keeps the focus ring at an index among the pane's elements, so one shown or hidden before the field would
