@@ -1,7 +1,7 @@
 // The Log view as rows (hooks/log-rows.ts): the sessions list, each a press that opens its page, the notes for a
 // list it cannot show, and a session's page: its head, a note for what it leaves out, and each line's blocks.
 import { describe, expect, test } from 'claude-code/testing'
-import type { LogPage, TurnEntry } from '../types'
+import type { LogPage, LogSession, TurnEntry } from '../types'
 import { logListBlocks, logPageBlocks, sessionKey } from '../hooks/log-rows'
 import type { Block } from '../hooks/rows'
 import { clockOf } from '../hooks/zone'
@@ -18,7 +18,7 @@ function entry(at: string, kind: TurnEntry['kind'], text: string, isCut = false)
 }
 
 function page(entries: TurnEntry[], more: Partial<LogPage> = {}): LogPage {
-  return { session: 'lead', entries, isCut: false, problem: null, ...more }
+  return { session: 'lead', hours: 24, entries, isCut: false, problem: null, ...more }
 }
 
 describe('logListBlocks', () => {
@@ -26,6 +26,7 @@ describe('logListBlocks', () => {
     const blocks = logListBlocks(
       {
         kind: 'sessions',
+        hours: 24,
         sessions: [
           { id: 'lead', changedAt: Date.parse('2026-10-19T20:05:00Z'), lastPrompt: 'plan the week' },
           { id: 'api', changedAt: Date.parse('2026-10-18T22:40:00Z'), lastPrompt: null },
@@ -43,14 +44,24 @@ describe('logListBlocks', () => {
     expect(blocks[1]?.rows[1]?.maxLines).toBe(2)
   })
 
-  test('says why it lists none: reading, no team, no turn logs, a failed read, or no session in the window', () => {
+  test('says why it lists none: reading, no team, a team with no config, no turn logs, a failed read, or no session in the window', () => {
     const note = (list: Parameters<typeof logListBlocks>[0]) => words(logListBlocks(list, UTC))
     expect(note({ kind: 'reading' })).toEqual([['log:note', ['Reading the turn logs…']]])
     expect(note({ kind: 'no-team' })[0]?.[1][0]).toMatch(/^No team found/)
+    expect(note({ kind: 'no-config' })).toEqual([['log:note', ['No turn logs: the team has no config file, and teamrig writes turn logs only for a team with one.']]])
     expect(note({ kind: 'no-log' })[0]?.[1][0]).toMatch(/^No turn logs yet: a teamrig with the turn log writes/)
     expect(note({ kind: 'failed', reason: 'EPERM: denied.' })).toEqual([['log:note', ['The turn logs could not be read: EPERM: denied.']]])
     expect(logListBlocks({ kind: 'failed', reason: 'x' }, UTC)[0]?.rows[0]?.spans[0]?.color).toBe('warning')
-    expect(note({ kind: 'sessions', sessions: [] })).toEqual([['log:note', ['No session wrote a prompt or a reply in the last 24 h.']]])
+    expect(note({ kind: 'sessions', hours: 24, sessions: [] })).toEqual([['log:note', ['No session wrote a prompt or a reply in the last 24 h.']]])
+  })
+
+  test("prints the hours teamrig keeps the team's turn log, the list's window", () => {
+    const kept = (sessions: LogSession[]) => words(logListBlocks({ kind: 'sessions', hours: 2, sessions }, UTC))
+    expect(kept([{ id: 'api', changedAt: Date.parse('2026-10-19T19:00:00Z'), lastPrompt: null }])).toEqual([
+      ['log:intro', ["Each session's prompts and replies of the last 2 h, the newest change first."]],
+      ['log:session:api', ['api · 19:00 UTC', 'no prompt in the last 2 h']],
+    ])
+    expect(kept([])).toEqual([['log:note', ['No session wrote a prompt or a reply in the last 2 h.']]])
   })
 })
 
@@ -98,11 +109,11 @@ describe('logPageBlocks', () => {
       ['log-page:2026-10-18T20:00:00Z:prompt', ['prompt · Sun 10-18 23:00 IDT', 'a']],
       ['log-page:2026-10-18T23:10:00Z:reply', ['reply · 02:10 IDT', 'b']],
     ])
-    const list = logListBlocks({ kind: 'sessions', sessions: [{ id: 'lead', changedAt: Date.parse('2026-10-19T20:05:00Z'), lastPrompt: null }] }, JERUSALEM)
+    const list = logListBlocks({ kind: 'sessions', hours: 24, sessions: [{ id: 'lead', changedAt: Date.parse('2026-10-19T20:05:00Z'), lastPrompt: null }] }, JERUSALEM)
     expect(words(list)[1]?.[1][0]).toBe('lead · 23:05 IDT')
   })
 
-  test('notes the lines its cap leaves out and a file it could not read; an empty page says so', () => {
+  test("notes the lines its cap leaves out and a file it could not read; an empty page says so, in the team's kept hours", () => {
     const cut = logPageBlocks(page([entry('2026-10-19T20:01:00Z', 'prompt', 'a')], { isCut: true, problem: 'x.jsonl: EBUSY.' }), UTC)
     expect(words(cut).slice(0, 3)).toEqual([
       ['log-page', ['lead', 'last 24 h · 1 line, the newest last']],
@@ -113,6 +124,10 @@ describe('logPageBlocks', () => {
       ['log-page', ['lead', 'last 24 h · 0 lines, the newest last']],
       ['log-page:problem', ['Not all read: gone.']],
       ['log-page:empty', ['Nothing in the last 24 h.']],
+    ])
+    expect(words(logPageBlocks(page([], { hours: 2 }), UTC))).toEqual([
+      ['log-page', ['lead', 'last 2 h · 0 lines, the newest last']],
+      ['log-page:empty', ['Nothing in the last 2 h.']],
     ])
   })
 })

@@ -210,22 +210,31 @@ export type TurnEntry = {
 export type LogSession = { readonly id: string; readonly changedAt: number; readonly lastPrompt: string | null }
 
 /**
- * The Log view's list (hooks/turn-log.ts): the sessions with a turn log file of the last LOG_HOURS, newest first;
- * or that it is not read yet, that the pane found no team, that the team has no turn log folder (teamrig writes
+ * The Log view's list (hooks/turn-log.ts): the sessions with a turn log file of the last `hours` (the team config's
+ * `turnLog.keepHours`), newest first; or that it is not read yet, that the pane found no team, that the team has no
+ * config file (teamrig refuses such a team and writes it no turn log), that it has no turn log folder (teamrig writes
  * none before its turn log version or with turnLog.enabled false), or why the folder could not be read.
  */
 export type LogList =
-  | { readonly kind: 'sessions'; readonly sessions: readonly LogSession[] }
+  | { readonly kind: 'sessions'; readonly hours: number; readonly sessions: readonly LogSession[] }
   | { readonly kind: 'reading' }
   | { readonly kind: 'no-team' }
+  | { readonly kind: 'no-config' }
   | { readonly kind: 'no-log' }
   | { readonly kind: 'failed'; readonly reason: string }
 
 /**
- * A session's page in the Log view: its newest lines of the last LOG_HOURS, oldest first, at most LOG_PAGE_CHARS
- * of text (`isCut` when older lines are left out), and why a file of it could not be read (null when all were).
+ * A session's page in the Log view: its newest lines of the last `hours` (the team config's `turnLog.keepHours`),
+ * oldest first, at most LOG_PAGE_CHARS of text (`isCut` when older lines are left out), and why a file of it could
+ * not be read (null when all were).
  */
-export type LogPage = { readonly session: string; readonly entries: readonly TurnEntry[]; readonly isCut: boolean; readonly problem: string | null }
+export type LogPage = {
+  readonly session: string
+  readonly hours: number
+  readonly entries: readonly TurnEntry[]
+  readonly isCut: boolean
+  readonly problem: string | null
+}
 
 /**
  * A place the tasks view shows (hooks/nav.ts): the list, remembering the key of the element a page was opened from

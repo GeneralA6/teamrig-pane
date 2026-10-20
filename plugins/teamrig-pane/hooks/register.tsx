@@ -15,9 +15,10 @@
 // session (size.ts). A switch row, first in every
 // state and width, the strip included, flips the body between the tasks, the Changes view (the
 // files changed in the git repos the session works in and their lines, changes.ts, counted as Δn on
-// the switch and in the tab title) and the Log view: each team session's prompts and replies of the last 24 h
-// from the turn logs teamrig writes (turn-log.ts), a press on a session opening its page at its newest lines,
-// back (b) returning to the list. The band above the prompt shows the task the session works on now
+// the switch and in the tab title) and the Log view: each team session's prompts and replies of the hours teamrig
+// keeps them (the team config's turnLog.keepHours) from the turn logs it writes (turn-log.ts), a press on a session
+// opening its page at its newest lines, back (b) returning to the list. The band above the prompt shows the task the
+// session works on now
 // (banner.ts), a press opening its card, whether the pane is open, minimized or never drawn. Reads
 // files and runs git (status, diff, grep; no model calls); /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
@@ -152,8 +153,10 @@ const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KN
 const DIFFS_SHAPE = 'diffs-v1'
 const diffs = atom({ plugin: 'teamrig-pane', key: 'diffs' } as const, NO_DIFFS, { shape: DIFFS_SHAPE })
 /** The Log view's list and page are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when LogList, LogPage or TurnEntry changes shape. */
-const LOG_SHAPE = 'log-v1'
+const LOG_SHAPE = 'log-v2'
 const LOG_READING: LogList = { kind: 'reading' }
+const NO_TEAM_LOG: LogList = { kind: 'no-team' }
+const NO_CONFIG_LOG: LogList = { kind: 'no-config' }
 const logList = atom({ plugin: 'teamrig-pane', key: 'logList' } as const, LOG_READING, { shape: LOG_SHAPE })
 const AT_LOG_LIST: LogPage | null = null
 const logPage = atom({ plugin: 'teamrig-pane', key: 'logPage' } as const, AT_LOG_LIST, { shape: LOG_SHAPE })
@@ -437,23 +440,32 @@ export const register: Register = on => {
       list: path => unlessMissing(() => $.fs.list(path), () => $.fs.exists(path), null),
       read: path => $.fs.read(path),
     }
-    const logLive = new LiveLog({
-      reader: new TurnLogReader(logFiles, places.found && places.team !== null ? places.team.turnLog : null),
-      now: () => $.clock.now(),
-      isShown: async () => (await read($, view)) === 'log' && (await read($, size)) !== 'minimized',
-      shownPage: async () => (await read($, logPage))?.session ?? null,
-      publishList: async list => {
-        await update($, logList, () => list)
-      },
-      publishPage: async page => {
-        await update($, logPage, () => page)
-      },
-    })
+    const turnLog = team === null ? null : team.paths.turnLog
+    const logLive =
+      turnLog === null
+        ? null
+        : new LiveLog({
+            reader: new TurnLogReader(logFiles, turnLog),
+            now: () => $.clock.now(),
+            isShown: async () => (await read($, view)) === 'log' && (await read($, size)) !== 'minimized',
+            shownPage: async () => (await read($, logPage))?.session ?? null,
+            publishList: async list => {
+              await update($, logList, () => list)
+            },
+            publishPage: async page => {
+              await update($, logPage, () => page)
+            },
+          })
     logging = logLive
+    if (logLive === null) {
+      // No team, or one with no config file, which teamrig refuses and writes no turn log for: nothing to poll.
+      await update($, logList, () => (team === null ? NO_TEAM_LOG : NO_CONFIG_LOG))
+      await update($, logPage, () => AT_LOG_LIST)
+    }
     await started.refresh()
     started.startTimers((ms, fn) => $.clock.every(ms, fn))
     changesLive.startTimers((ms, fn) => $.clock.every(ms, fn))
-    logLive.startTimers((ms, fn) => $.clock.every(ms, fn))
+    logLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
     void $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
     // Once per start: git --version and the engine's version, never on a poll. The check never rejects; a
     // failed write only leaves the lines out.
