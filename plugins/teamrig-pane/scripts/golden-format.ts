@@ -33,10 +33,23 @@ export function clockAt(value: string | undefined): number {
   return ms
 }
 
-/** A read of the real clock that golden-clock.ts cannot fix, as it fixes Date.now alone: `new Date()`, `Date()`, a timer. */
-const OTHER_CLOCK_READ = /\bnew Date\(\s*\)|(?<![.\w])Date\(\s*\)|\bperformance\.now\(|\bprocess\.hrtime\b/
+/**
+ * `real`, its clock fixed at `at`: `Date.now()`, `new Date()` and `Date()` read `at`; a Date of a given instant or
+ * fields is the real one's. golden-clock.ts puts it in place of the global Date in each CLI run of a capture.
+ */
+export function fixedDate(at: number, real: DateConstructor): DateConstructor {
+  const now = (): number => at
+  return new Proxy(real, {
+    construct: (target, args, newTarget) => Reflect.construct(target, args.length === 0 ? [at] : args, newTarget),
+    apply: target => new target(at).toString(),
+    get: (target, property, receiver) => (property === 'now' ? now : Reflect.get(target, property, receiver)),
+  })
+}
 
-/** The lines (from 1) of `source` that read the real clock other than through Date.now: a capture refuses such a teamrig. */
+/** A read of a timer clock, which golden-clock.ts cannot fix, as it fixes the Date clock alone. */
+const OTHER_CLOCK_READ = /\bperformance\.now\(|\bprocess\.hrtime\b/
+
+/** The lines (from 1) of `source` that read a timer clock, not the Date one: a capture refuses such a teamrig. */
 export function realClockReads(source: string): number[] {
   return source.split('\n').flatMap((line, index) => (OTHER_CLOCK_READ.test(line) ? [index + 1] : []))
 }

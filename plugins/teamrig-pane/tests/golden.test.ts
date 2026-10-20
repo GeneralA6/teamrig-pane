@@ -12,6 +12,7 @@ import {
   GOLDEN_ROOT,
   GOLDEN_SESSION,
   GOLDEN_START,
+  fixedDate,
   GoldenClock,
   goldenModule,
   realClockReads,
@@ -182,8 +183,23 @@ describe('golden capture', () => {
     for (const value of [undefined, '', ' ', 'soon', '1.5', '1e400']) expect(() => clockAt(value)).toThrow(GOLDEN_CLOCK_VARIABLE)
   })
 
-  test('names the lines of teamrig source that read the clock other than through Date.now', () => {
-    expect(realClockReads('const at = Date.now()\nconst d = new Date(at)\nconst e = x.toDate()')).toEqual([])
-    expect(realClockReads('a\nconst d = new Date()\nconst t = performance.now()\nconst s = Date()\nprocess.hrtime.bigint()')).toEqual([2, 3, 4, 5])
+  test("fixes a run's Date clock however teamrig reads it, and leaves a Date of a given instant or fields as it is", () => {
+    const realNow = Date.now
+    const FixedDate = fixedDate(GOLDEN_START, Date)
+    expect(FixedDate.now()).toBe(GOLDEN_START)
+    expect(new FixedDate().getTime()).toBe(GOLDEN_START)
+    expect(FixedDate()).toBe(new Date(GOLDEN_START).toString())
+    expect(new FixedDate() instanceof Date).toBe(true)
+    expect(new FixedDate(0).getTime()).toBe(0)
+    expect(new FixedDate('2030-01-09T10:00:00Z').getTime()).toBe(Date.UTC(2030, 0, 9, 10))
+    expect(new FixedDate(2030, 0, 9).getFullYear()).toBe(2030)
+    expect(FixedDate.UTC(2030, 0, 9)).toBe(Date.UTC(2030, 0, 9))
+    // The Date it wraps keeps the real clock.
+    expect(Date.now).toBe(realNow)
+  })
+
+  test('names the lines of teamrig source that read a timer clock, which the Date one does not fix', () => {
+    expect(realClockReads('const at = Date.now()\nconst d = new Date()\nconst s = Date()\nconst e = x.toDate()')).toEqual([])
+    expect(realClockReads('a\nconst t = performance.now()\nprocess.hrtime.bigint()')).toEqual([2, 3])
   })
 })
