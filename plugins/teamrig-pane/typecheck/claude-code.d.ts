@@ -171,7 +171,7 @@ declare module 'claude-code' {
   export interface Context {
     readonly command: { register(spec: CommandSpec): Promise<{ command: string }> }
     readonly env: { get(name: string): Promise<string | undefined> }
-    readonly fs: { stat(path: string): Promise<FsStat>; exists(path: string): Promise<boolean>; read(path: string): Promise<string> }
+    readonly fs: { stat(path: string): Promise<FsStat>; exists(path: string): Promise<boolean>; read(path: string): Promise<string>; list(path: string): Promise<FsEntry[]> }
     readonly session: { id(): Promise<string>; version(): Promise<SessionVersion> }
     readonly clock: { now(): Promise<number>; every(ms: number, fn: () => void): Timer }
     readonly store: { get(key: string): Promise<unknown>; set(key: string, value: unknown): Promise<void>; delete(key: string): Promise<void> }
@@ -263,6 +263,7 @@ declare module 'claude-code' {
     'fs.stat': { filter: never; e: { readonly path: string }; result: Answer<FsStat> }
     'fs.exists': { filter: never; e: { readonly path: string }; result: Answer<boolean> }
     'fs.read': { filter: never; e: { readonly path: string }; result: Answer<string> }
+    'fs.list': { filter: never; e: { readonly path: string }; result: Answer<FsEntry[]> }
     'store.get': { filter: never; e: { readonly key: string }; result: Answer<unknown> }
     'store.set': { filter: never; e: { readonly key: string; readonly value: unknown }; result: Answer<void> }
     'store.delete': { filter: never; e: { readonly key: string }; result: Answer<void> }
