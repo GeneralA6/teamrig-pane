@@ -1298,12 +1298,15 @@ test("the Log view lists the team's sessions with a turn log of the last 24 h, t
   expect(await drawnLines(pane)).toContain('Ship the log view')
   expect(await drawnLines(pane)).toContain('Plan the week')
 
-  // A new prompt moves its session up on the next poll; the Tasks view shows the tasks again.
+  // A new prompt moves its session up on the next poll; Tasks leaves the Log view, and as the session has no area,
+  // all shows its team's tasks again.
   disk.write(`${WEB_LOG}/lead/2026-10-13T13.jsonl`, [turnLine(50, 'prompt', 'Plan the week'), turnLine(1, 'prompt', 'Review the plan')])
   await clock.advance(POLL_MS)
   expect(await sessions()).toEqual(['lead', 'api'])
   expect(await drawnLines(pane)).toContain('Review the plan')
   await pane.press({ key: 'tasks' })
+  expect(await drawnLines(pane)).not.toContain('Review the plan')
+  await pane.press({ key: 'all' })
   expect(await pane.find({ text: /Ship the team register/ })).toBeDefined()
 })
 
@@ -1491,6 +1494,7 @@ test("a task id in an open card opens that task's page: its title and card alone
   expect(buttonKeys(drawn)).toEqual([
     'tasks',
     'changes',
+    'log',
     'find-key',
     'mine',
     'all',
@@ -1507,7 +1511,7 @@ test("a task id in an open card opens that task's page: its title and card alone
 
   await pane.press({ key: gotoKey(drawn, 'T58') })
   expect(screenOf(await pane.drawn())).toEqual([
-    ' Tasks Changes',
+    ' Tasks Changes Log',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all archive',
@@ -1561,6 +1565,7 @@ test('back, forward and the trail step through the places; the list keeps the he
   expect(buttonKeys(drawn)).toEqual([
     'tasks',
     'changes',
+    'log',
     'find-key',
     'mine',
     'all',
@@ -1632,7 +1637,7 @@ test("a reference file in an open card opens as a page: its name, where it was r
 
   await pane.press({ key: toFile })
   expect(screenOf(await pane.drawn())).toEqual([
-    ' Tasks Changes',
+    ' Tasks Changes Log',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all archive',
@@ -1709,7 +1714,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   expect(drawnField(drawn)).toEqual({ key: 'find', value: '' })
   // The active matches in plan order, each a press with a dim line of whose it is; the Find field draws no words.
   expect(screenOf(drawn)).toEqual([
-    ' Tasks Changes',
+    ' Tasks Changes Log',
     ' Find  clear',
     ' Keys go to Claude · click the field to search',
     ' mine all archive',
@@ -1804,8 +1809,8 @@ test('the Find field keeps its index among the focusable elements on the list, w
   drawn = await pane.drawn()
   expect(keyedNode(drawn, 'week-steps')).not.toBe(null)
   indexes.push(fieldIndex(drawn))
-  // After Tasks, Changes and s: Find.
-  expect(indexes).toEqual([3, 3, 3, 3, 3])
+  // After Tasks, Changes, Log and s: Find.
+  expect(indexes).toEqual([4, 4, 4, 4, 4])
 })
 
 test("the line under the Find field says where the keys go: to Claude's prompt, to the pane, or typed into the search", async ($, on) => {
@@ -1909,7 +1914,7 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   expect(buttonKeys(drawn)).not.toContain('next')
   expect(await pane.find({ type: 'Text', text: /^next ›$/ })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(drawn)).toEqual([
-    ' Tasks Changes',
+    ' Tasks Changes Log',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all archive',
