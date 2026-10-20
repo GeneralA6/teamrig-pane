@@ -1,18 +1,33 @@
 // Register lines shaped as teamrig writes them (events v2, inbox marks v1), and an in-memory `Files`.
-import { DEFAULT_REGISTER, EVENT_VERSION, MARK_VERSION } from '../hooks/core/read/index'
+import { DEFAULT_REGISTER, EVENT_VERSION, MARK_VERSION, TimeZone } from '../hooks/core/read/index'
 import { lineHash } from '../hooks/line-hash'
 import { treeOf, type PaneTree } from '../hooks/meta'
 import type { FileStamp, Files } from '../hooks/source'
-import type { TaskRow, WaitRow } from '../types'
+import { zoneNamed, type Clock } from '../hooks/zone'
+import type { TaskRow, TeamSettings, WaitRow } from '../types'
 
 export const NOW = Date.UTC(2026, 9, 13, 14, 0)
 export const HOUR = 3_600_000
 /** teamrig's default hours before an untouched task reads NOT PICKED UP, for a team whose config sets none. */
 export const NOT_PICKED_UP_HOURS = DEFAULT_REGISTER.check.notPickedUpAfterHours
 
-/** The tree of `tasks` at `now`, for a team whose config sets `notPickedUpAfterHours` (teamrig's default when unset). */
-export function treeAt(tasks: readonly TaskRow[], now: number, notPickedUpAfterHours = NOT_PICKED_UP_HOURS): PaneTree {
-  return treeOf({ tasks, now, notPickedUpAfterHours })
+/** What a team whose config sets neither the hours nor a zone reads with, on a machine whose zone is UTC. */
+export const TEAM_SETTINGS: TeamSettings = { notPickedUpAfterHours: NOT_PICKED_UP_HOURS, timeZone: TimeZone.UTC.name }
+
+/** A team zone ahead of UTC, three hours on NOW (Israel's summer time, `IDT`): what a UTC clock cannot tell apart. */
+export const JERUSALEM = zoneNamed('Asia/Jerusalem')
+
+/**
+ * The tree of `tasks` at `now`, for a team whose config sets `notPickedUpAfterHours` (teamrig's default when unset)
+ * and the zone named `timeZone` (UTC unless given).
+ */
+export function treeAt(tasks: readonly TaskRow[], now: number, notPickedUpAfterHours = NOT_PICKED_UP_HOURS, timeZone = TimeZone.UTC.name): PaneTree {
+  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone })
+}
+
+/** The clock at `now` in `zone`, UTC unless given. */
+export function clockAt(now: number, zone: TimeZone = TimeZone.UTC): Clock {
+  return { now, zone }
 }
 
 export function iso(ms: number): string {
