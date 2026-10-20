@@ -11,6 +11,12 @@ export const GOLDEN_SESSION = '00000000-0000-4000-8000-000000000001'
 /** The variable golden-clock.ts reads in each CLI run of a capture: the instant, in ms, the run's clock is fixed at. */
 export const GOLDEN_CLOCK_VARIABLE = 'GOLDEN_CLOCK_MS'
 
+/**
+ * The demo team's zone, which the capture writes into its config: teamrig and the pane then print every time on its
+ * clock whatever the machine's, a time in its summer (the capture's October) and one in its winter (a 2030 wait).
+ */
+export const GOLDEN_TIME_ZONE = 'Asia/Jerusalem'
+
 /** The instant of a capture's first CLI run; each later run is a minute on, so every capture writes and prints the same. */
 export const GOLDEN_START = Date.UTC(2026, 9, 17, 11, 0)
 const RUN_STEP_MS = 60_000
