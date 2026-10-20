@@ -121,8 +121,9 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to
 `~/.claude/keybindings.json` (the context it belongs under is unverified).
 
-The banner, in the band above the prompt, names the task the session works on: its area's task in progress
-that took its status last, else its first open task in plan order after a dim `next`. It follows the register
+The banner, in the band above the prompt, leads with the session's name, then the task the session works on
+(`acme-po · ◐ T595  Current-task banner`): its area's task in progress that took its status last, else its
+first open task in plan order after a dim `next`. It follows the register
 as the list does, whether the pane is open, minimized or never drawn. A click opens that task's description,
 status, note, proof, priority and due under it; a second click closes it. A survey takes the band while it is
 up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
@@ -143,6 +144,12 @@ session.
 Above the prompt it shows at most 6 one-line rows, the last saying how many it left out, because that area is
 redrawn on every keystroke. The status bar takes only the rows past the 4 the list keeps. The side dock shows
 the whole list.
+
+Docked, a title line leads every view and page, so with panes open in several tabs a glance tells them apart:
+the session's name as teamrig messages it, bold (` (pinned)` after it for a pin), then dim its area when the
+name is not the area's id, and its team (`acme-pane · area pane · team acme`). With no area it reads
+`no session · team <name>`. It scrolls with the body, as the host keeps no pane row fixed; the band above the
+prompt keeps the name in view. Above the prompt and in the minimized strip the pane draws no title.
 
 ## The Tasks view
 
@@ -172,7 +179,7 @@ heading with its count; an empty section is left out:
 A heading's count is the status bar's count for its section, the tasks past a cap included.
 
 The header names the area only for a pin (`web (pinned) · 3 active · inbox 2 unread`); the session's own area
-goes unnamed, as its tab names the session. `inbox n unread` counts the lines in the area's inbox past its last
+goes unnamed, as the title line above names the session. `inbox n unread` counts the lines in the area's inbox past its last
 `teamrig inbox read`; it is missing when the area never ran one. In the dock a click on it opens the inbox as a
 file's page (see [A reference file's page](#a-reference-files-page)) at its first unread line, drawn bold, or at
 its newest line when none is unread. Reading it there marks nothing read: the pane never writes an inbox, so the
@@ -418,7 +425,7 @@ the page by its week (`Done 10-12`). Above the prompt no page shows, so there is
 
 ## The Changes view
 
-`[Tasks] [Changes Δ3]` leads the pane in every state. Changes lists the files changed in each git repo the
+`[Tasks] [Changes Δ3]` sits under the title line in every state, and is the whole minimized strip. Changes lists the files changed in each git repo the
 session works in: the repo of the session's folder and the repo of each file it or one of its agents writes
 (Edit, Write, NotebookEdit; a file a shell command changes adds no repo). Until one is found, the view says
 `No git repo yet` and why. A worktree is its own repo; once its folder is removed it leaves the view. Each repo has a header

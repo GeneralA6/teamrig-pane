@@ -12,7 +12,9 @@ every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick mov
 labels on. No model calls, so no tokens. Every time is on the team's clock and zone-marked
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
 session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
-to each team session's prompts and replies (Tasks, Changes and Log, below).
+to each team session's prompts and replies (Tasks, Changes and Log, below). Docked, its first line
+names the session, its area and its team (`acme-pane · area pane · team acme`), so panes open in several
+tabs tell apart at a glance.
 
 - **mine**: the session's area, under its status bar (Status bar, below) and a header counting its
   active tasks and unread inbox lines (`3 active · inbox 1 unread`; a pin names the area first,
@@ -188,8 +190,9 @@ every task again.
 
 ## The banner
 
-The band above the prompt names the task the session works on: its area's task in progress that took its
-status last (`◐ T595  Current-task banner outside the pane`), else its first open task in plan order after a
+The band above the prompt leads with the session's name, then the task the session works on: its area's task
+in progress that took its status last (`acme-po · ◐ T595  Current-task banner outside the pane`), else its
+first open task in plan order after a
 dim `next`, else a dim `nothing in progress or open`. It follows the register as the list does, cut at one
 line, whether the pane is open, minimized or never drawn; a session with no area gets no band from the pane. A
 click on it opens the task's description, status, note, proof, priority and due under its title; a second
@@ -251,8 +254,9 @@ or what is wrong.
 
 ## Tasks, Changes and Log
 
-The switch, `[Tasks] [Changes Δ3] [Log]`, leads the pane in every state: open, in a dock however narrow (its
-buttons wrap under each other rather than clip), above the prompt, and as the minimized strip. While
+The switch, `[Tasks] [Changes Δ3] [Log]`, shows in every state: open, in a dock however narrow (its
+buttons wrap under each other rather than clip) under the title line, above the prompt, and as the
+minimized strip. While
 the pane holds the keyboard, `t` presses Tasks, `d` Changes and `g` Log (`c` already closes the cards).
 
 Changes lists the files changed in the git repos the session works in: the repo of the session's folder,
@@ -296,8 +300,8 @@ moves.
 
 What the host draws and the mod can't change:
 
-- there is no fixed header: the body scrolls as one, so in a long list the switch scrolls up out of view
-  with the rows;
+- there is no fixed header: the body scrolls as one, so in a long list the title line and the switch
+  scroll up out of view with the rows (the band above the prompt keeps the session's name in view);
 - the tab strip, and so the title's `Δn`, shows only while more than one pane is open;
 - a mod can't show or focus the built-in Diff pane (`/diff`), so Changes is the plugin's own list of
   git's changes, and its own diff of each file under it.
