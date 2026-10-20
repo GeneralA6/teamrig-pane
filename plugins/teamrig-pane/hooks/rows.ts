@@ -194,7 +194,7 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   if (snap.area === null) return [single('no-area', [{ text: NO_AREA, dim: true }])]
   const tree = treeOf(snap)
   const view = areaView(snap.tasks, snap.area, tree)
-  // The session's own area goes unnamed, as its tab names the session; a pin names the area it shows.
+  // The session's own area goes unnamed, as the title above names the session (session-title.ts); a pin names the area it shows.
   const header: Span[] = snap.areaSource === 'pinned' ? [{ text: view.area, bold: true }, { text: ' (pinned) · ', dim: true }] : []
   const waiting = view.waiting.filter(task => task.owner === view.area).length
   const activeTotal = view.verifying.length + view.working.length + view.upNext.length + waiting

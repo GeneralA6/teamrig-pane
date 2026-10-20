@@ -675,10 +675,32 @@ test('/teamrig-pane <session> pins the session an id or a name names; a word nam
   expect(store.get(`pin:${S1}`)).toBe('api')
   expect(await pane.find({ text: /^api \(pinned\) · 1 active/ })).toBeDefined()
   expect(await pane.find({ text: /Ship the api/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: 'web-api (pinned) · area api · team web' })).toBeDefined()
+  expect(await bannerText(await mountBand($))).toMatch(/^web-api · next ○ T7 {2}Ship the api/)
 
   await run('lead')
   expect(store.get(`pin:${S1}`)).toBe('lead')
   expect(await pane.find({ text: /^lead \(pinned\) · 0 active/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: 'web-lead (pinned) · area lead · team web' })).toBeDefined()
+})
+
+test('a title line leads the docked tasks, Changes and Log views: the session, its area and its team; inline, none', async ($, on) => {
+  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write('/Homes/tester/.teamrig/teams/web/config.json', [JSON.stringify({ sessions: ['lead', 'api'] })])
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await $.command.run({ command: 'teamrig-pane', args: 'api', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+
+  for (const view of ['changes', 'log', 'tasks']) {
+    await pane.press({ key: view })
+    const first = childrenOf(keyedNode(await pane.drawn(), 'controls'))[0]
+    expect(typeOf(first)).toBe('Text')
+    expect(screenOf(first)).toEqual(['web-api (pinned) · area api · team web'])
+  }
+  // Above the prompt the band beside the pane names the session, so the pane spends no row of its few on it.
+  await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
+  expect(keyedNode(await pane.drawn(), 'title')).toBeNull()
 })
 
 test('the settings file in the kit home names the folders, ~/ under the home folder', async ($, on) => {
@@ -999,14 +1021,14 @@ test('the band above the prompt names the task up next, follows a status change,
   const press = keyedProps(await band.drawn(), BANNER_KEY)
   expect(press).toMatchObject({ plain: true })
   expect(press !== null && 'hotkey' in press).toBe(false)
-  expect(await banner()).toMatch(/^next ○ T1 {2}Ship the task pane/)
+  expect(await banner()).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
 
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, title: 'Ship the task pane' }),
     statusLine('T1', 'po', NOW, 'in-progress', 'halfway'),
   ])
   await clock.advance(3_000)
-  expect(await banner()).toMatch(/^◐ T1 {2}Ship the task pane/)
+  expect(await banner()).toMatch(/^po · ◐ T1 {2}Ship the task pane/)
   expect(await banner()).not.toMatch(/Note/)
 
   await band.press({ key: BANNER_KEY })
@@ -1021,13 +1043,16 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   await start(on, { paneSize: 'minimized' })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const band = await mountBand($)
-  expect(await bannerText(band)).toMatch(/^next ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log'])
+  // The strip is the switch alone: the title comes back with the pane.
+  expect(keyedNode(await pane.drawn(), 'title')).toBeNull()
   await pane.press({ key: 'tasks' })
+  expect(keyedNode(await pane.drawn(), 'title')).not.toBeNull()
   expect(buttonKeys(await pane.drawn())).not.toContain(BANNER_KEY)
-  expect(await bannerText(band)).toMatch(/^next ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
 })
 
 test('a survey takes the band: the plugin passes it to the engine, and draws the banner again once the survey is gone', async ($, on) => {
@@ -1040,7 +1065,7 @@ test('a survey takes the band: the plugin passes it to the engine, and draws the
   expect(passes).toEqual([true])
 
   await band.redraw(BAND_PROPS)
-  expect(await bannerText(band)).toMatch(/^next ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
   expect(await band.find({ text: ENGINE_BAND })).toBeUndefined()
   expect(passes).toEqual([true])
 })
@@ -1057,11 +1082,11 @@ test('the band draws nothing for a session with no area, then says its area has 
 
   disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
   await clock.advance(3_000)
-  expect(await bannerText(band)).toBe(NOTHING_CURRENT)
+  expect(await bannerText(band)).toBe(`po · ${NOTHING_CURRENT}`)
 
   disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' })])
   await clock.advance(3_000)
-  expect(await bannerText(band)).toMatch(/^next ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
 })
 
 test('the session registers /teamrig-pane alone: /teamrig stays free for the teamrig plugin', async ($, on) => {

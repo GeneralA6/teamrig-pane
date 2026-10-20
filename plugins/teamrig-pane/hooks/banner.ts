@@ -2,13 +2,14 @@
 // drawn in the band above the prompt (register.tsx), the one place outside the pane the engine gives a mod and one a
 // press reaches, so it shows whether the pane is open, minimized or never opened. Now: the area's own in-progress task
 // that took its status last. With none in progress, its next: the first open task in plan order (teamrig's list
-// order), after a dim `next`. With neither, a dim line says so. A press opens it to the card's facts the person reads
+// order), after a dim `next`. With neither, a dim line says so. It leads with the session's name (T824), the band's one
+// line that stays in view while the pane scrolls. A press opens it to the card's facts the person reads
 // first (what it is, where it stands, when it is due) and a second press closes it. Pure: one block of rows that
 // layout.ts wraps and register.tsx draws as one press.
 import type { Snapshot, TaskDetail, TaskRow } from '../types'
 import { cardRows, type CardField } from './card'
 import type { TaskTree } from './core/read/index'
-import { indentOf, titleRow, type Block, type Row, type Span } from './rows'
+import { SEPARATOR, indentOf, titleRow, type Block, type Row, type Span } from './rows'
 import { newestFirst } from './view'
 import { cells } from './width'
 
@@ -36,15 +37,18 @@ export function currentTask(snap: Snapshot, tree: TaskTree<TaskRow>): Current | 
 }
 
 /**
- * The banner's block: `◐ T12  title` (after `next` for a task not started) cut at one line, or with `isOpen` the title
- * whole and the card's facts under it at the edge. `tree` is the snapshot's (meta.ts treeOf), `area` the session's:
- * the band draws none for a session with no area.
+ * The banner's block: `acme-tr-pane · ◐ T12  title` (`next` before a task not started) cut at one line, or with
+ * `isOpen` the title whole and the card's facts under it at the edge. It leads with `name` (session-title.ts
+ * sessionName), so the band says whose session it is while the pane's body scrolls. `tree` is the snapshot's (meta.ts
+ * treeOf), `area` the session's: the band draws none for a session with no area.
  */
-export function bannerBlock(current: Current | null, isOpen: boolean, tree: TaskTree<TaskRow>, area: string): Block {
-  if (current === null) return { key: BANNER_KEY, rows: [{ key: BANNER_KEY, spans: [{ text: NOTHING_CURRENT, dim: true }] }] }
+export function bannerBlock(current: Current | null, isOpen: boolean, tree: TaskTree<TaskRow>, area: string, name: string): Block {
+  const lead: Span[] = [{ text: name, bold: true }, SEPARATOR]
+  if (current === null) return { key: BANNER_KEY, rows: [{ key: BANNER_KEY, spans: [...lead, { text: NOTHING_CURRENT, dim: true }] }] }
   const { task } = current
   const title = titleRow(BANNER_KEY, task, isOpen ? undefined : 1)
-  const head: Row =
-    current.kind === 'now' ? title : { ...title, spans: [NEXT, ...title.spans], hang: { text: ' '.repeat(cells(NEXT.text) + cells(indentOf(task).text)) } }
+  const before = current.kind === 'now' ? lead : [...lead, NEXT]
+  const hang = cells(before.map(span => span.text).join('')) + cells(indentOf(task).text)
+  const head: Row = { ...title, spans: [...before, ...title.spans], hang: { text: ' '.repeat(hang) } }
   return { key: BANNER_KEY, rows: isOpen ? [head, ...cardRows(BANNER_KEY, task, UNREAD, tree, area, null, BANNER_FACTS)] : [head] }
 }

@@ -12,13 +12,13 @@
 // page, Enter the top one's, back returning to the results; emptying the field or clear closes it. A line under the
 // field says where the keys go (find-field.ts). The close mark (✕, ctrl+x x) minimizes it to a one-row strip
 // instead of closing it; a press on the strip or /teamrig-pane opens it again, and the size is kept for the next
-// session (size.ts). A switch row, first in every
-// state and width, the strip included, flips the body between the tasks, the Changes view (the
+// session (size.ts). A title line leads every docked view: the session's name, area and team (session-title.ts). A switch
+// row, under it in every state and width and the whole strip, flips the body between the tasks, the Changes view (the
 // files changed in the git repos the session works in and their lines, changes.ts, counted as Δn on
 // the switch and in the tab title) and the Log view: each team session's prompts and replies of the hours teamrig
 // keeps them (the team config's turnLog.keepHours) from the turn logs it writes (turn-log.ts), a press on a session
-// opening its page at its newest lines, back (b) returning to the list. The band above the prompt shows the task the
-// session works on now
+// opening its page at its newest lines, back (b) returning to the list. The band above the prompt shows the session's
+// name and the task it works on now
 // (banner.ts), a press opening its card, whether the pane is open, minimized or never drawn. Reads
 // files and runs git (status, diff, grep; no model calls); /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
@@ -54,6 +54,7 @@ import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type Regi
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { windowed, type Slot } from './window'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
+import { sessionName, titleSpans } from './session-title'
 import { NOTHING_EXPANDED, paneBlocks, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
@@ -823,7 +824,7 @@ export const register: Register = on => {
     }
     const drawSlot = (slot: Slot) => (slot.kind === 'drawn' ? drawBlock(slot.drawn) : <Box key={slot.key} height={slot.rows} />)
 
-    // The switch: first in every state, so another view is always one press (or t / d / g) away, its
+    // The switch: under the title in every state, so another view is always one press (or t / d / g) away, its
     // buttons wrapping under each other in a dock too narrow for both. Minimized, it is the whole
     // pane, one row, and a press on either button opens the pane in full on that view.
     // The Tasks button shows the list, from a page too, scrolled back to where the page was opened from; the Log
@@ -935,9 +936,16 @@ export const register: Register = on => {
     // engine keeps the focus ring at an index among the pane's elements, so one shown or hidden before the field would
     // move the ring off it as the person types (the first key opens a search, which hides collapse), and the next keys
     // would press the pane's hotkeys or reach the prompt.
+    // The session's title (session-title.ts) leads every docked view on one line cut at the pane's width; a Text, so it
+    // holds no place in the focus ring. It scrolls with the body, as the engine keeps no pane row fixed: the band above
+    // the prompt names the session too, and stays in view. Inline the pane draws none, as it sits by that band, in rows
+    // INLINE_MAX_ROWS caps and the engine redraws on every keystroke.
+    const sessionTitle = inline ? null : titleSpans(snap)
+    const titleRow = sessionTitle === null ? null : drawText(sessionTitle, 'truncate-end', 'title')
     const controls =
       current === 'tasks' ? (
         <Box key="controls" flexDirection="column">
+          {titleRow}
           {switchRow}
           {findRow}
           {keysLine}
@@ -946,7 +954,10 @@ export const register: Register = on => {
           </Box>
         </Box>
       ) : (
-        switchRow
+        <Box key="controls" flexDirection="column">
+          {titleRow}
+          {switchRow}
+        </Box>
       )
     // The status bar leads the tasks: its segments in one row as wide as the body, its counts under it.
     // A press on a segment or a count (or the count's key) filters the list to that status, a second
@@ -1082,7 +1093,8 @@ export const register: Register = on => {
     const { Box, Button, Text, Link } = $.ui.resolve(e)
     const tree = treeOf(snap)
     const isOpen = await read($, bannerOpen)
-    const [banner] = dockLayout([bannerBlock(currentTask(snap, tree), isOpen, tree, snap.area)], e.props.bodyColumns, bannerWraps)
+    const name = sessionName(snap.area, snap.areaName)
+    const [banner] = dockLayout([bannerBlock(currentTask(snap, tree), isOpen, tree, snap.area, name)], e.props.bodyColumns, bannerWraps)
     if (banner === undefined) return next(e)
     return (
       <Box>
