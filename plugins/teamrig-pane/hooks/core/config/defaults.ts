@@ -1,8 +1,12 @@
 // Copied from teamrig's src/config/defaults.ts by scripts/sync-core.ts: change it there, then run the sync.
 import type {
   AlertsConfig,
+  ClaimsConfig,
+  CoordinatorWaitConfig,
+  HeavyConfig,
   BudgetConfig,
   BurstConfig,
+  CommitGuardConfig,
   CommitsConfig,
   ContextFilesConfig,
   GithubConfig,
@@ -12,12 +16,19 @@ import type {
   LeadBoundaryConfig,
   LoopsConfig,
   OpenConfig,
+  PackageGuardConfig,
+  PromptsConfig,
   PushGuardConfig,
+  ReadonlyShellConfig,
   RefreshConfig,
   RegisterConfig,
+  ScaleOutConfig,
   SkillsConfig,
+  StatusLineConfig,
   TestsConfig,
+  TurnLogConfig,
   WakeConfig,
+  WindowsConfig,
 } from './types.ts';
 
 /** Defaults for every key except the roster (`sessions`, `roles.lead`), which each team supplies. */
@@ -53,11 +64,24 @@ export const DEFAULT_REGISTER: RegisterConfig = {
   requireEvidenceOnDone: true,
   requireSkillOnDone: true,
   requireNoteOn: ['waiting', 'verifying', 'done', 'dropped'],
+  requireFollowupsOn: ['verifying', 'done'],
   autoArchive: true,
   requireProofOnVerifying: true,
+  requireDecisionCard: true,
   verifyGate: 'refuse',
   maxVerifying: 5,
-  check: { staleAfterHours: 72, notPickedUpAfterHours: 24, prioritySkipAfterHours: 24, weekLengthDays: 7, stopgapFiles: ['CLAUDE.md', '.claude/rules'] },
+  /**
+   * maxSelfMadePerDay, measured on a working team (10-15 to 10-18): on a day a session added tasks for itself, it added
+   * 3 at the median and 9 at the 90th percentile; the two days past 10 (36 and 19) were the run that raised the question.
+   */
+  check: {
+    staleAfterHours: 72,
+    notPickedUpAfterHours: 24,
+    prioritySkipAfterHours: 24,
+    maxSelfMadePerDay: 10,
+    weekLengthDays: 7,
+    stopgapFiles: ['CLAUDE.md', '.claude/rules'],
+  },
 };
 
 export const DEFAULT_SKILLS: SkillsConfig = {
@@ -74,6 +98,17 @@ export const DEFAULT_CONTEXT_FILES: ContextFilesConfig = { maxClaudeMdChars: 12_
 export const DEFAULT_LOCK: LockConfig = { ttlMs: 30_000, pollMs: 50, waitMs: 20_000 };
 
 export const DEFAULT_PUSH_GUARD: PushGuardConfig = { protectedBranches: ['main', 'master'], pushToProtected: 'ask' };
+
+/** Refused by default: a helper's `npx eslint` once fetched and ran an unvetted package (T450, 10-16). */
+export const DEFAULT_PACKAGE_GUARD: PackageGuardConfig = { adHocRunners: 'deny' };
+
+/** Refused by default: the hooks are the repository's own checks, and a session that skips them ships what they would catch. */
+export const DEFAULT_COMMIT_GUARD: CommitGuardConfig = { skipHooks: 'deny' };
+
+export const DEFAULT_PROMPTS: PromptsConfig = { hookAsks: 'ask' };
+
+/** Off, and trusting no prefix, until a team opts in. */
+export const DEFAULT_READONLY_SHELL: ReadonlyShellConfig = { enabled: false, allowPrefixes: [] };
 
 /** Tests: a test folder, `*.test.*` and `*.spec.*` files, and pytest's `test_*.py`. `warn` only adds to a push the guard already asks about. */
 export const DEFAULT_COMMITS: CommitsConfig = {
@@ -111,12 +146,15 @@ export const DEFAULT_ALERTS: AlertsConfig = { persistentFailureHours: 24 };
 
 export const DEFAULT_LOOPS: LoopsConfig = { chainNudgeAt: 6 };
 export const DEFAULT_LEAD_BOUNDARY: LeadBoundaryConfig = { enabled: true, ownPaths: [], searchNudgeAt: 3 };
+/** On, for a day: what a tab showed stays readable through a night of refreshes. */
+export const DEFAULT_TURN_LOG: TurnLogConfig = { enabled: true, keepHours: 24 };
 
 /**
  * On, for p1 only. In one team of 12 sessions, others handed a session 3 to 6 p1 tasks a day once its register
  * settled, so even all of them waking a session cold (about 210k W each) costs about 1.3M W a day, under 0.2% of
  * a 900M W week. Two minutes gathers the tasks handed in one sitting into one wake, and 15 minutes between wakes
- * caps a session at 4 an hour however much is handed.
+ * caps a session at 4 an hour however much is handed. No day start: waking every session each morning costs up to
+ * 210k W each, so a team opts in with `wake.dayStartUtc`.
  */
 export const DEFAULT_WAKE: WakeConfig = { enabled: true, priority: 1, batchSeconds: 120, minGapMinutes: 15 };
 
@@ -148,11 +186,33 @@ export const DEFAULT_REFRESH: RefreshConfig = {
 
 export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto' };
 
+/** The status line shows the session's folder, its branch and the command that resumes it, unless the team turns them off. */
+export const DEFAULT_STATUS_LINE: StatusLineConfig = { folder: true, branch: true, resume: true };
+
 /**
- * A hire spends the week's budget, so it waits for the owner's yes: at most two hires at 1% of the week a day
- * each, 3% in all, reviewed after a week and due to retire after 4 hours with no open task. A rehire resumes its
- * last Claude Code session only when it holds at most 250k tokens of context and was idle at most a week.
+ * A host lock outlives the longest heavy step it may hold by this many minutes, so the step is killed
+ * before its lock runs out and no second step starts beside it.
  */
+export const HEAVY_TTL_MARGIN_MINUTES = 10;
+
+/**
+ * A host lock lasts 150 minutes and a heavy step at most 45 of them; a step waits up to an hour for the lock, and its
+ * memory is sampled every 15 seconds while it runs.
+ */
+export const DEFAULT_HEAVY: HeavyConfig = { lockTtlMinutes: 150, maxRunMinutes: 45, waitMinutes: 60, memorySampleSeconds: 15, memoryFloorMb: 4096, smallReserveMb: 2048 };
+
+/** A waiting coordinator step looks again every 30 seconds; a deploy step waits up to an hour for claims and the host lock. */
+export const DEFAULT_COORDINATOR_WAIT: CoordinatorWaitConfig = { pollSeconds: 30, maxMinutes: 60 };
+
+/** A roll's gate answers within 20 seconds, else the roll waits. */
+export const DEFAULT_GATE_TIMEOUT_SECONDS = 20;
+
+/** A quiet claim lasts at most two hours. */
+export const DEFAULT_CLAIMS: ClaimsConfig = { maxMinutes: 120 };
+
+/** A target measures cleanly 30 minutes after a deploy; a deploy the ledger knows only by its ledger.md line rolled for 20 minutes; a window under 15 minutes is left out. */
+export const DEFAULT_WINDOWS: WindowsConfig = { settleMinutes: 30, targetSettleMinutes: {}, assumedRollMinutes: 20, minMinutes: 15 };
+
 /**
  * A burst spends more of the week, so the owner approves each one. A surplus burst may start from 48 hours before
  * the reset once at least 5% of the week is projected unused; each burst session runs at most 3 helpers at once,
@@ -160,7 +220,27 @@ export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto' };
  */
 export const DEFAULT_BURST: BurstConfig = { policy: 'owner', surplusHours: 48, minSparePct: 5, maxHelpers: 3, maxHires: 2 };
 
-export const DEFAULT_HIRING: HiringConfig = { policy: 'owner', maxSessions: 2, dailyPct: 1, maxDailyPct: 3, idleHours: 4, reviewDays: 7, resumeMaxTokens: 250_000, resumeMaxIdleDays: 7 };
+/**
+ * An area's pace is the tasks it finished over the last week, counted once it finished at least 3; the dated
+ * tasks of the top two priorities are the work it must finish in time.
+ */
+export const DEFAULT_SCALE_OUT: ScaleOutConfig = { windowDays: 7, minDone: 3, topPriorities: 2 };
+
+/**
+ * A hire spends the week's budget, so it waits for the owner's yes: at most two hires at once, each spending its
+ * part of the team's daily budget, reviewed after a week and due to retire after 4 hours with no open task. A
+ * rehire resumes its last Claude Code session only when it holds at most 250k tokens of context and was idle at
+ * most a week.
+ */
+export const DEFAULT_HIRING: HiringConfig = {
+  policy: 'owner',
+  maxSessions: 2,
+  idleHours: 4,
+  reviewDays: 7,
+  resumeMaxTokens: 250_000,
+  resumeMaxIdleDays: 7,
+  scaleOut: DEFAULT_SCALE_OUT,
+};
 
 /**
  * The lead's model and effort for each key its `launch` entry leaves unset: Opus (Claude Code's `opus`

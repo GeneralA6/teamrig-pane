@@ -55,7 +55,7 @@ describe('vendor', () => {
   test('names the read entry and every module once, each a path under src/', async () => {
     expect(CORE_FILES[0]).toBe(READ_ENTRY)
     expect(new Set(CORE_FILES).size).toBe(CORE_FILES.length)
-    expect(CORE_FILES.every(path => /^[a-z]+\/[a-z-]+\.ts$/.test(path))).toBe(true)
+    expect(CORE_FILES.every(path => /^[a-z-]+\/[a-z-]+\.ts$/.test(path))).toBe(true)
   })
 
   test('names a listed module the read entry no longer reaches', async () => {

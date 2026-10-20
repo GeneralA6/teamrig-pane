@@ -84,6 +84,11 @@ export class ConfigReader {
     return this.checkedNumber(value, itemPath, bounds, false);
   }
 
+  /** One whole-number item within `bounds`, for use inside list or map callbacks. */
+  integerItem(value: unknown, itemPath: string, bounds: NumberBounds = {}): number | undefined {
+    return this.checkedNumber(value, itemPath, bounds, true);
+  }
+
   boolean(parent: JsonRecord, key: string, path: string, fallback: boolean): boolean {
     const value = parent[key];
     if (value === undefined) {
@@ -150,6 +155,17 @@ export class ConfigReader {
     return this.checked(itemPath, value, check);
   }
 
+  /** One list of strings, such as a program and its arguments, for use inside `list` callbacks; an empty list is an issue. */
+  stringListItem(value: unknown, itemPath: string, maxItems: number): readonly string[] | undefined {
+    if (!Array.isArray(value) || value.length === 0 || value.length > maxItems) {
+      this.problem(itemPath, `a list of 1 to ${maxItems} strings`, value);
+      return undefined;
+    }
+    const items = value.map((entry: unknown, index) => this.stringItem(entry, `${itemPath}[${index}]`));
+    const strings = items.filter((item): item is string => item !== undefined);
+    return strings.length === items.length ? strings : undefined;
+  }
+
   /** One object list item, for use inside `list` callbacks. */
   objectItem(value: unknown, itemPath: string): JsonRecord | undefined {
     if (!isRecord(value)) {
@@ -162,6 +178,13 @@ export class ConfigReader {
   /** Records a rule that spans several fields, such as "the lead must be one of the sessions". */
   report(path: string, message: string): void {
     this.issues.push({ path, message });
+  }
+
+  /** A key this config format no longer reads: flagged, so a hand-written one is not silently ignored. */
+  dropped(parent: JsonRecord, key: string, path: string, why: string): void {
+    if (parent[key] !== undefined) {
+      this.report(join(path, key), `is no longer read: ${why}; delete it`);
+    }
   }
 
   /** The value, or undefined when it is missing or invalid (an invalid one is recorded as an issue). */

@@ -23,13 +23,17 @@ export const CORE_FILES: readonly string[] = [
   'config/roster.ts',
   'config/text.ts',
   'config/types.ts',
+  'coordinator/targets.ts',
   'core/guards.ts',
   'core/ids.ts',
   'core/jsonl.ts',
   'core/time.ts',
+  'core/zone.ts',
   'inbox/marks.ts',
   'inbox/unread.ts',
   'names/rename.ts',
+  'readonly-shell/rules.ts',
+  'register/card.ts',
   'register/events.ts',
   'register/fold.ts',
   'register/layout.ts',
@@ -41,6 +45,7 @@ export const CORE_FILES: readonly string[] = [
   'register/views.ts',
   'register/waits.ts',
   'rules/keys.ts',
+  'turn-log/entry.ts',
 ]
 
 /** Static imports and re-exports (`import x from '…'`, `export { y } from '…'`), across lines. */
