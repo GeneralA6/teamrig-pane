@@ -44,9 +44,10 @@ type DirKey = Exclude<SettingKey, 'goalsDoc'>
 
 /**
  * The session's team and where teamrig keeps it: its folder (which holds the team's notes, read for a card's
- * reference files), and the files that name its sessions, its config and its rename log; either may not be there.
+ * reference files), the files that name its sessions, its config and its rename log, and the folder of its sessions'
+ * turn logs (turn-log.ts); any may not be there.
  */
-export type TeamFiles = { team: string; dir: string; config: string; renames: string }
+export type TeamFiles = { team: string; dir: string; config: string; renames: string; turnLog: string }
 
 /**
  * The register's folders, the session's team's files (null when no team was found) and its settings (teamSettings:
@@ -199,7 +200,7 @@ async function teamFolders(
     value: {
       state,
       inbox: inTeamHome(paths.inbox) ?? `${state}/inbox`,
-      files: { team: team.value, dir: teamHome, config: configPath, renames: `${state}/renames.jsonl` },
+      files: { team: team.value, dir: teamHome, config: configPath, renames: `${state}/renames.jsonl`, turnLog: `${state}/turn-log` },
       settings: teamSettings(read?.config ?? null, input.machineZone),
     },
   }
