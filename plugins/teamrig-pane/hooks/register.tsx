@@ -1,7 +1,7 @@
 // teamrig-pane: docks this session's list from the task register (where it is: places.ts) on the right
 // of the fullscreen UI. `mine` shows the session's area: a status bar of its tasks (status-bar.ts),
 // then its tasks in sections (rows.ts): Verifying, Working on, Up next, Waiting (its waiting tasks, then
-// those asked of another session) and Done today (the UTC day, as the bar counts it), each task a row with a
+// those asked of another session) and Done today (the team zone's day, as the bar counts it), each task a row with a
 // dim meta line (meta.ts), and its unread inbox lines; `all` shows every owner's active tasks. A press on a task row opens its card in
 // place of the meta line (card.ts): its status and note, plan, the ask quoted where its refs still point, who
 // asked, the tasks planned first, its goals' roadmap items, evidence and links. A press on a task id in a card opens
@@ -35,6 +35,7 @@ import type {
   Snapshot,
   TaskDetail,
   TaskRow,
+  TeamSettings,
   ViewMode,
 } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
@@ -43,7 +44,7 @@ import { findPlaces, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails, type RefPlaces } from './details'
 import { RefFileReader } from './ref-file'
-import { DEFAULT_REGISTER } from './core/read/index'
+import { DEFAULT_REGISTER, TimeZone } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { windowed, type Slot } from './window'
@@ -80,6 +81,7 @@ import {
 import { weekSteps, weekOf } from './done'
 import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
+import { clockOf, machineZoneOf } from './zone'
 import { filePageBlocks, lineBlockKey } from './file-page'
 import { pageBlocks } from './page'
 import { searchTasks, topResult } from './search'
@@ -113,6 +115,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   unreadInbox: null,
   problem: null,
   notPickedUpAfterHours: DEFAULT_REGISTER.check.notPickedUpAfterHours,
+  timeZone: TimeZone.UTC.name,
   now: 0,
 }
 /**
@@ -121,7 +124,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
  * value reads as absent (the empty snapshot, until the reload's first poll). Bump it whenever the
  * Snapshot or TaskRow type in ../types changes shape.
  */
-const SNAPSHOT_SHAPE = 'register-v5'
+const SNAPSHOT_SHAPE = 'register-v6'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */
@@ -346,9 +349,10 @@ export const register: Register = on => {
       TEAMRIG_HOME: await $.env.get('TEAMRIG_HOME'),
       TEAMRIG_TEAM: await $.env.get('TEAMRIG_TEAM'),
     }
-    const places = await findPlaces({ env, files, home: home ?? null, cwd: e.cwd })
-    const registerAt: { paths: RegisterPaths; notPickedUpAfterHours: number } | { missing: string } = places.found
-      ? { paths: registerPaths(places.dirs), notPickedUpAfterHours: places.notPickedUpAfterHours }
+    const machineZone = machineZoneOf(await $.env.get('TZ'), Intl.DateTimeFormat().resolvedOptions().timeZone)
+    const places = await findPlaces({ env, files, home: home ?? null, cwd: e.cwd, machineZone })
+    const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } = places.found
+      ? { paths: registerPaths(places.dirs), settings: places.settings }
       : { missing: places.problem }
     team = places.found && places.team !== null ? { files, paths: places.team } : null
     const refPlaces: RefPlaces = {
@@ -361,7 +365,7 @@ export const register: Register = on => {
     details = new TaskDetails(files, refPlaces)
     refFiles = new RefFileReader(files, refPlaces)
     const started = new LiveRegister({
-      source: 'missing' in registerAt ? registerAt : new TaskRegisterSource(files, registerAt.paths, registerAt.notPickedUpAfterHours),
+      source: 'missing' in registerAt ? registerAt : new TaskRegisterSource(files, registerAt.paths, registerAt.settings),
       sessionId: () => $.session.id(),
       now: () => $.clock.now(),
       publish: async change => {
@@ -774,7 +778,7 @@ export const register: Register = on => {
           label="archive"
           hotkey="h"
           variant={place.kind === 'done' ? 'primary' : 'secondary'}
-          onPress={() => void go($, current => doneAt(current, weekOf(snap.now)))}
+          onPress={() => void go($, current => doneAt(current, weekOf(snap.now, clockOf(snap).zone)))}
         />,
       )
     // A page shows no list, so no card in it to collapse.
@@ -903,7 +907,7 @@ export const register: Register = on => {
     // The Archive page's week between its steps to the week before and after (p, l), each dim where the pane holds no
     // older or newer week. A step changes the page's week in place, so back returns to where the page was opened from.
     const stepTo = (week: string) => () => void go($, current => doneAt(current, week))
-    const steps = place.kind === 'done' ? weekSteps(place.week, snap.now) : null
+    const steps = place.kind === 'done' ? weekSteps(place.week, clockOf(snap)) : null
     const weekRow =
       steps === null ? null : (
         <Box key="week-steps" flexDirection="row" flexWrap="wrap" columnGap={2}>

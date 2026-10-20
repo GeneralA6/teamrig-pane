@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { findPlaces, foldersUp, type Places, type PlacesEnv, type PlacesInput, type TeamFiles } from '../hooks/places'
-import { NOT_PICKED_UP_HOURS } from './fixtures'
+import { TEAM_SETTINGS } from './fixtures'
 
 const KIT = 'C:/Homes/a/.teamrig'
 const SETTINGS = `${KIT}/pane.json`
@@ -18,7 +18,7 @@ const TEAM_FOUND: Places = {
   found: true,
   dirs: { tasksDir: STATE, inboxDir: `${STATE}/inbox` },
   team: WEB_FILES,
-  notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+  settings: TEAM_SETTINGS,
   goalsDoc: null,
 }
 
@@ -41,9 +41,13 @@ function fakeFiles(files: Readonly<Record<string, string>>, locked: readonly str
   return { port, reads }
 }
 
-type Options = { home?: string | null; cwd?: string | null; locked?: readonly string[] }
+/** `machineZone`: the zone the machine runs in, UTC unless given. */
+type Options = { home?: string | null; cwd?: string | null; locked?: readonly string[]; machineZone?: string }
 
-/** Finds the places over `env` and `files`, from home C:/Homes/a and the folder C:/w/app/src unless `options` say otherwise. */
+/**
+ * Finds the places over `env` and `files`, from home C:/Homes/a and the folder C:/w/app/src on a UTC machine unless
+ * `options` say otherwise.
+ */
 async function places(env: PlacesEnv, files: Readonly<Record<string, string>> = {}, options: Options = {}) {
   const fake = fakeFiles(files, options.locked ?? [])
   const found = await findPlaces({
@@ -51,6 +55,7 @@ async function places(env: PlacesEnv, files: Readonly<Record<string, string>> = 
     files: fake.port,
     home: options.home === undefined ? 'C:\\Homes\\a\\' : options.home,
     cwd: options.cwd === undefined ? 'C:\\w\\app\\src' : options.cwd,
+    machineZone: options.machineZone ?? 'UTC',
   })
   return { found, reads: fake.reads }
 }
@@ -73,7 +78,7 @@ describe('places', () => {
       found: true,
       dirs: { tasksDir: 'D:/team/tasks', inboxDir: 'C:/Homes/a/inbox' },
       team: null,
-      notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+      settings: TEAM_SETTINGS,
       goalsDoc: 'docs/GOALS.md',
     })
     expect(reads).toEqual([])
@@ -85,7 +90,7 @@ describe('places', () => {
       found: true,
       dirs: { tasksDir: 'C:/Homes/a/team/tasks', inboxDir: 'C:/Homes/a/team/inbox' },
       team: null,
-      notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+      settings: TEAM_SETTINGS,
       goalsDoc: 'docs/R.md',
     })
     const env = { TEAMRIG_PANE_TASKS_DIR: 'D:/t', TEAMRIG_PANE_GOALS_DOC: 'docs/G.md' }
@@ -93,14 +98,14 @@ describe('places', () => {
       found: true,
       dirs: { tasksDir: 'D:/t', inboxDir: 'C:/Homes/a/team/inbox' },
       team: null,
-      notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+      settings: TEAM_SETTINGS,
       goalsDoc: 'docs/G.md',
     })
   })
 
   test('$TEAMRIG_HOME moves the kit home, and with it the default settings file', async () => {
     const { found } = await places({ TEAMRIG_HOME: ' D:\\kit ' }, { 'D:/kit/pane.json': json(ALL_DIRS) })
-    expect(found).toEqual({ found: true, dirs: ALL_DIRS, team: null, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, goalsDoc: null })
+    expect(found).toEqual({ found: true, dirs: ALL_DIRS, team: null, settings: TEAM_SETTINGS, goalsDoc: null })
   })
 
   test('$TEAMRIG_PANE_SETTINGS names another settings file, which must then be there', async () => {
@@ -109,7 +114,7 @@ describe('places', () => {
       found: true,
       dirs: ALL_DIRS,
       team: null,
-      notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+      settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
     expect((await places(env, { [SETTINGS]: json(ALL_DIRS) })).found).toEqual({
@@ -160,7 +165,7 @@ describe('places', () => {
       found: true,
       dirs: { tasksDir: `${KIT}/teams/ops/state`, inboxDir: `${KIT}/teams/ops/state/inbox` },
       team: { team: 'ops', dir: `${KIT}/teams/ops`, config: `${KIT}/teams/ops/config.json`, renames: `${KIT}/teams/ops/state/renames.jsonl` },
-      notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+      settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
     expect(reads).toEqual([])
@@ -172,7 +177,7 @@ describe('places', () => {
       found: true,
       dirs: { tasksDir: `${KIT}/teams/web/data`, inboxDir: 'D:/inbox' },
       team: { ...WEB_FILES, renames: `${KIT}/teams/web/data/renames.jsonl` },
-      notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+      settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
     const stateOnly = await places({}, { [POINTER]: json({ team: 'web' }), [CONFIG]: json({ paths: { state: '/srv/state' } }) })
@@ -180,7 +185,7 @@ describe('places', () => {
       found: true,
       dirs: { tasksDir: '/srv/state', inboxDir: '/srv/state/inbox' },
       team: { ...WEB_FILES, renames: '/srv/state/renames.jsonl' },
-      notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+      settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
   })
@@ -197,15 +202,32 @@ describe('places', () => {
     ]
     for (const [files, options, team] of cases) {
       const found = (await places(ALL_DIRS_ENV, files, options)).found
-      expect(found).toEqual({ found: true, dirs: ALL_DIRS, team, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, goalsDoc: null })
+      expect(found).toEqual({ found: true, dirs: ALL_DIRS, team, settings: TEAM_SETTINGS, goalsDoc: null })
     }
   })
 
   test("the team config's register.check.notPickedUpAfterHours is when a task reads NOT PICKED UP, folders named or not", async () => {
     const files = { [POINTER]: json({ team: 'web' }), [CONFIG]: json({ register: { check: { notPickedUpAfterHours: 48 } } }) }
-    expect((await places({}, files)).found).toEqual({ ...TEAM_FOUND, notPickedUpAfterHours: 48 })
+    const settings = { ...TEAM_SETTINGS, notPickedUpAfterHours: 48 }
+    expect((await places({}, files)).found).toEqual({ ...TEAM_FOUND, settings })
     const named = (await places(ALL_DIRS_ENV, files)).found
-    expect(named).toEqual({ found: true, dirs: ALL_DIRS, team: WEB_FILES, notPickedUpAfterHours: 48, goalsDoc: null })
+    expect(named).toEqual({ found: true, dirs: ALL_DIRS, team: WEB_FILES, settings, goalsDoc: null })
+  })
+
+  test("the team config's timeZone is the team's zone, folders named or not; with none set, the machine's", async () => {
+    const machine = { machineZone: 'Europe/Berlin' }
+    const zoned = { [POINTER]: json({ team: 'web' }), [CONFIG]: json({ timeZone: 'Asia/Jerusalem' }) }
+    const jerusalem = { ...TEAM_SETTINGS, timeZone: 'Asia/Jerusalem' }
+    expect((await places({}, zoned, machine)).found).toEqual({ ...TEAM_FOUND, settings: jerusalem })
+    expect((await places(ALL_DIRS_ENV, zoned, machine)).found).toEqual({ found: true, dirs: ALL_DIRS, team: WEB_FILES, settings: jerusalem, goalsDoc: null })
+    const berlin = { ...TEAM_SETTINGS, timeZone: 'Europe/Berlin' }
+    expect((await places({}, { [POINTER]: json({ team: 'web' }) }, machine)).found).toEqual({ ...TEAM_FOUND, settings: berlin })
+    expect((await places(ALL_DIRS_ENV, {}, machine)).found).toEqual({ found: true, dirs: ALL_DIRS, team: null, settings: berlin, goalsDoc: null })
+  })
+
+  test('a machine zone the system does not know reads as UTC, as teamrig resolves it', async () => {
+    const found = (await places(ALL_DIRS_ENV, {}, { machineZone: 'Not/A_Zone' })).found
+    expect(found).toEqual({ found: true, dirs: ALL_DIRS, team: null, settings: TEAM_SETTINGS, goalsDoc: null })
   })
 
   test('a team config teamrig cannot read is the problem, naming the file, where in it and what is wrong', async () => {
@@ -228,7 +250,7 @@ describe('places', () => {
 
   test('a variable or setting still wins over the team default, folder by folder', async () => {
     const { found } = await places({ TEAMRIG_PANE_INBOX_DIR: 'D:/i' }, { [POINTER]: json({ team: 'web' }), [SETTINGS]: json({ inboxDir: 'E:/i' }) })
-    expect(found).toEqual({ found: true, dirs: { tasksDir: STATE, inboxDir: 'D:/i' }, team: WEB_FILES, notPickedUpAfterHours: NOT_PICKED_UP_HOURS, goalsDoc: null })
+    expect(found).toEqual({ found: true, dirs: { tasksDir: STATE, inboxDir: 'D:/i' }, team: WEB_FILES, settings: TEAM_SETTINGS, goalsDoc: null })
   })
 
   test('a broken pointer or team id is the problem, naming where it was found', async () => {

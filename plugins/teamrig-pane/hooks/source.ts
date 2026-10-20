@@ -3,7 +3,7 @@
 // and the register put together by teamrig's own read entry (hooks/core/read), so the pane shows what
 // teamrig's commands show, on a register never rotated and on a rotated one alike.
 // File access goes through `Files`, which register.tsx backs with $.fs and tests with a fake.
-import type { AreaSource, Snapshot, TaskRow } from '../types'
+import type { AreaSource, Snapshot, TaskRow, TeamSettings } from '../types'
 import {
   assemble,
   indexMarks,
@@ -220,12 +220,13 @@ export class TaskRegisterSource {
   private lastArea: string | null = null
   private readonly files: Files
   private readonly paths: RegisterPaths
-  private readonly notPickedUpAfterHours: number
+  /** The team config's settings each snapshot carries (places.ts teamSettings), read once when the session starts. */
+  private readonly settings: TeamSettings
 
-  constructor(files: Files, paths: RegisterPaths, notPickedUpAfterHours: number) {
+  constructor(files: Files, paths: RegisterPaths, settings: TeamSettings) {
     this.files = files
     this.paths = paths
-    this.notPickedUpAfterHours = notPickedUpAfterHours
+    this.settings = settings
     this.register = new LayoutRegister(files, paths.events)
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
   }
@@ -258,7 +259,7 @@ export class TaskRegisterSource {
       areaSource,
       unreadInbox: area !== null && this.inbox && mark !== undefined ? unreadOf(area, this.inbox.current, mark, lineHash).lines.length : null,
       problem: skippedText(this.paths, this.register.current, this.marks.current),
-      notPickedUpAfterHours: this.notPickedUpAfterHours,
+      ...this.settings,
       now,
     }
   }

@@ -81,9 +81,17 @@ export type Snapshot = {
    * `register.check.notPickedUpAfterHours`, as teamrig's `register check` reads it.
    */
   notPickedUpAfterHours: number
+  /**
+   * The IANA name of the team's zone (`Asia/Jerusalem`): the team config's `timeZone`, else the machine's, as teamrig
+   * resolves it. Every time prints on its clock, and a stored bare day is a day of it (hooks/zone.ts).
+   */
+  timeZone: string
   /** When it was built, so due and age labels move on without a file change. */
   now: number
 }
+
+/** What the team config sets that the snapshot carries: the NOT PICKED UP hours and the team's zone. */
+export type TeamSettings = Pick<Snapshot, 'notPickedUpAfterHours' | 'timeZone'>
 
 /** Lines quoted for a task (hooks/details.ts) from one part of its ref; `ref` names that part. */
 export type RefQuote = { ref: string; lines: string[] }
