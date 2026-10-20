@@ -20,7 +20,7 @@ import { cells } from './width'
  * `task` the text is that task's id in an open card (ids.ts), which a press on opens as a page; never split either.
  * With `file` the text names a file a card's Reference row lists (ref-file.ts), which a press on opens as a page too
  * (file-page.ts); never split. With `inbox` the text is the header's unread count, which a press on opens that area's
- * inbox as a file's page; never split. `underline` marks the words a search matched (search-rows.ts).
+ * inbox as a file's page; never split. `underline` marks the words a search matched (search-view.ts).
  */
 export type Span = {
   text: string
