@@ -17,10 +17,10 @@ const NOTE = `${KEY}:note`
 const TAB = '  '
 
 /** A run of lines with no blank line, from line `first` (1 is the file's first). */
-type Paragraph = { first: number; lines: string[] }
+export type Paragraph = { first: number; lines: string[] }
 
-/** `text`'s paragraphs: its lines as drawn (tabs as TAB, no trailing spaces) between blank lines, none over BLOCK_LINES. */
-function paragraphs(text: string): Paragraph[] {
+/** `text`'s paragraphs: its lines as drawn (tabs as TAB, no trailing spaces) between blank lines, none over BLOCK_LINES; a Log page's entries split the same (log-rows.ts). */
+export function paragraphs(text: string): Paragraph[] {
   const found: Paragraph[] = []
   let open: Paragraph | null = null
   for (const [i, raw] of text.split(/\r?\n/).entries()) {
