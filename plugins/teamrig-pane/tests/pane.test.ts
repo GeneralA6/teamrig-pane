@@ -1708,10 +1708,11 @@ test("a reference file's line: its page lands on the paragraph that holds it, th
 
 test("the header's inbox count opens the inbox as a page, landing on its first unread line, bold; reading it marks nothing read", async ($, on) => {
   const { clock, disk } = await start(on)
-  // The fixture's three items, a blank line after the one read: the two unread start on line 3.
+  // The fixture's three items, a blank line after the one read: the two unread start on line 3. Wide, so the page's head keeps
+  // the inbox's path and its line on one line.
   disk.write(INBOX, ['line one', '', 'line two', 'line three'])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   let drawn = await pane.drawn()
   const presses = buttonKeys(drawn).filter(key => key.startsWith('goto:inbox:'))
   expect(presses).toHaveLength(1)
