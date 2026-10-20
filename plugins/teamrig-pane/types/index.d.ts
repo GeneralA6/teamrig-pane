@@ -268,11 +268,11 @@ export type Nav = { readonly places: readonly Place[]; readonly at: number }
  */
 export type FindField = { readonly round: number; readonly text: string }
 
-/**
- * How many times the pane's focus ring landed on an element (the engine's ui.focus event, hooks/find-field.ts), and
- * whether the last landing was on the Find field.
- */
-export type RingLandings = { readonly count: number; readonly onField: boolean }
+/** What the focus ring last landed on (hooks/find-field.ts): the Find field, a result of the Tasks search, or any other element. */
+export type RingStop = 'field' | 'result' | 'other'
+
+/** How many times the pane's focus ring landed on an element (the engine's ui.focus event, hooks/find-field.ts), and what the last landing was on. */
+export type RingLandings = { readonly count: number; readonly on: RingStop }
 
 /** What each page a place names read for its task when it opened (hooks/details.ts), by task id. */
 export type PageDetails = { readonly [id: string]: TaskDetail }
@@ -288,7 +288,7 @@ export type BarStatus = 'done-today' | 'verifying' | 'working' | 'waiting' | 'no
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs and the Log view's list and page are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page and the focus ring's landings are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -313,7 +313,7 @@ declare module 'claude-code' {
       /** The Find field's round and the text it holds as drawn (hooks/find-field.ts). */
       findField: FindField
       /** The focus ring's landings in the pane (hooks/find-field.ts): the line under the Find field reads them. */
-      ring: RingLandings
+      ring: Shaped<RingLandings>
       /** The key of the pane element the focus ring last landed on, null for none: a windowed body (hooks/window.ts) always draws it. */
       held: string | null
       /** Whether the banner (hooks/banner.ts) in the band above the prompt shows its task's card; a press on it opens and closes it. */

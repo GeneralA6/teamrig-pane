@@ -8,9 +8,9 @@
 // that task's page (page.ts), the card with the body to itself, under back and forward (b, f) and a trail of the
 // last places (nav.ts), which the list keeps while a page lies ahead of it; a page opens at its top, and a return
 // to the list scrolls back to the card it left. `Find` (s) moves the keys into the Find field, which shows the tasks
-// the pane holds that its words match (search.ts), the matched words underlined, each result a press that opens its
-// page, Enter the top one's, back returning to the results; emptying the field or clear closes it. A line under the
-// field says where the keys go (find-field.ts). The close mark (✕, ctrl+x x) minimizes it to a one-row strip
+// the pane holds that its words match (search.ts) under a count of them, the matched words underlined, each result a
+// press that opens its page, back returning to the results; Enter opens the one match, or moves the keys onto the
+// first of more; emptying the field or clear closes it. A line under the field says where the keys go (find-field.ts). The close mark (✕, ctrl+x x) minimizes it to a one-row strip
 // instead of closing it; a press on the strip or /teamrig-pane opens it again, and the size is kept for the next
 // session (size.ts). A title line leads every docked view: the session's name, area and team (session-title.ts). A switch
 // row, under it in every state and width and the whole strip, flips the body between the tasks, the Changes view (the
@@ -92,9 +92,10 @@ import { treeOf } from './meta'
 import { clockOf, machineZoneOf } from './zone'
 import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
 import { pageBlocks } from './page'
-import { searchTasks, topResult } from './task-search'
-import { searchBlocks } from './search-rows'
-import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldKey, keysAt, keysHint, landedOn, type KeysAt } from './find-field'
+import { matchCount, NO_RESULTS, searchTasks, topResult, type SearchResults } from './task-search'
+import { SEARCH_VIEW, searchBlocks } from './search-rows'
+import { resultKey } from './search-view'
+import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -180,8 +181,9 @@ const NO_FILES: FilePages = {}
 const filePages = atom({ plugin: 'teamrig-pane', key: 'filePages' } as const, NO_FILES, { shape: FILES_SHAPE })
 /** The Find field's round (find-field.ts): the key it is drawn under and the text it starts with. */
 const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, FIRST_FIELD)
-/** The focus ring's landings in the pane (find-field.ts), counted by the ui.focus hook. */
-const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS)
+/** The focus ring's landings in the pane (find-field.ts), counted by the ui.focus hook, kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when RingLandings changes shape. */
+const RING_SHAPE = 'ring-v1'
+const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS, { shape: RING_SHAPE })
 /** The key of the pane element the focus ring last landed on, null for none or an engine stop: a windowed body (window.ts) always draws it. */
 const held = atom({ plugin: 'teamrig-pane', key: 'held' } as const, null)
 /** Whether the banner (banner.ts) in the band above the prompt shows its task's card: a press on it opens and closes it. */
@@ -580,6 +582,8 @@ export const register: Register = on => {
     let field: FindField = FIRST_FIELD
     let landings: RingLandings = NO_LANDINGS
     let heldKey: string | null = null
+    /** The tasks the search shown matched, read once for its body, the Find field's Enter and the line under it; none off a search. */
+    let found: SearchResults = NO_RESULTS
     /** The session whose Log page shows; null for the list or another view. */
     let logSession: string | null = null
     let body: Drawn[] = []
@@ -604,6 +608,7 @@ export const register: Register = on => {
           field = await read($, findField)
         }
         const place = currentPlace(at)
+        if (place.kind === 'search') found = searchTasks(snap.tasks, place.query, treeOf(snap))
         // A page has no status bar: the bar counts the list, and a press on it filters the list.
         const bar = current === 'tasks' && shown === 'mine' && place.kind === 'list' ? statusBar(snap, await read($, barFilter), columns) : null
         // With no bar there is nothing to filter by, and the list shows every task.
@@ -611,7 +616,7 @@ export const register: Register = on => {
           place.kind === 'task'
             ? pageBlocks(snap, shown, place.id, await read($, pages))
             : place.kind === 'search'
-              ? searchBlocks(snap, place.query)
+              ? searchBlocks(snap, place.query, found)
               : place.kind === 'done'
                 ? doneBlocks(snap, shown, place.week)
                 : place.kind === 'file'
@@ -687,12 +692,18 @@ export const register: Register = on => {
       await logging?.close()
       await $.ui.scroll({ to: 'start', in: PANE }).catch(() => undefined)
     }
-    // Enter in the Find field opens the top result's page, the first active match, else the newest finished one, and
-    // moves the ring onto the page's back step: left in the field, a new round's and empty, it would type the next
-    // keys into a new search, so b, f and s would never answer.
-    const openTop = async (query: string) => {
-      const top = topResult(searchTasks(snap.tasks, query, treeOf(snap)))
+    // Enter in the Find field, on its words as typed (a redraw may lag behind them): with more than one match it moves
+    // the ring onto the first result drawn (task-search.ts topResult), where Enter opens it and the arrows move on; with
+    // one it opens that page and moves the ring onto the page's back step: left in the field, a new round's and empty,
+    // it would type the next keys into a new search, so b, f and s would never answer.
+    const submit = async (query: string) => {
+      const results = searchTasks(snap.tasks, query, treeOf(snap))
+      const top = topResult(results)
       if (top === null) return
+      if (matchCount(results) > 1) {
+        await focusOn($, resultKey(SEARCH_VIEW, top.id))
+        return
+      }
       await openPage(top.id, fieldKey(field))
       await focusOn($, 'back')
     }
@@ -896,8 +907,8 @@ export const register: Register = on => {
       )
 
     // The Find field, under the switch in the dock whatever it shows: the first change opens a search (a place, so back
-    // from a result's page returns to it), each change shows the results for its words, Enter opens the top one's page,
-    // and an empty field or clear closes the search. It is drawn under its round's key, holding what the round started
+    // from a result's page returns to it), each change shows the results for its words, Enter opens the one match's page
+    // or moves the ring onto the first of more, and an empty field or clear closes the search. It is drawn under its round's key, holding what the round started
     // with (find-field.ts): the query of the search shown, else nothing; never the person's typing, which the engine
     // would drop on each redraw. `s: Find` before it moves the focus ring into it, and clear moves it back in; the
     // field never takes the focus by itself, as it would then hold every key the pane's hotkeys answer. Esc hands the
@@ -909,17 +920,17 @@ export const register: Register = on => {
           key={fieldKey(field)}
           placeholder="id, title, owner, note…"
           value={field.text}
-          submitLabel="open"
+          submitLabel={submitWords(matchCount(found))}
           onInput={value => void go($, current => searched(current, value), 'typing')}
-          onSubmit={value => void openTop(value)}
+          onSubmit={value => void submit(value)}
         />
         {place.kind === 'search' ? <Button label="clear" variant="secondary" onPress={() => void clearSearch($)} /> : null}
       </Box>
     )
-    // Under the field, where the person's keys go now (find-field.ts): typed into the field, to the pane's hotkeys or to
-    // Claude's prompt, and the key or the click that moves them; bold while typing searches, wrapped in a narrow dock.
-    const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo)
-    const keysText = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys) }] }, columns)
+    // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
+    // hotkeys or to Claude's prompt, and the key or the click that moves them; bold while typing searches, wrapped in a narrow dock.
+    const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo, place.kind === 'search')
+    const keysText = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, matchCount(found)) }] }, columns)
       .map(line => line.map(span => span.text).join(''))
       .join('\n')
     const keysLine = inline ? null : keys === 'search' ? (

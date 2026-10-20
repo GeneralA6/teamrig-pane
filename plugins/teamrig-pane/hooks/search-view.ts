@@ -1,8 +1,8 @@
 // What any search draws under its Find field (search-rows.ts draws the Tasks view's on it; the Inbox, Log and Changes
 // searches, T772-T774, will too): the hint while the query has no word, one line that says so when nothing matches,
-// else a dim line counting the matches, then one block per result shown. A result underlines the words that matched
-// (markedSpans) and shows a long field from a little before its first match (excerpt). Pure: blocks of rows (rows.ts)
-// that layout.ts wraps.
+// else a dim line counting the matches, then one block per result shown, keyed by the view and its id (resultKey), so
+// the focus ring can be told on a result. A result underlines the words that matched (markedSpans) and shows a long
+// field from a little before its first match (excerpt). Pure: blocks of rows (rows.ts) that layout.ts wraps.
 import { single, type Block, type Span } from './rows'
 import { queryWords, type Mark } from './search'
 
@@ -23,10 +23,20 @@ export type SearchView = {
   /** What a query nothing matches shows. */
   nothing: string
   noun: Noun
-  /** One block per result shown, in order, the search's cap already applied. */
+  /** One block per result shown, in order, the search's cap already applied, each keyed `resultKey(key, <its id>)`. */
   results: readonly Block[]
   /** How many results matched, those past the cap too. */
   total: number
+}
+
+/** The key a search keyed `view` draws its result `id` under: `<view>:<id>`. */
+export function resultKey(view: string, id: string): string {
+  return `${view}:${id}`
+}
+
+/** True for a key a search keyed `view` draws one of its results under; its own lines' (`<view>-count`) are not. */
+export function isResultOf(view: string, key: string): boolean {
+  return key.startsWith(`${view}:`)
 }
 
 /** `text` as spans in `style`, the `marks` runs underlined. */

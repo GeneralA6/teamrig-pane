@@ -2,15 +2,16 @@
 // the count of the matches, then each active match as the list draws a task, its title row and under it a dim line of
 // whose it is and the other fields a word matched in, then each finished one dim on one line with when it closed; the
 // words that matched underlined. Past the cap (task-search.ts MAX_RESULTS), the count says how many are shown and asks
-// for another word. A press on a result opens its page (`opens`). Pure: blocks of rows (rows.ts) that layout.ts wraps.
+// for another word. Each result is keyed SEARCH_VIEW and its id (search-view.ts resultKey), and a press on it opens its
+// page (`opens`). Pure: blocks of rows (rows.ts) that layout.ts wraps.
 import type { Snapshot } from '../types'
 import { HELD_DAYS } from './done'
-import { treeOf, whenWords } from './meta'
+import { whenWords } from './meta'
 import { GLYPH, GLYPH_COLOR, indentOf, META_LINES, problemBlocks, readingBlock, SEPARATOR, TITLE_GAP, TITLE_LINES } from './rows'
 import type { Block, Row, Span } from './rows'
 import { marksOf } from './search'
-import { excerpt, markedSpans, searchViewBlocks, type Noun } from './search-view'
-import { fieldText, searchTasks, type SearchedField, type TaskHit } from './task-search'
+import { excerpt, markedSpans, resultKey, searchViewBlocks, type Noun } from './search-view'
+import { fieldText, matchCount, type SearchedField, type SearchResults, type TaskHit } from './task-search'
 import { clockOf, type Clock } from './zone'
 
 /** The fields a result's title row does not show, in the order its meta line names them, each by its words. */
@@ -26,6 +27,9 @@ const FIELD_WORDS: ReadonlyArray<readonly [field: Exclude<SearchedField, 'title'
 export const SEARCH_HINT = 'Type words to find a task by its id, title, owner, who asked, goals, week, note, evidence or ref.'
 /** What a query no held task matches shows. */
 export const NOTHING_FOUND = `Nothing matches. The pane searches the active tasks and those finished in the last ${HELD_DAYS} days.`
+
+/** The Tasks search's key: its results are keyed `search:<id>`, its own lines `search-count` and the like. */
+export const SEARCH_VIEW = 'search'
 
 /** A Tasks search counts tasks. */
 export const TASK_NOUN: Noun = { one: 'task', many: 'tasks' }
@@ -52,7 +56,7 @@ function matchedParts(hit: TaskHit): Span[] {
 function activeBlock(hit: TaskHit): Block {
   const task = hit.row
   const indent = indentOf(task)
-  const key = `search:${task.id}`
+  const key = resultKey(SEARCH_VIEW, task.id)
   const title: Row = {
     key,
     spans: [
@@ -72,7 +76,7 @@ function activeBlock(hit: TaskHit): Block {
 /** `✓ T4  title          14:02`: a finished match, dim, on one line with when it closed. */
 function doneBlock(hit: TaskHit, clock: Clock): Block {
   const task = hit.row
-  const key = `search:${task.id}`
+  const key = resultKey(SEARCH_VIEW, task.id)
   const color = GLYPH_COLOR[task.status]
   const row: Row = {
     key,
@@ -91,15 +95,14 @@ function doneBlock(hit: TaskHit, clock: Clock): Block {
 }
 
 /**
- * The search's body for `query` over the snapshot's tasks: the register's problem, if any, then the search view of
- * the matches (the hint while the query has no word, the line that says nothing matched, else the count and the
- * results). A snapshot never read says so instead.
+ * The search's body for `query` over the snapshot's tasks, `results` the tasks it matched (task-search.ts searchTasks):
+ * the register's problem, if any, then the search view of the matches (the hint while the query has no word, the line
+ * that says nothing matched, else the count and the results). A snapshot never read says so instead.
  */
-export function searchBlocks(snap: Snapshot, query: string): Block[] {
+export function searchBlocks(snap: Snapshot, query: string, results: SearchResults): Block[] {
   const reading = readingBlock(snap)
   if (reading !== null) return [reading]
-  const results = searchTasks(snap.tasks, query, treeOf(snap))
   const shown = [...results.active.map(activeBlock), ...results.done.map(hit => doneBlock(hit, clockOf(snap)))]
-  const view = { key: 'search', query, hint: SEARCH_HINT, nothing: NOTHING_FOUND, noun: TASK_NOUN, results: shown, total: shown.length + results.more }
+  const view = { key: SEARCH_VIEW, query, hint: SEARCH_HINT, nothing: NOTHING_FOUND, noun: TASK_NOUN, results: shown, total: matchCount(results) }
   return [...problemBlocks(snap), ...searchViewBlocks(view)]
 }

@@ -48,7 +48,12 @@ export function searchTasks(tasks: readonly TaskRow[], query: string, tree: Task
   return { active: keptActive, done: keptDone, more: hits.length - keptActive.length - keptDone.length }
 }
 
-/** The result Enter opens: the first active match, else the newest finished one; null when none matched. */
+/** How many tasks matched, those past MAX_RESULTS too. */
+export function matchCount(results: SearchResults): number {
+  return results.active.length + results.done.length + results.more
+}
+
+/** The first result drawn, the first active match, else the newest finished one, which Enter opens or moves to; null when none matched. */
 export function topResult(results: SearchResults): TaskRow | null {
   return (results.active[0] ?? results.done[0])?.row ?? null
 }

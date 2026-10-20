@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { single, type Block } from '../hooks/rows'
-import { countWords, EXCERPT_LEAD, excerpt, markedSpans, searchViewBlocks, type Noun, type SearchView } from '../hooks/search-view'
+import { countWords, EXCERPT_LEAD, excerpt, isResultOf, markedSpans, resultKey, searchViewBlocks, type Noun, type SearchView } from '../hooks/search-view'
 
 const NOTES: Noun = { one: 'note', many: 'notes' }
 /** Two notes found, the hint and the nothing line in a notes search's words. */
@@ -17,6 +17,11 @@ const VIEW: SearchView = {
 const textOf = (blocks: readonly Block[]) => blocks.flatMap(block => block.rows.map(row => row.spans.map(span => span.text).join('')))
 
 describe('search view', () => {
+  test("a result is keyed by its view and its id; the view's own lines and other keys are not results", async () => {
+    expect(resultKey('search', 'T5')).toBe('search:T5')
+    expect(['search:T5', 'search-count', 'search-meta:T5', 'find:2', 'notes:1'].map(key => isResultOf('search', key))).toEqual([true, false, false, false, false])
+  })
+
   test('marks split a text into plain and underlined spans in one style', async () => {
     expect(markedSpans('Load the feed', [{ start: 0, end: 4 }], { dim: true })).toEqual([
       { dim: true, text: 'Load', underline: true },
