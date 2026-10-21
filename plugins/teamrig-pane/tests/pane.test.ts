@@ -675,16 +675,16 @@ test('/teamrig-pane <session> pins the session an id or a name names; a word nam
   expect(store.get(`pin:${S1}`)).toBe('api')
   expect(await pane.find({ text: /^api \(pinned\) · 1 active/ })).toBeDefined()
   expect(await pane.find({ text: /Ship the api/ })).toBeDefined()
-  expect(await pane.find({ type: 'Text', text: 'web-api (pinned) · area api · team web' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: 'web-api (pinned)' })).toBeDefined()
   expect(await bannerText(await mountBand($))).toMatch(/^web-api · next ○ T7 {2}Ship the api/)
 
   await run('lead')
   expect(store.get(`pin:${S1}`)).toBe('lead')
   expect(await pane.find({ text: /^lead \(pinned\) · 0 active/ })).toBeDefined()
-  expect(await pane.find({ type: 'Text', text: 'web-lead (pinned) · area lead · team web' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: 'web-lead (pinned)' })).toBeDefined()
 })
 
-test('a title line leads the docked tasks, Changes and Log views: the session, its area and its team; inline, none', async ($, on) => {
+test('a title line leads the docked tasks, Changes and Log views: the session, and its team where its name does not lead with it; inline, none', async ($, on) => {
   const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
   disk.write('/Homes/tester/.teamrig/teams/web/config.json', [JSON.stringify({ sessions: ['lead', 'api'] })])
@@ -696,7 +696,7 @@ test('a title line leads the docked tasks, Changes and Log views: the session, i
     await pane.press({ key: view })
     const first = childrenOf(keyedNode(await pane.drawn(), 'controls'))[0]
     expect(typeOf(first)).toBe('Text')
-    expect(screenOf(first)).toEqual(['web-api (pinned) · area api · team web'])
+    expect(screenOf(first)).toEqual(['web-api (pinned)'])
   }
   // Above the prompt the band beside the pane names the session, so the pane spends no row of its few on it.
   await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
