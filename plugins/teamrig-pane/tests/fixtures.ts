@@ -4,7 +4,7 @@ import { lineHash } from '../hooks/line-hash'
 import { treeOf, type PaneTree } from '../hooks/meta'
 import type { FileStamp, Files } from '../hooks/source'
 import { zoneNamed, type Clock } from '../hooks/zone'
-import type { Snapshot, TaskRow, TeamSettings, WaitRow } from '../types'
+import type { Snapshot, TaskRow, TeamLeads, TeamSettings, WaitRow } from '../types'
 
 export const NOW = Date.UTC(2026, 9, 13, 14, 0)
 export const HOUR = 3_600_000
@@ -13,17 +13,24 @@ export const NOT_PICKED_UP_HOURS = DEFAULT_REGISTER.check.notPickedUpAfterHours
 
 /** What a team whose config sets neither the hours nor a zone reads with, on a machine whose zone is UTC. */
 export const TEAM_SETTINGS: TeamSettings = { notPickedUpAfterHours: NOT_PICKED_UP_HOURS, timeZone: TimeZone.UTC.name }
-/** A snapshot's team fields when the pane found no team: no team name and no session name. */export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName'> = { team: null, areaName: null }
+/** A snapshot's team fields when the pane found no team: no team name, no session name and no leads. */
+export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads'> = { team: null, areaName: null, leads: null }
 
 /** A team zone ahead of UTC, three hours on NOW (Israel's summer time, `IDT`): what a UTC clock cannot tell apart. */
 export const JERUSALEM = zoneNamed('Asia/Jerusalem')
 
 /**
  * The tree of `tasks` at `now`, for a team whose config sets `notPickedUpAfterHours` (teamrig's default when unset)
- * and the zone named `timeZone` (UTC unless given).
+ * and the zone named `timeZone` (UTC unless given), with `leads` (none read unless given).
  */
-export function treeAt(tasks: readonly TaskRow[], now: number, notPickedUpAfterHours = NOT_PICKED_UP_HOURS, timeZone = TimeZone.UTC.name): PaneTree {
-  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone })
+export function treeAt(
+  tasks: readonly TaskRow[],
+  now: number,
+  notPickedUpAfterHours = NOT_PICKED_UP_HOURS,
+  timeZone = TimeZone.UTC.name,
+  leads: TeamLeads | null = null,
+): PaneTree {
+  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone, leads })
 }
 
 /** The clock at `now` in `zone`, UTC unless given. */

@@ -7,7 +7,7 @@
 // the words change with the clock and the other tasks' statuses, so view.ts's sameView compares them to know when a
 // poll must redraw.
 import type { ThemeKey } from 'claude-code'
-import type { TaskRow, TaskStatus } from '../types'
+import type { TaskRow, TaskStatus, TeamLeads } from '../types'
 import { ACTIVE_STATUSES, priorityText, TaskTree, TimeZone, unfinishedAfter, waitText, type EffectiveDue, type WaitContext } from './core/read/index'
 import type { Span } from './rows'
 import { dayOf, zoneNamed, type Clock } from './zone'
@@ -18,25 +18,31 @@ const DAY_MS = 24 * HOUR_MS
 /** overdue: past its due; new: the owner has not touched it yet; unseen: still untouched past the team's hours. */
 export type Flag = 'overdue' | 'new' | 'unseen'
 
-/** What treeOf reads from a snapshot (types/index.d.ts Snapshot): its tasks, its clock, the team's NOT PICKED UP hours and zone. */
+/**
+ * What treeOf reads from a snapshot (types/index.d.ts Snapshot): its tasks, its clock, the team's NOT PICKED UP hours
+ * and zone, and who leads whom.
+ */
 export type TreeSource = {
   readonly tasks: readonly TaskRow[]
   readonly now: number
   readonly notPickedUpAfterHours: number
   readonly timeZone: string
+  readonly leads: TeamLeads | null
 }
 
 /**
  * teamrig's dependency tree of the snapshot's tasks at its clock in the team's zone (core register/tree.ts), with how
- * long a task may stand untouched by its owner before teamrig's `register check` flags it NOT-PICKED-UP: the team
- * config's `register.check.notPickedUpAfterHours`.
+ * long a task may stand untouched by its owner before teamrig's `register check` flags it NOT-PICKED-UP (the team
+ * config's `register.check.notPickedUpAfterHours`), and who leads whom for the card's Lead row (leads.ts).
  */
 export class PaneTree extends TaskTree<TaskRow> {
   readonly notPickedUpMs: number
+  readonly leads: TeamLeads | null
 
-  constructor(tasks: ReadonlyMap<string, TaskRow>, now: Date, zone: TimeZone, notPickedUpAfterHours: number) {
+  constructor(tasks: ReadonlyMap<string, TaskRow>, now: Date, zone: TimeZone, notPickedUpAfterHours: number, leads: TeamLeads | null) {
     super(tasks, now, zone)
     this.notPickedUpMs = notPickedUpAfterHours * HOUR_MS
+    this.leads = leads
   }
 }
 
@@ -179,7 +185,7 @@ export function lateWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null
  * as in teamrig.
  */
 export function treeOf(snap: TreeSource): PaneTree {
-  return new PaneTree(new Map(snap.tasks.map(task => [task.id, task])), new Date(snap.now), zoneNamed(snap.timeZone), snap.notPickedUpAfterHours)
+  return new PaneTree(new Map(snap.tasks.map(task => [task.id, task])), new Date(snap.now), zoneNamed(snap.timeZone), snap.notPickedUpAfterHours, snap.leads)
 }
 
 /**

@@ -254,6 +254,9 @@ describe('view', () => {
     expect(sameView(base, { ...base, unreadInbox: 1 })).toBe(false)
     expect(sameView(base, { ...base, notPickedUpAfterHours: NOT_PICKED_UP_HOURS * 2 })).toBe(false)
     expect(sameView(base, { ...base, timeZone: 'Asia/Jerusalem' })).toBe(false)
+    const leads = { lead: 'lead', leaderOf: { po: 'lead' } }
+    expect(sameView({ ...base, leads }, { ...base, leads: { lead: 'lead', leaderOf: { po: 'lead' } } })).toBe(true)
+    expect(sameView(base, { ...base, leads })).toBe(false)
     const regoaled = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00', goals: ['G11'] }))
     expect(sameView(base, { ...base, tasks: regoaled })).toBe(false)
     expect(sameView(base, { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, title: 'Renamed' })) })).toBe(false)
@@ -1150,7 +1153,8 @@ describe('source', () => {
 
   /** Team web, whose config calls api web-backend and gives ui the team's default name. */
   const WEB: TeamFiles = { team: 'web', dir: 'K/teams/web', config: 'K/teams/web/config.json', renames: 'R/tasks/renames.jsonl', turnLog: null }
-  const WEB_CONFIG = JSON.stringify({ sessions: ['lead', 'api', 'ui'], names: { api: 'web-backend' } })
+  const WEB_TEAM = { sessions: ['lead', 'api', 'ui'], roles: { lead: 'lead' }, names: { api: 'web-backend' } }
+  const WEB_CONFIG = JSON.stringify(WEB_TEAM)
   const namesOf = (snap: Snapshot | null) => (snap === null ? null : { team: snap.team, areaName: snap.areaName })
 
   test("names the area as teamrig's commands do, from the team's config and rename log, a rename on the next poll", async () => {
@@ -1171,7 +1175,21 @@ describe('source', () => {
     const noConfig = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, WEB)
     expect(namesOf(await noConfig.poll({ claudeSession: S1, pinned: 'api', now: NOW }))).toEqual({ team: 'web', areaName: null })
     const noTeam = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, null)
-    expect(namesOf(await noTeam.poll({ claudeSession: S1, pinned: 'api', now: NOW }))).toEqual(NO_TEAM)
+    expect(namesOf(await noTeam.poll({ claudeSession: S1, pinned: 'api', now: NOW }))).toEqual({ team: null, areaName: null })
+  })
+
+  test("carries who leads whom from the team's config, a promotion on the next poll, and none with no config file", async () => {
+    const files = new MemoryFiles()
+    files.write(WEB.config, WEB_CONFIG)
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, WEB)
+    const leadsOf = async () => (await source.poll({ claudeSession: S1, pinned: 'api', now: NOW }))?.leads
+    expect(await leadsOf()).toEqual({ lead: 'lead', leaderOf: { api: 'lead', ui: 'lead' } })
+
+    files.write(WEB.config, JSON.stringify({ ...WEB_TEAM, leads: { api: ['ui'] } }))
+    expect(await leadsOf()).toEqual({ lead: 'lead', leaderOf: { api: 'lead', ui: 'api' } })
+
+    const noConfig = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, WEB)
+    expect((await noConfig.poll({ claudeSession: S1, pinned: 'api', now: NOW }))?.leads).toBe(null)
   })
 })
 

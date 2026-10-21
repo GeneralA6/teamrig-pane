@@ -9,6 +9,7 @@
 import type { Snapshot, TaskDetail, TaskRow } from '../types'
 import { cardRows, type CardField } from './card'
 import type { TaskTree } from './core/read/index'
+import type { PaneTree } from './meta'
 import { SEPARATOR, indentOf, titleRow, type Block, type Row, type Span } from './rows'
 import { newestFirst } from './view'
 import { cells } from './width'
@@ -42,7 +43,7 @@ export function currentTask(snap: Snapshot, tree: TaskTree<TaskRow>): Current | 
  * sessionName), so the band says whose session it is while the pane's body scrolls. `tree` is the snapshot's (meta.ts
  * treeOf); the band draws none for a session with no area.
  */
-export function bannerBlock(current: Current | null, isOpen: boolean, tree: TaskTree<TaskRow>, name: string): Block {
+export function bannerBlock(current: Current | null, isOpen: boolean, tree: PaneTree, name: string): Block {
   const lead: Span[] = [{ text: name, bold: true }, SEPARATOR]
   if (current === null) return { key: BANNER_KEY, rows: [{ key: BANNER_KEY, spans: [...lead, { text: NOTHING_CURRENT, dim: true }] }] }
   const { task } = current
