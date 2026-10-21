@@ -1933,13 +1933,16 @@ test("the line under the Find field says where the keys go: to Claude's prompt, 
     $.ui.focus({ component: 'Pane', requestId: 'teamrig-pane', plugin: 'teamrig-pane', element, origin })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  /** The line under the Find field as drawn: its text, and whether it is bold (typing searches) or dim; null where none is. */
+  /** The line under the Find field as drawn: its words, and whether it is bold (typing searches) or dim; null where none is. */
   const keysLine = async () => {
     const found = await pane.find({ type: 'Text', text: /^(Typing searches|On a result|Keys on the pane|Keys go to Claude) · / })
     if (found === undefined) return null
     // Drawn one way or the other, never both.
     expect(found.props['bold'] === true).toBe(found.props['dimColor'] !== true)
-    return { text: found.text, bold: found.props['bold'] === true }
+    // A narrow dock wraps the line within its columns; its words read the same.
+    const lines = found.text.split('\n')
+    expect(lines.every(line => line.length <= PANE_PROPS.bodyColumns - 2)).toBe(true)
+    return { text: lines.join(' '), bold: found.props['bold'] === true }
   }
   const CLAUDE = { text: 'Keys go to Claude · click the field to search', bold: false }
   const ON_PANE = { text: 'Keys on the pane · s: search · Esc: to Claude', bold: false }
