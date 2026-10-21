@@ -14,19 +14,23 @@ import {
   DEFAULT_COMMITS,
   DEFAULT_CONTEXT_FILES,
   DEFAULT_CLAIMS,
+  DEFAULT_DECISIONS,
   DEFAULT_COORDINATOR_WAIT,
   DEFAULT_GATE_TIMEOUT_SECONDS,
   DEFAULT_GITHUB,
   DEFAULT_HEAVY,
   DEFAULT_HIRING,
+  DEFAULT_EXEC,
   DEFAULT_LOCK,
   DEFAULT_LEAD_BOUNDARY,
   DEFAULT_TURN_LOG,
   DEFAULT_LOOPS,
   DEFAULT_MESSAGES,
+  DEFAULT_HEADROOM,
   DEFAULT_OPEN,
   DEFAULT_OWNER_GATES,
   DEFAULT_COMMIT_GUARD,
+  DEFAULT_SECRET_GUARD,
   DEFAULT_PACKAGE_GUARD,
   DEFAULT_PROMPTS,
   DEFAULT_PUSH_GUARD,
@@ -47,11 +51,13 @@ import { CONFIG_LIMITS, RULE_CONFLICT_LIMITS } from './limits.ts';
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
 import {
   AD_HOC_RUNNERS,
+  PACKAGE_INSTALLS,
   BURST_POLICIES,
   CONFLICT_WINNERS,
   ESCALATIONS,
   HIRING_POLICIES,
   isAdHocRunners,
+  isPackageInstalls,
   isBurstPolicy,
   isCommitGate,
   isConflictWinner,
@@ -61,6 +67,7 @@ import {
   isOverAction,
   isHookAsks,
   isPushToProtected,
+  isSecretReads,
   isSkipHooks,
   isTerminalChoice,
   isVerifyGate,
@@ -68,12 +75,14 @@ import {
   HOOK_ASKS,
   OVER_ACTIONS,
   PUSH_TO_PROTECTED,
+  SECRET_READS,
   SKIP_HOOKS,
   TERMINALS,
   type ContextFilesConfig,
+  type ExecConfig,
   VERIFY_GATES,
   WEEKDAYS,
-  type AdHocRunners,
+  type PackageGuardConfig,
   type BudgetConfig,
   type BudgetLiftConfig,
   type BudgetReset,
@@ -90,11 +99,13 @@ import {
   type LeadBoundaryConfig,
   type KitConfig,
   type LaunchConfig,
+  type HeadroomConfig,
   type OpenConfig,
   type PathsConfig,
   type PushToProtected,
   type HookAsks,
   type QuietHours,
+  type SecretGuardConfig,
   type SkipHooks,
   type ReadonlyShellConfig,
   type ScaleOutConfig,
@@ -132,6 +143,21 @@ const GITHUB_LOGIN = /^[a-z0-9][a-z0-9-]{0,38}$/i;
 
 const BRANCH_NAME: Check<string> = (name) => (/^[^\s~^:?*[\\]+$/.test(name) ? undefined : 'not a valid branch name');
 
+/**
+ * An `exec.path` folder: absolute from a drive or the root (`C:/tools`, `/usr/bin`), never against the cwd, and with no
+ * `;` or `:` past the drive, so joining the list into one PATH cannot split a folder or add one.
+ */
+const EXEC_DIRECTORY: Check<string> = (folder) => {
+  if (!/^(?:[A-Za-z]:[\\/]|\/)/.test(folder)) {
+    return 'expected an absolute folder, such as C:/tools or /usr/bin';
+  }
+  return /^(?:[A-Za-z]:)?[^;:]*$/.test(folder) ? undefined : 'expected no ; or : past the drive';
+};
+
+/** An environment variable's name, such as `EXEC_WEBHOOK_URL`: what a config key names in place of a secret value. */
+const ENV_VARIABLE: Check<string> = (name) =>
+  /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name) ? undefined : 'expected a variable name: a letter or _, then at most 63 letters, digits or _';
+
 /** The key shape the skills lint recognises in frontmatter. */
 const isFrontmatterKey: Check<string> = (key) => (/^[A-Za-z0-9_-]+$/.test(key) ? undefined : 'expected a frontmatter key: letters, digits, _ or -');
 
@@ -166,6 +192,76 @@ function readNames(read: ConfigReader, raw: JsonRecord, sessions: readonly strin
     names[id] = name;
   }
   return names;
+}
+
+/** Why a member cannot be listed under `subLead`, or undefined; `leaderOf` holds the members listed so far. */
+function memberProblem(member: string, subLead: string, sessions: readonly string[], lead: string, leaderOf: ReadonlyMap<string, string>): string | undefined {
+  if (!sessions.includes(member)) {
+    return `${describe(member)} is not one of the sessions`;
+  }
+  if (member === lead) {
+    return `${describe(member)} is the lead, which no one leads`;
+  }
+  if (member === subLead) {
+    return `${describe(member)} is the sub-lead itself`;
+  }
+  const leader = leaderOf.get(member);
+  return leader === undefined ? undefined : `${describe(member)} is already led by ${leader}; a session has one leader`;
+}
+
+/** The sub-lead's leaders upward through `leaderOf`, stopping at the first repeat; it is a cycle when that is `subLead`. */
+function leadsItself(subLead: string, leaderOf: ReadonlyMap<string, string>): boolean {
+  const seen = new Set<string>();
+  for (let leader = leaderOf.get(subLead); leader !== undefined && !seen.has(leader); leader = leaderOf.get(leader)) {
+    if (leader === subLead) {
+      return true;
+    }
+    seen.add(leader);
+  }
+  return false;
+}
+
+/**
+ * `leads`: each sub-lead's members (T781). The tree stays whole: a sub-lead and its members are sessions, the lead is
+ * neither, a session is listed once, and no sub-lead leads itself, even through others. A wrong member is reported and
+ * left out, and so is a sub-lead left with none or caught in a cycle, so those sessions stay with the leader above.
+ */
+function readLeads(read: ConfigReader, raw: JsonRecord, sessions: readonly string[], lead: string): Record<string, string[]> {
+  const leads = new Map<string, string[]>();
+  const leaderOf = new Map<string, string>();
+  for (const subLead of Object.keys(raw)) {
+    const path = `leads.${subLead}`;
+    const listed = read.list(raw, subLead, 'leads', [], (value, itemPath) => read.stringItem(value, itemPath, isSessionName));
+    if (!sessions.includes(subLead) || subLead === lead) {
+      read.report(path, subLead === lead ? 'is the lead, which leads every session no sub-lead lists; list sub-leads only' : 'is not one of the sessions');
+      continue;
+    }
+    const members: string[] = [];
+    for (const member of listed) {
+      const problem = memberProblem(member, subLead, sessions, lead, leaderOf);
+      if (problem === undefined) {
+        members.push(member);
+        leaderOf.set(member, subLead);
+      } else {
+        read.report(path, problem);
+      }
+    }
+    if (members.length === 0) {
+      read.report(path, 'lists no member; a sub-lead leads at least one session');
+      continue;
+    }
+    leads.set(subLead, members);
+  }
+  for (const [subLead, members] of [...leads]) {
+    if (leadsItself(subLead, leaderOf)) {
+      read.report(`leads.${subLead}`, 'leads itself through its members; a sub-lead cannot be under its own group');
+      for (const member of members) {
+        leaderOf.delete(member);
+      }
+      leads.delete(subLead);
+    }
+  }
+  return Object.fromEntries(leads);
 }
 
 /**
@@ -223,9 +319,11 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
   const rolesRaw = read.section(raw, 'roles', '');
   const lead = read.requiredString(rolesRaw, 'lead', 'roles', isSessionName);
   const coordinatorOwner = read.optionalString(rolesRaw, 'coordinatorOwner', 'roles', isSessionName);
+  const securityReviewer = read.optionalString(rolesRaw, 'securityReviewer', 'roles', isSessionName);
   for (const [key, name] of [
     ['lead', lead],
     ['coordinatorOwner', coordinatorOwner],
+    ['securityReviewer', securityReviewer],
   ] as const) {
     if (name !== undefined && name !== '' && sessions.length > 0 && !sessions.includes(name)) {
       read.report(`roles.${key}`, `${describe(name)} is not one of the sessions`);
@@ -235,6 +333,7 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
     read.report('sessions', 'lists a session more than once');
   }
   const names = readNames(read, read.section(raw, 'names', ''), sessions);
+  const leads = readLeads(read, read.section(raw, 'leads', ''), sessions, lead);
   const launch = readLaunch(read, read.section(raw, 'launch', ''), sessions);
   const team = readTeam(read, raw);
   const timeZone = read.optionalString(raw, 'timeZone', '', isTimeZone);
@@ -246,6 +345,7 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
   const tabStatus = read.section(raw, 'tabStatus', '');
   const pickerGuard = read.section(raw, 'pickerGuard', '');
   const budget = parseBudget(read, read.section(raw, 'budget', ''), sessions);
+  const decisions = read.section(raw, 'decisions', '');
 
   const config: KitConfig = {
     configVersion: read.integer(raw, 'configVersion', '', 1, { min: 1 }),
@@ -253,7 +353,12 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
     ...(timeZone === undefined ? {} : { timeZone }),
     sessions,
     names,
-    roles: coordinatorOwner === undefined ? { lead } : { lead, coordinatorOwner },
+    roles: {
+      lead,
+      ...(coordinatorOwner === undefined ? {} : { coordinatorOwner }),
+      ...(securityReviewer === undefined ? {} : { securityReviewer }),
+    },
+    leads,
     ownerGates: read.stringList(
       raw,
       'ownerGates',
@@ -282,6 +387,7 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
       pollMs: read.integer(lock, 'pollMs', 'lock', DEFAULT_LOCK.pollMs, { min: 10 }),
       waitMs: read.integer(lock, 'waitMs', 'lock', DEFAULT_LOCK.waitMs, { min: 0 }),
     },
+    exec: parseExec(read, read.section(raw, 'exec', '')),
     pushGuard: {
       protectedBranches: read.stringList(
         pushGuard,
@@ -293,9 +399,10 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
       ),
       pushToProtected: parsePushToProtected(read, pushGuard),
     },
-    packageGuard: { adHocRunners: parseAdHocRunners(read, read.section(raw, 'packageGuard', '')) },
+    packageGuard: parsePackageGuard(read, read.section(raw, 'packageGuard', '')),
     commitGuard: { skipHooks: parseSkipHooks(read, read.section(raw, 'commitGuard', '')) },
     prompts: { hookAsks: parseHookAsks(read, read.section(raw, 'prompts', '')) },
+    secretGuard: parseSecretGuard(read, read.section(raw, 'secretGuard', '')),
     commits: parseCommits(read, read.section(raw, 'commits', '')),
     coordinator: parseCoordinator(read, read.section(raw, 'coordinator', '')),
     budget,
@@ -310,6 +417,10 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
     github: parseGithub(read, read.section(raw, 'github', ''), sessions),
     alerts: {
       persistentFailureHours: read.integer(alerts, 'persistentFailureHours', 'alerts', DEFAULT_ALERTS.persistentFailureHours, CONFIG_LIMITS.persistentFailureHours),
+    },
+    decisions: {
+      batchTimesUtc: read.stringList(decisions, 'batchTimesUtc', 'decisions', DEFAULT_DECISIONS.batchTimesUtc, isUtcTime, CONFIG_LIMITS.decisionBatchTimes.maxItems),
+      batchAt: read.integer(decisions, 'batchAt', 'decisions', DEFAULT_DECISIONS.batchAt, CONFIG_LIMITS.decisionBatchAt),
     },
     tabStatus: { enabled: read.boolean(tabStatus, 'enabled', 'tabStatus', false) },
     pickerGuard: { enabled: read.boolean(pickerGuard, 'enabled', 'pickerGuard', false) },
@@ -845,6 +956,15 @@ function parseFollowupStatus(read: ConfigReader, value: unknown, path: string): 
   return undefined;
 }
 
+function parseExec(read: ConfigReader, raw: JsonRecord): ExecConfig {
+  const path = 'exec';
+  const webhookEnv = read.optionalString(raw, 'webhookEnv', path, ENV_VARIABLE);
+  return {
+    path: read.stringList(raw, 'path', path, DEFAULT_EXEC.path, shortLine(CONFIG_LIMITS.execPath.maxLength, EXEC_DIRECTORY), CONFIG_LIMITS.execPath.maxItems),
+    ...(webhookEnv === undefined ? {} : { webhookEnv }),
+  };
+}
+
 function parseContextFiles(read: ConfigReader, raw: JsonRecord): ContextFilesConfig {
   const path = 'contextFiles';
   const defaults = DEFAULT_CONTEXT_FILES;
@@ -878,7 +998,17 @@ function parseOpen(read: ConfigReader, raw: JsonRecord): OpenConfig {
   const terminal = read.string(raw, 'terminal', 'open', DEFAULT_OPEN.terminal, (value) =>
     isTerminalChoice(value) ? undefined : `expected one of ${TERMINALS.join(', ')}`,
   );
-  return { terminal: isTerminalChoice(terminal) ? terminal : DEFAULT_OPEN.terminal };
+  return { terminal: isTerminalChoice(terminal) ? terminal : DEFAULT_OPEN.terminal, headroom: parseHeadroom(read, read.section(raw, 'headroom', 'open')) };
+}
+
+/** `open.headroom`: the room a new session needs on the host. */
+function parseHeadroom(read: ConfigReader, raw: JsonRecord): HeadroomConfig {
+  const path = 'open.headroom';
+  return {
+    sessionMb: read.integer(raw, 'sessionMb', path, DEFAULT_HEADROOM.sessionMb, CONFIG_LIMITS.headroomSessionMb),
+    commitMaxPct: read.integer(raw, 'commitMaxPct', path, DEFAULT_HEADROOM.commitMaxPct, CONFIG_LIMITS.headroomCommitMaxPct),
+    closeIdleMinutes: read.integer(raw, 'closeIdleMinutes', path, DEFAULT_HEADROOM.closeIdleMinutes, CONFIG_LIMITS.headroomCloseIdleMinutes),
+  };
 }
 
 function parseStatusLine(read: ConfigReader, raw: JsonRecord): StatusLineConfig {
@@ -896,10 +1026,16 @@ function parsePushToProtected(read: ConfigReader, raw: JsonRecord): PushToProtec
   return isPushToProtected(value) ? value : fallback;
 }
 
-function parseAdHocRunners(read: ConfigReader, raw: JsonRecord): AdHocRunners {
-  const fallback = DEFAULT_PACKAGE_GUARD.adHocRunners;
-  const value = read.string(raw, 'adHocRunners', 'packageGuard', fallback, oneOf(AD_HOC_RUNNERS));
-  return isAdHocRunners(value) ? value : fallback;
+function parsePackageGuard(read: ConfigReader, raw: JsonRecord): PackageGuardConfig {
+  const path = 'packageGuard';
+  const defaults = DEFAULT_PACKAGE_GUARD;
+  const adHocRunners = read.string(raw, 'adHocRunners', path, defaults.adHocRunners, oneOf(AD_HOC_RUNNERS));
+  const installs = read.string(raw, 'installs', path, defaults.installs, oneOf(PACKAGE_INSTALLS));
+  return {
+    adHocRunners: isAdHocRunners(adHocRunners) ? adHocRunners : defaults.adHocRunners,
+    installs: isPackageInstalls(installs) ? installs : defaults.installs,
+    cooldownDays: read.integer(raw, 'cooldownDays', path, defaults.cooldownDays, CONFIG_LIMITS.packageCooldownDays),
+  };
 }
 
 function parseSkipHooks(read: ConfigReader, raw: JsonRecord): SkipHooks {
@@ -916,6 +1052,27 @@ function parseHookAsks(read: ConfigReader, raw: JsonRecord): HookAsks {
 
 const isShellPrefix: Check<string> = (value) =>
   PREFIX_PATTERN.test(value) ? undefined : 'expected words of letters, digits and _ @ . / : = + -, one space apart, the first naming a program';
+
+function parseSecretGuard(read: ConfigReader, raw: JsonRecord): SecretGuardConfig {
+  const path = 'secretGuard';
+  const defaults = DEFAULT_SECRET_GUARD;
+  const secretReads = read.string(raw, 'secretReads', path, defaults.secretReads, oneOf(SECRET_READS));
+  const { secretPaths, secretEnvNames } = CONFIG_LIMITS;
+  return {
+    secretReads: isSecretReads(secretReads) ? secretReads : defaults.secretReads,
+    paths: read.stringList(raw, 'paths', path, defaults.paths, shortLine(secretPaths.maxLength, isSecretGlob), secretPaths.maxItems),
+    envNames: read.stringList(raw, 'envNames', path, defaults.envNames, shortLine(secretEnvNames.maxLength, isSecretNamePattern), secretEnvNames.maxItems),
+  };
+}
+
+/** A glob with something to match after its `!`. */
+const isSecretGlob: Check<string> = (value) => (value.replace(/^!/, '').trim() === '' ? 'expected a glob, with a leading ! to keep a path readable' : undefined);
+
+/** A regular expression with something to match after its `!`. */
+const isSecretNamePattern: Check<string> = (value) => {
+  const body = value.replace(/^!/, '');
+  return body === '' ? 'expected a regular expression, with a leading ! to keep a variable printable' : isValidRegex(body);
+};
 
 function parseReadonlyShell(read: ConfigReader, raw: JsonRecord): ReadonlyShellConfig {
   const { maxItems, maxLength } = CONFIG_LIMITS.readonlyShellPrefixes;
@@ -951,6 +1108,12 @@ const REFRESH_TOKENS = { min: 10_000, max: 10_000_000 } as const;
 const REFRESH_TASKS = { min: 0, max: 100 } as const;
 /** Long enough to read the notice and type, short enough that the fresh start is not missed. */
 const RESTART_DELAY_SECONDS = { min: 5, max: 600 } as const;
+/** 0: only a draft holds the /clear; an hour at most, since the restart gives up after one. */
+const HOLD_AFTER_ACTIVITY_MINUTES = { min: 0, max: 60 } as const;
+/** 0: no band; long enough to read and press, short of the restart's give-up. */
+const COUNTDOWN_SECONDS = { min: 0, max: 120 } as const;
+/** 0 turns the stop of Claude Code's compaction off. */
+const COMPACT_CEILING_TOKENS = { min: 0, max: 10_000_000 } as const;
 /** A program and its arguments. */
 const END_COMMAND_MAX_ITEMS = 16;
 
@@ -966,6 +1129,9 @@ function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
     tabTitle: read.boolean(raw, 'tabTitle', path, defaults.tabTitle),
     autoRestart: read.boolean(raw, 'autoRestart', path, defaults.autoRestart),
     restartDelaySeconds: read.integer(raw, 'restartDelaySeconds', path, defaults.restartDelaySeconds, RESTART_DELAY_SECONDS),
+    holdAfterActivityMinutes: read.integer(raw, 'holdAfterActivityMinutes', path, defaults.holdAfterActivityMinutes, HOLD_AFTER_ACTIVITY_MINUTES),
+    countdownSeconds: read.integer(raw, 'countdownSeconds', path, defaults.countdownSeconds, COUNTDOWN_SECONDS),
+    compactCeilingTokens: read.integer(raw, 'compactCeilingTokens', path, defaults.compactCeilingTokens, COMPACT_CEILING_TOKENS),
     endCommand: read.stringList(raw, 'endCommand', path, defaults.endCommand, undefined, END_COMMAND_MAX_ITEMS),
     ...(handoverDir === undefined ? {} : { handoverDir }),
   };

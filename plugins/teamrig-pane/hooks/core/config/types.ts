@@ -10,6 +10,8 @@ export interface RolesConfig {
   readonly lead: string;
   /** Owns deploy coordination and fleet health, when the team has that role. */
   readonly coordinatorOwner?: string;
+  /** Reviews the privileged commands sessions ask to run (`exec`), when the team has that role; the owner always may too. */
+  readonly securityReviewer?: string;
 }
 
 /** One priority level; tasks print it as `p<id>`, and p1 is the most urgent. */
@@ -72,9 +74,9 @@ export interface RegisterConfig {
   readonly requireDecisionCard: boolean;
   /** Whether `set --status verifying` needs `--proof`, what will prove the shipped change works. */
   readonly requireProofOnVerifying: boolean;
-  /** What `set --status in-progress` does while a task it needs is still verifying. */
+  /** What `set --status in-progress` does while a task it needs is still verifying, or, on a first start, while its owner's own verify steps are due. */
   readonly verifyGate: VerifyGate;
-  /** A session holding more verifying tasks than this is a PILE-UP in `check`; 0 turns the flag off. */
+  /** A session holding more verifying tasks than this is a PILE-UP in `check`, and its oldest are due to verify before new work starts; 0 turns both off. */
   readonly maxVerifying: number;
   readonly check: RegisterCheckConfig;
 }
@@ -129,6 +131,20 @@ export interface LockConfig {
   readonly waitMs: number;
 }
 
+/** Privileged commands a reviewer approved, run by `teamrig exec` (src/exec/). */
+export interface ExecConfig {
+  /**
+   * The directories a request's bare program name is looked up on, in order, and the only PATH its commands get; the
+   * session's own PATH is never searched. Empty: a request names its program by absolute path.
+   */
+  readonly path: readonly string[];
+  /**
+   * The name of the environment variable that holds the webhook URL every approval, refusal and run is posted to
+   * (spec §10), never the URL itself, which is a secret. Absent: nothing is posted.
+   */
+  readonly webhookEnv?: string;
+}
+
 export interface PushGuardConfig {
   /** Branches the push guard watches: a push to one goes as `pushToProtected` says; force-push, mirror and deletion are refused. */
   readonly protectedBranches: readonly string[];
@@ -137,12 +153,14 @@ export interface PushGuardConfig {
 }
 
 /**
- * A normal push to a protected branch: `ask` the human, or `allow` it with a note. Neither changes a refusal, a
- * `--force-with-lease` push, or a command the guard cannot read, which still asks.
+ * A normal push to a protected branch: `ask` the human, `allow` it with a note, or `lead`: the lead's own goes through
+ * with a note, another session's only once the lead approved one of its waiting tasks (`teamrig approve`, T684), else
+ * it is refused with how to ask, never asked of the human. None changes a refusal, a `--force-with-lease` push, or a
+ * command the guard cannot read, which still asks.
  */
-export type PushToProtected = 'ask' | 'allow';
+export type PushToProtected = 'ask' | 'allow' | 'lead';
 
-export const PUSH_TO_PROTECTED: readonly PushToProtected[] = ['ask', 'allow'];
+export const PUSH_TO_PROTECTED: readonly PushToProtected[] = ['ask', 'allow', 'lead'];
 
 export function isPushToProtected(value: unknown): value is PushToProtected {
   return PUSH_TO_PROTECTED.some((choice) => choice === value);
@@ -151,7 +169,18 @@ export function isPushToProtected(value: unknown): value is PushToProtected {
 export interface PackageGuardConfig {
   /** What a Bash or PowerShell call that runs a package ad hoc does. */
   readonly adHocRunners: AdHocRunners;
+  /** What a Bash or PowerShell call that installs a package version the guard cannot vet does. */
+  readonly installs: PackageInstalls;
+  /** A version published fewer days ago than this is not vetted: a fresh release is unproven. */
+  readonly cooldownDays: number;
 }
+
+/**
+ * An install the guard cannot vet (`npm install`, `pnpm add`, `yarn add`, `bun add` and their updates): a range or a
+ * bare update rather than an exact version or tag, a git or URL source, or a version published fewer than
+ * `cooldownDays` ago or with a known advisory: `deny` refuses it, `ask` asks the human, `allow` lets it run.
+ */
+export type PackageInstalls = 'deny' | 'ask' | 'allow';
 
 /**
  * An ad-hoc package run, one that fetches a package outside the project's lockfile and runs it at once (`npx` of a
@@ -180,11 +209,36 @@ export interface PromptsConfig {
 
 /**
  * A call a teamrig hook would ask the human about (a push to a protected branch or one it cannot read, an ad-hoc
- * package run, a git command without hooks, a helper over the budget, as their own keys set): `ask` raises the
- * permission prompt; `refuse` refuses it instead, its reason telling the session to record the step as waiting for
+ * package run, an install it cannot vet, a git command without hooks, a call that would print a secret, a helper over
+ * the budget, as their own keys set): `ask` raises the permission prompt; `refuse` refuses it instead, its reason telling the session to record the step as waiting for
  * the owner's approval and take its next task, so no prompt holds a session while nobody is there to answer it.
  */
 export type HookAsks = 'ask' | 'refuse';
+
+export interface SecretGuardConfig {
+  /** What a Bash, PowerShell, Read or Grep call that would print a secret does. */
+  readonly secretReads: SecretReads;
+  /**
+   * The team's own secret files, globs read after the guard's defaults (`.env`, `~/.npmrc`, `~/.ssh/**`...): `~/`
+   * starts at home, a glob without a leading `/` or drive matches at any depth, and the last glob that matches a path
+   * decides, so `!glob` keeps a path readable.
+   */
+  readonly paths: readonly string[];
+  /**
+   * The team's own patterns for environment variables whose values are secrets, regular expressions over the name
+   * (case ignored) read after the guard's defaults (`TOKEN`, `SECRET`, `PASSW`..., a store's URL by its kind: `DB_URL`,
+   * `CACHE_URL`); a store named by its product is the team's to add. The last pattern that matches a name decides, so
+   * `!pattern` keeps a variable printable.
+   */
+  readonly envNames: readonly string[];
+}
+
+/**
+ * A call that would print a secret: a secret file's content (`cat .env`, `Get-Content ~/.npmrc`, the Read tool), the
+ * whole environment (`env`, `printenv`, `Get-ChildItem Env:`), a secret variable (`echo $GITHUB_TOKEN`), or a
+ * Kubernetes secret's data: `deny` refuses it, `ask` asks the human, `allow` lets it run.
+ */
+export type SecretReads = 'deny' | 'ask' | 'allow';
 
 /**
  * The opt-in hook that lets a Bash or PowerShell line run without a permission prompt when every command in it
@@ -207,6 +261,12 @@ export function isAdHocRunners(value: unknown): value is AdHocRunners {
   return AD_HOC_RUNNERS.some((choice) => choice === value);
 }
 
+export const PACKAGE_INSTALLS: readonly PackageInstalls[] = ['deny', 'ask', 'allow'];
+
+export function isPackageInstalls(value: unknown): value is PackageInstalls {
+  return PACKAGE_INSTALLS.some((choice) => choice === value);
+}
+
 export const SKIP_HOOKS: readonly SkipHooks[] = ['deny', 'ask', 'allow'];
 
 export function isSkipHooks(value: unknown): value is SkipHooks {
@@ -219,6 +279,12 @@ export function isHookAsks(value: unknown): value is HookAsks {
   return HOOK_ASKS.some((choice) => choice === value);
 }
 
+export const SECRET_READS: readonly SecretReads[] = ['deny', 'ask', 'allow'];
+
+export function isSecretReads(value: unknown): value is SecretReads {
+  return SECRET_READS.some((choice) => choice === value);
+}
+
 export const COMMIT_GATES = ['off', 'warn', 'refuse'] as const;
 /** What a push to a protected branch does about commits over the size rule: nothing, list them, or refuse the push. */
 export type CommitGate = (typeof COMMIT_GATES)[number];
@@ -227,7 +293,7 @@ export function isCommitGate(value: unknown): value is CommitGate {
   return COMMIT_GATES.some((gate) => gate === value);
 }
 
-/** The small-commits rule: one logical change per commit, and a reason line on any commit over the bounds. */
+/** How long a message between sessions may be, and when a send to an idle session is held as a cold wake. */
 export interface MessagesConfig {
   /** The longest message one session may send another. */
   readonly maxLines: number;
@@ -254,8 +320,8 @@ export interface LeadBoundaryConfig {
   /** Off: the lead's own work is neither nudged nor shown. */
   readonly enabled: boolean;
   /**
-   * The lead's own files and folders beyond the team's teamrig folder and Claude Code's memory folders, which
-   * always count: editing or searching them is its job. `~` is the user's home, `*` one folder name.
+   * The lead's own files and folders beyond the team's teamrig folder and Claude Code's memory folders and session
+   * scratchpads, which always count: editing or searching them is its job. `~` is the user's home, `*` one folder name.
    */
   readonly ownPaths: readonly string[];
   /** The turn's code search that brings the lead one nudge, and from which the owner's turn-end line counts searches; 0 never. */
@@ -316,6 +382,7 @@ export interface GithubConfig {
   readonly everyMinutes: number;
 }
 
+/** The small-commits rule: one logical change per commit, and a reason line on any commit over the bounds. */
 export interface CommitsConfig {
   /** Changed non-test lines (added + deleted) a commit may carry without a reason line. */
   readonly maxLines: number;
@@ -450,7 +517,7 @@ export interface HeavyConfig {
   readonly lockTtlMinutes: number;
   /** A heavy step still running after this many minutes is killed with every process it started. */
   readonly maxRunMinutes: number;
-  /** A heavy step waits this many minutes at most for the host lock, then is refused. */
+  /** A heavy step is refused once its line for the host lock has not moved for this many minutes: no step ahead of it, holding the lock or sharing the host ended meanwhile. */
   readonly waitMinutes: number;
   /**
    * While a heavy step runs, its process tree's memory and the host's free memory are sampled this often, for its
@@ -467,7 +534,7 @@ export interface HeavyConfig {
 export interface CoordinatorWaitConfig {
   /** A waiting step looks again after this many seconds; the first in line for the host lock every 2 at most. */
   readonly pollSeconds: number;
-  /** A deploy step (`teamrig integrate`) waits this many minutes at most for quiet claims and the host lock, then is refused. */
+  /** A deploy step (`teamrig integrate`, `roll`) waits this many minutes at most for quiet claims and the host lock, then is refused; a wait in a line for the lock that keeps moving goes on past them. */
   readonly maxMinutes: number;
 }
 
@@ -568,6 +635,17 @@ export interface AlertsConfig {
   readonly persistentFailureHours: number;
 }
 
+/** When the lead asks the owner the decisions waiting on them, together in a batch (src/decisions/batch.ts). */
+export interface DecisionsConfig {
+  /**
+   * The lead's batch times, `HH:MM` UTC (its budget checkpoints, say). With none, a batch comes only at the daily
+   * meeting or by `batchAt`, and a wait due within a day is asked at once.
+   */
+  readonly batchTimesUtc: readonly string[];
+  /** A batch is due once this many waits on the owner are not yet asked; 0: never by count. */
+  readonly batchAt: number;
+}
+
 /**
  * Context refresh: at any turn end with the session's context at or over `contextTokens`, at a task end
  * (`set <id> --status done`) with `everyTasks` tasks finished since its context was last fresh, or after the lead
@@ -596,6 +674,26 @@ export interface RefreshConfig {
   readonly autoRestart: boolean;
   /** How long after the turn's end the automatic restart waits, so the user can still type to keep the context. */
   readonly restartDelaySeconds: number;
+  /**
+   * The plugin's mod holds the automatic /clear while the person typed in the tab's prompt (a key, a paste) or sent
+   * a prompt there this recently, and while the prompt holds a draft: a /clear never lands under the person. 0: only
+   * a draft holds it.
+   */
+  readonly holdAfterActivityMinutes: number;
+  /**
+   * Before the plugin's mod runs the automatic /clear, a band above the prompt counts down this many seconds, with
+   * "Refresh now" and "Hold 10 min"; a key in the prompt holds it too. 0: no band, the /clear runs at once.
+   */
+  readonly countdownSeconds: number;
+  /**
+   * While a session's handover is asked for or written (the fresh start to come), the plugin's mod stops Claude Code's
+   * own compaction (trigger `auto`) of its main conversation as long as the context, as Claude Code estimates it, is
+   * under this many tokens: the /clear at the turn's end replaces the compaction. Past it a compaction goes through, so
+   * a session never runs out of room (a prompt too long for the window is past it too); `/compact` and a subagent's own
+   * compaction are never stopped. 0: never stopped. It also bounds the owner's open daily meeting, which holds the
+   * lead's refresh only under it (src/refresh/decide.ts `meetingHolds`); 0 holds it until the meeting ends.
+   */
+  readonly compactCeilingTokens: number;
   /**
    * A program (its path, then its arguments) run after an automatic restart ended a session, given Claude
    * Code's SessionEnd hook input (reason `clear`) on stdin: for a SessionEnd hook the end skipped, since on
@@ -684,8 +782,22 @@ export function isTerminalChoice(value: unknown): value is TerminalChoice {
   return TERMINALS.some((terminal) => terminal === value);
 }
 
+/**
+ * The room `teamrig open` and `teamrig hire --yes` need on the host before they add a session (src/sessions/headroom.ts),
+ * and when `teamrig close` may end one to free it.
+ */
+export interface HeadroomConfig {
+  /** The MB a new session is counted to need while no session runs to measure; else the median running session's tree. */
+  readonly sessionMb: number;
+  /** The most of the host's commit limit, in %, its commit charge may reach with the new session counted. */
+  readonly commitMaxPct: number;
+  /** How long, in minutes, a session stays quiet before `teamrig close` may end it. */
+  readonly closeIdleMinutes: number;
+}
+
 export interface OpenConfig {
   readonly terminal: TerminalChoice;
+  readonly headroom: HeadroomConfig;
 }
 
 /** What `teamrig statusline` shows beside the model and the plan's use of the week. */
@@ -761,6 +873,11 @@ export interface KitConfig {
   readonly names: Readonly<Record<string, string>>;
   /** Each role's session, by id. */
   readonly roles: RolesConfig;
+  /**
+   * Each sub-lead's members, by id (T781, `promote`): a sub-lead leads the sessions it lists, and the lead every
+   * session no sub-lead lists; a sub-lead may list sub-leads, at any depth. Read through `LeadTree`.
+   */
+  readonly leads: Readonly<Record<string, readonly string[]>>;
   /** Decision areas only the human owner can approve; silence never counts as consent for them. */
   readonly ownerGates: readonly string[];
   /** The local rules kept although they conflict with a core rule, each with the side that wins (`rules keep`). */
@@ -770,10 +887,13 @@ export interface KitConfig {
   readonly skills: SkillsConfig;
   readonly contextFiles: ContextFilesConfig;
   readonly lock: LockConfig;
+  readonly exec: ExecConfig;
   readonly pushGuard: PushGuardConfig;
   readonly packageGuard: PackageGuardConfig;
   readonly commitGuard: CommitGuardConfig;
   readonly prompts: PromptsConfig;
+  /** Refuses a call that would print a secret file, the environment or a secret variable (hook-secret-guard). */
+  readonly secretGuard: SecretGuardConfig;
   readonly commits: CommitsConfig;
   readonly coordinator: CoordinatorConfig;
   readonly budget: BudgetConfig;
@@ -783,15 +903,16 @@ export interface KitConfig {
   readonly tests: TestsConfig;
   readonly github: GithubConfig;
   readonly alerts: AlertsConfig;
+  readonly decisions: DecisionsConfig;
   /**
    * A colored circle before each tab's title for what its session is doing (hook-tab-status.ts). It also
    * needs Claude Code's own title off (`CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`), else Claude Code writes over it.
    */
   readonly tabStatus: { readonly enabled: boolean };
   /**
-   * Refuses Claude Code's question picker (AskUserQuestion) to every session but the lead, which would stop the
-   * session until the person answers; the reason says to record the decision on its task and go on
-   * (hook-picker-guard.ts). Off by default.
+   * Refuses Claude Code's question picker (AskUserQuestion), which would stop the session until the person answers,
+   * to every session and helper, and to the lead outside the owner's daily meeting; the reason says to decide it if it
+   * is the session's own, else record it on its task and go on (hook-picker-guard.ts). Off by default.
    */
   readonly pickerGuard: { readonly enabled: boolean };
   readonly turnLog: TurnLogConfig;

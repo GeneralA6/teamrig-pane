@@ -9,7 +9,10 @@ import type {
   CommitGuardConfig,
   CommitsConfig,
   ContextFilesConfig,
+  DecisionsConfig,
   GithubConfig,
+  HeadroomConfig,
+  ExecConfig,
   HiringConfig,
   LaunchConfig,
   LockConfig,
@@ -18,6 +21,7 @@ import type {
   OpenConfig,
   PackageGuardConfig,
   PromptsConfig,
+  SecretGuardConfig,
   PushGuardConfig,
   ReadonlyShellConfig,
   RefreshConfig,
@@ -97,15 +101,25 @@ export const DEFAULT_CONTEXT_FILES: ContextFilesConfig = { maxClaudeMdChars: 12_
 
 export const DEFAULT_LOCK: LockConfig = { ttlMs: 30_000, pollMs: 50, waitMs: 20_000 };
 
-export const DEFAULT_PUSH_GUARD: PushGuardConfig = { protectedBranches: ['main', 'master'], pushToProtected: 'ask' };
+/** No exec PATH: a privileged command names its program by absolute path until the team lists its tool folders. */
+export const DEFAULT_EXEC: ExecConfig = { path: [] };
 
-/** Refused by default: a helper's `npx eslint` once fetched and ran an unvetted package (T450, 10-16). */
-export const DEFAULT_PACKAGE_GUARD: PackageGuardConfig = { adHocRunners: 'deny' };
+export const DEFAULT_PUSH_GUARD: PushGuardConfig ={ protectedBranches: ['main', 'master'], pushToProtected: 'ask' };
+
+/**
+ * Refused by default: a helper's `npx eslint` once fetched and ran an unvetted package (T450, 10-16), and an install
+ * lands a version as unvetted unless its exact version is old enough and has no advisory (T681). Two weeks is the
+ * window in which a compromised release is usually found and pulled.
+ */
+export const DEFAULT_PACKAGE_GUARD: PackageGuardConfig = { adHocRunners: 'deny', installs: 'deny', cooldownDays: 14 };
 
 /** Refused by default: the hooks are the repository's own checks, and a session that skips them ships what they would catch. */
 export const DEFAULT_COMMIT_GUARD: CommitGuardConfig = { skipHooks: 'deny' };
 
 export const DEFAULT_PROMPTS: PromptsConfig = { hookAsks: 'ask' };
+
+/** Refused by default: a secret printed into a session lands in its transcript and every later prompt (T660, 10-19). */
+export const DEFAULT_SECRET_GUARD: SecretGuardConfig = { secretReads: 'deny', paths: [], envNames: [] };
 
 /** Off, and trusting no prefix, until a team opts in. */
 export const DEFAULT_READONLY_SHELL: ReadonlyShellConfig = { enabled: false, allowPrefixes: [] };
@@ -144,6 +158,8 @@ export const DEFAULT_SESSION_SHARE = 1;
 
 export const DEFAULT_ALERTS: AlertsConfig = { persistentFailureHours: 24 };
 
+export const DEFAULT_DECISIONS: DecisionsConfig = { batchTimesUtc: [], batchAt: 5 };
+
 export const DEFAULT_LOOPS: LoopsConfig = { chainNudgeAt: 6 };
 export const DEFAULT_LEAD_BOUNDARY: LeadBoundaryConfig = { enabled: true, ownPaths: [], searchNudgeAt: 3 };
 /** On, for a day: what a tab showed stays readable through a night of refreshes. */
@@ -171,7 +187,9 @@ export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {
  * Claude Code compacts a 200k window at about 167k, so 120k refreshes before that; every 3 tasks catches a
  * session that grows slowly, from 80k up. Measured over 8 days of 12 sessions: about 9 refreshes a day in all.
  * The user types /clear for the fresh start (`autoRestart` off): an automatic /clear wiped the screen while the
- * user was still reading the last reply, still had its question to answer, or was away.
+ * user was still reading the last reply, still had its question to answer, or was away. While a handover is
+ * pending, the compaction at 167k waits up to 185k: 18k of room to finish the step and write it, and 15k under the
+ * window for a large tool result.
  */
 export const DEFAULT_REFRESH: RefreshConfig = {
   enabled: true,
@@ -181,10 +199,20 @@ export const DEFAULT_REFRESH: RefreshConfig = {
   tabTitle: true,
   autoRestart: false,
   restartDelaySeconds: 15,
+  holdAfterActivityMinutes: 5,
+  countdownSeconds: 20,
+  compactCeilingTokens: 185_000,
   endCommand: [],
 };
 
-export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto' };
+/**
+ * A session is counted at 1.2 GB (on 10-19, 18 sessions held 21.9 GB with their helpers and MCP servers), and the
+ * commit charge stays at most 92% with it (it reached 100% that morning, and Claude Code then killed running steps).
+ * A session quiet an hour may be closed: the owner's pick on 10-19.
+ */
+export const DEFAULT_HEADROOM: HeadroomConfig = { sessionMb: 1200, commitMaxPct: 92, closeIdleMinutes: 60 };
+
+export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto', headroom: DEFAULT_HEADROOM };
 
 /** The status line shows the session's folder, its branch and the command that resumes it, unless the team turns them off. */
 export const DEFAULT_STATUS_LINE: StatusLineConfig = { folder: true, branch: true, resume: true };
