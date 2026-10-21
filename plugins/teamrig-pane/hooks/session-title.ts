@@ -1,8 +1,9 @@
 // The session title (T824): whose pane this is, so with several panes open across tabs a glance tells them apart.
 // The pane's first line, in every view and page, names the session as teamrig messages it (its name on the team, from
-// the team's config and rename log: source.ts), then its area and its team, dim; the band above the prompt leads its
-// banner with the name alone (banner.ts), the one line that stays in view while the pane's body scrolls, as the engine
-// keeps no pane row fixed. A pinned area is the area the pane shows, so the title names it and says it is pinned.
+// the team's config and rename log: source.ts), then dim its team where the name does not lead with it; the area id is
+// left out (T935: it read as unclear). The band above the prompt leads its banner with the name alone
+// (banner.ts), the one line that stays in view while the pane's body scrolls, as the engine keeps no pane row fixed. A
+// pinned area is the area the pane shows, so the title names it and says it is pinned.
 // Pure: spans that register.tsx draws on one line, cut at the pane's width.
 import type { Snapshot } from '../types'
 import { SEPARATOR, type Span } from './rows'
@@ -19,15 +20,19 @@ export function sessionName(area: string, areaName: string | null): string {
 }
 
 /**
- * `acme-tr-pane · area tr-pane · team acme`: the name bold, the rest dim; the area only when the name is not the
- * area itself, the team only when the pane found one, ` (pinned)` after the name of a pinned area. With no area, a dim
- * `no session` before the team; with neither, null: the pane draws no title.
+ * `team-lead · team acme`: the name bold, then the team dim, only where the pane found one and the name does not lead
+ * with it (`acme-tr-pane` stands alone); ` (pinned)` after the name of a pinned area. With no area, a dim `no session`
+ * before the team; with neither, null: the pane draws no title.
  */
 export function titleSpans(names: TitleNames): Span[] | null {
-  const team: Span[] = names.team === null ? [] : [SEPARATOR, { text: `team ${names.team}`, dim: true }]
-  if (names.area === null) return names.team === null ? null : [{ text: NO_SESSION, dim: true }, ...team]
+  if (names.area === null) return names.team === null ? null : [{ text: NO_SESSION, dim: true }, ...teamSpans(names.team)]
   const name = sessionName(names.area, names.areaName)
   const pinned: Span[] = names.areaSource === 'pinned' ? [{ text: ' (pinned)', dim: true }] : []
-  const area: Span[] = name === names.area ? [] : [SEPARATOR, { text: `area ${names.area}`, dim: true }]
-  return [{ text: name, bold: true }, ...pinned, ...area, ...team]
+  const team = names.team !== null && name.startsWith(`${names.team}-`) ? [] : teamSpans(names.team)
+  return [{ text: name, bold: true }, ...pinned, ...team]
+}
+
+/** ` · team acme`, dim; none when the pane found no team. */
+function teamSpans(team: string | null): Span[] {
+  return team === null ? [] : [SEPARATOR, { text: `team ${team}`, dim: true }]
 }

@@ -12,11 +12,20 @@ describe('sessionName', () => {
 })
 
 describe('titleSpans', () => {
-  test('the name bold, then its area and team dim between dots', () => {
-    expect(titleSpans(NAMED)).toEqual([
-      { text: 'acme-tr-pane', bold: true },
+  test('a name that leads with its team stands alone, bold; the area id is never drawn', () => {
+    expect(titleSpans(NAMED)).toEqual([{ text: 'acme-tr-pane', bold: true }])
+    expect(titleSpans({ ...NAMED, area: 'lead', areaName: 'acme-boss' })).toEqual([{ text: 'acme-boss', bold: true }])
+  })
+
+  test('a name that does not lead with its team: the team dim after a dot', () => {
+    expect(titleSpans({ ...NAMED, area: 'lead', areaName: 'team-lead' })).toEqual([
+      { text: 'team-lead', bold: true },
       SEPARATOR,
-      { text: 'area tr-pane', dim: true },
+      { text: 'team acme', dim: true },
+    ])
+    // A name that only starts with the team's letters does not lead with the team.
+    expect(titleSpans({ ...NAMED, areaName: 'acmes-tr-pane' })).toEqual([
+      { text: 'acmes-tr-pane', bold: true },
       SEPARATOR,
       { text: 'team acme', dim: true },
     ])
