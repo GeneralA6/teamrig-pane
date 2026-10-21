@@ -146,8 +146,8 @@ redrawn on every keystroke. The status bar takes only the rows past the 4 the li
 the whole list.
 
 Docked, a title line leads every view and page, so with panes open in several tabs a glance tells them apart:
-the session's name as teamrig messages it, bold (` (pinned)` after it for a pin), then dim its area when the
-name is not the area's id, and its team (`acme-pane · area pane · team acme`). With no area it reads
+the session's name as teamrig messages it, bold (` (pinned)` after it for a pin), then dim its team when the
+name does not lead with it: `acme-pane` alone, `team-lead · team acme`. The area id is left out. With no area it reads
 `no session · team <name>`. It scrolls with the body, as the host keeps no pane row fixed; the band above the
 prompt keeps the name in view. Above the prompt and in the minimized strip the pane draws no title.
 

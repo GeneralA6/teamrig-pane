@@ -13,8 +13,8 @@ labels on. No model calls, so no tokens. Every time is on the team's clock and z
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
 session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
 to each team session's prompts and replies (Tasks, Changes and Log, below). Docked, its first line
-names the session, its area and its team (`acme-pane · area pane · team acme`), so panes open in several
-tabs tell apart at a glance.
+names the session (`acme-pane`; `team-lead · team acme` when the name does not lead with its team), so
+panes open in several tabs tell apart at a glance.
 
 - **mine**: the session's area, under its status bar (Status bar, below) and a header counting its
   active tasks and unread inbox lines (`3 active · inbox 1 unread`; a pin names the area first,
