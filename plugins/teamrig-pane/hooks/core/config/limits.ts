@@ -27,9 +27,14 @@ export const CONFIG_LIMITS = {
   maxSelfMadePerDay: { min: 0, max: 200 },
   stopgapFiles: { maxItems: 20, maxLength: 260 },
   persistentFailureHours: { min: 1, max: 720 },
+  decisionBatchTimes: { maxItems: 8 },
+  decisionBatchAt: { min: 0, max: 50 },
   chainNudgeAt: { min: 0, max: 50 },
   leadOwnPaths: { maxItems: 16, maxLength: 256 },
   readonlyShellPrefixes: { maxItems: 16, maxLength: 120 },
+  secretPaths: { maxItems: 32, maxLength: 200 },
+  secretEnvNames: { maxItems: 16, maxLength: 120 },
+  packageCooldownDays: { min: 0, max: 365 },
   searchNudgeAt: { min: 0, max: 50 },
   turnLogKeepHours: { min: 1, max: 168 },
   wakePriority: { min: 1, max: 99 },
@@ -70,6 +75,9 @@ export const CONFIG_LIMITS = {
   heavyMemorySampleSeconds: { min: 0, max: 600 },
   heavyMemoryFloorMb: { min: 0, max: 1_048_576 },
   heavySmallReserveMb: { min: 0, max: 1_048_576 },
+  headroomSessionMb: { min: 100, max: 65_536 },
+  headroomCommitMaxPct: { min: 50, max: 100 },
+  headroomCloseIdleMinutes: { min: 15, max: 10_080 },
   coordinatorPollSeconds: { min: 1, max: 600 },
   coordinatorWaitMaxMinutes: { min: 0, max: 1440 },
   gateTimeoutSeconds: { min: 1, max: 600 },
@@ -78,6 +86,7 @@ export const CONFIG_LIMITS = {
   assumedRollMinutes: { min: 0, max: 1440 },
   windowMinMinutes: { min: 1, max: 1440 },
   resetBlackoutHours: { min: 1, max: 48 },
+  execPath: { maxItems: 16, maxLength: 260 },
 } as const;
 
 /**

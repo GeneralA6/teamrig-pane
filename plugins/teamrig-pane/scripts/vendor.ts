@@ -15,6 +15,7 @@ export const CORE_FILES: readonly string[] = [
   READ_ENTRY,
   'config/defaults.ts',
   'config/launch.ts',
+  'config/lead-tree.ts',
   'config/limits.ts',
   'config/migrate.ts',
   'config/parse.ts',

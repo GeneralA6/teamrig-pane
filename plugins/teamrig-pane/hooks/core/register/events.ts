@@ -2,7 +2,7 @@
 import { isRecord, type JsonRecord } from '../core/guards.ts';
 import type { JsonlRecord } from '../core/jsonl.ts';
 import { parseUtcDeadline } from '../core/time.ts';
-import { isTaskStatus, LEGACY_WAITING_STATUS, TASK_ID, type TaskStatus } from './model.ts';
+import { isTaskStatus, LEGACY_WAITING_STATUS, TASK_ID, WAIT_STATUSES, type TaskStatus } from './model.ts';
 import { parseCard, type DecisionCard } from './card.ts';
 import { parseWaits, type WaitReason } from './waits.ts';
 
@@ -14,8 +14,10 @@ import { parseWaits, type WaitReason } from './waits.ts';
  * `waits`, which replaced `blocked`: an older reader ignores the new fields and skips a `waiting` line as
  * a newer teamrig's, and a `blocked` line reads here as `waiting` with no reasons. It also gained a
  * `verifying` status's `proof`, a task's `description` (0.44.0) and its `size` (0.47.0), and a `waiting` status's
- * decision `card` (0.79.0), which an older reader ignores: each reads there as none, and an older teamrig's
- * `compact` drops it from the snapshot it rewrites (the archive keeps the lines as written).
+ * decision `card` (0.79.0), the same `waits` and `card` on a `verifying` line for what its proof waits for
+ * (0.109.0), and an update's approval `verdict` (0.126.0), which an older reader ignores: each reads there as none
+ * (an answered update as a note alone), and an older teamrig's `compact` drops it from the snapshot it rewrites (the
+ * archive keeps the lines as written).
  * Parsing checks the FORMAT only (any positive priority, any goal string): team policy is applied
  * on write, so changing the config never erases history.
  */
@@ -71,9 +73,12 @@ export interface StatusEvent extends EventBase {
   readonly evidence: string | null;
   /** The skill written or updated when the task closed, or `none`; absent before skills were tracked. */
   readonly skill: string | null;
-  /** What a `waiting` task waits for; written only with that status, and absent on a `blocked` line read as one. */
+  /**
+   * What a `waiting` task waits for, or what a `verifying` one's proof does (WAIT_STATUSES); written only with those
+   * statuses, and absent on a `blocked` line read as one.
+   */
   readonly waits?: readonly WaitReason[];
-  /** What a `waiting` task asks of whoever decides (card.ts); written only with that status, on a decision or an approval wait. */
+  /** What a wait on a decision or an approval asks of whoever decides (card.ts); written only with WAIT_STATUSES. */
   readonly card?: DecisionCard;
   /** What will prove a `verifying` task works; written only with that status, and absent on lines from before `--proof`. */
   readonly proof?: string;
@@ -86,10 +91,21 @@ export interface StatusEvent extends EventBase {
   readonly followups?: readonly string[];
 }
 
+/** The lead's answer to the approval a waiting task asks of it (T684): given, or declined with the note saying why. */
+export const APPROVAL_VERDICTS = ['approved', 'declined'] as const;
+
+export type ApprovalVerdict = (typeof APPROVAL_VERDICTS)[number];
+
+export function isApprovalVerdict(value: unknown): value is ApprovalVerdict {
+  return APPROVAL_VERDICTS.some((verdict) => verdict === value);
+}
+
 export interface UpdateEvent extends EventBase {
   readonly type: 'update';
   readonly changes: Partial<TaskFields>;
   readonly note: string | null;
+  /** The lead's answer to the task's approval wait, its note saying what it checked or why not; only `approve` writes it. */
+  readonly verdict?: ApprovalVerdict;
 }
 
 export type RegisterEvent = CreateEvent | StatusEvent | UpdateEvent;
@@ -154,11 +170,11 @@ export function parseEvent(line: JsonlRecord): EventParse {
       if (problem !== undefined) {
         return unreadable(problem);
       }
-      const waits = status === 'waiting' && record['waits'] !== undefined ? parseWaits(record['waits']) : undefined;
+      const waits = WAIT_STATUSES.includes(status) && record['waits'] !== undefined ? parseWaits(record['waits']) : undefined;
       if (typeof waits === 'string') {
         return unreadable(waits);
       }
-      const card = status === 'waiting' ? parseCard(record['card']) : undefined;
+      const card = WAIT_STATUSES.includes(status) ? parseCard(record['card']) : undefined;
       if (typeof card === 'string') {
         return unreadable(card);
       }
@@ -192,7 +208,11 @@ export function parseEvent(line: JsonlRecord): EventParse {
       if (problem !== undefined) {
         return unreadable(problem);
       }
-      return { kind: 'event', event: { ...base, type: 'update', changes, note: textOrNull(record, 'note') } };
+      const verdict = record['verdict'];
+      if (verdict !== undefined && !isApprovalVerdict(verdict)) {
+        return unreadable(`unknown approval verdict ${JSON.stringify(verdict)}`);
+      }
+      return { kind: 'event', event: { ...base, type: 'update', changes, note: textOrNull(record, 'note'), ...(verdict === undefined ? {} : { verdict }) } };
     }
     default:
       return unreadable(`unknown event type ${JSON.stringify(record['type'])}`);

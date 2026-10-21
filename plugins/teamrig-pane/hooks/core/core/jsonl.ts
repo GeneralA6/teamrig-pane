@@ -69,7 +69,7 @@ export class NewerDataError extends Error {
   readonly known: number;
 
   constructor(file: string, found: number, known: number) {
-    super(`${file} holds format v${found} records; this version writes v${known}. Update teamrig before writing.`);
+    super(`${file} holds format v${found} records; this version writes v${known}. A newer teamrig wrote them: in a Claude Code tab, /reload-plugins loads the installed one; elsewhere, update teamrig before writing.`);
     this.name = 'NewerDataError';
     this.file = file;
     this.found = found;
@@ -83,4 +83,17 @@ export function assertWritable(file: string, parse: JsonlParse, knownVersion: nu
   if (newest > knownVersion) {
     throw new NewerDataError(file, newest, knownVersion);
   }
+}
+
+/**
+ * A one-object file's record before it is rewritten; undefined for a missing or damaged file, which the write
+ * may replace. A file in a newer format is refused, so an old binary never overwrites what a newer one wrote.
+ */
+export function writableObject(file: string, text: string | undefined, knownVersion: number): JsonRecord | undefined {
+  const record = text === undefined ? undefined : parseObject(text.trim());
+  const version = record === undefined ? undefined : recordVersion(record);
+  if (version !== undefined && version > knownVersion) {
+    throw new NewerDataError(file, version, knownVersion);
+  }
+  return record;
 }
