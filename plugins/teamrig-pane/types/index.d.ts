@@ -66,6 +66,14 @@ export type TaskRow = {
  */
 export type AreaSource = 'pinned' | 'inbox-read'
 
+/** Who leads the team's sessions: teamrig's lead tree (T781) over the team's config, as hooks/leads.ts reads it. */
+export type TeamLeads = {
+  /** The team's lead, `roles.lead`. */
+  lead: string
+  /** Each session on the team but the lead, to its direct leader: the sub-lead that lists it, else the lead. */
+  leaderOf: Readonly<Record<string, string>>
+}
+
 /** Everything a drawing needs, rebuilt when a register file changes. */
 export type Snapshot = {
   /** The tasks a drawing can show: the active ones and those finished within HELD_DAYS of the fold (hooks/done.ts isHeldFinished). */
@@ -80,6 +88,11 @@ export type Snapshot = {
    * teamrig reads, or an area that is not on the team.
    */
   areaName: string | null
+  /**
+   * Who leads whom on the team, for the card's Lead row: re-read with the names when the team's config moves
+   * (hooks/source.ts). Null with no team or no config file teamrig reads.
+   */
+  leads: TeamLeads | null
   /** Unread lines in `<inbox>/<area>.md`, past its read mark as teamrig finds it; null when the area never ran `inbox read`. */
   unreadInbox: number | null
   /** What the pane could not read: a failed load (the last good tasks stay drawn), or the lines teamrig's reader skipped. */

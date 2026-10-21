@@ -3,6 +3,7 @@
 // from the snapshot's dependency tree (meta.ts treeOf, core register/tree.ts).
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, type TaskTree } from './core/read/index'
+import { sameLeads } from './leads'
 import { metaText, treeOf, whenWords, type PaneTree } from './meta'
 import { barCounts, barStatusOf, isFinishedOn, type BarCounts } from './status-bar'
 import { dayOf } from './zone'
@@ -165,6 +166,7 @@ export function sameView(a: Snapshot, b: Snapshot): boolean {
     a.areaSource !== b.areaSource ||
     a.team !== b.team ||
     a.areaName !== b.areaName ||
+    !sameLeads(a.leads, b.leads) ||
     a.unreadInbox !== b.unreadInbox ||
     a.problem !== b.problem ||
     a.notPickedUpAfterHours !== b.notPickedUpAfterHours ||

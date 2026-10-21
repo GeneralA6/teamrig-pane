@@ -3,7 +3,7 @@
 // and the register put together by teamrig's own read entry (hooks/core/read), so the pane shows what
 // teamrig's commands show, on a register never rotated and on a rotated one alike.
 // File access goes through `Files`, which register.tsx backs with $.fs and tests with a fake.
-import type { AreaSource, Snapshot, TaskRow, TeamSettings } from '../types'
+import type { AreaSource, Snapshot, TaskRow, TeamLeads, TeamSettings } from '../types'
 import {
   assemble,
   indexMarks,
@@ -30,6 +30,7 @@ import {
 } from './core/read/index'
 import { lineHash } from './line-hash'
 import { isHeldFinished } from './done'
+import { teamLeads } from './leads'
 import { rowOf } from './log'
 import type { TeamFiles } from './places'
 import { isActive } from './view'
@@ -156,15 +157,18 @@ class WatchedFile<T> {
 }
 
 /**
- * The team's session names, as teamrig's Roster gives them over the team's config and rename log, each file re-read
- * only when its stamp moves, so a rename shows on the next poll. A missing config, or one teamrig refuses, names no
- * session (places.ts already refused the pane for a config it cannot read).
+ * The team's session names, as teamrig's Roster gives them over the team's config and rename log, and who leads whom
+ * (leads.ts), each file re-read only when its stamp moves, so a rename or a promotion shows on the next poll. A missing
+ * config, or one teamrig refuses, names no session and no lead (places.ts already refused the pane for a config it
+ * cannot read).
  */
 class TeamNames {
   readonly team: string
   private readonly config: WatchedFile<ConfigRead | null>
   private readonly renames: WatchedFile<readonly Rename[]>
   private roster: Roster | null = null
+  /** The lead tree of the config last read; null with none read. */
+  leads: TeamLeads | null = null
 
   constructor(files: Files, team: TeamFiles) {
     this.team = team.team
@@ -172,13 +176,14 @@ class TeamNames {
     this.renames = new WatchedFile<readonly Rename[]>(files, team.renames, text => readRenames(text).renames, [])
   }
 
-  /** True when the names may have changed: the config or the rename log moved. */
+  /** True when the names or the leads may have changed: the config or the rename log moved. */
   async refresh(): Promise<boolean> {
     const configMoved = await this.config.refresh()
     const renamesMoved = await this.renames.refresh()
     if (!configMoved && !renamesMoved) return false
     const read = this.config.current
     this.roster = read?.status === 'loaded' ? new Roster(read.config, this.team, this.renames.current) : null
+    this.leads = read?.status === 'loaded' ? teamLeads(read.config) : null
     return true
   }
 
@@ -302,6 +307,7 @@ export class TaskRegisterSource {
       areaSource,
       team: this.names?.team ?? null,
       areaName: area === null ? null : (this.names?.nameOf(area) ?? null),
+      leads: this.names?.leads ?? null,
       unreadInbox: area !== null && this.inbox && mark !== undefined ? unreadOf(area, this.inbox.current, mark, lineHash).lines.length : null,
       problem: skippedText(this.paths, this.register.current, this.marks.current),
       ...this.settings,

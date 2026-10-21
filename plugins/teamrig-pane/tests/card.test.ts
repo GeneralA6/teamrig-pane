@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { TaskDetail, TaskRow } from '../types'
+import type { TaskDetail, TaskRow, TeamLeads } from '../types'
 import { cardRows, LABEL_CELLS } from '../hooks/card'
 import { readRegister } from '../hooks/core/read/index'
 import { wrapRow } from '../hooks/layout'
@@ -232,6 +232,23 @@ describe('card', () => {
     const rows = (id: string) => cardOf(tasks, id).filter(row => /:(owner|origin)$/.test(row.key)).map(textOf)
     expect(rows('T1')).toEqual([labelled('Owner', 'po'), labelled('Origin', 'Asked and added by lead 13:00 UTC')])
     expect(rows('T2')).toEqual([labelled('Owner', 'etl'), labelled('Origin', 'Asked by owner, added by lead Mon 10-12')])
+  })
+
+  test("Lead, under Owner, names the lead the owner answers to on the team's lead tree; no row with no team config read", async () => {
+    const tasks = rowsOf([
+      createLine('T1', { owner: 'etl', by: 'lead', at: NOW - HOUR, source: 'lead' }),
+      createLine('T2', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'lead' }),
+      createLine('T3', { owner: 'lead', by: 'lead', at: NOW - HOUR, source: 'lead' }),
+    ])
+    const leads: TeamLeads = { lead: 'lead', leaderOf: { po: 'lead', etl: 'po' } }
+    const card = (id: string, read: TeamLeads | null) => cardRows('waiting', taskOf(tasks, id), UNREAD, treeAt(tasks, NOW, undefined, undefined, read))
+    const rows = (id: string, read: TeamLeads | null) => card(id, read).filter(row => /:(owner|lead)$/.test(row.key)).map(textOf)
+    expect(rows('T1', leads)).toEqual([labelled('Owner', 'etl'), labelled('Lead', 'po')])
+    expect(rows('T2', leads)).toEqual([labelled('Owner', 'po'), labelled('Lead', 'lead')])
+    expect(rows('T3', leads)).toEqual([labelled('Owner', 'lead'), labelled('Lead', 'lead')])
+    expect(rows('T1', null)).toEqual([labelled('Owner', 'etl')])
+    const keys = card('T1', leads).map(row => row.key)
+    expect(keys[keys.indexOf('waiting-card:T1:owner') + 1]).toBe('waiting-card:T1:lead')
   })
 
   test("Planned reads the task's week plan against the team's week: this week, next week, another week by its Monday, or none", async () => {

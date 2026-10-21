@@ -3,7 +3,8 @@
 // Description: what the task is and why, as written (`teamrig add --description`, a GitHub issue's body); a task
 // written before teamrig kept one shows the ask quoted from its ref (details.ts) instead. Status: since when, who
 // set it when that is known, then why a waiting task waits. Note: the newest status note. Proof: what proves a
-// verifying task. Owner: the session that owns it, on every card. Priority, Due (Verify by while verifying; a date
+// verifying task. Owner: the session that owns it, on every card. Lead: the lead its owner answers to (leads.ts),
+// when the team's config is read. Priority, Due (Verify by while verifying; a date
 // taken from a task that needs it names that task; late in red) and Planned (its week plan against the team's week:
 // this week, next week, the week of a day, or none), each on its own row. After: the tasks planned first, with their
 // status. Needed by: each active task of another owner that needs it, with its owner and due, the earliest due first.
@@ -19,8 +20,9 @@ import type { TaskDetail, TaskRow } from '../types'
 import { TimeZone, type TaskTree, type WaitContext } from './core/read/index'
 import { fileLabel, refParts } from './details'
 import { idSpans } from './ids'
+import { leadOf } from './leads'
 import { issueOf, taskLinks } from './links'
-import { dueWords, lateWords, neededByLines, STATUS_WORDS, storedDayWords, waitingWords, whenWords } from './meta'
+import { dueWords, lateWords, neededByLines, STATUS_WORDS, storedDayWords, waitingWords, whenWords, type PaneTree } from './meta'
 import { refSegments } from './ref-file'
 import type { Row, Span } from './rows'
 import { weekAfter, weekOf, type Clock } from './zone'
@@ -42,6 +44,7 @@ export type CardField =
   | 'note'
   | 'proof'
   | 'owner'
+  | 'lead'
   | 'priority'
   | 'due'
   | 'planned'
@@ -192,7 +195,7 @@ export function cardRows(
   section: string,
   task: TaskRow,
   detail: TaskDetail,
-  tree: TaskTree<TaskRow>,
+  tree: PaneTree,
   lead: Span | null = GUIDE,
   only: ReadonlySet<CardField> | null = null,
 ): Row[] {
@@ -207,6 +210,7 @@ export function cardRows(
     ...field('note', 'Note', textLines(task.note)),
     ...field('proof', 'Proof', textLines(task.proof, { color: 'success' })),
     ...field('owner', 'Owner', [[{ text: task.owner }]]),
+    ...field('lead', 'Lead', textLines(leadOf(task.owner, tree.leads))),
     ...field('priority', 'Priority', [[{ text: String(task.priority) }]]),
     ...field('due', task.status === 'verifying' ? 'Verify by' : 'Due', dueLines(task, tree)),
     ...field('planned', 'Planned', plannedLines(task, context)),
