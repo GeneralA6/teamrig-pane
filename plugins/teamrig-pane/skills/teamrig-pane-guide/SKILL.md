@@ -257,14 +257,15 @@ value:
 ◐ T12  Build the signup endpoint
     │ Description  The signup endpoint, email first
     │ Status       in progress since 11:55 IDT by api
+    │ Owner        api
+    │ Lead         lead
     │ Priority     2
     │ Due          Sat 10-17
-    │ Week         Tue 10-13
+    │ Planned      this week
     │ After        T5 (done)
     │ Needed by    T14 (web, due Mon 10-19)
     │ Goal         G10.2 Accounts
-    │ From         lead
-    │ Added        Tue 10-13 by lead
+    │ Origin       Asked and added by lead Tue 10-13
     │ Reference    inbox/api.md
     │ Evidence     abc1234
     │ Links        https://github.com/acme/app/pull/7
@@ -276,15 +277,15 @@ value:
 | `Status` | `not started`, `in progress`, `waiting`, `verifying`, `done` or `dropped`, since when, and who set it when that was the task's newest change; then why a waiting task waits, in red |
 | `Note` | Its newest status note |
 | `Proof` | What proves a verifying task (`teamrig set --proof`), in green |
+| `Owner` | The session that owns it, on every card |
+| `Lead` | The lead its owner answers to, from the team's config: the sub-lead that lists it, else the lead (for the lead's own tasks too); none when the pane read no team config |
 | `Priority` | Its priority, a number |
 | `Due` | The date it works to, `late 2d` in red once past it, a date taken from a task that needs it naming that task (`Wed 10-14 (from T7)`); `Verify by` while it is verifying |
-| `Week` | Its planning week, by its first day |
+| `Planned` | The week plan it is in, against the team's week: `this week`, `next week`, `week of Mon 10-26`, or `not in a week plan` |
 | `After` | The tasks planned before it (`--after`), each with its status |
 | `Needed by` | Each active task of another owner that needs it (planned after it, or waiting on it), with its owner and due, the one due first |
 | `Goal` | The roadmap item of each of its `--goals` from the goals document (see [reference.md](reference.md#where-the-register-is)), else the bare id |
-| `From` | Who asked, or `GitHub issue #12` for a task teamrig opened from one |
-| `Added` | When it was written and by whom |
-| `Owner` | Its owner, in another area's list |
+| `Origin` | Who asked, then who wrote it and when: `Asked by owner, added by lead Tue 10-13`; `Asked and added by lead 13:00 IDT` when one session did both; `GitHub issue #12, added by ...` for a task teamrig opened from one |
 | `Reference` | Where its ask is written: each file by its folder and name (`inbox/po.md`), a click away from its page, other words as written |
 | `Evidence` | Its evidence |
 | `Links` | Up to 5 links: the GitHub issue a task teamrig opened from one came from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its description, ref, newest note, proof and evidence, once each |
@@ -309,12 +310,12 @@ Tasks › T50 › T58
 ○ T58  Read the source
 Description  Read the source nightly
 Status       not started since Sat 10-10 by lead
-Priority     3
-Week         Tue 10-13
-Goal         G10.2
-From         owner
-Added        Sat 10-10 by lead
 Owner        etl
+Lead         lead
+Priority     3
+Planned      this week
+Goal         G10.2
+Origin       Asked by owner, added by lead Sat 10-10
 Reference    docs/x.md
 ```
 

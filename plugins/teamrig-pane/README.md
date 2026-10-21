@@ -79,17 +79,21 @@ the value column, and shows only when it has a value:
   and who set it when that was the task's newest change, then why a waiting task waits, in red;
 - **Note:** its newest status note;
 - **Proof:** what proves a verifying task, in green;
+- **Owner:** the session that owns it, on every card;
+- **Lead:** the lead its owner answers to, from the team's config: the sub-lead that lists it, else the
+  lead (for the lead's own tasks too); none when the pane read no team config;
 - **Priority:** its number;
 - **Due:** the date it works to, `late 2d` in red once past it, a date taken from a task that needs it
   naming that task (`Wed 10-14 (from T7)`); **Verify by** while it is verifying;
-- **Week:** its planning week, by its first day;
+- **Planned:** the week plan it is in, against the team's week: `this week`, `next week`,
+  `week of Mon 10-26`, or `not in a week plan`;
 - **After:** the tasks planned before it, each with its status (`T5 (done)`);
 - **Needed by:** each active task of another owner that needs it, with its owner and due
   (`T7 (beta, due Thu 10-22)`), the one due first;
 - **Goal:** the roadmap item of each of its goals (`--goals G10.1g`, `S4`), else the bare id;
-- **From:** who asked, or `GitHub issue #12` for a task teamrig opened from one;
-- **Added:** when it was written and by whom;
-- **Owner:** its owner, in another area's list;
+- **Origin:** who asked, then who wrote it and when (`Asked by owner, added by lead Tue 10-13`;
+  `Asked and added by lead 13:00 IDT` when one session did both; `GitHub issue #12, added by ...` for a
+  task teamrig opened from one);
 - **Reference:** where its ask is written: each file by its folder and name (`inbox/po.md`), a click
   away from its page (below), other words as written;
 - **Evidence:** its evidence;
