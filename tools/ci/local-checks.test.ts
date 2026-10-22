@@ -66,6 +66,7 @@ describe('localChecks', () => {
 
   it('checks the commits since the base, names each check once and reads no CI event', () => {
     assert.deepEqual(localChecks('upstream/main', TEAMRIG).find((check) => check.name === 'DCO')?.argv, ['node', 'tools/dco/cli.ts', '--range', 'upstream/main..HEAD']);
+    assert.deepEqual(localChecks('upstream/main', TEAMRIG).find((check) => check.name === 'size rule')?.argv, ['node', 'tools/ci/size-rule-cli.ts', '--base', 'upstream/main']);
     assert.equal(new Set(checks.map((check) => check.name)).size, checks.length);
     assert.ok(checks.every((check) => !check.argv.includes('--github')));
   });
