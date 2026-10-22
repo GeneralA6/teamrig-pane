@@ -238,8 +238,9 @@ By default the pane reads the register where teamrig keeps it for the session's 
 both folders named below, the session's team is still looked for, for the files that name its sessions
 and for its notes: when none can be found or read, the pane goes without them.
 
-In a project teamrig is not set up for (no team and no folder named), the Tasks view shows how to set
-it up in place of the tasks: install teamrig while no team is under the kit home, make a team (ask
+In a project teamrig is not set up for (no team and no folder named), the pane shows how to set it up
+and nothing else, with no view buttons, Find row or mine/all/archive until it finds a team (the minimized
+strip keeps its buttons, and a press opens the steps): install teamrig while no team is under the kit home, make a team (ask
 Claude, or run `/teamrig:team-setup`), join a team already made by writing `{"team": "<id>"}` to the
 project's `.teamrig.json` (the kit home's teams are listed), or name both folders below. The pane looks
 again every 3 s and lists the tasks once it finds a team, with no restart; a problem a look finds, such

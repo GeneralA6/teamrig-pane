@@ -154,7 +154,8 @@ prompt keeps the name in view. Above the prompt and in the minimized strip the p
 ## The Tasks view
 
 In a project teamrig is not set up for (no `.teamrig.json` up from the session's folder, no `$TEAMRIG_TEAM`, no
-folder named), the view shows how to set it up in place of the tasks:
+folder named), the pane shows how to set it up and nothing else, in every view: no Tasks / Changes / Log switch, no
+Find row, no mine / all / archive (the minimized strip keeps its switch, and a press opens the steps):
 
 ```text
 teamrig is not set up for this project
@@ -166,8 +167,8 @@ The pane looks again every few seconds and lists the tasks once a team is found.
 ```
 
 With teams under the kit home, the install step gives way to `Join a team: write {"team": "<id>"} to
-<project>/.teamrig.json`, listing them. The pane looks again every 3 s and shows the team's tasks once it finds
-one, with no restart. To help the user, ask what the team is for and run the team-setup skill only if they want a team.
+<project>/.teamrig.json`, listing them. The pane looks again every 3 s and shows the team's tasks, with the switch,
+Find and the mode buttons, once it finds one, with no restart. To help the user, ask what the team is for and run the team-setup skill only if they want a team.
 
 The area is the teamrig session the pane shows as "mine". It comes from a pin (`/teamrig-pane <session>`), else from
 the newest `teamrig inbox read --session <id>` run in this Claude Code session (teamrig records which Claude
