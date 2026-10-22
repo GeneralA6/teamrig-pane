@@ -58,8 +58,8 @@ export type TeamFiles = { team: string; dir: string; config: string; renames: st
  * either way.
  */
 export type Places =
-  | { found: true; dirs: RegisterDirs; team: TeamFiles | null; settings: TeamSettings; goalsDoc: string | null }
-  | { found: false; problem: string; goalsDoc: string | null }
+  | { kind: 'found'; dirs: RegisterDirs; team: TeamFiles | null; settings: TeamSettings; goalsDoc: string | null }
+  | { kind: 'problem'; problem: string; goalsDoc: string | null }
 
 export type PlacesInput = {
   env: PlacesEnv
@@ -88,7 +88,7 @@ export async function findPlaces(input: PlacesInput): Promise<Places> {
   const settingsPath = named === undefined ? (kit === null ? null : `${kit}/pane.json`) : slashed(withHome(named, home))
   const settings: Found<Settings> = settingsPath === null ? { ok: true, value: {} } : await readSettings(input.files, settingsPath, named !== undefined, home)
   const goalsDoc = fromEnv.goalsDoc ?? (settings.ok ? settings.value.goalsDoc : undefined) ?? null
-  if (!settings.ok) return { found: false, problem: settings.problem, goalsDoc }
+  if (!settings.ok) return { kind: 'problem', problem: settings.problem, goalsDoc }
   const chosen = (key: DirKey): string | undefined => fromEnv[key] ?? settings.value[key]
   const tasksDir = chosen('tasksDir')
   const inboxDir = chosen('inboxDir')
@@ -97,16 +97,16 @@ export async function findPlaces(input: PlacesInput): Promise<Places> {
   // or read leaves no files and teamrig's defaults instead of a problem.
   if (tasksDir !== undefined && inboxDir !== undefined) {
     return {
-      found: true,
+      kind: 'found',
       dirs: { tasksDir, inboxDir },
       team: team.ok ? team.value.files : null,
       settings: team.ok ? team.value.settings : teamSettings(null, input.machineZone),
       goalsDoc,
     }
   }
-  if (!team.ok) return { found: false, problem: team.problem, goalsDoc }
+  if (!team.ok) return { kind: 'problem', problem: team.problem, goalsDoc }
   return {
-    found: true,
+    kind: 'found',
     dirs: { tasksDir: tasksDir ?? team.value.state, inboxDir: inboxDir ?? team.value.inbox },
     team: team.value.files,
     settings: team.value.settings,

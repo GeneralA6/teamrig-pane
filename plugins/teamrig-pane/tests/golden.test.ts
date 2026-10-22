@@ -92,7 +92,7 @@ function goldenFiles(changes: Record<string, string> = {}): MemoryFiles {
 async function paneSnapshot(files: MemoryFiles): Promise<Snapshot> {
   // The machine's zone is UTC: the team config's, as teamrig read it, must win over it.
   const places = await findPlaces({ env: { TEAMRIG_HOME: KIT }, files, home: null, cwd: `${GOLDEN_ROOT}/proj`, machineZone: 'UTC' })
-  if (!places.found) throw new Error(places.problem)
+  if (places.kind !== 'found') throw new Error(places.problem)
   const snap = await new TaskRegisterSource(files, registerPaths(places.dirs), places.settings, places.team).poll({
     claudeSession: GOLDEN_SESSION,
     pinned: null,

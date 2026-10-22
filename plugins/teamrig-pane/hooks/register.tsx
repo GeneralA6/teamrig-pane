@@ -418,15 +418,14 @@ export const register: Register = on => {
     }
     const machineZone = machineZoneOf(await $.env.get('TZ'), Intl.DateTimeFormat().resolvedOptions().timeZone)
     const places = await findPlaces({ env, files, home: home ?? null, cwd: e.cwd, machineZone })
-    const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } = places.found
-      ? { paths: registerPaths(places.dirs), settings: places.settings }
-      : { missing: places.problem }
-    team = places.found && places.team !== null ? { files, paths: places.team } : null
+    const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } =
+      places.kind === 'found' ? { paths: registerPaths(places.dirs), settings: places.settings } : { missing: places.problem }
+    team = places.kind === 'found' && places.team !== null ? { files, paths: places.team } : null
     const refPlaces: RefPlaces = {
       inboxDir: 'missing' in registerAt ? null : registerAt.paths.inboxDir,
       home: home ?? null,
       cwd: e.cwd,
-      teamDir: places.found && places.team !== null ? places.team.dir : null,
+      teamDir: places.kind === 'found' && places.team !== null ? places.team.dir : null,
       goalsDoc: places.goalsDoc,
     }
     details = new TaskDetails(files, refPlaces)
@@ -435,7 +434,7 @@ export const register: Register = on => {
       source:
         'missing' in registerAt
           ? registerAt
-          : new TaskRegisterSource(files, registerAt.paths, registerAt.settings, places.found ? places.team : null),
+          : new TaskRegisterSource(files, registerAt.paths, registerAt.settings, places.kind === 'found' ? places.team : null),
       sessionId: () => $.session.id(),
       now: () => $.clock.now(),
       publish: async change => {
