@@ -77,8 +77,8 @@ It is part of Claude Code's own screen, not another window: nothing to switch to
   a golden test holds the pane's rows to what `teamrig list` prints.
 - **Files only.** A stat every 3 s re-reads a file only when its size or time moved, plus a tick every
   60 s. No model calls, so no tokens.
-- **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; see
-  [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
+- **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; a project
+  with none shows how to set it up. See [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
 
 Using an AI assistant? Point it at [llms.txt](llms.txt): the pane explained for language models, with a link
 to teamrig's guide.

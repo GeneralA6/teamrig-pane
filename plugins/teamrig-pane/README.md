@@ -238,6 +238,13 @@ By default the pane reads the register where teamrig keeps it for the session's 
 both folders named below, the session's team is still looked for, for the files that name its sessions
 and for its notes: when none can be found or read, the pane goes without them.
 
+In a project teamrig is not set up for (no team and no folder named), the Tasks view shows how to set
+it up in place of the tasks: install teamrig while no team is under the kit home, make a team (ask
+Claude, or run `/teamrig:team-setup`), join a team already made by writing `{"team": "<id>"}` to the
+project's `.teamrig.json` (the kit home's teams are listed), or name both folders below. The pane looks
+again every 3 s and lists the tasks once it finds a team, with no restart; a problem a look finds, such
+as a pointer with no team in it, is a `WARN` line over the steps. One folder named alone is a `WARN`.
+
 Any folder can be named instead, each on its own; a variable wins over the settings file, which wins
 over the team default:
 
