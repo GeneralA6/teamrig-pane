@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { checkDocs, type DocFile } from './doc-check.ts';
+import { descriptionOf, frontmatterOf } from './skill-front.ts';
 
 /**
  * The LLM guide (the plugin's teamrig-pane-guide skill) and the root llms.txt, held to the code: every form of the
@@ -20,20 +22,15 @@ const TEAMRIG_GUIDE = 'https://github.com/GeneralA6/teamrig/blob/main/plugins/te
 const MAX_DESCRIPTION_WORDS = 30;
 const NO_EMOJI = /\p{Emoji_Presentation}|\u{FE0F}/u;
 
-interface Doc {
-  readonly path: string;
-  readonly text: string;
-}
-
 function read(path: string): string {
   return readFileSync(join(ROOT, path), 'utf8');
 }
 
-const guide: readonly Doc[] = readdirSync(join(ROOT, GUIDE))
+const guide: readonly DocFile[] = readdirSync(join(ROOT, GUIDE))
   .filter((name) => name.endsWith('.md'))
   .sort()
   .map((name) => ({ path: `${GUIDE}/${name}`, text: read(`${GUIDE}/${name}`) }));
-const llms: Doc = { path: 'llms.txt', text: read('llms.txt') };
+const llms: DocFile ={ path: 'llms.txt', text: read('llms.txt') };
 const all = guide.map((doc) => doc.text).join('\n');
 
 function guideText(name: string): string {
@@ -74,19 +71,6 @@ function row(text: string, label: string): string {
   const rows = text.split(/\r?\n/).filter((line) => line.startsWith(`| ${label} |`));
   assert.equal(rows.length, 1, `one row for ${label}`);
   return rows[0] ?? '';
-}
-
-/** A heading's anchor as GitHub writes it. */
-function anchorOf(heading: string): string {
-  return heading
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]/gu, '')
-    .replace(/\s/g, '-');
-}
-
-function anchors(text: string): Set<string> {
-  return new Set(Array.from(text.matchAll(/^#{1,6} (.+)$/gm), (match) => anchorOf(match[1] ?? '')));
 }
 
 describe('the pane guide documents the command', () => {
@@ -182,8 +166,8 @@ describe('the pane guide states the limits the code holds', () => {
 });
 
 describe('the pane guide skill', () => {
-  const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(skill)?.[1] ?? '';
-  const description = /^description:\s*(.+)$/m.exec(front)?.[1]?.trim() ?? '';
+  const front = frontmatterOf(skill);
+  const description = descriptionOf(front) ?? '';
 
   it('is named after its folder', () => {
     assert.equal(/^name:\s*(\S+)\s*$/m.exec(front)?.[1], SKILL_NAME);
@@ -211,17 +195,7 @@ describe('the pane guide skill', () => {
   });
 
   it('has relative links and anchors that resolve', () => {
-    const problems = guide.flatMap((doc) =>
-      Array.from(doc.text.matchAll(/\]\(([\w.-]+\.md)(?:#([\w-]+))?\)/g), (match) => {
-        const target = `${GUIDE}/${match[1] ?? ''}`;
-        const anchor = match[2];
-        if (!existsSync(join(ROOT, target))) {
-          return `${doc.path}: ${target} does not exist`;
-        }
-        return anchor === undefined || anchors(read(target)).has(anchor) ? undefined : `${doc.path}: ${target} has no #${anchor}`;
-      }).filter((problem) => problem !== undefined),
-    );
-    assert.deepEqual(problems, []);
+    assert.deepEqual(checkDocs(guide, (target) => existsSync(join(ROOT, target))).problems, []);
   });
 });
 
