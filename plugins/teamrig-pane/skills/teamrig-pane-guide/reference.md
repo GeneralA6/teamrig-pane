@@ -45,8 +45,8 @@ from the session's folder or a folder above it. Each quoted line is cut at 320 c
 ## WARN lines and their fixes
 
 The pane draws a problem as one `WARN` line above the tasks, keeps the last good tasks drawn, and reads again on
-the next poll. A project teamrig is not set up for (no team, no folder named) is no problem: the Tasks view shows
-the setup steps instead, and a problem a later look finds is a `WARN` line over them.
+the next poll. A project teamrig is not set up for (no team, no folder named) is no problem: the pane shows
+the setup steps alone, and a problem a later look finds is a `WARN` line over them.
 
 | WARN line | Fix |
 | --- | --- |
