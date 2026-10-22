@@ -155,20 +155,22 @@ prompt keeps the name in view. Above the prompt and in the minimized strip the p
 
 In a project teamrig is not set up for (no `.teamrig.json` up from the session's folder, no `$TEAMRIG_TEAM`, no
 folder named), the pane shows how to set it up and nothing else, in every view: no Tasks / Changes / Log switch, no
-Find row, no mine / all / archive (the minimized strip keeps its switch, and a press opens the steps):
+Find row, no mine / all / archive (the minimized strip keeps its switch, and a press opens the setup):
 
 ```text
 teamrig is not set up for this project
 No .teamrig.json in <project> or a folder above it, and no team named by $TEAMRIG_TEAM.
-1. Install teamrig, if it is not: claude plugin marketplace add GeneralA6/teamrig, then claude plugin install teamrig@teamrig.
-2. New team: ask Claude here to set up a team for the work, or run /teamrig:team-setup. It proposes the sessions, then makes the team and ties this project to it.
-3. Tasks kept outside teamrig: name tasksDir and inboxDir in <kit home>/pane.json.
+Set up a team: ask Claude here, or run /teamrig:team-setup. It proposes the sessions, then makes the team and ties this project to it.
 The pane looks again every few seconds and lists the tasks once a team is found.
 ```
 
-With teams under the kit home, the install step gives way to `Join a team: write {"team": "<id>"} to
-<project>/.teamrig.json`, listing them. The pane looks again every 3 s and shows the team's tasks, with the switch,
-Find and the mode buttons, once it finds one, with no restart. To help the user, ask what the team is for and run the team-setup skill only if they want a team.
+With no team under the kit home, the step opens with installing teamrig: `Install teamrig if it is not (claude plugin
+marketplace add GeneralA6/teamrig, then claude plugin install teamrig@teamrig), then set up a team: …`. The pane
+looks again every 3 s and shows the team's tasks, with the switch, Find and the mode buttons, once it finds one, with
+no restart. To help the user, ask what the team is for and run the team-setup skill only if they want a team. The pane
+no longer lists two other ways, which still work when the user asks: join a team already made by writing
+`{"team": "<id>"}` to `<project>/.teamrig.json`, or keep tasks outside teamrig by naming `tasksDir` and `inboxDir`
+in `<kit home>/pane.json`.
 
 The area is the teamrig session the pane shows as "mine". It comes from a pin (`/teamrig-pane <session>`), else from
 the newest `teamrig inbox read --session <id>` run in this Claude Code session (teamrig records which Claude
