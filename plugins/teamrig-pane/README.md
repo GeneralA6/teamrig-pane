@@ -240,11 +240,12 @@ and for its notes: when none can be found or read, the pane goes without them.
 
 In a project teamrig is not set up for (no team and no folder named), the pane shows how to set it up
 and nothing else, with no view buttons, Find row or mine/all/archive until it finds a team (the minimized
-strip keeps its buttons, and a press opens the steps): install teamrig while no team is under the kit home, make a team (ask
-Claude, or run `/teamrig:team-setup`), join a team already made by writing `{"team": "<id>"}` to the
-project's `.teamrig.json` (the kit home's teams are listed), or name both folders below. The pane looks
-again every 3 s and lists the tasks once it finds a team, with no restart; a problem a look finds, such
-as a pointer with no team in it, is a `WARN` line over the steps. One folder named alone is a `WARN`.
+strip keeps its buttons, and a press opens the setup): one step, set up a team (ask Claude, or run
+`/teamrig:team-setup`, which makes the team and ties the project to it), opening with installing teamrig
+while no team is under the kit home. Joining a team already made (write `{"team": "<id>"}` to the
+project's `.teamrig.json`) and naming both folders below still work; the pane no longer lists them. The
+pane looks again every 3 s and lists the tasks once it finds a team, with no restart; a problem a look
+finds, such as a pointer with no team in it, is a `WARN` line over the step. One folder named alone is a `WARN`.
 
 Any folder can be named instead, each on its own; a variable wins over the settings file, which wins
 over the team default:
