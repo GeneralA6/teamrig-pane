@@ -153,6 +153,22 @@ prompt keeps the name in view. Above the prompt and in the minimized strip the p
 
 ## The Tasks view
 
+In a project teamrig is not set up for (no `.teamrig.json` up from the session's folder, no `$TEAMRIG_TEAM`, no
+folder named), the view shows how to set it up in place of the tasks:
+
+```text
+teamrig is not set up for this project
+No .teamrig.json in <project> or a folder above it, and no team named by $TEAMRIG_TEAM.
+1. Install teamrig, if it is not: claude plugin marketplace add GeneralA6/teamrig, then claude plugin install teamrig@teamrig.
+2. New team: ask Claude here to set up a team for the work, or run /teamrig:team-setup. It proposes the sessions, then makes the team and ties this project to it.
+3. Tasks kept outside teamrig: name tasksDir and inboxDir in <kit home>/pane.json.
+The pane looks again every few seconds and lists the tasks once a team is found.
+```
+
+With teams under the kit home, the install step gives way to `Join a team: write {"team": "<id>"} to
+<project>/.teamrig.json`, listing them. The pane looks again every 3 s and shows the team's tasks once it finds
+one, with no restart. To help the user, ask what the team is for and run the team-setup skill only if they want a team.
+
 The area is the teamrig session the pane shows as "mine". It comes from a pin (`/teamrig-pane <session>`), else from
 the newest `teamrig inbox read --session <id>` run in this Claude Code session (teamrig records which Claude
 Code session read). teamrig's prompt hook records the same when it binds a tab by its Claude Code title: a tab

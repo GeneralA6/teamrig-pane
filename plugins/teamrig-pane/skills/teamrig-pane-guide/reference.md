@@ -45,11 +45,12 @@ from the session's folder or a folder above it. Each quoted line is cut at 320 c
 ## WARN lines and their fixes
 
 The pane draws a problem as one `WARN` line above the tasks, keeps the last good tasks drawn, and reads again on
-the next poll.
+the next poll. A project teamrig is not set up for (no team, no folder named) is no problem: the Tasks view shows
+the setup steps instead, and a problem a later look finds is a `WARN` line over them.
 
 | WARN line | Fix |
 | --- | --- |
-| `no register found: set TEAMRIG_PANE_TASKS_DIR and TEAMRIG_PANE_INBOX_DIR, write them in <kit home>/pane.json, or start the session in a teamrig team's project (.teamrig.json)` | Start Claude Code in the team's project folder, set `$TEAMRIG_TEAM`, or name the folders. Create a team with teamrig only if the user wants one. |
+| `no register found: set TEAMRIG_PANE_TASKS_DIR and TEAMRIG_PANE_INBOX_DIR, write them in <kit home>/pane.json, or start the session in a teamrig team's project (.teamrig.json)` | One folder is named alone, or the session has no folder: name both folders, or drop the one named and start Claude Code in the team's project folder. |
 | `... or set TEAMRIG_HOME for teamrig's register` | No home folder is known: set `$TEAMRIG_HOME`. |
 | `<path> is not JSON; expected {"team": "<id>"}` | Fix the `.teamrig.json` pointer. |
 | `<path> has no "team" text; expected {"team": "<id>"}` | Add the team id to the pointer. |
