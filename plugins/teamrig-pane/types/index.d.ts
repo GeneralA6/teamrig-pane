@@ -299,9 +299,19 @@ export type ViewMode = 'mine' | 'all'
 /** A segment of the status bar over the area's tasks (hooks/status-bar.ts): done today, verifying, in progress, waiting, open. */
 export type BarStatus = 'done-today' | 'verifying' | 'working' | 'waiting' | 'not-started'
 
+/**
+ * A project teamrig is not set up for (hooks/places.ts): the session's folder, where a pointer file would tie it to a
+ * team; the teams in the kit home a pointer may name, by id; and the settings file, where the pane's own folders would
+ * name a register kept outside teamrig.
+ */
+export type ProjectSetup = { readonly project: string; readonly teams: readonly string[]; readonly settingsPath: string }
+
+/** What the Tasks view shows in place of tasks in a project teamrig is not set up for (hooks/setup.ts): its setup, and the problem the last look found. */
+export type SetupView = { readonly setup: ProjectSetup; readonly problem: string | null }
+
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page and the focus ring's landings are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page, the focus ring's landings and the setup are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -331,6 +341,8 @@ declare module 'claude-code' {
       held: string | null
       /** Whether the banner (hooks/banner.ts) in the band above the prompt shows its task's card; a press on it opens and closes it. */
       banner: boolean
+      /** What the Tasks view shows in a project teamrig is not set up for (hooks/setup.ts), null once a register is found. */
+      setup: Shaped<SetupView | null>
     }
   }
 }

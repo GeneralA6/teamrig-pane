@@ -27,7 +27,10 @@ const TEAM_FOUND: Places = {
   goalsDoc: null,
 }
 
-/** Files by forward-slash path; a path in `locked` throws as a locked file does, and `reads` records each read. */
+/**
+ * Files by forward-slash path, a folder being there while a file lies under it; a path in `locked` throws as a locked
+ * file or folder does, and `reads` records each read.
+ */
 function fakeFiles(files: Readonly<Record<string, string>>, locked: readonly string[]) {
   const reads: string[] = []
   const port: PlacesInput['files'] = {
@@ -43,7 +46,12 @@ function fakeFiles(files: Readonly<Record<string, string>>, locked: readonly str
       return text
     },
   }
-  return { port, reads }
+  const folders: PlacesInput['folders'] = async path => {
+    if (locked.includes(path)) throw new Error(`EACCES: ${path}`)
+    const under = Object.keys(files).flatMap(file => (file.startsWith(`${path}/`) ? [file.slice(path.length + 1).split('/')] : []))
+    return [...new Set(under.flatMap(([name = '', ...deeper]) => (deeper.length > 0 ? [name] : [])))]
+  }
+  return { port, folders, reads }
 }
 
 /** `machineZone`: the zone the machine runs in, UTC unless given. */
@@ -58,6 +66,7 @@ async function places(env: PlacesEnv, files: Readonly<Record<string, string>> = 
   const found = await findPlaces({
     env,
     files: fake.port,
+    folders: fake.folders,
     home: options.home === undefined ? 'C:\\Homes\\a\\' : options.home,
     cwd: options.cwd === undefined ? 'C:\\w\\app\\src' : options.cwd,
     machineZone: options.machineZone ?? 'UTC',
@@ -279,10 +288,31 @@ describe('places', () => {
     expect(locked.found).toEqual({ kind: 'problem', problem: `${POINTER} cannot be read (EBUSY: ${POINTER})`, goalsDoc: null })
   })
 
-  test('with nothing to go on, it says what to set: the variables, the settings file or a teamrig project', async () => {
+  test('with no team and no folder named, the project is not set up: its folder, the kit home’s teams and the settings file', async () => {
+    const { found, reads } = await places({})
+    expect(found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: [], settingsPath: SETTINGS } })
+    expect(reads).toEqual([])
+    // A folder named as teamrig names a team is one; a file, or a folder no team id names, is not.
+    const kit = { [CONFIG]: '{}', [`${KIT}/teams/ops/state/events.jsonl`]: '', [`${KIT}/teams/Old/config.json`]: '{}', [`${KIT}/teams/notes.md`]: '' }
+    expect((await places({}, kit)).found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: ['ops', 'web'], settingsPath: SETTINGS } })
+    // A teams folder it cannot list leaves the teams out, never the setup.
+    const locked = await places({}, kit, { locked: [`${KIT}/teams`] })
+    expect(locked.found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: [], settingsPath: SETTINGS } })
+  })
+
+  test('a project not set up follows the kit home and the settings file the variables move', async () => {
+    const moved = await places({ TEAMRIG_HOME: 'D:\\kit' }, { 'D:/kit/teams/web/config.json': '{}', [CONFIG]: '{}' })
+    expect(moved.found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: ['web'], settingsPath: 'D:/kit/pane.json' } })
+    // A settings file that names no folder leaves the project as unset as no file does.
+    const named = await places({ TEAMRIG_PANE_SETTINGS: '~/pane.json' }, { 'C:/Homes/a/pane.json': json({ goalsDoc: 'docs/G.md' }) })
+    expect(named.found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: [], settingsPath: 'C:/Homes/a/pane.json' } })
+  })
+
+  test('with one folder named or no session folder, it says what to set: the variables, the settings file or a teamrig project', async () => {
     const variables = 'TEAMRIG_PANE_TASKS_DIR and TEAMRIG_PANE_INBOX_DIR'
     const project = `no register found: set ${variables}, write them in ${SETTINGS}, or start the session in a teamrig team's project (.teamrig.json)`
     expect((await places({ TEAMRIG_PANE_TASKS_DIR: 'D:/t' })).found).toEqual({ kind: 'problem', problem: project, goalsDoc: null })
+    expect((await places({}, { [SETTINGS]: json({ inboxDir: 'D:/i' }) })).found).toEqual({ kind: 'problem', problem: project, goalsDoc: null })
     expect((await places({}, {}, { cwd: null })).found).toEqual({ kind: 'problem', problem: project, goalsDoc: null })
     const homeless = `no register found: set ${variables}, write them in a settings file named by TEAMRIG_PANE_SETTINGS, or set TEAMRIG_HOME for teamrig's register`
     expect((await places({}, { [POINTER]: json({ team: 'web' }) }, { home: null })).found).toEqual({ kind: 'problem', problem: homeless, goalsDoc: null })

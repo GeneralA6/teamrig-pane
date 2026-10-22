@@ -1,4 +1,5 @@
-// Where the register is, read once when the session starts. Each folder comes from the first of: its
+// Where the register is, read once when the session starts; in a project teamrig is not set up for (no team, no
+// folder named), read again at each poll until it is (setup.ts). Each folder comes from the first of: its
 // TEAMRIG_PANE_* variable, the pane's settings file, then where teamrig keeps the register of the
 // session's team (`<kit home>/teams/<team>/state`, or the team config's `paths.state` and
 // `paths.inbox`, read by teamrig's own reader). The goals document comes from its variable or the
@@ -6,7 +7,7 @@
 // `/teamrig-pane <session>`, name its sessions. The team config also sets how long a task may stand untouched by its
 // owner before it reads NOT PICKED UP, the team's zone (its `timeZone`, else the machine's, as teamrig resolves it)
 // and how many hours teamrig keeps its turn log, the Log view's window.
-import type { TeamSettings } from '../types'
+import type { ProjectSetup, TeamSettings } from '../types'
 import { DEFAULT_REGISTER, parseConfigText, TimeZone, type ConfigRead, type KitConfig } from './core/read/index'
 import { slashed, type Files, type RegisterDirs } from './source'
 import type { TurnLogPlace } from './turn-log'
@@ -54,16 +55,19 @@ export type TeamFiles = { team: string; dir: string; config: string; renames: st
 
 /**
  * The register's folders, the session's team's files (null when no team was found) and its settings (teamSettings:
- * the team config's, else teamrig's defaults), or the problem the pane shows instead of tasks; the goals document
- * either way.
+ * the team config's, else teamrig's defaults), or the problem the pane shows instead of tasks, the goals document
+ * with either; or, with no team and no folder named, the project's setup.
  */
 export type Places =
   | { kind: 'found'; dirs: RegisterDirs; team: TeamFiles | null; settings: TeamSettings; goalsDoc: string | null }
   | { kind: 'problem'; problem: string; goalsDoc: string | null }
+  | { kind: 'unset'; setup: ProjectSetup }
 
 export type PlacesInput = {
   env: PlacesEnv
   files: Pick<Files, 'stamp' | 'read'>
+  /** The names of the folders right under a folder; none when it is not there. It rejects when it cannot list one. */
+  folders: (path: string) => Promise<string[]>
   /** The person's home folder (USERPROFILE or HOME), for `~/` and the default kit home. */
   home: string | null
   /** The session's folder, where the walk for teamrig's pointer file starts. */
@@ -96,15 +100,24 @@ export async function findPlaces(input: PlacesInput): Promise<Places> {
   // Both folders named: the team is looked for only for its files and its settings, so a team that cannot be found
   // or read leaves no files and teamrig's defaults instead of a problem.
   if (tasksDir !== undefined && inboxDir !== undefined) {
+    const teamFound = team.ok ? team.value : null
     return {
       kind: 'found',
       dirs: { tasksDir, inboxDir },
-      team: team.ok ? team.value.files : null,
-      settings: team.ok ? team.value.settings : teamSettings(null, input.machineZone),
+      team: teamFound === null ? null : teamFound.files,
+      settings: teamFound === null ? teamSettings(null, input.machineZone) : teamFound.settings,
       goalsDoc,
     }
   }
   if (!team.ok) return { kind: 'problem', problem: team.problem, goalsDoc }
+  if (team.value === null) {
+    // No team and no folder named is a project teamrig is not set up for; one folder named, or no session folder to
+    // write a pointer in, is a setup left half done.
+    if (tasksDir !== undefined || inboxDir !== undefined || input.cwd === null || kit === null || settingsPath === null) {
+      return { kind: 'problem', problem: nothingNamed(settingsPath, kit === null), goalsDoc }
+    }
+    return { kind: 'unset', setup: { project: slashed(input.cwd), teams: await kitTeams(input.folders, `${kit}/teams`), settingsPath } }
+  }
   return {
     kind: 'found',
     dirs: { tasksDir: tasksDir ?? team.value.state, inboxDir: inboxDir ?? team.value.inbox },
@@ -173,18 +186,20 @@ type TeamFolders = { state: string; inbox: string; files: TeamFiles; settings: T
 type ConfigIssue = Extract<ConfigRead, { status: 'unreadable' }>['issue']
 
 /**
- * The team's state and inbox folders as teamrig lays them out, and its settings, or why they cannot be found. A team
- * with no config file keeps the folders under its home and teamrig's defaults, as teamrig reads it.
+ * The team's state and inbox folders as teamrig lays them out, and its settings, null when the session has no team,
+ * or why they cannot be found. A team with no config file keeps the folders under its home and teamrig's defaults,
+ * as teamrig reads it.
  */
 async function teamFolders(
   input: PlacesInput,
   variable: (name: PlaceVariable) => string | undefined,
   kit: string | null,
   settingsPath: string | null,
-): Promise<Found<TeamFolders>> {
+): Promise<Found<TeamFolders | null>> {
   const team = await findTeam(input, variable)
   if (!team.ok) return team
-  if (team.value === null || kit === null) return { ok: false, problem: nothingNamed(settingsPath, kit === null) }
+  if (kit === null) return { ok: false, problem: nothingNamed(settingsPath, true) }
+  if (team.value === null) return { ok: true, value: null }
   const teamHome = `${kit}/teams/${team.value}`
   const configPath = `${teamHome}/config.json`
   const config = await readIfThere(input.files, configPath)
@@ -237,6 +252,18 @@ function checkTeam(team: string, from: string): Found<string> {
   return TEAM_ID.test(team)
     ? { ok: true, value: team }
     : { ok: false, problem: `${from}: "${team}" is not a team id (a lowercase letter, then lowercase letters, digits or -, at most 32)` }
+}
+
+/**
+ * The teams in the kit home's teams folder, by id, sorted: its folders named as teamrig names a team. A folder that
+ * cannot be listed lists none, as the list only offers a team to join and the rest of the setup still shows.
+ */
+async function kitTeams(folders: PlacesInput['folders'], teamsDir: string): Promise<string[]> {
+  try {
+    return (await folders(teamsDir)).filter(name => TEAM_ID.test(name)).sort()
+  } catch {
+    return []
+  }
 }
 
 /** `dir` and each folder above it, up to its root (`C:` or the empty slash root), without a trailing slash. */

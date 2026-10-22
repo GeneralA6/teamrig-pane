@@ -37,6 +37,7 @@ import type {
   RefFileRead,
   RequirementProblem,
   RingLandings,
+  SetupView,
   Snapshot,
   TaskDetail,
   TaskRow,
@@ -64,6 +65,8 @@ import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 import { LiveDiffs, NO_DIFFS } from './diff'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { logListBlocks, logPageBlocks } from './log-rows'
+import { SetupWatch } from './setup'
+import { setupBlocks } from './setup-rows'
 import {
   AT_LIST,
   back,
@@ -168,6 +171,11 @@ const logPage = atom({ plugin: 'teamrig-pane', key: 'logPage' } as const, AT_LOG
 const NOTHING_MISSING: RequirementProblem[] = []
 /** What the pane lacks (requirements.ts); each session start checks again and writes it anew, a hot reload's too. */
 const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, NOTHING_MISSING)
+/** The setup kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when SetupView or ProjectSetup changes shape. */
+const SETUP_SHAPE = 'setup-v1'
+const NOT_SETTING_UP: SetupView | null = null
+/** What the tasks view shows in a project teamrig is not set up for (setup.ts), in place of the tasks; null once a register is found. */
+const setup = atom({ plugin: 'teamrig-pane', key: 'setup' } as const, NOT_SETTING_UP, { shape: SETUP_SHAPE })
 /** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
 const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
 /** The places are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when Place or Nav changes shape. */
@@ -371,6 +379,8 @@ export const register: Register = on => {
   let diffing: LiveDiffs | null = null
   /** Reads the Log view's list or page again while it shows; set when the session starts. */
   let logging: LiveLog | null = null
+  /** Looks for the register again while the project is not set up for teamrig; set when the session starts in one. */
+  let watch: SetupWatch | null = null
   /** The tab title last asked for: `Tasks · Δn` (changes-rows.ts paneTitle). */
   let title = paneTitle(EMPTY_CHANGES)
   /**
@@ -391,6 +401,7 @@ export const register: Register = on => {
     live?.stop()
     tracked?.stop()
     logging?.stop()
+    watch?.stop()
     // A filter is a look for the moment, never kept: a new session, or a hot reload, lists every task again.
     await update($, barFilter, () => null)
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
@@ -426,7 +437,7 @@ export const register: Register = on => {
      * Reads the register `places` names, in place of any read before: its tasks, a task's refs and goals, and the
      * Log view's turn logs. Places with a problem show it in place of the tasks.
      */
-    const bind = async (places: Places): Promise<void> => {
+    const bind = async (places: Exclude<Places, { kind: 'unset' }>): Promise<void> => {
       live?.stop()
       logging?.stop()
       const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } =
@@ -523,7 +534,41 @@ export const register: Register = on => {
       knownSeed(seed, kept),
     )
     tracked = changesLive
-    await bind(await findPlaces({ env, files, home: home ?? null, cwd: e.cwd, machineZone }))
+    // The kit home's teams, for a project teamrig is not set up for: a missing folder lists none (source.ts unlessMissing).
+    const folders = async (path: string): Promise<string[]> => {
+      const entries = await unlessMissing(() => $.fs.list(path), () => $.fs.exists(path), null)
+      return entries === null ? [] : entries.filter(entry => entry.kind === 'dir').map(entry => entry.name)
+    }
+    const findHere = () => findPlaces({ env, files, folders, home: home ?? null, cwd: e.cwd, machineZone })
+    const places = await findHere()
+    if (places.kind === 'unset') {
+      // Nothing to read until a team or a register is named here: the tasks view shows how to set the project up,
+      // and the watch looks again at each poll and binds the register it finds.
+      live = null
+      team = null
+      details = null
+      refFiles = null
+      logging = null
+      await update($, logList, () => NO_TEAM_LOG)
+      await update($, logPage, () => AT_LOG_LIST)
+      const watching = new SetupWatch(
+        {
+          find: findHere,
+          show: async shown => {
+            await update($, setup, () => shown)
+          },
+          bind,
+        },
+        places.setup,
+      )
+      watch = watching
+      await watching.show()
+      watching.startTimers((ms, fn) => $.clock.every(ms, fn))
+    } else {
+      watch = null
+      await update($, setup, () => NOT_SETTING_UP)
+      await bind(places)
+    }
     changesLive.startTimers((ms, fn) => $.clock.every(ms, fn))
     void $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
     // Once per start: git --version and the engine's version, never on a poll. The check never rejects; a
@@ -661,19 +706,26 @@ export const register: Register = on => {
         }
         const place = currentPlace(at)
         if (place.kind === 'search') found = searchTasks(snap.tasks, place.query, treeOf(snap))
+        // A project teamrig is not set up for has no tasks: its setup steps take the tasks view, whatever place it is at.
+        const setupShown = current === 'tasks' ? await read($, setup) : NOT_SETTING_UP
         // A page has no status bar: the bar counts the list, and a press on it filters the list.
-        const bar = current === 'tasks' && shown === 'mine' && place.kind === 'list' ? statusBar(snap, await read($, barFilter), columns) : null
+        const bar =
+          current === 'tasks' && setupShown === null && shown === 'mine' && place.kind === 'list'
+            ? statusBar(snap, await read($, barFilter), columns)
+            : null
         // With no bar there is nothing to filter by, and the list shows every task.
         const tasksBlocks =
-          place.kind === 'task'
-            ? pageBlocks(snap, place.id, await read($, pages))
-            : place.kind === 'search'
-              ? searchBlocks(snap, place.query, found)
-              : place.kind === 'done'
-                ? doneBlocks(snap, shown, place.week)
-                : place.kind === 'file'
-                  ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
-                  : paneBlocks(snap, shown, open, bar?.filter ?? null)
+          setupShown !== null
+            ? setupBlocks(setupShown)
+            : place.kind === 'task'
+              ? pageBlocks(snap, place.id, await read($, pages))
+              : place.kind === 'search'
+                ? searchBlocks(snap, place.query, found)
+                : place.kind === 'done'
+                  ? doneBlocks(snap, shown, place.week)
+                  : place.kind === 'file'
+                    ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
+                    : paneBlocks(snap, shown, open, bar?.filter ?? null)
         // Inline, the Log view shows its list alone: a page opens in the dock.
         const logShown = current === 'log' && !inline ? await read($, logPage) : null
         logSession = logShown?.session ?? null
