@@ -179,8 +179,9 @@ describe('the pane guide skill', () => {
     assert.doesNotMatch(description, /:\s/, 'no ": ", so it stays a plain YAML value');
   });
 
+  // A skill of teamrig's (`/teamrig:team-setup`) is its own command, never mistaken for the pane's.
   it("never gives /teamrig, the teamrig plugin's own name, as the pane's command", () => {
-    assert.doesNotMatch(all, /`\/teamrig(?![\w-])/);
+    assert.doesNotMatch(all, /`\/teamrig(?![\w:-])/);
   });
 
   it('links the teamrig guide', () => {
