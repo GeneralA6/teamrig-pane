@@ -49,9 +49,10 @@ describe('README', () => {
     assert.doesNotMatch(readme, /\/tasklist/);
   });
 
+  // A skill of teamrig's (`/teamrig:team-setup`) is its own command, never mistaken for the pane's.
   it("never gives /teamrig, the teamrig plugin's own command, as the pane's, here or in the plugin README", () => {
     for (const text of [readme, pluginReadme]) {
-      assert.doesNotMatch(text, /`\/teamrig(?![\w-])/);
+      assert.doesNotMatch(text, /`\/teamrig(?![\w:-])/);
       assert.doesNotMatch(text, /command:teamrig(?![\w-])/);
     }
   });
