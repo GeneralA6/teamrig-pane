@@ -652,9 +652,10 @@ test('in a project teamrig is not set up for, the pane shows how to set it up al
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
   expect(await pane.find({ text: SETUP_HEAD })).toBeDefined()
-  expect(unwrapped((await pane.find({ text: /^2\. Join a team/ }))?.text)).toBe(
-    '2. Join a team: write {"team": "<id>"} to /work/.teamrig.json. Teams on this machine: web.',
+  expect(unwrapped((await pane.find({ text: /^Set up a team/ }))?.text)).toBe(
+    'Set up a team: ask Claude here, or run /teamrig:team-setup. It proposes the sessions, then makes the team and ties this project to it.',
   )
+  expect(await pane.find({ text: /Join a team|tasksDir|Install teamrig/ })).toBeUndefined()
   expect(await buttonLabels(pane)).toEqual([])
   expect(await pane.findAll({ type: 'Input' })).toEqual([])
   expect(await pane.find({ text: /^Keys on the pane/ })).toBeUndefined()

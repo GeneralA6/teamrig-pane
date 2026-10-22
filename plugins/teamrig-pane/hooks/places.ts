@@ -116,7 +116,7 @@ export async function findPlaces(input: PlacesInput): Promise<Places> {
     if (tasksDir !== undefined || inboxDir !== undefined || input.cwd === null || kit === null || settingsPath === null) {
       return { kind: 'problem', problem: nothingNamed(settingsPath, kit === null), goalsDoc }
     }
-    return { kind: 'unset', setup: { project: slashed(input.cwd), teams: await kitTeams(input.folders, `${kit}/teams`), settingsPath } }
+    return { kind: 'unset', setup: { project: slashed(input.cwd), teams: await kitTeams(input.folders, `${kit}/teams`) } }
   }
   return {
     kind: 'found',

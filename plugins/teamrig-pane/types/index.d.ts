@@ -301,10 +301,9 @@ export type BarStatus = 'done-today' | 'verifying' | 'working' | 'waiting' | 'no
 
 /**
  * A project teamrig is not set up for (hooks/places.ts): the session's folder, where a pointer file would tie it to a
- * team; the teams in the kit home a pointer may name, by id; and the settings file, where the pane's own folders would
- * name a register kept outside teamrig.
+ * team, and the teams in the kit home, by id: none on the machine likely means teamrig is not installed.
  */
-export type ProjectSetup = { readonly project: string; readonly teams: readonly string[]; readonly settingsPath: string }
+export type ProjectSetup = { readonly project: string; readonly teams: readonly string[] }
 
 /** What the Tasks view shows in place of tasks in a project teamrig is not set up for (hooks/setup.ts): its setup, and the problem the last look found. */
 export type SetupView = { readonly setup: ProjectSetup; readonly problem: string | null }
