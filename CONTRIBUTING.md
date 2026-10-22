@@ -77,6 +77,9 @@ Node version or the pinned Claude Code release shows goes unseen until CI runs a
 ## Branches and releases
 - Every change is its own branch off `main` and lands through a pull request once every check
   passes on its head (the local gate while CI is paused); it is rebase-merged and the branch is deleted.
+- Each commit is one logical change. The `size rule` (`tools/ci/size-rule-cli.ts`, run by the local gate, CI
+  and `npm run check`) fails a commit over 400 changed non-test lines or 15 non-test files whose message has
+  no `Large-commit: <reason>` line: teamrig's push guard rule at its defaults, so a pull request meets it too.
 - Nothing is pushed to `main` directly, and release tags are set only by the maintainer.
 - Installs take the version in `plugins/teamrig-pane/.claude-plugin/plugin.json`, not the newest commit:
   `claude plugin update` moves an install only when that version rises. So a change to anything under
