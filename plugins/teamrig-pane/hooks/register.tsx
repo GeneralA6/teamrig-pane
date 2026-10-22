@@ -45,7 +45,7 @@ import type {
 } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { LiveRegister, pinKey } from './live'
-import { findPlaces, type PlacesEnv } from './places'
+import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { inboxFile, TaskDetails, type RefPlaces } from './details'
 import { RefFileReader } from './ref-file'
@@ -417,34 +417,71 @@ export const register: Register = on => {
       TEAMRIG_TEAM: await $.env.get('TEAMRIG_TEAM'),
     }
     const machineZone = machineZoneOf(await $.env.get('TZ'), Intl.DateTimeFormat().resolvedOptions().timeZone)
-    const places = await findPlaces({ env, files, home: home ?? null, cwd: e.cwd, machineZone })
-    const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } =
-      places.kind === 'found' ? { paths: registerPaths(places.dirs), settings: places.settings } : { missing: places.problem }
-    team = places.kind === 'found' && places.team !== null ? { files, paths: places.team } : null
-    const refPlaces: RefPlaces = {
-      inboxDir: 'missing' in registerAt ? null : registerAt.paths.inboxDir,
-      home: home ?? null,
-      cwd: e.cwd,
-      teamDir: places.kind === 'found' && places.team !== null ? places.team.dir : null,
-      goalsDoc: places.goalsDoc,
+    // A missing folder lists as null (no turn logs yet); a locked or denied one throws, which the list shows.
+    const logFiles: LogFiles = {
+      list: path => unlessMissing(() => $.fs.list(path), () => $.fs.exists(path), null),
+      read: path => $.fs.read(path),
     }
-    details = new TaskDetails(files, refPlaces)
-    refFiles = new RefFileReader(files, refPlaces)
-    const started = new LiveRegister({
-      source:
-        'missing' in registerAt
-          ? registerAt
-          : new TaskRegisterSource(files, registerAt.paths, registerAt.settings, places.kind === 'found' ? places.team : null),
-      sessionId: () => $.session.id(),
-      now: () => $.clock.now(),
-      publish: async change => {
-        await update($, snapshot, change)
-      },
-      loadPin: claudeSession => $.store.get(pinKey(claudeSession)),
-      savePin: (claudeSession, area) =>
-        area === null ? $.store.delete(pinKey(claudeSession)) : $.store.set(pinKey(claudeSession), area),
-    })
-    live = started
+    /**
+     * Reads the register `places` names, in place of any read before: its tasks, a task's refs and goals, and the
+     * Log view's turn logs. Places with a problem show it in place of the tasks.
+     */
+    const bind = async (places: Places): Promise<void> => {
+      live?.stop()
+      logging?.stop()
+      const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } =
+        places.kind === 'found' ? { paths: registerPaths(places.dirs), settings: places.settings } : { missing: places.problem }
+      team = places.kind === 'found' && places.team !== null ? { files, paths: places.team } : null
+      const refPlaces: RefPlaces = {
+        inboxDir: 'missing' in registerAt ? null : registerAt.paths.inboxDir,
+        home: home ?? null,
+        cwd: e.cwd,
+        teamDir: places.kind === 'found' && places.team !== null ? places.team.dir : null,
+        goalsDoc: places.goalsDoc,
+      }
+      details = new TaskDetails(files, refPlaces)
+      refFiles = new RefFileReader(files, refPlaces)
+      const started = new LiveRegister({
+        source:
+          'missing' in registerAt
+            ? registerAt
+            : new TaskRegisterSource(files, registerAt.paths, registerAt.settings, places.kind === 'found' ? places.team : null),
+        sessionId: () => $.session.id(),
+        now: () => $.clock.now(),
+        publish: async change => {
+          await update($, snapshot, change)
+        },
+        loadPin: claudeSession => $.store.get(pinKey(claudeSession)),
+        savePin: (claudeSession, area) =>
+          area === null ? $.store.delete(pinKey(claudeSession)) : $.store.set(pinKey(claudeSession), area),
+      })
+      live = started
+      const turnLog = team === null ? null : team.paths.turnLog
+      const logLive =
+        turnLog === null
+          ? null
+          : new LiveLog({
+              reader: new TurnLogReader(logFiles, turnLog),
+              now: () => $.clock.now(),
+              isShown: async () => (await read($, view)) === 'log' && (await read($, size)) !== 'minimized',
+              shownPage: async () => (await read($, logPage))?.session ?? null,
+              publishList: async list => {
+                await update($, logList, () => list)
+              },
+              publishPage: async page => {
+                await update($, logPage, () => page)
+              },
+            })
+      logging = logLive
+      if (logLive === null) {
+        // No team, or one with no config file, which teamrig refuses and writes no turn log for: nothing to poll.
+        await update($, logList, () => (team === null ? NO_TEAM_LOG : NO_CONFIG_LOG))
+        await update($, logPage, () => AT_LOG_LIST)
+      }
+      await started.refresh()
+      started.startTimers((ms, fn) => $.clock.every(ms, fn))
+      logLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
+    }
     sizer = new PaneSizer({
       load: () => $.store.get(SIZE_KEY),
       save: value => $.store.set(SIZE_KEY, value),
@@ -486,37 +523,8 @@ export const register: Register = on => {
       knownSeed(seed, kept),
     )
     tracked = changesLive
-    // A missing folder lists as null (no turn logs yet); a locked or denied one throws, which the list shows.
-    const logFiles: LogFiles = {
-      list: path => unlessMissing(() => $.fs.list(path), () => $.fs.exists(path), null),
-      read: path => $.fs.read(path),
-    }
-    const turnLog = team === null ? null : team.paths.turnLog
-    const logLive =
-      turnLog === null
-        ? null
-        : new LiveLog({
-            reader: new TurnLogReader(logFiles, turnLog),
-            now: () => $.clock.now(),
-            isShown: async () => (await read($, view)) === 'log' && (await read($, size)) !== 'minimized',
-            shownPage: async () => (await read($, logPage))?.session ?? null,
-            publishList: async list => {
-              await update($, logList, () => list)
-            },
-            publishPage: async page => {
-              await update($, logPage, () => page)
-            },
-          })
-    logging = logLive
-    if (logLive === null) {
-      // No team, or one with no config file, which teamrig refuses and writes no turn log for: nothing to poll.
-      await update($, logList, () => (team === null ? NO_TEAM_LOG : NO_CONFIG_LOG))
-      await update($, logPage, () => AT_LOG_LIST)
-    }
-    await started.refresh()
-    started.startTimers((ms, fn) => $.clock.every(ms, fn))
+    await bind(await findPlaces({ env, files, home: home ?? null, cwd: e.cwd, machineZone }))
     changesLive.startTimers((ms, fn) => $.clock.every(ms, fn))
-    logLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
     void $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
     // Once per start: git --version and the engine's version, never on a poll. The check never rejects; a
     // failed write only leaves the lines out.
