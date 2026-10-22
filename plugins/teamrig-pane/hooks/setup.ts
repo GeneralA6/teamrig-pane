@@ -1,7 +1,7 @@
 // A project teamrig is not set up for (places.ts: no team, no folder named) shows how to set it up in place of
 // tasks (setup-rows.ts), and the pane looks for its register again every POLL_MS: a team made in the project, or a
 // pointer file written there, starts the register (register.tsx bind) with no restart. A look that finds a problem,
-// such as a pointer file that names no team, shows it over the steps and looks again; the look that finds the
+// such as a pointer file that names no team, shows it over the step and looks again; the look that finds the
 // register ends the watch. Each look stats the pointer files up from the session's folder and the settings file,
 // and lists the kit home's teams. The engine allows $ only at its call sites in a hook, so session.start hands this
 // class ports built from $ calls rather than $ itself. Its timer never rejects: a failed look or write is tried again
@@ -29,7 +29,6 @@ function isSameSetup(a: SetupView, b: SetupView): boolean {
   return (
     a.problem === b.problem &&
     a.setup.project === b.setup.project &&
-    a.setup.settingsPath === b.setup.settingsPath &&
     a.setup.teams.join('\n') === b.setup.teams.join('\n')
   )
 }

@@ -7,7 +7,7 @@ import { teamSettings, type Places } from '../hooks/places'
 import { SetupWatch, type FoundPlaces, type SetupPorts } from '../hooks/setup'
 import type { ProjectSetup, SetupView } from '../types'
 
-const SETUP: ProjectSetup = { project: 'C:/w/app', teams: [], settingsPath: 'C:/Homes/a/.teamrig/pane.json' }
+const SETUP: ProjectSetup = { project: 'C:/w/app', teams: [] }
 const FOUND: FoundPlaces = {
   kind: 'found',
   dirs: { tasksDir: 'C:/Homes/a/.teamrig/teams/web/state', inboxDir: 'C:/Homes/a/.teamrig/teams/web/inbox' },

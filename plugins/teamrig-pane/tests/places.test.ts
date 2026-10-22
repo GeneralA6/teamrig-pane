@@ -288,24 +288,24 @@ describe('places', () => {
     expect(locked.found).toEqual({ kind: 'problem', problem: `${POINTER} cannot be read (EBUSY: ${POINTER})`, goalsDoc: null })
   })
 
-  test('with no team and no folder named, the project is not set up: its folder, the kit home’s teams and the settings file', async () => {
+  test('with no team and no folder named, the project is not set up: its folder and the kit home’s teams', async () => {
     const { found, reads } = await places({})
-    expect(found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: [], settingsPath: SETTINGS } })
+    expect(found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: [] } })
     expect(reads).toEqual([])
     // A folder named as teamrig names a team is one; a file, or a folder no team id names, is not.
     const kit = { [CONFIG]: '{}', [`${KIT}/teams/ops/state/events.jsonl`]: '', [`${KIT}/teams/Old/config.json`]: '{}', [`${KIT}/teams/notes.md`]: '' }
-    expect((await places({}, kit)).found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: ['ops', 'web'], settingsPath: SETTINGS } })
+    expect((await places({}, kit)).found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: ['ops', 'web'] } })
     // A teams folder it cannot list leaves the teams out, never the setup.
     const locked = await places({}, kit, { locked: [`${KIT}/teams`] })
-    expect(locked.found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: [], settingsPath: SETTINGS } })
+    expect(locked.found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: [] } })
   })
 
-  test('a project not set up follows the kit home and the settings file the variables move', async () => {
+  test('a project not set up follows the kit home its variable moves, and a settings file naming no folder leaves it unset', async () => {
     const moved = await places({ TEAMRIG_HOME: 'D:\\kit' }, { 'D:/kit/teams/web/config.json': '{}', [CONFIG]: '{}' })
-    expect(moved.found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: ['web'], settingsPath: 'D:/kit/pane.json' } })
+    expect(moved.found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: ['web'] } })
     // A settings file that names no folder leaves the project as unset as no file does.
     const named = await places({ TEAMRIG_PANE_SETTINGS: '~/pane.json' }, { 'C:/Homes/a/pane.json': json({ goalsDoc: 'docs/G.md' }) })
-    expect(named.found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: [], settingsPath: 'C:/Homes/a/pane.json' } })
+    expect(named.found).toEqual({ kind: 'unset', setup: { project: 'C:/w/app/src', teams: [] } })
   })
 
   test('with one folder named or no session folder, it says what to set: the variables, the settings file or a teamrig project', async () => {

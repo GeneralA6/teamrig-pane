@@ -13,7 +13,7 @@
 // first of more; emptying the field or clear closes it. A line under the field says where the keys go (find-field.ts). The close mark (✕, ctrl+x x) minimizes it to a one-row strip
 // instead of closing it; a press on the strip or /teamrig-pane opens it again, and the size is kept for the next
 // session (size.ts). A title line leads every docked view: the session's name, area and team (session-title.ts). A switch
-// row, under it in every state and width (but a project teamrig is not set up for, where the setup steps show alone)
+// row, under it in every state and width (but a project teamrig is not set up for, where the setup shows alone)
 // and the whole strip, flips the body between the tasks, the Changes view (the
 // files changed in the git repos the session works in and their lines, changes.ts, counted as Δn on
 // the switch and in the tab title) and the Log view: each team session's prompts and replies of the hours teamrig
@@ -709,7 +709,7 @@ export const register: Register = on => {
         }
         const place = currentPlace(at)
         if (place.kind === 'search') found = searchTasks(snap.tasks, place.query, treeOf(snap))
-        // A project teamrig is not set up for has no tasks, changes or log to show: its setup steps take every view,
+        // A project teamrig is not set up for has no tasks, changes or log to show: its setup takes every view,
         // whatever place it is at.
         setupShown = await read($, setup)
         // A page has no status bar: the bar counts the list, and a press on it filters the list.
@@ -988,9 +988,9 @@ export const register: Register = on => {
       </Box>
     )
     if (isMinimized && body.length === 0) return <Box paddingX={PAD_COLUMNS}>{switchRow}</Box>
-    // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup steps show alone, with no
+    // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
     // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, s, m, a, h) answers. The minimized strip
-    // above keeps its switch, so a press on it still opens the pane, onto the steps.
+    // above keeps its switch, so a press on it still opens the pane, onto the setup.
     if (setupShown !== null)
       return (
         <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={inline ? 0 : 1}>
