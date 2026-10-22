@@ -13,7 +13,8 @@
 // first of more; emptying the field or clear closes it. A line under the field says where the keys go (find-field.ts). The close mark (✕, ctrl+x x) minimizes it to a one-row strip
 // instead of closing it; a press on the strip or /teamrig-pane opens it again, and the size is kept for the next
 // session (size.ts). A title line leads every docked view: the session's name, area and team (session-title.ts). A switch
-// row, under it in every state and width and the whole strip, flips the body between the tasks, the Changes view (the
+// row, under it in every state and width (but a project teamrig is not set up for, where the setup steps show alone)
+// and the whole strip, flips the body between the tasks, the Changes view (the
 // files changed in the git repos the session works in and their lines, changes.ts, counted as Δn on
 // the switch and in the tab title) and the Log view: each team session's prompts and replies of the hours teamrig
 // keeps them (the team config's turnLog.keepHours) from the turn logs it writes (turn-log.ts), a press on a session
@@ -56,7 +57,7 @@ import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardP
 import { windowed, type Slot } from './window'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
-import { NOTHING_EXPANDED, paneBlocks, type Span } from './rows'
+import { NOTHING_EXPANDED, paneBlocks, type Block, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
 import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
@@ -174,7 +175,7 @@ const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as con
 /** The setup kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when SetupView or ProjectSetup changes shape. */
 const SETUP_SHAPE = 'setup-v1'
 const NOT_SETTING_UP: SetupView | null = null
-/** What the tasks view shows in a project teamrig is not set up for (setup.ts), in place of the tasks; null once a register is found. */
+/** What the pane shows alone in a project teamrig is not set up for (setup.ts), whatever the view; null once a register is found. */
 const setup = atom({ plugin: 'teamrig-pane', key: 'setup' } as const, NOT_SETTING_UP, { shape: SETUP_SHAPE })
 /** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
 const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
@@ -683,6 +684,8 @@ export const register: Register = on => {
     let found: SearchResults = NO_RESULTS
     /** The session whose Log page shows; null for the list or another view. */
     let logSession: string | null = null
+    /** What a project teamrig is not set up for shows (setup.ts), alone, in every view; null once a register is found. */
+    let setupShown: SetupView | null = NOT_SETTING_UP
     let body: Drawn[] = []
     /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
     let barLines: BarPiece[][] = []
@@ -706,37 +709,38 @@ export const register: Register = on => {
         }
         const place = currentPlace(at)
         if (place.kind === 'search') found = searchTasks(snap.tasks, place.query, treeOf(snap))
-        // A project teamrig is not set up for has no tasks: its setup steps take the tasks view, whatever place it is at.
-        const setupShown = current === 'tasks' ? await read($, setup) : NOT_SETTING_UP
+        // A project teamrig is not set up for has no tasks, changes or log to show: its setup steps take every view,
+        // whatever place it is at.
+        setupShown = await read($, setup)
         // A page has no status bar: the bar counts the list, and a press on it filters the list.
         const bar =
           current === 'tasks' && setupShown === null && shown === 'mine' && place.kind === 'list'
             ? statusBar(snap, await read($, barFilter), columns)
             : null
         // With no bar there is nothing to filter by, and the list shows every task.
-        const tasksBlocks =
-          setupShown !== null
-            ? setupBlocks(setupShown)
-            : place.kind === 'task'
-              ? pageBlocks(snap, place.id, await read($, pages))
-              : place.kind === 'search'
-                ? searchBlocks(snap, place.query, found)
-                : place.kind === 'done'
-                  ? doneBlocks(snap, shown, place.week)
-                  : place.kind === 'file'
-                    ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
-                    : paneBlocks(snap, shown, open, bar?.filter ?? null)
+        const tasksBlocks = async (): Promise<Block[]> =>
+          place.kind === 'task'
+            ? pageBlocks(snap, place.id, await read($, pages))
+            : place.kind === 'search'
+              ? searchBlocks(snap, place.query, found)
+              : place.kind === 'done'
+                ? doneBlocks(snap, shown, place.week)
+                : place.kind === 'file'
+                  ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
+                  : paneBlocks(snap, shown, open, bar?.filter ?? null)
         // Inline, the Log view shows its list alone: a page opens in the dock.
-        const logShown = current === 'log' && !inline ? await read($, logPage) : null
+        const logShown = setupShown === null && current === 'log' && !inline ? await read($, logPage) : null
         logSession = logShown?.session ?? null
         const viewBlocks =
-          current === 'tasks'
-            ? tasksBlocks
-            : current === 'changes'
-              ? changesBlocks(changed, isGitMissing(missing), await read($, diffs))
-              : logShown === null
-                ? logListBlocks(await read($, logList), clockOf(snap))
-                : logPageBlocks(logShown, clockOf(snap))
+          setupShown !== null
+            ? setupBlocks(setupShown)
+            : current === 'tasks'
+              ? await tasksBlocks()
+              : current === 'changes'
+                ? changesBlocks(changed, isGitMissing(missing), await read($, diffs))
+                : logShown === null
+                  ? logListBlocks(await read($, logList), clockOf(snap))
+                  : logPageBlocks(logShown, clockOf(snap))
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
@@ -938,8 +942,16 @@ export const register: Register = on => {
       isAnchor: (drawn: Drawn) => [heldKey, landingKey].some(key => key !== null && isDrawnIn(drawn, key)),
     }
     const drawSlot = (slot: Slot) => (slot.kind === 'drawn' ? drawBlock(slot.drawn) : <Box key={slot.key} height={slot.rows} />)
+    const drawBody = () => (inline ? body.map(drawBlock) : windowed(body, bodyWindow).map(drawSlot))
 
-    // The switch: under the title in every state, so another view is always one press (or t / d / g) away, its
+    // The session's title (session-title.ts) leads every docked view on one line cut at the pane's width; a Text, so it
+    // holds no place in the focus ring. It scrolls with the body, as the engine keeps no pane row fixed: the band above
+    // the prompt names the session too, and stays in view. Inline the pane draws none, as it sits by that band, in rows
+    // INLINE_MAX_ROWS caps and the engine redraws on every keystroke.
+    const sessionTitle = inline ? null : titleSpans(snap)
+    const titleRow = sessionTitle === null ? null : drawText(sessionTitle, 'truncate-end', 'title')
+
+    // The switch: under the title in every state but setup, so another view is always one press (or t / d / g) away, its
     // buttons wrapping under each other in a dock too narrow for both. Minimized, it is the whole
     // pane, one row, and a press on either button opens the pane in full on that view.
     // The Tasks button shows the list, from a page too, scrolled back to where the page was opened from; the Log
@@ -976,6 +988,16 @@ export const register: Register = on => {
       </Box>
     )
     if (isMinimized && body.length === 0) return <Box paddingX={PAD_COLUMNS}>{switchRow}</Box>
+    // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup steps show alone, with no
+    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, s, m, a, h) answers. The minimized strip
+    // above keeps its switch, so a press on it still opens the pane, onto the steps.
+    if (setupShown !== null)
+      return (
+        <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={inline ? 0 : 1}>
+          {titleRow}
+          {drawBody()}
+        </Box>
+      )
 
     const buttons = [
       <Button
@@ -1041,12 +1063,6 @@ export const register: Register = on => {
     // engine keeps the focus ring at an index among the pane's elements, so one shown or hidden before the field would
     // move the ring off it as the person types (the first key opens a search, which hides collapse), and the next keys
     // would press the pane's hotkeys or reach the prompt.
-    // The session's title (session-title.ts) leads every docked view on one line cut at the pane's width; a Text, so it
-    // holds no place in the focus ring. It scrolls with the body, as the engine keeps no pane row fixed: the band above
-    // the prompt names the session too, and stays in view. Inline the pane draws none, as it sits by that band, in rows
-    // INLINE_MAX_ROWS caps and the engine redraws on every keystroke.
-    const sessionTitle = inline ? null : titleSpans(snap)
-    const titleRow = sessionTitle === null ? null : drawText(sessionTitle, 'truncate-end', 'title')
     const controls =
       current === 'tasks' ? (
         <Box key="controls" flexDirection="column">
@@ -1179,7 +1195,7 @@ export const register: Register = on => {
         {logHead}
         {weekRow}
         {statusRows}
-        {inline ? body.map(drawBlock) : windowed(body, bodyWindow).map(drawSlot)}
+        {drawBody()}
       </Box>
     )
   })
