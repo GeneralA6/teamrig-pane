@@ -11,6 +11,26 @@ npm run setup
 `npm run setup` installs the git hooks: the scrub and DCO checks below run before each commit, and the
 [local gate](#the-local-gate) before each push.
 
+## How we work
+Every contributor, and every Claude Code session opened in this repo, works the same way. [CLAUDE.md](CLAUDE.md) holds
+the rules that apply on every turn, and the project skills in `.claude/skills/` the steps of each repeated job:
+
+| Skill | Use it for |
+| --- | --- |
+| [`dev-write-pane-test`](.claude/skills/dev-write-pane-test/SKILL.md) | a plugin test in the engine, or a node test where the runner cannot go |
+| [`dev-update-docs`](.claude/skills/dev-update-docs/SKILL.md) | the docs a change must update, and the tests that hold them to the code |
+| [`dev-sync-core`](.claude/skills/dev-sync-core/SKILL.md) | moving `hooks/core/` to a new teamrig commit, and the golden capture after it |
+| [`dev-ship-change`](.claude/skills/dev-ship-change/SKILL.md) | from the last commit to the merge: version raise, checks, push, pull request |
+
+- **One branch per change**, cut from the newest `origin/main` (see [Branches and releases](#branches-and-releases)).
+- **One logical change per commit**: a fix with its tests, a refactor apart from what it enables, a mechanical change
+  alone, each committed once its step passes, so a reviewer reads one idea at a time and a bad step reverts alone. A
+  commit past 400 changed non-test lines or 15 non-test files carries a `Large-commit: <reason>` line saying why it
+  cannot be split; these are the limits teamrig itself applies to a team's pushes.
+- **Docs in the same pull request** as the change they describe, so `main` never documents what it does not do.
+- **Typed code with no casts**: no `any`, no `as unknown as`; narrow `unknown` with a type guard.
+- When a step in a skill turns out wrong, fix the skill in the same pull request.
+
 ## Sign-off (DCO)
 Every commit must carry a `Signed-off-by:` line that matches the commit author, certifying the
 [Developer Certificate of Origin 1.1](https://developercertificate.org/). Add it with:
