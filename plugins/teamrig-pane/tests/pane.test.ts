@@ -642,8 +642,10 @@ test('with one folder named, no settings file and no teamrig project, it says wh
 /** A drawn text's words, one space between each, as a wrapped line reads unwrapped. */
 const unwrapped = (text: string | undefined) => text?.split(/\s+/).join(' ')
 const SETUP_HEAD = /^teamrig is not set up for this project$/
+/** The labels of every Button the pane draws: the switch, Find, the mode buttons and any press in the body. */
+const buttonLabels = async (pane: Mounted<'Pane'>) => (await pane.findAll({ type: 'Button' })).map(found => found.props['label'])
 
-test('in a project teamrig is not set up for, the tasks view shows how to set it up, with no warning and no area hint', async ($, on) => {
+test('in a project teamrig is not set up for, the pane shows how to set it up alone: no switch, Find, mode buttons, warning or area hint', async ($, on) => {
   const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   disk.write('/Homes/tester/.teamrig/teams/web/config.json', ['{}'])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
@@ -653,9 +655,23 @@ test('in a project teamrig is not set up for, the tasks view shows how to set it
   expect(unwrapped((await pane.find({ text: /^2\. Join a team/ }))?.text)).toBe(
     '2. Join a team: write {"team": "<id>"} to /work/.teamrig.json. Teams on this machine: web.',
   )
+  expect(await buttonLabels(pane)).toEqual([])
+  expect(await pane.findAll({ type: 'Input' })).toEqual([])
+  expect(await pane.find({ text: /^Keys on the pane/ })).toBeUndefined()
   expect(await pane.find({ text: /^WARN / })).toBeUndefined()
   expect(await pane.find({ text: /No area/ })).toBeUndefined()
   expect(disk.reads).toEqual([])
+})
+
+test('a pane left minimized in a project teamrig is not set up for keeps its switch, and a press on it opens the steps alone', async ($, on) => {
+  await start(on, { paneSize: 'minimized' }, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log'])
+
+  await pane.press({ key: 'changes' })
+  expect(await pane.find({ text: SETUP_HEAD })).toBeDefined()
+  expect(await buttonLabels(pane)).toEqual([])
 })
 
 test('a project set up while the pane shows the steps lists its tasks at the next poll, with no restart', async ($, on) => {
@@ -675,6 +691,9 @@ test('a project set up while the pane shows the steps lists its tasks at the nex
     createLine('T7', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the team register' }),
   ])
   await clock.advance(POLL_MS)
+  // With a team found, the switch, Find and the mode buttons are back.
+  const labels = await buttonLabels(pane)
+  for (const label of ['Tasks', 'Log', 'Find', 'mine', 'all', 'archive']) expect(labels).toContain(label)
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /Ship the team register/ })).toBeDefined()
   expect(await pane.find({ text: SETUP_HEAD })).toBeUndefined()
