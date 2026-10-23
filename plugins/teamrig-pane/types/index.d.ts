@@ -308,9 +308,25 @@ export type ProjectSetup = { readonly project: string; readonly teams: readonly 
 /** What the Tasks view shows in place of tasks in a project teamrig is not set up for (hooks/setup.ts): its setup, and the problem the last look found. */
 export type SetupView = { readonly setup: ProjectSetup; readonly problem: string | null }
 
+/** Where a reveal lands its target in the docked body's window (hooks/frame.ts revealed): its top, middle or bottom, or the least move that shows it. */
+export type RevealBlock = 'start' | 'center' | 'end' | 'nearest'
+
+/**
+ * Where a step wants the docked body's window (hooks/body-scroll.ts): at an offset (the person's scrolls), at the
+ * body's end (a Log page, which stays there as its lines come in), or where the element keyed `key` shows (a step back
+ * to the list, into a file's page).
+ */
+export type ScrollTarget =
+  | { readonly kind: 'offset'; readonly offset: number }
+  | { readonly kind: 'end' }
+  | { readonly kind: 'reveal'; readonly key: string; readonly block: RevealBlock }
+
+/** The last step's target, `seq` counting the steps, so a drawing tells a new reveal from one it settled. */
+export type BodyScroll = { readonly seq: number; readonly to: ScrollTarget }
+
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page, the focus ring's landings and the setup are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page, the focus ring's landings, the setup and the body's window are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -336,12 +352,12 @@ declare module 'claude-code' {
       findField: FindField
       /** The focus ring's landings in the pane (hooks/find-field.ts): the line under the Find field reads them. */
       ring: Shaped<RingLandings>
-      /** The key of the pane element the focus ring last landed on, null for none: a windowed body (hooks/window.ts) always draws it. */
-      held: string | null
       /** Whether the banner (hooks/banner.ts) in the band above the prompt shows its task's card; a press on it opens and closes it. */
       banner: boolean
       /** What the Tasks view shows in a project teamrig is not set up for (hooks/setup.ts), null once a register is found. */
       setup: Shaped<SetupView | null>
+      /** Where the docked body's window is to stand: the last step that moved it (hooks/body-scroll.ts). */
+      bodyScroll: Shaped<BodyScroll>
     }
   }
 }

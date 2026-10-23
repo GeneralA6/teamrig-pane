@@ -26,6 +26,7 @@ import { atom, read, update } from 'claude-code'
 import type { Components, Context, Register } from 'claude-code'
 import type {
   BarStatus,
+  BodyScroll,
   ExpandedTasks,
   FilePages,
   FindField,
@@ -54,10 +55,11 @@ import { RefFileReader } from './ref-file'
 import { DEFAULT_REGISTER, TimeZone } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
-import { diffKey, openKey, pieceKey, pressesFrom } from './press-keys'
+import { diffKey, pieceKey, pressesFrom, standInsOf } from './press-keys'
 import { buttonCells, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
-import { windowed, type Slot } from './window'
+import { barSpans, blankSpans, frameOf, placesOf, viewOf, type FrameSlot, type View } from './frame'
+import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
 import { NOTHING_EXPANDED, paneBlocks, type Block, type Span } from './rows'
@@ -109,6 +111,11 @@ const PANE = 'teamrig-pane'
 const DOCK_COLUMNS = 58
 /** Columns of space between the pane's frame and its text, each side. */
 const PAD_COLUMNS = 1
+/**
+ * The most of a docked pane's rows its header, with the blank row under it, may take and still stay put: a taller one
+ * (a dock too narrow for its buttons) would leave the body too few rows, so the pane then scrolls as one.
+ */
+const HEADER_MAX_SHARE = 0.5
 /** Most rows an inline pane (above the prompt) shows, its last one saying what it left out. */
 const INLINE_MAX_ROWS = 6
 /** Between two crumbs of a page's trail. */
@@ -197,16 +204,11 @@ const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, FI
 /** The focus ring's landings in the pane (find-field.ts), counted by the ui.focus hook, kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when RingLandings changes shape. */
 const RING_SHAPE = 'ring-v1'
 const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS, { shape: RING_SHAPE })
-/** The key of the pane element the focus ring last landed on, null for none or an engine stop: a windowed body (window.ts) always draws it. */
-const held = atom({ plugin: 'teamrig-pane', key: 'held' } as const, null)
 /** Whether the banner (banner.ts) in the band above the prompt shows its task's card: a press on it opens and closes it. */
 const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, false)
-
-/** True when the element keyed `key` is drawn in `drawn`: its press, its open card, or a press in the card (a task id, a reference file, a Changes file). */
-function isDrawnIn(drawn: Drawn, key: string): boolean {
-  const open = openKey(drawn.key)
-  return key === drawn.key || key === open || (/^(?:goto|diff):/.test(key) && key.includes(`:${open}:`))
-}
+/** Where the docked body's window is to stand (body-scroll.ts), kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when BodyScroll or ScrollTarget changes shape. */
+const SCROLL_SHAPE = 'scroll-v1'
+const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, AT_TOP, { shape: SCROLL_SHAPE })
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -220,8 +222,7 @@ type StepOrigin = 'typing' | 'step'
  * Moves the tasks view by `step` (nav.ts), keeping only the details of the pages, and the reads of the files, a place
  * still names. A step other than typing that changes what the Find field should hold starts a new round of it
  * (find-field.ts). A page opens at its top, a file's page at its ref's line, and a step from a page back to the list
- * brings the element the page was opened from to the middle of the window; a refused or failed scroll (an engine
- * without `$.ui.scroll` among them) leaves the window where it is.
+ * brings the element the page was opened from to the middle of the window; a failed move leaves the window where it is.
  */
 async function go($: Context, step: (current: Nav) => Nav, origin: StepOrigin = 'step'): Promise<void> {
   // The step runs on the places as last written, so a step written while this one runs is never lost.
@@ -240,12 +241,15 @@ async function go($: Context, step: (current: Nav) => Nav, origin: StepOrigin = 
 }
 
 /**
- * Moves the pane's window to the top, brings the element a landing names to its middle, or a file page's line to the
- * window's top by the paragraph that holds it (file-page.ts), the page's top when none does.
+ * Moves the docked body's window (body-scroll.ts) to the top, brings the element a landing names to its middle, or a
+ * file page's line to the window's top by the paragraph that holds it (file-page.ts), the page's top when none does.
+ * Inline the pane cuts its rows to fit (INLINE_MAX_ROWS) and has no window to move.
  */
 async function scrollTo($: Context, to: Landing): Promise<void> {
   const key = to.kind === 'top' ? null : to.kind === 'row' ? to.key : lineBlockKey(to, (await read($, filePages))[to.file])
-  await $.ui.scroll(key === null ? { to: 'start', in: PANE } : { to: { key }, in: PANE, block: to.kind === 'line' ? 'start' : 'center' })
+  await update($, bodyScroll, current =>
+    scrolledTo(current, key === null ? { kind: 'offset', offset: 0 } : { kind: 'reveal', key, block: to.kind === 'line' ? 'start' : 'center' }),
+  )
 }
 
 /** Moves the pane's focus ring onto the element keyed `key`; refused while the pane does not hold the keys, which leaves it where it was. */
@@ -354,6 +358,9 @@ function drawFindRow({ Box, Button, Input }: FindComponents, row: FindRow) {
 
 /** An element of a header row that wraps, and the cells it takes: the header packs those rows in code (pack.ts). */
 type HeaderItem = { readonly node: JSX.Element; readonly cells: number }
+
+/** A piece of the docked header and the rows it takes: the header's rows are counted as drawn, so the body's window takes the rest (T860). */
+type HeaderPart = { readonly node: JSX.Element; readonly rows: number }
 
 /** The line under the Find field, `text` saying where the keys go (keysHint): bold while typing searches, else dim. */
 function drawKeysLine({ Text }: FindComponents, keys: KeysAt, text: string) {
@@ -646,17 +653,13 @@ export const register: Register = on => {
 
   // One Text per block (rows.ts, layout.ts), the unstyled spans plain strings: a few elements a
   // task. A task's block is a plain Button around its Text, so a press (or Enter on it) expands or
-  // collapses the task. Docked, the root's gap spaces the blocks and its padding the frame, and only the blocks
-  // near the window are drawn (window.ts), each run of the others one empty Box of their rows.
+  // collapses the task. Docked, the header stays put and the body scrolls under it in a window the pane keeps
+  // itself (frame.ts), cut to the rows it shows, a blank Text of a row between two blocks.
   // Each landing of the pane's focus ring the engine let through is counted, the line under the Find field reading
-  // where the keys go from it (find-field.ts), and the element it landed on kept, which a windowed body draws
-  // wherever the window is. A failed count lets the ring move as it would have.
+  // where the keys go from it (find-field.ts). A failed count lets the ring move as it would have.
   on('ui.focus', { requestId: PANE }, async ($, e, next) => {
     const moved = await next(e)
-    if (moved.deny === undefined) {
-      await update($, ring, current => landedOn(current, e.element))
-      await update($, held, () => e.element ?? null)
-    }
+    if (moved.deny === undefined) await update($, ring, current => landedOn(current, e.element))
     return moved
   }).catch(($, e, next) => next(e))
 
@@ -664,6 +667,10 @@ export const register: Register = on => {
   let keysMemo = FIRST_MEMO
   /** The rows the last docked layout wrapped: a drawing re-wraps only the rows that changed since. */
   const wraps = new WrapCache()
+  /** Where the docked body's window stood as last drawn: a reveal moves it from there. */
+  let lastView: View = viewOf([], 0, 0)
+  /** The reveal the window last settled on (body-scroll.ts settle), held while no new step comes. */
+  let settled: Settled | null = null
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const components = $.ui.resolve(e)
     const { Box, Text, Button, Link } = components
@@ -683,7 +690,8 @@ export const register: Register = on => {
     /** The Find field's round (find-field.ts), drawn in the tasks view docked. */
     let field: FindField = FIRST_FIELD
     let landings: RingLandings = NO_LANDINGS
-    let heldKey: string | null = null
+    /** Where the docked body's window is to stand, the last step that moved it; at the top inline. */
+    let scroll: BodyScroll = AT_TOP
     /** The tasks the search shown matched, read once for its body, the Find field's Enter and the line under it; none off a search. */
     let found: SearchResults = NO_RESULTS
     /** The session whose Log page shows; null for the list or another view. */
@@ -696,7 +704,6 @@ export const register: Register = on => {
     const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
     try {
       landings = await read($, ring)
-      heldKey = await read($, held)
       keysMemo = drawnWith(keysMemo, e.props.isFocused, landings)
       isMinimized = (await read($, size)) === 'minimized'
       current = await read($, view)
@@ -706,6 +713,7 @@ export const register: Register = on => {
         shown = await read($, mode)
         open = await read($, expanded)
         const missing = await read($, requirements)
+        if (!inline) scroll = await read($, bodyScroll)
         if (current === 'tasks' && !inline) {
           at = await read($, nav)
           files = await read($, filePages)
@@ -798,11 +806,11 @@ export const register: Register = on => {
     // Back shows the list, read again, from its top.
     const openLog = async (session: string) => {
       await logging?.open(session)
-      await $.ui.scroll({ to: 'end', in: PANE }).catch(() => undefined)
+      await update($, bodyScroll, current => scrolledTo(current, { kind: 'end' }))
     }
     const closeLog = async () => {
       await logging?.close()
-      await $.ui.scroll({ to: 'start', in: PANE }).catch(() => undefined)
+      await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
     }
     // Enter in the Find field, on its words as typed (a redraw may lag behind them): with more than one match it moves
     // the ring onto the first result drawn (task-search.ts topResult), where Enter opens it and the arrows move on; with
@@ -904,15 +912,9 @@ export const register: Register = on => {
         </Button>
       )
     }
-    // The key of the element a step lands on: back to the list, or into a file's page at its line.
-    const listed = currentPlace(at)
-    const landingKey =
-      listed.kind === 'list' ? listed.row : listed.kind === 'file' ? lineBlockKey({ file: listed.file, line: listed.line }, files[listed.file]) : null
     // A Button holds strings and Texts alone, so an open card (its links, its ids) draws under the task's Button, not
-    // in it. A page's title is no press: its card is always open. A Text keeps no key (the engine keeps a Box's and
-    // a Button's), so the block a step lands on, when it is words alone (a file page's paragraph), draws in a Box
-    // under its key for `$.ui.scroll` to find. An element drawn as parts (the header, its inbox count a press) is a
-    // column Box of them, under its key.
+    // in it. A page's title is no press: its card is always open. An element drawn as parts (the header, its inbox
+    // count a press) is a column Box of them, under its key.
     const drawBlock = (drawn: Drawn) => {
       if (drawn.parts !== undefined)
         return (
@@ -921,14 +923,7 @@ export const register: Register = on => {
           </Box>
         )
       const head = headOf(drawn)
-      if (drawn.card === undefined) {
-        if (drawn.key !== landingKey || drawn.toggle !== null || drawn.opens !== undefined || drawn.reads !== undefined) return head
-        return (
-          <Box key={drawn.key} flexDirection="column">
-            {head}
-          </Box>
-        )
-      }
+      if (drawn.card === undefined) return head
       const from = pressesFrom(drawn)
       return (
         <Box key={from} flexDirection="column">
@@ -937,36 +932,99 @@ export const register: Register = on => {
         </Box>
       )
     }
-    // Docked, the body is drawn windowed (window.ts): the elements near what the person sees, the one the keys are
-    // on and the one a step lands on, each run of the others one empty Box of their rows.
-    const bodyWindow = {
-      offset: e.props.scroll.offset,
-      bodyRows: e.props.scroll.bodyRows,
-      gap: 1,
-      isAnchor: (drawn: Drawn) => [heldKey, landingKey].some(key => key !== null && isDrawnIn(drawn, key)),
+    // A slot of the docked body's window (frame.ts): an element cut to its rows in view, its open card alone when the
+    // cut leaves none of its head's lines, or the blank rows between two elements.
+    const drawSlot = (slot: FrameSlot) => {
+      if (slot.kind === 'gap') return drawText(blankSpans(slot.rows), 'wrap', slot.key)
+      if (slot.head) return drawBlock(slot.drawn)
+      const { drawn } = slot
+      const from = pressesFrom(drawn)
+      return (
+        <Box key={from} flexDirection="column">
+          {(drawn.card ?? []).map(part => drawPart(part, drawn.wrap, from))}
+        </Box>
+      )
     }
-    const drawSlot = (slot: Slot) => (slot.kind === 'drawn' ? drawBlock(slot.drawn) : <Box key={slot.key} height={slot.rows} />)
-    const drawBody = () => (inline ? body.map(drawBlock) : windowed(body, bodyWindow).map(drawSlot))
+    // The presses out of the window (press-keys.ts standInsOf), each a Button under its key in a Box no row tall: the
+    // engine keeps the focus ring at an index among the pane's elements, so every press is drawn wherever the window
+    // stands, and Tab still reaches the list's true ends. A press on one does nothing: it is out of sight.
+    const drawStandIns = (key: string, keys: readonly string[]) =>
+      keys.length === 0 ? null : (
+        <Box key={key} flexDirection="column" height={0} overflow="hidden">
+          {keys.map(standIn => (
+            <Button key={standIn} label={standIn} plain onPress={() => undefined} />
+          ))}
+        </Box>
+      )
+    // The header and body as they are, one under the other. Inline (gap 0) inlineLayout cut the rows to fit; a dock
+    // whose header is too tall to stay put (HEADER_MAX_SHARE) draws every block, a blank row apart, and the engine's
+    // window scrolls the pane as one.
+    const drawFlat = (header: readonly HeaderPart[], gap: number) => (
+      <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={gap}>
+        {header.map(part => part.node)}
+        {body.map(drawBlock)}
+      </Box>
+    )
+    // Docked, the header stays put and the body scrolls under it (T860): the two are as tall together as the
+    // engine's window, so the engine has no rows to scroll, and the body's window takes the rows the header, counted
+    // as drawn, and the blank row under it leave. It shows the body from the offset the last step settles on
+    // (body-scroll.ts), the presses out of it drawn as stand-ins, and while the body is taller than the window a
+    // scroll bar beside it, in the right padding's column, so the body's width never changes.
+    const drawDocked = (header: readonly HeaderPart[]) => {
+      const rows = e.props.scroll.bodyRows
+      const headerRows = header.reduce((sum, part) => sum + part.rows, 0) + Math.max(0, header.length - 1)
+      if (headerRows + 1 > rows * HEADER_MAX_SHARE) return drawFlat(header, 1)
+      const visibleRows = rows - headerRows - 1
+      const places = placesOf(body, 1)
+      const landed = settle(scroll, settled, places, viewOf(places, lastView.offset, visibleRows))
+      settled = landed.settled
+      const frame = viewOf(places, landed.offset, visibleRows)
+      lastView = frame
+      const out = standInsOf(places, frame)
+      const bar = barSpans(frame)
+      return (
+        <Box flexDirection="column" paddingLeft={PAD_COLUMNS} gap={1} height={rows} overflow="hidden">
+          <Box key="header" flexDirection="column" gap={1} paddingRight={PAD_COLUMNS} flexShrink={0}>
+            {header.map(part => part.node)}
+          </Box>
+          <Box key="body" flexDirection="row" flexGrow={1} overflow="hidden">
+            <Box key="window" flexDirection="column" width={columns}>
+              {drawStandIns('above', out.above)}
+              {frameOf(places, frame).map(drawSlot)}
+              {drawStandIns('below', out.below)}
+            </Box>
+            {bar.length === 0 ? null : drawText(bar, 'truncate-end', 'scroll-bar')}
+          </Box>
+        </Box>
+      )
+    }
+    const drawPane = (header: readonly HeaderPart[]) => (inline ? drawFlat(header, 0) : drawDocked(header))
 
     // The session's title (session-title.ts) leads every docked view on one line cut at the pane's width; a Text, so it
-    // holds no place in the focus ring. It scrolls with the body, as the engine keeps no pane row fixed: the band above
-    // the prompt names the session too, and stays in view. Inline the pane draws none, as it sits by that band, in rows
-    // INLINE_MAX_ROWS caps and the engine redraws on every keystroke.
+    // holds no place in the focus ring. It stays above the body with the rest of the header. Inline the pane draws
+    // none, as it sits by the band above the prompt, which names the session too, in rows INLINE_MAX_ROWS caps and the
+    // engine redraws on every keystroke.
     const sessionTitle = inline ? null : titleSpans(snap)
-    const titleRow = sessionTitle === null ? null : drawText(sessionTitle, 'truncate-end', 'title')
+    const titleRow: HeaderPart | null = sessionTitle === null ? null : { node: drawText(sessionTitle, 'truncate-end', 'title'), rows: 1 }
 
     // The header's rows that wrap (the switch, the mode buttons, a page's trail, the Archive week's steps) are packed in
     // code (pack.ts), each a column Box under its key of one row Box a row, keyed `<key>:<row>`: the rows drawn are the
     // rows counted, so the body's window can take the rows the header leaves (T860).
-    const drawPacked = (key: string, items: readonly HeaderItem[], gap: number) => (
-      <Box key={key} flexDirection="column">
-        {packRows(items, item => item.cells, columns, gap).map((row, i) => (
-          <Box key={`${key}:${i}`} flexDirection="row" columnGap={gap}>
-            {row.map(item => item.node)}
+    const drawPacked = (key: string, items: readonly HeaderItem[], gap: number): HeaderPart => {
+      const packed = packRows(items, item => item.cells, columns, gap)
+      return {
+        node: (
+          <Box key={key} flexDirection="column">
+            {packed.map((row, i) => (
+              <Box key={`${key}:${i}`} flexDirection="row" columnGap={gap}>
+                {row.map(item => item.node)}
+              </Box>
+            ))}
           </Box>
-        ))}
-      </Box>
-    )
+        ),
+        rows: packed.length,
+      }
+    }
     /** A Button as a header item, its cells counted from how it looks. */
     const pressed = (node: JSX.Element, look: ButtonLook): HeaderItem => ({ node, cells: buttonCells(look) })
     /** Words as a header item. */
@@ -1017,17 +1075,11 @@ export const register: Register = on => {
         : []),
     ]
     const switchRow = drawPacked('switch', switchItems, 1)
-    if (isMinimized && body.length === 0) return <Box paddingX={PAD_COLUMNS}>{switchRow}</Box>
+    if (isMinimized && body.length === 0) return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>
     // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
     // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, s, m, a, h) answers. The minimized strip
     // above keeps its switch, so a press on it still opens the pane, onto the setup.
-    if (setupShown !== null)
-      return (
-        <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={inline ? 0 : 1}>
-          {titleRow}
-          {drawBody()}
-        </Box>
-      )
+    if (setupShown !== null) return drawPane(titleRow === null ? [] : [titleRow])
 
     const buttons = [
       pressed(<Button label="mine" hotkey="m" variant={shown === 'mine' ? 'primary' : 'secondary'} onPress={() => void showMode($, 'mine')} />, {
@@ -1089,30 +1141,40 @@ export const register: Register = on => {
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
     // hotkeys or to Claude's prompt, and the key or the click that moves them, wrapped in a narrow dock.
     const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo, place.kind === 'search')
-    const keysText = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, matchCount(found)) }] }, columns)
-      .map(line => line.map(span => span.text).join(''))
-      .join('\n')
-    const keysLine = inline ? null : drawKeysLine(components, keys, keysText)
+    const keysLines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, matchCount(found)) }] }, columns).map(line =>
+      line.map(span => span.text).join(''),
+    )
+    const keysLine = inline ? null : drawKeysLine(components, keys, keysLines.join('\n'))
     // In the tasks view the Find row and its line sit right under the switch, then the mode buttons, in the same block.
     // The field comes before every element that shows or hides with the place (collapse, clear, a page's steps): the
     // engine keeps the focus ring at an index among the pane's elements, so one shown or hidden before the field would
     // move the ring off it as the person types (the first key opens a search, which hides collapse), and the next keys
     // would press the pane's hotkeys or reach the prompt.
-    const controls =
-      current === 'tasks' ? (
-        <Box key="controls" flexDirection="column">
-          {titleRow}
-          {switchRow}
-          {findRow}
-          {keysLine}
-          {drawPacked('modes', buttons, 1)}
-        </Box>
-      ) : (
-        <Box key="controls" flexDirection="column">
-          {titleRow}
-          {switchRow}
-        </Box>
-      )
+    // The Find row is one row, as drawFindRow draws it.
+    const modes = drawPacked('modes', buttons, 1)
+    const controls: HeaderPart =
+      current === 'tasks'
+        ? {
+            node: (
+              <Box key="controls" flexDirection="column">
+                {titleRow?.node}
+                {switchRow.node}
+                {findRow}
+                {keysLine}
+                {modes.node}
+              </Box>
+            ),
+            rows: (titleRow?.rows ?? 0) + switchRow.rows + (findRow === null ? 0 : 1) + (keysLine === null ? 0 : keysLines.length) + modes.rows,
+          }
+        : {
+            node: (
+              <Box key="controls" flexDirection="column">
+                {titleRow?.node}
+                {switchRow.node}
+              </Box>
+            ),
+            rows: (titleRow?.rows ?? 0) + switchRow.rows,
+          }
     // The status bar leads the tasks: its segments in one row as wide as the body, its counts under it.
     // A press on a segment or a count (or the count's key) filters the list to that status, a second
     // press on the same one clears it, and one on another switches to it.
@@ -1131,16 +1193,22 @@ export const register: Register = on => {
         </Button>
       )
     }
-    const statusRows =
-      barLines.length === 0 ? null : (
-        <Box key="status-bar" flexDirection="column">
-          {barLines.map((line, i) => (
-            <Box key={`status-bar:${i}`} flexDirection="row">
-              {line.map(drawPiece)}
-            </Box>
-          ))}
-        </Box>
-      )
+    // Its lines come wrapped to the body's width (status-bar.ts), a row each.
+    const statusRows: HeaderPart | null =
+      barLines.length === 0
+        ? null
+        : {
+            node: (
+              <Box key="status-bar" flexDirection="column">
+                {barLines.map((line, i) => (
+                  <Box key={`status-bar:${i}`} flexDirection="row">
+                    {line.map(drawPiece)}
+                  </Box>
+                ))}
+              </Box>
+            ),
+            rows: barLines.length,
+          }
     // A page, and the list while a page lies ahead of it (back led there), leads with back and forward (b, f; dim
     // when there is nowhere to go), then the trail of the last places, each one a press away but the one shown
     // (bold), those ahead of it dim, then a rule. Each key is written out on its Button, where the guide's key check
@@ -1226,35 +1294,38 @@ export const register: Register = on => {
             ],
             2,
           )
-    const pageHead =
-      isPage(place) || canGoForward(at) ? (
-        <Box key="page-head" flexDirection="column">
-          <Box flexDirection="row" columnGap={2}>
-            {backStep}
-            {forwardStep}
-          </Box>
-          {drawPacked('trail', trailItems, 0)}
-          <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
-        </Box>
-      ) : null
+    // Its steps' row, the trail's packed rows and the rule.
+    const trailRows = drawPacked('trail', trailItems, 0)
+    const pageHead: HeaderPart | null =
+      isPage(place) || canGoForward(at)
+        ? {
+            node: (
+              <Box key="page-head" flexDirection="column">
+                <Box flexDirection="row" columnGap={2}>
+                  {backStep}
+                  {forwardStep}
+                </Box>
+                {trailRows.node}
+                <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
+              </Box>
+            ),
+            rows: 1 + trailRows.rows + 1,
+          }
+        : null
     // A Log page leads with back (b) to the list, then a rule.
-    const logHead =
-      logSession === null ? null : (
-        <Box key="log-head" flexDirection="column">
-          <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void closeLog()} />
-          <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
-        </Box>
-      )
-    return (
-      <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={inline ? 0 : 1}>
-        {controls}
-        {pageHead}
-        {logHead}
-        {weekRow}
-        {statusRows}
-        {drawBody()}
-      </Box>
-    )
+    const logHead: HeaderPart | null =
+      logSession === null
+        ? null
+        : {
+            node: (
+              <Box key="log-head" flexDirection="column">
+                <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void closeLog()} />
+                <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
+              </Box>
+            ),
+            rows: 2,
+          }
+    return drawPane([controls, pageHead, logHead, weekRow, statusRows].filter((part): part is HeaderPart => part !== null))
   })
 
   /** The banner's own: each layout settles its cache, so one shared with the pane's body would drop its rows. */

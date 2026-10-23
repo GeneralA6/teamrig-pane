@@ -4,8 +4,9 @@
 // as dockLayout wrapped them, one a line: an element's head (its Text's lines, or its parts when drawn as parts),
 // then its open card's parts, a Text or a press cut by lines and a line of presses kept whole or left out. The rows
 // between two elements are slots of their own, so the window may start or end on one. Here too are what reads the
-// window: a reveal's offset, the scroll bar's thumb, and a scroll move's offset.
-import type { UiScrollArgs, UiScrollInput } from 'claude-code'
+// window: a reveal's offset, the scroll bar, and a scroll move's offset.
+import type { UiScrollInput } from 'claude-code'
+import type { RevealBlock } from '../types'
 import type { CardPart, Drawn } from './layout'
 import type { Span } from './rows'
 
@@ -45,9 +46,6 @@ export type View = {
   /** The last offset that fills the window: the body's rows less the window's, 0 when the body fits. */
   readonly maxOffset: number
 }
-
-/** Where a reveal lands its target in the window, as `$.ui.scroll` takes it. */
-export type RevealBlock = NonNullable<UiScrollArgs['block']>
 
 /** The scroll bar's thumb: its first row in the bar's track, and its rows. */
 export type Thumb = { readonly top: number; readonly size: number }
@@ -200,6 +198,24 @@ export function thumbOf(view: View, track: number): Thumb | null {
   if (view.contentRows <= view.visibleRows || track < 1) return null
   const size = within(Math.round((track * view.visibleRows) / view.contentRows), 1, track)
   return { top: Math.round(((track - size) * view.offset) / view.maxOffset), size }
+}
+
+/** `rows` empty lines as one Text's spans: a gap's rows in the window, each a blank so it keeps its row. */
+export function blankSpans(rows: number): Span[] {
+  return Array.from({ length: Math.max(0, rows) }, (_, i) => (i === 0 ? [BLANK] : [NEW_LINE, BLANK])).flat()
+}
+
+/**
+ * The scroll bar beside the window as one Text's spans, a row a line: its thumb (thumbOf) `┃`, the rest of its track
+ * a dim `│`. None when the body fits the window.
+ */
+export function barSpans(view: View): Span[] {
+  const thumb = thumbOf(view, view.visibleRows)
+  if (thumb === null) return []
+  return Array.from({ length: view.visibleRows }, (_, row): Span[] => {
+    const mark: Span = row >= thumb.top && row < thumb.top + thumb.size ? { text: '┃' } : { text: '│', dim: true }
+    return row === 0 ? [mark] : [NEW_LINE, mark]
+  }).flat()
 }
 
 /**

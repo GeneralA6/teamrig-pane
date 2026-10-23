@@ -37,8 +37,18 @@ declare module 'claude-code' {
     readonly gap?: number
     readonly columnGap?: number
     readonly paddingX?: number
-    /** The rows the Box takes: an empty one holds that many (a windowed body's spacer, hooks/window.ts). */
+    readonly paddingLeft?: number
+    readonly paddingRight?: number
+    /** The rows the Box takes, whatever its children need: the docked pane's root is as tall as the engine's window. */
     readonly height?: number
+    /** The columns the Box takes, whatever its children need. */
+    readonly width?: number
+    /** How much of the free space along its parent's direction the Box takes; 0, none, by default. */
+    readonly flexGrow?: number
+    /** How much the Box gives up when its parent's children need more than it has; 0 keeps its size. */
+    readonly flexShrink?: number
+    /** `hidden` cuts what its children draw past the Box's edges. */
+    readonly overflow?: 'visible' | 'hidden'
     readonly children?: Child
   }
   export type TextProps = {
