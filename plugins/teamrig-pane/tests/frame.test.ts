@@ -1,6 +1,6 @@
 // The docked body cut to its window's rows, and what reads the window: a reveal, the scroll bar, a scroll move.
 import { describe, expect, test } from 'claude-code/testing'
-import { cutDrawn, cutSpans, frameOf, placesOf, revealed, rowsOf, scrolledBy, thumbOf, viewOf, type FrameSlot, type View } from '../hooks/frame'
+import { barSpans, blankSpans, cutDrawn, cutSpans, frameOf, placesOf, revealed, rowsOf, scrolledBy, thumbOf, viewOf, type FrameSlot, type View } from '../hooks/frame'
 import type { CardPart, Drawn, Piece } from '../hooks/layout'
 import type { Span } from '../hooks/rows'
 
@@ -252,6 +252,25 @@ describe('thumbOf', () => {
 
   test('one row at least', () => {
     expect(thumbOf({ offset: 990, visibleRows: 10, contentRows: 1000, maxOffset: 990 }, 10)).toEqual({ top: 9, size: 1 })
+  })
+})
+
+describe('blankSpans', () => {
+  test('a blank a row, a new line between two, none for no rows', () => {
+    expect(blankSpans(3).map(span => span.text).join('')).toBe(' \n \n ')
+    expect(blankSpans(0)).toEqual([])
+  })
+})
+
+describe('barSpans', () => {
+  test("a row a line beside the window: the thumb's rows bold marks, the track's dim", () => {
+    const spans = barSpans({ offset: 15, visibleRows: 10, contentRows: 40, maxOffset: 30 })
+    expect(spans.map(span => span.text).join('')).toBe('│\n│\n│\n│\n┃\n┃\n┃\n│\n│\n│')
+    expect(spans.filter(span => span.text !== '\n').map(span => span.dim === true)).toEqual([true, true, true, true, false, false, false, true, true, true])
+  })
+
+  test('no bar when the body fits the window', () => {
+    expect(barSpans({ offset: 0, visibleRows: 10, contentRows: 10, maxOffset: 0 })).toEqual([])
   })
 })
 

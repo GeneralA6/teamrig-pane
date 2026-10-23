@@ -2,17 +2,9 @@
 // pane's whole tree (frame.ts), and a step writes where it wants it: at an offset (the person's scrolls), at the
 // body's end (a Log page, which stays there as its lines come in), or where an element shows (a reveal: a step back
 // to the list, into a file's page). Each drawing settles that on the body it draws.
-import { revealed, type Placed, type RevealBlock, type View } from './frame'
+import type { BodyScroll, ScrollTarget } from '../types'
+import { revealed, type Placed, type View } from './frame'
 import { placeOf } from './press-keys'
-
-/** Where a step wants the window. */
-export type ScrollTarget =
-  | { readonly kind: 'offset'; readonly offset: number }
-  | { readonly kind: 'end' }
-  | { readonly kind: 'reveal'; readonly key: string; readonly block: RevealBlock }
-
-/** The last step's target, `seq` counting the steps, so a drawing tells a new reveal from one it settled. */
-export type BodyScroll = { readonly seq: number; readonly to: ScrollTarget }
 
 /** The window at the body's top, before any step. */
 export const AT_TOP: BodyScroll = { seq: 0, to: { kind: 'offset', offset: 0 } }

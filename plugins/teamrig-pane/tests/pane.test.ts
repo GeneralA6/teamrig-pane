@@ -264,10 +264,11 @@ test("the area's Tasks view leads with a bar of its tasks by status and their co
   for (const count of ['1 done today', '1 verifying', '1 waiting', '1 not started'])
     expect(await pane.find({ type: 'Text', text: count })).toBeDefined()
   expect(await pane.find({ text: /working/ })).toBeUndefined()
-  // The bar sits between the switch and the tasks.
+  // The bar ends the header, under the switch and above the tasks' window.
   const drawn = await pane.drawn()
-  const rootKeys = childrenOf(drawn).map(child => propsOf(child)).map(props => (props !== null && 'key' in props ? props.key : null))
-  expect(rootKeys.indexOf('status-bar')).toBe(1)
+  const headerKeys = childrenOf(keyedNode(drawn, 'header')).map(child => propsOf(child)).map(props => (props !== null && 'key' in props ? props.key : null))
+  expect(headerKeys.indexOf('status-bar')).toBe(1)
+  expect(headerKeys.at(-1)).toBe('status-bar')
 
   await pane.press({ key: 'all' })
   expect(keyedNode(await pane.drawn(), 'status-bar')).toBe(null)
@@ -468,7 +469,7 @@ test('a register of 20,000 events loads and draws in well under a second, and a 
   expect(disk.reads.length).toBe(reads)
 })
 
-test("docked, a list of 2,000 tasks draws only the elements near the window and the list's two ends, and a scroll draws the rows it moves to", async ($, on) => {
+test("docked, a list of 2,000 tasks draws the words of only the tasks its window shows, each other task's press a stand-in under its key", async ($, on) => {
   const { disk } = await start(on)
   disk.write(
     EVENTS,
@@ -479,22 +480,38 @@ test("docked, a list of 2,000 tasks draws only the elements near the window and 
   await pane.press({ key: 'all' })
   const numbers = async () =>
     (await pane.findAll({ type: 'Text', text: /Long list task \d+/ })).map(found => Number(/Long list task (\d+)/.exec(found.text)?.[1]))
-  // Four screenfuls of 40 rows, and a screenful above the list's last task, hold a few dozen tasks of the 2,000, and
-  // the tree's buttons stay as few.
+  // The window under the header, less than 40 rows, holds a few tasks from the list's first; the stand-ins hold no
+  // words, so the tree holds no other task's text.
   const top = await numbers()
   expect(top).toContain(1)
-  expect(top).toContain(2_000)
-  expect(top).not.toContain(1_000)
-  expect(top.length).toBeLessThan(60)
-  expect(buttonKeys(await pane.drawn()).length).toBeLessThan(80)
+  expect(top).not.toContain(2_000)
+  expect(top.length).toBeLessThan(20)
+  // Every task's press is drawn, in the window or as a stand-in, so the focus ring's indexes stay put as it moves.
+  expect(buttonKeys(await pane.drawn()).filter(key => /^po:T\d+$/.test(key))).toHaveLength(2_000)
+})
 
-  // In the middle: the rows around the window, away from both ends, and a screenful at each end.
-  await pane.redraw({ ...PANE_PROPS, scroll: { offset: 5_000, bodyRows: 40 } })
-  const middle = await numbers()
-  expect(middle.filter(n => n > 100 && n < 1_900).length).toBeGreaterThan(0)
-  expect(middle).toContain(1)
-  expect(middle).toContain(2_000)
-  expect(middle.length).toBeLessThan(100)
+test('docked, the header and the body\'s window fill the rows the engine gives the pane, a scroll bar beside a body taller than its window', async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(
+    EVENTS,
+    Array.from({ length: 200 }, (_, i) => createLine(`T${i + 1}`, { owner: 'po', by: 'lead', at: NOW - HOUR, title: `Long list task ${i + 1}` })),
+  )
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'all' })
+  const drawn = await pane.drawn()
+  // The header's rows are counted as the pane draws them: with the blank row under the header, the window takes the
+  // rest of the 40, and the root, as tall as the engine's window, holds both.
+  const headerRows = linesOf(keyedNode(drawn, 'header')).length
+  const windowRows = linesOf(keyedNode(drawn, 'window')).length
+  expect(headerRows + 1 + windowRows).toBe(PANE_PROPS.scroll.bodyRows)
+  expect(linesOf(drawn)).toHaveLength(PANE_PROPS.scroll.bodyRows)
+  // The bar runs the window's rows, its thumb at the top, its track dim below.
+  const [, bar] = childrenOf(keyedNode(drawn, 'body'))
+  const marks = linesOf(bar)
+  expect(marks).toHaveLength(windowRows)
+  expect(marks[0]).toBe('┃')
+  expect(marks.at(-1)).toBe('│')
 })
 
 test("docked, a long list's first and last tasks are drawn wherever the window stands, so Tab and Shift+Tab wrap to its true ends", async ($, on) => {
@@ -595,7 +612,9 @@ test('docked, it pads the frame, spaces the tasks, wraps a long title under itse
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  expect((await pane.find({ type: 'Box' }))?.props).toMatchObject({ paddingX: 1, gap: 1 })
+  // The root is as tall as the engine's window and clips the body's window under the header (T860).
+  expect((await pane.find({ type: 'Box' }))?.props).toMatchObject({ paddingLeft: 1, gap: 1, height: PANE_PROPS.scroll.bodyRows, overflow: 'hidden' })
+  expect(propsOf(keyedNode(await pane.drawn(), 'header'))).toMatchObject({ paddingRight: 1 })
   const task = await pane.find({ type: 'Text', text: /Ship the task pane/ })
   expect(task?.text).toMatch(/^○ T1  .+\n {6}\S.+\n {6}p3 · new · asked by owner$/)
   expect(task?.text.split('\n').every(line => line.length <= PANE_PROPS.bodyColumns - 2)).toBe(true)
@@ -631,7 +650,7 @@ test('with one folder named, no settings file and no teamrig project, it says wh
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  const problem = await pane.find({ text: /^WARN no register found/ })
+  const problem = await pane.find({ type: 'Text', text: /^WARN no register found/ })
   expect(problem?.text.split(/\s+/).join(' ')).toBe(
     "WARN no register found: set TEAMRIG_PANE_TASKS_DIR and TEAMRIG_PANE_INBOX_DIR, write them in /Homes/tester/.teamrig/pane.json, or start the session in a teamrig team's project (.teamrig.json)",
   )
@@ -779,14 +798,18 @@ test('the settings file in the kit home names the folders, ~/ under the home fol
   expect(await pane.find({ text: /WARN/ })).toBeUndefined()
 })
 
-test('draws each collapsed task as one Text: no Box beyond the root, the controls, the find row and the two packed button rows', async ($, on) => {
+test('draws each collapsed task as one Text: no Box beyond the frame, the controls, the find row and the two packed button rows', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   await pane.press({ key: 'all' })
-  // The switch and the mode buttons are packed in code (pack.ts): each a column Box of one row Box a row, one row here.
-  expect(countType(await pane.drawn(), 'Box')).toBe(7)
+  // The frame is the root, the header, the body's row and its window (T860); the switch and the mode buttons are
+  // packed in code (pack.ts): each a column Box of one row Box a row, one row here.
+  const drawn = await pane.drawn()
+  expect(countType(drawn, 'Box')).toBe(10)
+  // The list fits its window, so no scroll bar stands beside it.
+  expect(childrenOf(keyedNode(drawn, 'body')).filter(child => child !== null)).toHaveLength(1)
 })
 
 test('pressing a task opens its card in place of its meta line, the ask quoted from the inbox and the roadmap; pressing again closes it', async ($, on) => {
@@ -877,9 +900,10 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   await pane.press({ key: 'po:T1' })
   expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {7}waiting since 14:00 UTC by security\n {4}│ Note {9}needs owner paste\n/ })).toBeDefined()
   expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeUndefined()
-  // Each open card is a column Box, its reference file's line a row Box in it; the switch and the mode buttons are
-  // packed in code (pack.ts), each a column Box of one row Box here.
-  expect(countType(await pane.drawn(), 'Box')).toBe(11)
+  // Each open card is a column Box, its reference file's line a row Box in it; the frame is four Boxes (the root, the
+  // header, the body's row, its window); the switch and the mode buttons are packed in code (pack.ts), each a column
+  // Box of one row Box here.
+  expect(countType(await pane.drawn(), 'Box')).toBe(14)
   const collapse = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'collapse')
   expect(collapse?.props).toMatchObject({ hotkey: 'c' })
 
@@ -887,7 +911,7 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   expect(await pane.find({ text: /│ (Status|From)/ })).toBeUndefined()
   expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeDefined()
   expect(await pane.find({ text: /collapse/ })).toBeUndefined()
-  expect(countType(await pane.drawn(), 'Box')).toBe(7)
+  expect(countType(await pane.drawn(), 'Box')).toBe(10)
 })
 
 test('an open card draws each address its ref, note, proof and evidence hold as one Link, the issue a GitHub task came from first', async ($, on) => {
@@ -1024,6 +1048,8 @@ test('resized to a narrow dock or inline, it draws every line inside the frame a
     await pane.redraw({ ...PANE_PROPS, bodyColumns })
     const text = (await pane.findAll({ type: 'Text' })).map(found => found.text).join('')
     expect(text.replace(/\s/g, '')).toContain('Ship')
+    // The header alone is taller than the pane: no window of its own, the engine scrolls the pane as one.
+    expect(keyedNode(await pane.drawn(), 'window')).toBe(null)
   }
   await pane.redraw({ ...PANE_PROPS, bodyColumns: 12, placement: 'inline', scroll: { offset: 0, bodyRows: 4 } })
   const rows = await pane.findAll({ type: 'Text' })
@@ -1578,26 +1604,41 @@ function numberProp(props: object | null, name: string): number {
 /**
  * A drawn tree as the lines it reads as, unstyled and unwrapped: a Text's children run on, a row Box's children
  * stand side by side (its columnGap between), a column Box's one under another (its gap blank lines between), a
- * labelled Button is its label, paddingX indents. Trailing blanks are cut.
+ * labelled Button is its label, paddingX and paddingLeft indent. A Box with a width fills it, so what stands beside
+ * it starts past it; one with a height takes those rows, cut or filled with blank lines. Trailing blanks, and the
+ * blank lines under the last drawn one, are cut.
  */
 function screenOf(node: unknown): string[] {
+  const lines = linesOf(node)
+  const last = lines.findLastIndex(line => line !== '')
+  return lines.slice(0, last + 1)
+}
+
+/** A drawn tree's lines as screenOf reads them, the blank lines a Box's height fills kept. */
+function linesOf(node: unknown): string[] {
   if (typeof node === 'string') return node.split('\n')
   const props = propsOf(node)
-  if (typeOf(node) === 'Button' && props !== null && 'label' in props && typeof props.label === 'string') return [props.label]
+  if (typeOf(node) === 'Button' && props !== null && 'label' in props && typeof props.label === 'string') return props.label.split('\n')
   const parts = childrenOf(node)
     .filter(child => typeof child === 'string' || (typeof child === 'object' && child !== null))
-    .map(screenOf)
+    .map(linesOf)
   if (typeOf(node) !== 'Box') return parts.map(lines => lines.join('\n')).join('').split('\n')
-  const pad = ' '.repeat(numberProp(props, 'paddingX'))
+  const pad = ' '.repeat(numberProp(props, 'paddingX') + numberProp(props, 'paddingLeft'))
+  const sized = (lines: string[]): string[] => {
+    const width = numberProp(props, 'width')
+    const filled = width === 0 ? lines : lines.map(line => line.padEnd(width))
+    if (props === null || !('height' in props) || typeof props.height !== 'number') return filled
+    return Array.from({ length: props.height }, (_, i) => filled[i] ?? ''.padEnd(width))
+  }
   if (props !== null && 'flexDirection' in props && props.flexDirection === 'row') {
     const gap = ' '.repeat(numberProp(props, 'columnGap'))
     const widths = parts.map(lines => Math.max(...lines.map(cells)))
     const height = Math.max(0, ...parts.map(lines => lines.length))
     const rows = Array.from({ length: height }, (_, i) => parts.map((lines, j) => (lines[i] ?? '').padEnd(widths[j] ?? 0)).join(gap))
-    return rows.map(row => `${pad}${row}`.trimEnd())
+    return sized(rows.map(row => `${pad}${row}`.trimEnd()))
   }
   const blank = Array.from({ length: numberProp(props, 'gap') }, () => '')
-  return parts.flatMap((lines, i) => (i === 0 ? lines : [...blank, ...lines])).map(line => (line === '' ? '' : `${pad}${line}`.trimEnd()))
+  return sized(parts.flatMap((lines, i) => (i === 0 ? lines : [...blank, ...lines])).map(line => (line === '' ? '' : `${pad}${line}`.trimEnd())))
 }
 
 /** T52 in po's list, planned after T50, itself after T58: a chain of ids to follow. */
@@ -1808,15 +1849,14 @@ test("a reference file's line: its page lands on the paragraph that holds it, th
   if (toLong === undefined) throw new Error('no press on docs/long.md')
 
   await pane.press({ key: toLong })
-  // 400 lines with no blank line split every 50: line 300 sits in the block from line 251, drawn though far below
-  // the window's top, as the step lands there, in a Box under its key: a Text keeps none for `$.ui.scroll` to find.
-  // The kit has no implementation of a plugin's own scroll (it throws before any ui.scroll hook), so the move
-  // itself is the engine's; what the test holds is that its target is drawn. The paragraphs it does not land on
-  // stay Texts, keyless.
+  // 400 lines with no blank line split every 50: line 300 sits in the block from line 251, far below the body's
+  // top, and the step moves the body's window to start at that block. The blocks out of the window are not drawn.
   const drawn = await pane.drawn()
-  expect(propsOf(keyedNode(drawn, 'file-page:para:251'))).toMatchObject({ key: 'file-page:para:251' })
-  expect(keyedNode(drawn, 'file-page:para:1')).toBeNull()
-  expect(await pane.find({ type: 'Text', text: /^brief line 300\n?$/ })).toMatchObject({ props: { bold: true } })
+  const shown = linesOf(keyedNode(drawn, 'window')).map(line => line.trimEnd())
+  expect(shown[0]).toBe('brief line 251')
+  expect(shown).toContain('brief line 260')
+  expect(shown).not.toContain('brief line 250')
+  expect(screenOf(drawn)).not.toContain(' brief line 1')
 
   await pane.press({ key: 'back' })
   const toGone = buttonKeys(await pane.drawn()).filter(key => key.startsWith('goto:file:'))[1]
@@ -1846,7 +1886,8 @@ test("the header's inbox count opens the inbox as a page, landing on its first u
   const screen = screenOf(drawn)
   expect(screen).toContain(' inbox/po.md')
   expect(screen).toContain(` ${INBOX} · line 3`)
-  expect(propsOf(keyedNode(drawn, 'file-page:para:3'))).toMatchObject({ key: 'file-page:para:3' })
+  // The page fits its window, so the step to its first unread line leaves the window at the page's top.
+  expect(linesOf(keyedNode(drawn, 'window')).map(line => line.trimEnd())).toContain('line two')
   expect(await pane.find({ type: 'Text', text: /^line two\n?$/ })).toMatchObject({ props: { bold: true } })
 
   // Back on the list after a poll, the two lines are still unread: the pane writes no mark.
@@ -1886,9 +1927,11 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
     '',
     ' 2 tasks match',
     '',
-    ' ○ T50  Load the feed\n       on etl',
+    ' ○ T50  Load the feed',
+    '        on etl',
     '',
-    ' ○ T58  Read the source\n       on etl',
+    ' ○ T58  Read the source',
+    '        on etl',
   ])
   // The words that matched underlined: `the` in the title, `etl` in the dim line of whose it is.
   expect(childrenOf(keyedNode(drawn, 'search:T50'))).toEqual([
