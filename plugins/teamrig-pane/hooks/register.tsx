@@ -55,6 +55,8 @@ import { DEFAULT_REGISTER, TimeZone } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { diffKey, openKey, pieceKey, pressesFrom } from './press-keys'
+import { buttonCells, packRows, type ButtonLook } from './pack'
+import { cells } from './width'
 import { windowed, type Slot } from './window'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
@@ -336,16 +338,22 @@ type FindRow = {
   onClear: (() => void) | null
 }
 
-/** `s: Find`, the field, then clear while a search shows, in one row that wraps in a narrow dock. */
+/**
+ * `s: Find`, the field, then clear while a search shows, in one row that never wraps: the field's width is the
+ * engine's, so the header counts the row as one (pack.ts).
+ */
 function drawFindRow({ Box, Button, Input }: FindComponents, row: FindRow) {
   return (
-    <Box key="find-row" flexDirection="row" flexWrap="wrap" columnGap={1}>
+    <Box key="find-row" flexDirection="row" columnGap={1}>
       <Button key="find-key" label="Find" plain hotkey="s" onPress={row.onFind} />
       <Input key={row.key} placeholder={row.placeholder} value={row.text} submitLabel={row.submitLabel} onInput={row.onInput} onSubmit={row.onSubmit} />
       {row.onClear === null ? null : <Button label="clear" variant="secondary" onPress={row.onClear} />}
     </Box>
   )
 }
+
+/** An element of a header row that wraps, and the cells it takes: the header packs those rows in code (pack.ts). */
+type HeaderItem = { readonly node: JSX.Element; readonly cells: number }
 
 /** The line under the Find field, `text` saying where the keys go (keysHint): bold while typing searches, else dim. */
 function drawKeysLine({ Text }: FindComponents, keys: KeysAt, text: string) {
@@ -947,6 +955,23 @@ export const register: Register = on => {
     const sessionTitle = inline ? null : titleSpans(snap)
     const titleRow = sessionTitle === null ? null : drawText(sessionTitle, 'truncate-end', 'title')
 
+    // The header's rows that wrap (the switch, the mode buttons, a page's trail, the Archive week's steps) are packed in
+    // code (pack.ts), each a column Box under its key of one row Box a row, keyed `<key>:<row>`: the rows drawn are the
+    // rows counted, so the body's window can take the rows the header leaves (T860).
+    const drawPacked = (key: string, items: readonly HeaderItem[], gap: number) => (
+      <Box key={key} flexDirection="column">
+        {packRows(items, item => item.cells, columns, gap).map((row, i) => (
+          <Box key={`${key}:${i}`} flexDirection="row" columnGap={gap}>
+            {row.map(item => item.node)}
+          </Box>
+        ))}
+      </Box>
+    )
+    /** A Button as a header item, its cells counted from how it looks. */
+    const pressed = (node: JSX.Element, look: ButtonLook): HeaderItem => ({ node, cells: buttonCells(look) })
+    /** Words as a header item. */
+    const worded = (node: JSX.Element, text: string): HeaderItem => ({ node, cells: cells(text) })
+
     // The switch: under the title in every state but setup, so another view is always one press (or t / d / g) away, its
     // buttons wrapping under each other in a dock too narrow for both. Minimized, it is the whole
     // pane, one row, and a press on either button opens the pane in full on that view.
@@ -959,30 +984,39 @@ export const register: Register = on => {
       if (target === 'changes') await tracked?.refresh()
       if (target === 'log') await logging?.close()
     }
-    const switchRow = (
-      <Box key="switch" flexDirection="row" flexWrap="wrap" columnGap={1}>
-        <Button
-          key="tasks"
-          label="Tasks"
-          hotkey="t"
-          variant={current === 'tasks' ? 'primary' : 'secondary'}
-          onPress={() => void switchTo('tasks')}
-        />
+    const changesWords = changesLabel(changed)
+    const switchItems = [
+      pressed(
+        <Button key="tasks" label="Tasks" hotkey="t" variant={current === 'tasks' ? 'primary' : 'secondary'} onPress={() => void switchTo('tasks')} />,
+        { label: 'Tasks', plain: false, hotkey: 't' },
+      ),
+      pressed(
         <Button
           key="changes"
-          label={changesLabel(changed)}
+          label={changesWords}
           hotkey="d"
           variant={current === 'changes' ? 'primary' : 'secondary'}
           onPress={() => void switchTo('changes')}
-        />
-        <Button key="log" label="Log" hotkey="g" variant={current === 'log' ? 'primary' : 'secondary'} onPress={() => void switchTo('log')} />
-        {isMinimized ? (
-          <Text key="hint" dimColor wrap="truncate-end">
-            minimized
-          </Text>
-        ) : null}
-      </Box>
-    )
+        />,
+        { label: changesWords, plain: false, hotkey: 'd' },
+      ),
+      pressed(<Button key="log" label="Log" hotkey="g" variant={current === 'log' ? 'primary' : 'secondary'} onPress={() => void switchTo('log')} />, {
+        label: 'Log',
+        plain: false,
+        hotkey: 'g',
+      }),
+      ...(isMinimized
+        ? [
+            worded(
+              <Text key="hint" dimColor wrap="truncate-end">
+                minimized
+              </Text>,
+              'minimized',
+            ),
+          ]
+        : []),
+    ]
+    const switchRow = drawPacked('switch', switchItems, 1)
     if (isMinimized && body.length === 0) return <Box paddingX={PAD_COLUMNS}>{switchRow}</Box>
     // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
     // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, s, m, a, h) answers. The minimized strip
@@ -996,36 +1030,41 @@ export const register: Register = on => {
       )
 
     const buttons = [
-      <Button
-        label="mine"
-        hotkey="m"
-        variant={shown === 'mine' ? 'primary' : 'secondary'}
-        onPress={() => void showMode($, 'mine')}
-      />,
-      <Button
-        label="all"
-        hotkey="a"
-        variant={shown === 'all' ? 'primary' : 'secondary'}
-        onPress={() => void showMode($, 'all')}
-      />,
+      pressed(<Button label="mine" hotkey="m" variant={shown === 'mine' ? 'primary' : 'secondary'} onPress={() => void showMode($, 'mine')} />, {
+        label: 'mine',
+        plain: false,
+        hotkey: 'm',
+      }),
+      pressed(<Button label="all" hotkey="a" variant={shown === 'all' ? 'primary' : 'secondary'} onPress={() => void showMode($, 'all')} />, {
+        label: 'all',
+        plain: false,
+        hotkey: 'a',
+      }),
     ]
     const place = currentPlace(at)
     // The archive opens the Archive page (done-rows.ts) at the week of now, in the dock alone, where a page can show:
     // inline, the places are never read.
     if (!inline)
       buttons.push(
-        <Button
-          key="archive"
-          label="archive"
-          hotkey="h"
-          variant={place.kind === 'done' ? 'primary' : 'secondary'}
-          onPress={() => void go($, current => doneAt(current, weekOf(snap.now, clockOf(snap).zone)))}
-        />,
+        pressed(
+          <Button
+            key="archive"
+            label="archive"
+            hotkey="h"
+            variant={place.kind === 'done' ? 'primary' : 'secondary'}
+            onPress={() => void go($, current => doneAt(current, weekOf(snap.now, clockOf(snap).zone)))}
+          />,
+          { label: 'archive', plain: false, hotkey: 'h' },
+        ),
       )
     // A page shows no list, so no card in it to collapse.
     if (Object.keys(open).length > 0 && place.kind === 'list')
       buttons.push(
-        <Button label="collapse" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />,
+        pressed(<Button label="collapse" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />, {
+          label: 'collapse',
+          plain: false,
+          hotkey: 'c',
+        }),
       )
 
     // The Find field, under the switch in the dock whatever it shows: the first change opens a search (a place, so back
@@ -1066,9 +1105,7 @@ export const register: Register = on => {
           {switchRow}
           {findRow}
           {keysLine}
-          <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
-            {buttons}
-          </Box>
+          {drawPacked('modes', buttons, 1)}
         </Box>
       ) : (
         <Box key="controls" flexDirection="column">
@@ -1124,43 +1161,71 @@ export const register: Register = on => {
       nowhere('forward', FORWARD_LABEL)
     )
     const { crumbs, isCutBefore, isCutAfter } = trail(at)
+    const dimWords = (key: string, text: string) =>
+      worded(
+        <Text key={key} dimColor>
+          {text}
+        </Text>,
+        text,
+      )
     const crumbRow = crumbs.flatMap((crumb, i) => {
       const label = placeLabel(crumb.place)
-      const drawn = crumb.isShown ? (
-        <Text key={`crumb:${crumb.index}`} bold>
-          {label}
-        </Text>
-      ) : (
-        <Button key={`crumb:${crumb.index}`} plain onPress={() => void go($, current => wentTo(current, crumb.index))}>
-          <Text underline dimColor={crumb.isAhead}>
-            {label}
-          </Text>
-        </Button>
-      )
-      return i === 0 ? [drawn] : [<Text key={`after:${crumb.index - 1}`} dimColor>{TRAIL_SEPARATOR}</Text>, drawn]
+      const drawn = crumb.isShown
+        ? worded(
+            <Text key={`crumb:${crumb.index}`} bold>
+              {label}
+            </Text>,
+            label,
+          )
+        : pressed(
+            <Button key={`crumb:${crumb.index}`} plain onPress={() => void go($, current => wentTo(current, crumb.index))}>
+              <Text underline dimColor={crumb.isAhead}>
+                {label}
+              </Text>
+            </Button>,
+            { label, plain: true, hotkey: null },
+          )
+      return i === 0 ? [drawn] : [dimWords(`after:${crumb.index - 1}`, TRAIL_SEPARATOR), drawn]
     })
+    const trailItems = [
+      ...(isCutBefore ? [dimWords('cut-before', `…${TRAIL_SEPARATOR}`)] : []),
+      ...crumbRow,
+      ...(isCutAfter ? [dimWords('cut-after', `${TRAIL_SEPARATOR}…`)] : []),
+    ]
     // The Archive page's week between its steps to the week before and after (p, l), each dim where the pane holds no
     // older or newer week. A step changes the page's week in place, so back returns to where the page was opened from.
     const stepTo = (week: string) => () => void go($, current => doneAt(current, week))
     const steps = place.kind === 'done' ? weekSteps(place.week, clockOf(snap)) : null
+    const weekText = steps === null ? '' : `week of ${weekWords(steps.week)}`
     const weekRow =
-      steps === null ? null : (
-        <Box key="week-steps" flexDirection="row" flexWrap="wrap" columnGap={2}>
-          {steps.prev === null ? (
-            nowhere('prev', PREV_LABEL)
-          ) : (
-            <Button key="prev" label={PREV_LABEL} hotkey="p" variant="secondary" onPress={stepTo(steps.prev)} />
-          )}
-          <Text key="week" bold>
-            {`week of ${weekWords(steps.week)}`}
-          </Text>
-          {steps.next === null ? (
-            nowhere('next', NEXT_LABEL)
-          ) : (
-            <Button key="next" label={NEXT_LABEL} hotkey="l" variant="secondary" onPress={stepTo(steps.next)} />
-          )}
-        </Box>
-      )
+      steps === null
+        ? null
+        : drawPacked(
+            'week-steps',
+            [
+              steps.prev === null
+                ? worded(nowhere('prev', PREV_LABEL), PREV_LABEL)
+                : pressed(<Button key="prev" label={PREV_LABEL} hotkey="p" variant="secondary" onPress={stepTo(steps.prev)} />, {
+                    label: PREV_LABEL,
+                    plain: false,
+                    hotkey: 'p',
+                  }),
+              worded(
+                <Text key="week" bold>
+                  {weekText}
+                </Text>,
+                weekText,
+              ),
+              steps.next === null
+                ? worded(nowhere('next', NEXT_LABEL), NEXT_LABEL)
+                : pressed(<Button key="next" label={NEXT_LABEL} hotkey="l" variant="secondary" onPress={stepTo(steps.next)} />, {
+                    label: NEXT_LABEL,
+                    plain: false,
+                    hotkey: 'l',
+                  }),
+            ],
+            2,
+          )
     const pageHead =
       isPage(place) || canGoForward(at) ? (
         <Box key="page-head" flexDirection="column">
@@ -1168,11 +1233,7 @@ export const register: Register = on => {
             {backStep}
             {forwardStep}
           </Box>
-          <Box key="trail" flexDirection="row" flexWrap="wrap">
-            {isCutBefore ? <Text key="cut-before" dimColor>{`…${TRAIL_SEPARATOR}`}</Text> : null}
-            {crumbRow}
-            {isCutAfter ? <Text key="cut-after" dimColor>{`${TRAIL_SEPARATOR}…`}</Text> : null}
-          </Box>
+          {drawPacked('trail', trailItems, 0)}
           <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
         </Box>
       ) : null
