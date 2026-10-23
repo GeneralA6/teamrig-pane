@@ -1,6 +1,6 @@
 // The docked body cut to its window's rows, and what reads the window: a reveal, the scroll bar, a scroll move.
 import { describe, expect, test } from 'claude-code/testing'
-import { cutDrawn, cutSpans, frameOf, placesOf, revealed, rowsOf, scrolledBy, thumbOf, type Frame, type View } from '../hooks/frame'
+import { cutDrawn, cutSpans, frameOf, placesOf, revealed, rowsOf, scrolledBy, thumbOf, viewOf, type FrameSlot, type View } from '../hooks/frame'
 import type { CardPart, Drawn, Piece } from '../hooks/layout'
 import type { Span } from '../hooks/rows'
 
@@ -68,9 +68,9 @@ function bodyLines(body: readonly Drawn[], gap: number): string[] {
   return body.flatMap((drawn, i) => [...(i > 0 ? Array.from({ length: gap }, () => '') : []), ...drawnLines(drawn, true)])
 }
 
-/** The rows a frame draws as text, a gap row as ''. */
-function frameLines(frame: Frame): string[] {
-  return frame.slots.flatMap(slot => (slot.kind === 'gap' ? Array.from({ length: slot.rows }, () => '') : drawnLines(slot.drawn, slot.head)))
+/** The rows a frame's slots draw as text, a gap row as ''. */
+function frameLines(slots: readonly FrameSlot[]): string[] {
+  return slots.flatMap(slot => (slot.kind === 'gap' ? Array.from({ length: slot.rows }, () => '') : drawnLines(slot.drawn, slot.head)))
 }
 
 describe('rowsOf', () => {
@@ -144,48 +144,67 @@ describe('placesOf', () => {
       { key: 'd', top: 14, rows: 2, headRows: 2 },
       { key: 'e', top: 17, rows: 2, headRows: 2 },
     ])
-    expect(places[2]?.parts).toEqual([
+    const partPlaces = (i: number) => places[i]?.parts.map(({ part, top, rows }) => ({ key: part.key, top, rows }))
+    expect(partPlaces(2)).toEqual([
       { key: 'c.t', top: 8, rows: 2 },
       { key: 'c.l', top: 10, rows: 1 },
       { key: 'c.p', top: 11, rows: 2 },
     ])
-    expect(places[3]?.parts).toEqual([
+    expect(partPlaces(3)).toEqual([
       { key: 'd.t', top: 14, rows: 1 },
       { key: 'd.l', top: 15, rows: 1 },
     ])
+    expect(places[2]?.parts[1]?.part).toBe(CARDED.card?.[1])
+  })
+})
+
+describe('viewOf', () => {
+  test("holds the offset to 0 to the body's last, and counts the body's rows, gaps too", () => {
+    const places = placesOf(BODY, 1)
+    expect(viewOf(places, 30, 4)).toEqual({ offset: 15, visibleRows: 4, contentRows: BODY_ROWS, maxOffset: 15 })
+    expect(viewOf(places, -2, 4).offset).toBe(0)
+    expect(viewOf(places, 3, 40)).toEqual({ offset: 0, visibleRows: 40, contentRows: BODY_ROWS, maxOffset: 0 })
+  })
+
+  test('an empty body has no rows, and a window no fewer than none', () => {
+    expect(viewOf([], 5, 4)).toEqual({ offset: 0, visibleRows: 4, contentRows: 0, maxOffset: 0 })
+    expect(viewOf(placesOf(BODY, 1), 3, -1)).toEqual({ offset: 3, visibleRows: 0, contentRows: BODY_ROWS, maxOffset: BODY_ROWS })
   })
 })
 
 describe('frameOf', () => {
-  test('shows exactly the window of the body rows, wherever it stands and whatever its height', () => {
-    const lines = bodyLines(BODY, 1)
-    expect(lines).toHaveLength(BODY_ROWS)
-    for (const visibleRows of [1, 4, BODY_ROWS, 30])
-      for (let offset = -2; offset <= BODY_ROWS + 2; offset++) {
-        const frame = frameOf(BODY, { offset, visibleRows, gap: 1 })
-        const maxOffset = Math.max(0, BODY_ROWS - visibleRows)
-        const held = Math.max(0, Math.min(maxOffset, offset))
-        expect({ offset: frame.offset, maxOffset: frame.maxOffset, contentRows: frame.contentRows }).toEqual({ offset: held, maxOffset, contentRows: BODY_ROWS })
-        expect(frameLines(frame)).toEqual(lines.slice(held, held + visibleRows))
-      }
+  test('shows exactly the window of the body rows, wherever it stands, whatever its height and gap', () => {
+    expect(bodyLines(BODY, 1)).toHaveLength(BODY_ROWS)
+    for (const gap of [0, 1, 2]) {
+      const lines = bodyLines(BODY, gap)
+      const places = placesOf(BODY, gap)
+      for (const visibleRows of [1, 4, lines.length, 30])
+        for (let offset = -2; offset <= lines.length + 2; offset++) {
+          const view = viewOf(places, offset, visibleRows)
+          expect(view.offset).toBe(Math.max(0, Math.min(lines.length - visibleRows, offset)))
+          expect(frameLines(frameOf(places, view))).toEqual(lines.slice(view.offset, view.offset + visibleRows))
+        }
+    }
   })
 
   test('a window that starts on a gap starts with it', () => {
-    const frame = frameOf(BODY, { offset: 1, visibleRows: 2, gap: 1 })
-    expect(frame.slots[0]).toEqual({ kind: 'gap', key: 'gap:a', rows: 1 })
-    expect(frame.slots.map(slot => (slot.kind === 'gap' ? slot.key : slot.drawn.key))).toEqual(['gap:a', 'b'])
+    const places = placesOf(BODY, 1)
+    const slots = frameOf(places, viewOf(places, 1, 2))
+    expect(slots[0]).toEqual({ kind: 'gap', key: 'gap:a', rows: 1 })
+    expect(slots.map(slot => (slot.kind === 'gap' ? slot.key : slot.drawn.key))).toEqual(['gap:a', 'b'])
   })
 
   test('a body that fits draws each element itself, and no gap slot when there are no gap rows', () => {
-    const frame = frameOf(BODY, { offset: 3, visibleRows: 40, gap: 0 })
-    expect(frame.offset).toBe(0)
-    expect(frame.slots).toHaveLength(BODY.length)
-    expect(frame.slots.every((slot, i) => slot.kind === 'drawn' && slot.drawn === BODY[i])).toBe(true)
+    const places = placesOf(BODY, 0)
+    const slots = frameOf(places, viewOf(places, 3, 40))
+    expect(slots).toHaveLength(BODY.length)
+    expect(slots.every((slot, i) => slot.kind === 'drawn' && slot.drawn === BODY[i])).toBe(true)
   })
 
   test('an empty body, or a window of no rows, holds nothing', () => {
-    expect(frameOf([], { offset: 5, visibleRows: 4, gap: 1 })).toEqual({ slots: [], offset: 0, visibleRows: 4, contentRows: 0, maxOffset: 0 })
-    expect(frameOf(BODY, { offset: 3, visibleRows: 0, gap: 1 }).slots).toEqual([])
+    expect(frameOf([], viewOf([], 5, 4))).toEqual([])
+    const places = placesOf(BODY, 1)
+    expect(frameOf(places, viewOf(places, 3, 0))).toEqual([])
   })
 })
 

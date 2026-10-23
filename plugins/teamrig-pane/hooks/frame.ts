@@ -23,7 +23,7 @@ export type Placed = Place & {
   readonly drawn: Drawn
   /** The head's rows: its Text's lines, or all its rows when drawn as parts. */
   readonly headRows: number
-  readonly parts: readonly (Place & { readonly key: string })[]
+  readonly parts: readonly (Place & { readonly part: CardPart })[]
 }
 
 /**
@@ -45,9 +45,6 @@ export type View = {
   /** The last offset that fills the window: the body's rows less the window's, 0 when the body fits. */
   readonly maxOffset: number
 }
-
-/** The window over the body, and what it holds. */
-export type Frame = View & { readonly slots: readonly FrameSlot[] }
 
 /** Where a reveal lands its target in the window, as `$.ui.scroll` takes it. */
 export type RevealBlock = NonNullable<UiScrollArgs['block']>
@@ -134,7 +131,7 @@ export function placesOf(body: readonly Drawn[], gap: number): Placed[] {
     const headRows = drawn.parts === undefined ? linesOf(drawn.spans) : rows
     let partTop = drawn.parts === undefined ? top + headRows : top
     const parts = (drawn.parts ?? drawn.card ?? []).map(part => {
-      const place = { key: part.key, top: partTop, rows: partRows(part) }
+      const place = { part, top: partTop, rows: partRows(part) }
       partTop += place.rows
       return place
     })
@@ -144,30 +141,33 @@ export function placesOf(body: readonly Drawn[], gap: number): Placed[] {
   })
 }
 
-/**
- * The window of `visibleRows` rows at `offset` over the body, `gap` rows between two elements: the offset held to
- * 0 to the body's last, and in order, each element and gap whose rows meet the window, cut to them.
- */
-export function frameOf(body: readonly Drawn[], window: { readonly offset: number; readonly visibleRows: number; readonly gap: number }): Frame {
-  const places = placesOf(body, window.gap)
+/** The window of `visibleRows` rows at `offset` over the placed body, the offset held to 0 to the body's last. */
+export function viewOf(places: readonly Placed[], offset: number, visibleRows: number): View {
   const last = places.at(-1)
   const contentRows = last === undefined ? 0 : last.top + last.rows
-  const visibleRows = Math.max(0, window.visibleRows)
-  const maxOffset = Math.max(0, contentRows - visibleRows)
-  const offset = within(window.offset, 0, maxOffset)
-  const end = offset + visibleRows
+  const rows = Math.max(0, visibleRows)
+  const maxOffset = Math.max(0, contentRows - rows)
+  return { offset: within(offset, 0, maxOffset), visibleRows: rows, contentRows, maxOffset }
+}
+
+/**
+ * What the window `view` (viewOf) holds of the placed body, in order: each element and gap whose rows meet it, cut
+ * to them, a gap the rows from an element's last to the next's first.
+ */
+export function frameOf(places: readonly Placed[], view: View): FrameSlot[] {
+  const end = view.offset + view.visibleRows
   const slots: FrameSlot[] = []
-  for (const placed of places) {
+  for (const [i, placed] of places.entries()) {
     if (placed.top >= end) break
-    const first = Math.max(offset, placed.top)
+    const first = Math.max(view.offset, placed.top)
     const lastRow = Math.min(end, placed.top + placed.rows)
     if (first < lastRow) slots.push({ kind: 'drawn', ...cutDrawn(placed.drawn, first - placed.top, lastRow - first) })
-    if (placed === last) break
-    const gapTop = placed.top + placed.rows
-    const gapRows = Math.min(end, gapTop + window.gap) - Math.max(offset, gapTop)
+    const next = places[i + 1]
+    if (next === undefined) break
+    const gapRows = Math.min(end, next.top) - Math.max(view.offset, placed.top + placed.rows)
     if (gapRows > 0) slots.push({ kind: 'gap', key: `gap:${placed.drawn.key}`, rows: gapRows })
   }
-  return { slots, offset, visibleRows, contentRows, maxOffset }
+  return slots
 }
 
 /**
