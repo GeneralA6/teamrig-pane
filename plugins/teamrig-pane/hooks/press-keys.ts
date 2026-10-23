@@ -1,10 +1,14 @@
 // The keys of the body's presses, one source for the presses register.tsx draws and for the order the focus ring
 // meets them in (T860): the docked body draws only the rows its window shows, and holds each press out of the window
 // as a hidden stand-in under the same key, so the ring's stops stay the same wherever the window stands.
+import type { Place, Placed, View } from './frame'
 import type { CardPart, Drawn, Piece } from './layout'
 
 /** A piece of a card's line that is a press: a task id, a reference file, an inbox count. */
 export type PressPiece = Exclude<Piece, { kind: 'words' }>
+
+/** A press, by its key, and the body rows it stands in. */
+export type PlacedPress = Place & { readonly key: string }
 
 /** The key of an open card's element: `from` for the presses on the task ids in it. */
 export function openKey(key: string): string {
@@ -50,11 +54,41 @@ function partKeys(part: CardPart, from: string): string[] {
 }
 
 /**
- * The keys of an element's presses in the order the focus ring meets them: its head's, when the head is drawn
- * (`head`) and is a press, then each press in its parts or its open card.
+ * An element's presses in the order the focus ring meets them, each with the rows it stands in: its head's, when the
+ * head is a press, then each press in its parts or its open card, a line's presses all on the line's row.
  */
-export function focusKeysOf(drawn: Drawn, head: boolean): string[] {
+export function pressesOf(placed: Placed): PlacedPress[] {
+  const { drawn } = placed
   const from = pressesFrom(drawn)
-  const own = head && drawn.parts === undefined && headPresses(drawn) ? [drawn.key] : []
-  return [...own, ...(drawn.parts ?? drawn.card ?? []).flatMap(part => partKeys(part, from))]
+  const head = drawn.parts === undefined && headPresses(drawn) ? [{ key: drawn.key, top: placed.top, rows: placed.headRows }] : []
+  return [...head, ...placed.parts.flatMap(({ part, top, rows }) => partKeys(part, from).map(key => ({ key, top, rows })))]
+}
+
+/**
+ * The presses a window leaves out, in the order the ring meets them: those above it, then those below. A press any
+ * of whose rows the window shows is drawn (frame.ts cuts a Text or a row press by lines and keeps a line of presses
+ * whole), so the pane draws these as hidden stand-ins and the ring's stops stay the same wherever the window stands.
+ */
+export function standInsOf(places: readonly Placed[], view: View): { readonly above: string[]; readonly below: string[] } {
+  const end = view.offset + view.visibleRows
+  const out = places.flatMap(pressesOf).filter(press => press.top >= end || press.top + press.rows <= view.offset)
+  return {
+    above: out.filter(press => press.top < view.offset).map(press => press.key),
+    below: out.filter(press => press.top >= view.offset).map(press => press.key),
+  }
+}
+
+/**
+ * Where the element keyed `key` stands, as `$.ui.scroll` found it: an element's key names its head (a task's Button,
+ * the whole of words alone or of an element drawn as parts), its open card's key the element whole, a press's its
+ * rows. Null when the body holds none.
+ */
+export function placeOf(places: readonly Placed[], key: string): Place | null {
+  for (const placed of places) {
+    if (key === placed.drawn.key) return { top: placed.top, rows: placed.headRows }
+    if (key === openKey(placed.drawn.key)) return { top: placed.top, rows: placed.rows }
+    const press = pressesOf(placed).find(found => found.key === key)
+    if (press !== undefined) return { top: press.top, rows: press.rows }
+  }
+  return null
 }
