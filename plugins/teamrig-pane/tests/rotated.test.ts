@@ -1,6 +1,7 @@
 // The pane on a rotated register: it folds the snapshot, the segments it does not cover and the tail,
 // exactly as teamrig's working-set read does, and reads a segment only when the snapshot cannot be used.
 import { describe, expect, test } from 'claude-code/testing'
+import type { JsonRecord } from '../hooks/core/core/guards'
 import { toJsonlLine } from '../hooks/core/core/jsonl'
 import { layoutPaths, readWorkingSet, type LayoutFiles, type SnapshotHeader } from '../hooks/core/read/index'
 import { snapshotHeaderRecord } from '../hooks/core/register/layout'
@@ -114,6 +115,23 @@ describe('a rotated register', () => {
     const snap = await poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null))
     expect(snap?.tasks.map(task => task.id)).toEqual(['T2', 'T3'])
     expect(snap?.problem).toBe('events.jsonl: 0 unreadable line(s), 1 line(s) from a newer teamrig, 0 event(s) naming no task')
+  })
+
+  test('a register a writer laid out at layout 4 folds as one at layout 3: the snapshot and the tail, no problem and no segment read (T1034)', async () => {
+    // Layout 4 holds layout 3's records under a higher version, so a teamrig that reads 3 at most leaves the files
+    // alone (teamrig T971); the pane reads both.
+    const atLayout4 = (record: JsonRecord): JsonRecord => ({ ...record, v: 4 })
+    const files = new MemoryFiles()
+    files.write(SEGMENT, lines(T1_CREATE, T1_DONE, T2_CREATE))
+    files.write(LAYOUT.snapshot, toJsonlLine(atLayout4(snapshotHeaderRecord(header()))) + lines(T2_CREATE))
+    files.write(PATHS.events, toJsonlLine(atLayout4(markerRecord(1, iso(NOW - 10 * DAY)))) + lines(T3_CREATE, T3_DONE))
+    const snap = await poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null))
+    expect(snap?.tasks.map(task => [task.id, task.status])).toEqual([
+      ['T2', 'open'],
+      ['T3', 'done'],
+    ])
+    expect(snap?.problem).toBe(null)
+    expect(files.reads).toEqual([LAYOUT.snapshot, PATHS.events])
   })
 
   test('a missing segment is named and fails the poll; the next poll retries though no file moved', async () => {
