@@ -2,7 +2,7 @@
 import { parseDeadline, showStored, storedText } from '../core/time.ts';
 import type { TimeZone } from '../core/zone.ts';
 import { cardLines } from './card.ts';
-import type { RegisterEvent } from './events.ts';
+import { PROBLEM_KINDS, type RegisterEvent } from './events.ts';
 import type { ApprovalAnswer, Task } from './fold.ts';
 import { ACTIVE_STATUSES, GITHUB_SOURCE, priorityText, type TaskStatus } from './model.ts';
 import { planOrder, type TaskTree, type WaitingOnYou } from './tree.ts';
@@ -72,12 +72,13 @@ export function taskLabel(task: Task, team?: string): string {
 }
 
 /**
- * The fields every task row starts with: `T12 in-progress`, `p2`, `owner alpha`, then `due 01-15` and
- * `after T5,T6` (its plan dependency) when it has them. The due is the effective one of `tree`, in its zone: an
- * earlier due of a task that needs it names that task (`due 01-10 (from T194)`).
+ * The fields every task row starts with: `T12 in-progress`, `p2`, `problem` or `critical` for a problem task,
+ * `owner alpha`, then `due 01-15` and `after T5,T6` (its plan dependency) when it has them. The due is the effective
+ * one of `tree`, in its zone: an earlier due of a task that needs it names that task (`due 01-10 (from T194)`).
  */
 function rowHead(task: Task, team: string | undefined, tree: TaskTree): string[] {
-  const parts = [`${taskLabel(task, team)} ${task.status}`, priorityText(task.priority), `owner ${task.owner}`];
+  const kind = task.kind !== null && PROBLEM_KINDS.includes(task.kind) ? [task.kind] : [];
+  const parts = [`${taskLabel(task, team)} ${task.status}`, priorityText(task.priority), ...kind, `owner ${task.owner}`];
   const inherited = tree.effectiveDue(task.id);
   if (inherited !== undefined && inherited.from !== null) {
     parts.push(`due ${showStored(inherited.due, tree.zone)} (from ${inherited.from})`);
@@ -90,13 +91,24 @@ function rowHead(task: Task, team: string | undefined, tree: TaskTree): string[]
   return parts;
 }
 
-/** How long a proof runs in the one-line verify queue before it is cut. */
+/** How long a proof runs in the verify queue's rows before it is cut. */
 const SUMMARY_PROOF_CHARS = 60;
+/** The most verifying tasks the verify queue names; a `+N more` line names the command that lists them all. */
+export const SUMMARY_VERIFY_ROWS = 5;
 
-/** `VERIFY 2: T1 (proof: ...), T3 (proof: ...)`: a verify queue in one line, each proof cut short; undefined when empty. */
-export function formatVerifySummary(queue: readonly Task[]): string | undefined {
-  const named = queue.map((task) => `${task.id} (proof: ${cut(proofText(task), SUMMARY_PROOF_CHARS)})`);
-  return queue.length === 0 ? undefined : `VERIFY ${queue.length}: ${named.join(', ')}`;
+/**
+ * `VERIFY 2, oldest first:` and a row each, `  T1 (proof: ...)`, each proof cut short, at most SUMMARY_VERIFY_ROWS
+ * rows and a `+N more` line naming `<command> verify --session <owner>`, which lists the whole queue; undefined when
+ * empty.
+ */
+export function formatVerifySummary(queue: readonly Task[], owner: string, command: string): string | undefined {
+  if (queue.length === 0) {
+    return undefined;
+  }
+  const rows = queue.slice(0, SUMMARY_VERIFY_ROWS).map((task) => `  ${task.id} (proof: ${cut(proofText(task), SUMMARY_PROOF_CHARS)})`);
+  const left = queue.length - rows.length;
+  const more = left > 0 ? [`  +${left} more: \`${command} verify --session ${owner}\``] : [];
+  return [`VERIFY ${queue.length}, oldest first:`, ...rows, ...more].join('\n');
 }
 
 /** A row of `verify`, times in the team's `zone`: `T1 since 01-07 12:00 IST, verify by 01-09 | <title> (proof: ...)`. */
@@ -239,6 +251,7 @@ export function formatEvent(event: RegisterEvent, zone: TimeZone): string {
         task.goals.length === 0 ? undefined : `goals=${task.goals.join(',')}`,
         task.after.length === 0 ? undefined : `after=${task.after.join(',')}`,
         task.size === null ? undefined : `size=${sizeText(task.size)}`,
+        task.kind === null ? undefined : `kind=${task.kind}`,
       ]
         .filter((part) => part !== undefined)
         .join(' ');

@@ -700,7 +700,10 @@ function parseRollGate(read: ConfigReader, value: unknown, path: string): RollGa
   return name === undefined || command === undefined ? undefined : { name, command };
 }
 
-/** The host lock and a heavy step's limits; a step longer than the lock less its margin is cut to fit, so it never outlives its lock. */
+/**
+ * The host lock and a heavy step's limits; a step longer than the lock less its margin is cut to fit, so it never
+ * outlives its lock, and a small step's limit longer than a step's is cut to it.
+ */
 function parseHeavy(read: ConfigReader, raw: JsonRecord): HeavyConfig {
   const path = 'coordinator.heavy';
   const lockPath = read.optionalString(raw, 'lockPath', path, isPathText);
@@ -710,10 +713,16 @@ function parseHeavy(read: ConfigReader, raw: JsonRecord): HeavyConfig {
   if (maxRunMinutes > longest) {
     read.report(`${path}.maxRunMinutes`, `must be at most lockTtlMinutes less ${HEAVY_TTL_MARGIN_MINUTES} (${longest})`);
   }
+  const longestRun = Math.min(maxRunMinutes, longest);
+  const smallMaxRunMinutes = read.integer(raw, 'smallMaxRunMinutes', path, Math.min(DEFAULT_HEAVY.smallMaxRunMinutes, longestRun), CONFIG_LIMITS.heavySmallMaxRunMinutes);
+  if (smallMaxRunMinutes > longestRun) {
+    read.report(`${path}.smallMaxRunMinutes`, `must be at most maxRunMinutes (${longestRun})`);
+  }
   return {
     ...(lockPath === undefined ? {} : { lockPath }),
     lockTtlMinutes,
-    maxRunMinutes: Math.min(maxRunMinutes, longest),
+    maxRunMinutes: longestRun,
+    smallMaxRunMinutes: Math.min(smallMaxRunMinutes, longestRun),
     waitMinutes: read.integer(raw, 'waitMinutes', path, DEFAULT_HEAVY.waitMinutes, CONFIG_LIMITS.heavyWaitMinutes),
     memorySampleSeconds: read.integer(raw, 'memorySampleSeconds', path, DEFAULT_HEAVY.memorySampleSeconds, CONFIG_LIMITS.heavyMemorySampleSeconds),
     memoryFloorMb: read.integer(raw, 'memoryFloorMb', path, DEFAULT_HEAVY.memoryFloorMb, CONFIG_LIMITS.heavyMemoryFloorMb),
@@ -730,6 +739,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
     read.report(`${path}.reservePct`, `with targetPct it passes 100% of the week (${targetPct} + ${reservePct})`);
   }
   const weeklyLimitW = read.optionalInteger(raw, 'weeklyLimitW', path, CONFIG_LIMITS.weeklyLimitW);
+  const extraWPerUsd = read.optionalInteger(raw, 'extraWPerUsd', path, CONFIG_LIMITS.extraWPerUsd);
   const reset = parseBudgetReset(read, raw);
   const why = "the team's daily budget is the pace, recomputed at every reading from what is left of the week";
   read.dropped(raw, 'dailyPct', path, why);
@@ -742,6 +752,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
     enabled: read.boolean(raw, 'enabled', path, defaults.enabled),
     ...(weeklyLimitW === undefined ? {} : { weeklyLimitW }),
     subagentWeight: read.number(raw, 'subagentWeight', path, defaults.subagentWeight, CONFIG_LIMITS.subagentWeight),
+    ...(extraWPerUsd === undefined ? {} : { extraWPerUsd }),
     ...(reset === undefined ? {} : { reset }),
     targetPct,
     reservePct,
@@ -863,6 +874,7 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
   const path = 'register';
   const defaults = DEFAULT_REGISTER;
   const check = read.section(raw, 'check', path);
+  const review = read.section(raw, 'review', path);
   if (raw[RENAMED_PRIORITIES_KEY] !== undefined) {
     read.report(`${path}.${RENAMED_PRIORITIES_KEY}`, `was renamed: use ${path}.priorities`);
   }
@@ -920,6 +932,9 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
         CONFIG_LIMITS.stopgapFiles.maxItems,
       ),
     },
+    review: {
+      hintPattern: read.string(review, 'hintPattern', `${path}.review`, defaults.review.hintPattern, isValidRegex),
+    },
   };
   return goalPattern === undefined ? register : { ...register, goalPattern };
 }
@@ -972,6 +987,7 @@ function parseContextFiles(read: ConfigReader, raw: JsonRecord): ContextFilesCon
     maxClaudeMdChars: read.integer(raw, 'maxClaudeMdChars', path, defaults.maxClaudeMdChars, CONFIG_LIMITS.claudeMdChars),
     maxMemoryIndexChars: read.integer(raw, 'maxMemoryIndexChars', path, defaults.maxMemoryIndexChars, CONFIG_LIMITS.memoryIndexChars),
     maxSkillListingChars: read.integer(raw, 'maxSkillListingChars', path, defaults.maxSkillListingChars, CONFIG_LIMITS.skillListingChars),
+    maxSessionListsChars: read.integer(raw, 'maxSessionListsChars', path, defaults.maxSessionListsChars, CONFIG_LIMITS.sessionListsChars),
   };
 }
 

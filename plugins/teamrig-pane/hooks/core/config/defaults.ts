@@ -86,6 +86,9 @@ export const DEFAULT_REGISTER: RegisterConfig = {
     weekLengthDays: 7,
     stopgapFiles: ['CLAUDE.md', '.claude/rules'],
   },
+  review: {
+    hintPattern: String.raw`\b(fix|bug|broken?|regress\w*|incident|fail\w*|crash\w*|leak\w*|wrong|missed)\b`,
+  },
 };
 
 export const DEFAULT_SKILLS: SkillsConfig = {
@@ -96,8 +99,16 @@ export const DEFAULT_SKILLS: SkillsConfig = {
   forbidFrontmatter: ['allowed-tools'],
 };
 
-/** Measured on a working team (10-15): 23k of CLAUDE.md, 15k of memory index and 4.6k of skill listing were re-read every call. */
-export const DEFAULT_CONTEXT_FILES: ContextFilesConfig = { maxClaudeMdChars: 12_000, maxMemoryIndexChars: 6_000, maxSkillListingChars: 4_000 };
+/**
+ * Measured on a working team (10-15): 23k of CLAUDE.md, 15k of memory index and 4.6k of skill listing were re-read every call.
+ * Its session lists measured 38k on 10-21; a bare Claude Code setup holds about 10k.
+ */
+export const DEFAULT_CONTEXT_FILES: ContextFilesConfig = {
+  maxClaudeMdChars: 12_000,
+  maxMemoryIndexChars: 6_000,
+  maxSkillListingChars: 4_000,
+  maxSessionListsChars: 16_000,
+};
 
 export const DEFAULT_LOCK: LockConfig = { ttlMs: 30_000, pollMs: 50, waitMs: 20_000 };
 
@@ -136,7 +147,7 @@ export const DEFAULT_COMMITS: CommitsConfig = {
 /**
  * Neutral on purpose: off, no allowance cap, every session an equal share, and past the line only
  * the warning lines, so a team that turns it on is measured and shown before anything acts.
- * The optional keys (weekly limit, reset, daily %, cap, quiet hours, snapshot folder) stay unset.
+ * The optional keys (weekly limit, extra usage's W per dollar, reset, quiet hours, snapshot folder) stay unset.
  */
 export const DEFAULT_BUDGET: BudgetConfig = {
   enabled: false,
@@ -224,10 +235,10 @@ export const DEFAULT_STATUS_LINE: StatusLineConfig = { folder: true, branch: tru
 export const HEAVY_TTL_MARGIN_MINUTES = 10;
 
 /**
- * A host lock lasts 150 minutes and a heavy step at most 45 of them; a step waits up to an hour for the lock, and its
- * memory is sampled every 15 seconds while it runs.
+ * A host lock lasts 150 minutes and a heavy step at most 45 of them, a small step at most 10; a step waits up to an hour
+ * for the lock, and its memory is sampled every 15 seconds while it runs.
  */
-export const DEFAULT_HEAVY: HeavyConfig = { lockTtlMinutes: 150, maxRunMinutes: 45, waitMinutes: 60, memorySampleSeconds: 15, memoryFloorMb: 4096, smallReserveMb: 2048 };
+export const DEFAULT_HEAVY: HeavyConfig = { lockTtlMinutes: 150, maxRunMinutes: 45, smallMaxRunMinutes: 10, waitMinutes: 60, memorySampleSeconds: 15, memoryFloorMb: 4096, smallReserveMb: 2048 };
 
 /** A waiting coordinator step looks again every 30 seconds; a deploy step waits up to an hour for claims and the host lock. */
 export const DEFAULT_COORDINATOR_WAIT: CoordinatorWaitConfig = { pollSeconds: 30, maxMinutes: 60 };

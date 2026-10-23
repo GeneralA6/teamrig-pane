@@ -11,6 +11,11 @@ import { TASK_ID } from './model.ts';
  */
 export interface EventLogRead {
   readonly events: readonly RegisterEvent[];
+  /**
+   * Each event's line as it was written, at the event's index. A rotation's snapshot copies these
+   * (compaction.ts), so it keeps the fields this code does not parse too, such as a newer teamrig's.
+   */
+  readonly lines: readonly string[];
   /** Task ids on lines that did not parse into events; they still reserve their ids. */
   readonly seenIds: readonly string[];
   /** Damaged lines and events this code should understand but cannot: counted, never fatal. */
@@ -46,6 +51,7 @@ export interface RegisterSnapshot {
 export function readEvents(text: string): EventLogRead {
   const parse = parseJsonl(text);
   const events: RegisterEvent[] = [];
+  const lines: string[] = [];
   const seenIds: string[] = [];
   let unreadable = parse.unreadable;
   let newer = 0;
@@ -64,6 +70,7 @@ export function readEvents(text: string): EventLogRead {
     const result = marker.kind === 'none' ? parseEvent(line) : marker;
     if (result.kind === 'event') {
       events.push(result.event);
+      lines.push(line.raw);
       continue;
     }
     if (result.kind === 'newer') {
@@ -76,7 +83,7 @@ export function readEvents(text: string): EventLogRead {
       seenIds.push(id);
     }
   }
-  return { events, seenIds, unreadable, newer, newestVersion, rotatedAfter: rotatedAfter ?? 0 };
+  return { events, lines, seenIds, unreadable, newer, newestVersion, rotatedAfter: rotatedAfter ?? 0 };
 }
 
 /** True when this code may append: no line is in a format newer than the one it writes. */

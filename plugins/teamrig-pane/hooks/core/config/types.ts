@@ -20,6 +20,15 @@ export interface PriorityConfig {
   readonly name: string;
 }
 
+/** How a problem task's review is asked (T916). */
+export interface RegisterReviewConfig {
+  /**
+   * A regular expression, matched case-insensitively against an unmarked task's title and description: a match prints
+   * a hint to mark the task `--problem` (or `--problem none`) when it is added and when it starts.
+   */
+  readonly hintPattern: string;
+}
+
 export interface RegisterCheckConfig {
   /** An active task untouched this long is STALE. */
   readonly staleAfterHours: number;
@@ -79,6 +88,7 @@ export interface RegisterConfig {
   /** A session holding more verifying tasks than this is a PILE-UP in `check`, and its oldest are due to verify before new work starts; 0 turns both off. */
   readonly maxVerifying: number;
   readonly check: RegisterCheckConfig;
+  readonly review: RegisterReviewConfig;
 }
 
 export const VERIFY_GATES = ['refuse', 'warn'] as const;
@@ -212,6 +222,8 @@ export interface PromptsConfig {
  * package run, an install it cannot vet, a git command without hooks, a call that would print a secret, a helper over
  * the budget, as their own keys set): `ask` raises the permission prompt; `refuse` refuses it instead, its reason telling the session to record the step as waiting for
  * the owner's approval and take its next task, so no prompt holds a session while nobody is there to answer it.
+ * `refuse` also answers the prompts Claude Code raises on its own, per case (hooks/prompt-refuse.ts): a line that
+ * provably only reads runs, a line teamrig's rules give a rerun form is refused quoting it, anything else is refused.
  */
 export type HookAsks = 'ask' | 'refuse';
 
@@ -472,6 +484,11 @@ export interface BudgetConfig {
    * multiplies each subagent call's W by it, so every W (and `weeklyLimitW`) is in main-session W. 1: alike.
    */
   readonly subagentWeight: number;
+  /**
+   * W per US dollar of extra usage, standing in until two spent readings past 100% of the week teach the rate
+   * (src/budget/extra.ts). Unset: the extra-usage pool shows in dollars only until then, with no allowance.
+   */
+  readonly extraWPerUsd?: number;
   /** Unset: the reset time the status line reports. */
   readonly reset?: BudgetReset;
   /** Use the week up to this share of the weekly limit. */
@@ -517,6 +534,12 @@ export interface HeavyConfig {
   readonly lockTtlMinutes: number;
   /** A heavy step still running after this many minutes is killed with every process it started. */
   readonly maxRunMinutes: number;
+  /**
+   * A small step (`heavy --small`) still running after this many minutes is killed the same way; at most
+   * maxRunMinutes. A small step shares the host beside others and holds back any step waiting for the lock, so a hung
+   * one is cut short; a longer step runs without --small.
+   */
+  readonly smallMaxRunMinutes: number;
   /** A heavy step is refused once its line for the host lock has not moved for this many minutes: no step ahead of it, holding the lock or sharing the host ended meanwhile. */
   readonly waitMinutes: number;
   /**
@@ -836,6 +859,8 @@ export interface ContextFilesConfig {
   readonly maxMemoryIndexChars: number;
   /** The skill listing: one `name: description` line per skill. */
   readonly maxSkillListingChars: number;
+  /** The lists the newest session's context holds: skills, deferred tools, agent types and MCP server instructions. */
+  readonly maxSessionListsChars: number;
 }
 
 export interface PathsConfig {
