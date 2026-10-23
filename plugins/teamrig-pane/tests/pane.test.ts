@@ -779,13 +779,14 @@ test('the settings file in the kit home names the folders, ~/ under the home fol
   expect(await pane.find({ text: /WARN/ })).toBeUndefined()
 })
 
-test('draws each collapsed task as one Text: no Box beyond the root, the controls, their two button rows and the find row', async ($, on) => {
+test('draws each collapsed task as one Text: no Box beyond the root, the controls, the find row and the two packed button rows', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   await pane.press({ key: 'all' })
-  expect(countType(await pane.drawn(), 'Box')).toBe(5)
+  // The switch and the mode buttons are packed in code (pack.ts): each a column Box of one row Box a row, one row here.
+  expect(countType(await pane.drawn(), 'Box')).toBe(7)
 })
 
 test('pressing a task opens its card in place of its meta line, the ask quoted from the inbox and the roadmap; pressing again closes it', async ($, on) => {
@@ -876,8 +877,9 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   await pane.press({ key: 'po:T1' })
   expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {7}waiting since 14:00 UTC by security\n {4}│ Note {9}needs owner paste\n/ })).toBeDefined()
   expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeUndefined()
-  // Each open card is a column Box, its reference file's line a row Box in it.
-  expect(countType(await pane.drawn(), 'Box')).toBe(9)
+  // Each open card is a column Box, its reference file's line a row Box in it; the switch and the mode buttons are
+  // packed in code (pack.ts), each a column Box of one row Box here.
+  expect(countType(await pane.drawn(), 'Box')).toBe(11)
   const collapse = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'collapse')
   expect(collapse?.props).toMatchObject({ hotkey: 'c' })
 
@@ -885,7 +887,7 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   expect(await pane.find({ text: /│ (Status|From)/ })).toBeUndefined()
   expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeDefined()
   expect(await pane.find({ text: /collapse/ })).toBeUndefined()
-  expect(countType(await pane.drawn(), 'Box')).toBe(5)
+  expect(countType(await pane.drawn(), 'Box')).toBe(7)
 })
 
 test('an open card draws each address its ref, note, proof and evidence hold as one Link, the issue a GitHub task came from first', async ($, on) => {
@@ -1210,8 +1212,10 @@ test('the Tasks / Changes / Log switch leads the pane in every view, width and p
     expect(buttonKeys(keyedNode(drawn, 'switch'))).toEqual(['tasks', 'changes', 'log'])
     // Then the mode buttons, past the Find row the dock draws between them.
     expect(buttonKeys(drawn).filter(key => key !== 'find-key').slice(0, 5)).toEqual(['tasks', 'changes', 'log', 'mine', 'all'])
-    const row = keyedProps(drawn, 'switch')
-    expect(row !== null && 'flexWrap' in row ? row.flexWrap : null).toBe('wrap')
+    // Packed in code (pack.ts), a row Box a row: `[ Tasks ] [ Changes ] [ Log ]` takes 29 cells, one row in a
+    // 50-column dock, a row a button at 20 columns and 12.
+    const rows = childrenOf(keyedNode(drawn, 'switch')).map(row => buttonKeys(row))
+    expect(rows).toEqual(props.bodyColumns === 50 ? [['tasks', 'changes', 'log']] : [['tasks'], ['changes'], ['log']])
   }
   await pane.redraw(PANE_PROPS)
   await pane.press({ key: 'changes' })
@@ -1675,7 +1679,7 @@ test('back, forward and the trail step through the places; the list keeps the he
   expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed$/ })).toBeDefined()
   expect(keyedProps(drawn, 'forward')).toMatchObject({ label: 'forward ›', hotkey: 'f' })
   expect(keyedNode(drawn, 'crumb:2')).toMatchObject({ type: 'Button', children: [{ type: 'Text', props: { underline: true, dimColor: true }, children: ['T58'] }] })
-  expect(childrenOf(keyedNode(drawn, 'trail'))).toMatchObject([
+  expect(childrenOf(keyedNode(drawn, 'trail:0'))).toMatchObject([
     { type: 'Button' },
     { type: 'Text', props: { dimColor: true }, children: [' › '] },
     { type: 'Text', props: { bold: true }, children: ['T50'] },
