@@ -54,6 +54,7 @@ import { RefFileReader } from './ref-file'
 import { DEFAULT_REGISTER, TimeZone } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
+import { diffKey, openKey, pieceKey, pressesFrom } from './press-keys'
 import { windowed, type Slot } from './window'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
@@ -198,11 +199,6 @@ const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS,
 const held = atom({ plugin: 'teamrig-pane', key: 'held' } as const, null)
 /** Whether the banner (banner.ts) in the band above the prompt shows its task's card: a press on it opens and closes it. */
 const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, false)
-
-/** The key of an open card's element: `from` for the presses on the task ids in it. */
-function openKey(key: string): string {
-  return `${key}-open`
-}
 
 /** True when the element keyed `key` is drawn in `drawn`: its press, its open card, or a press in the card (a task id, a reference file, a Changes file). */
 function isDrawnIn(drawn: Drawn, key: string): boolean {
@@ -835,7 +831,7 @@ export const register: Register = on => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
       if (part.kind === 'press')
         return (
-          <Button key={`diff:${from}:${part.key}`} plain onPress={() => void diffing?.toggle(part.expands)}>
+          <Button key={diffKey(from, part.key)} plain onPress={() => void diffing?.toggle(part.expands)}>
             {drawText(part.spans, wrap)}
           </Button>
         )
@@ -847,19 +843,19 @@ export const register: Register = on => {
                 return drawText(piece.spans, wrap, String(i))
               case 'id':
                 return (
-                  <Button key={`goto:${piece.task}:${from}:${part.key}:${i}`} plain onPress={() => void openPage(piece.task, from)}>
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void openPage(piece.task, from)}>
                     {drawPress(piece.span, 'id')}
                   </Button>
                 )
               case 'file':
                 return (
-                  <Button key={`goto:file:${from}:${part.key}:${i}`} plain onPress={() => void openFile(piece.file, from)}>
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void openFile(piece.file, from)}>
                     {drawPress(piece.span, 'file')}
                   </Button>
                 )
               case 'inbox':
                 return (
-                  <Button key={`goto:inbox:${from}:${part.key}:${i}`} plain onPress={() => void openInbox(piece.area, from)}>
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void openInbox(piece.area, from)}>
                     {drawPress(piece.span, 'inbox')}
                   </Button>
                 )
@@ -913,7 +909,7 @@ export const register: Register = on => {
       if (drawn.parts !== undefined)
         return (
           <Box key={drawn.key} flexDirection="column">
-            {drawn.parts.map(part => drawPart(part, drawn.wrap, drawn.key))}
+            {drawn.parts.map(part => drawPart(part, drawn.wrap, pressesFrom(drawn)))}
           </Box>
         )
       const head = headOf(drawn)
@@ -925,7 +921,7 @@ export const register: Register = on => {
           </Box>
         )
       }
-      const from = openKey(drawn.key)
+      const from = pressesFrom(drawn)
       return (
         <Box key={from} flexDirection="column">
           {head}
