@@ -21,7 +21,8 @@ export type Settled = { readonly seq: number; readonly offset: number }
  * The offset the window takes over `places`, `last` where it stood as last drawn: an offset as asked, the end the
  * body's last, a reveal where `revealed` lands its target. A reveal is settled once: later drawings keep its offset
  * while no new step comes, so the window holds still as the body changes around it. A reveal of a key the body does
- * not hold lands at the top. The view clamps the offset to the body.
+ * not hold yet lands at the top unsettled, so a later drawing that holds it lands there. The view clamps the offset to
+ * the body.
  */
 export function settle(
   scroll: BodyScroll,
@@ -38,7 +39,8 @@ export function settle(
     case 'reveal': {
       if (settled !== null && settled.seq === scroll.seq) return { offset: settled.offset, settled }
       const place = placeOf(places, to.key)
-      const offset = place === null ? 0 : revealed(place, last, to.block)
+      if (place === null) return { offset: 0, settled: null }
+      const offset = revealed(place, last, to.block)
       return { offset, settled: { seq: scroll.seq, offset } }
     }
   }

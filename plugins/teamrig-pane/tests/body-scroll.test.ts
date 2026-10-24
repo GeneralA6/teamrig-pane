@@ -41,7 +41,11 @@ describe('body-scroll', () => {
     expect(settle(scrolledTo(scroll, { kind: 'reveal', key: 'r10', block: 'start' }), first.settled, grown, viewOf(grown, 20, 10)).offset).toBe(22)
   })
 
-  test('a reveal of a key the body does not hold lands at the top', () => {
-    expect(settle(scrolledTo(AT_TOP, { kind: 'reveal', key: 'gone', block: 'center' }), null, PLACES, LAST)).toEqual({ offset: 0, settled: { seq: 1, offset: 0 } })
+  test('a reveal of a key the body does not hold yet lands at the top unsettled, and on its target once a drawing holds it', () => {
+    const scroll = scrolledTo(AT_TOP, { kind: 'reveal', key: 'late0', block: 'start' })
+    expect(settle(scroll, null, PLACES, LAST)).toEqual({ offset: 0, settled: null })
+    // The element arrives at the body's end, row 40.
+    const arrived = placesOf([...lines(20), ...lines(1, 'late')], 1)
+    expect(settle(scroll, null, arrived, viewOf(arrived, 0, 10))).toEqual({ offset: 31, settled: { seq: 1, offset: 31 } })
   })
 })
