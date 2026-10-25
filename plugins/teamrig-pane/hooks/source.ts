@@ -30,6 +30,7 @@ import {
 } from './core/read/index'
 import { lineHash } from './line-hash'
 import { isHeldFinished } from './done'
+import { inboxItems } from './inbox'
 import { teamLeads } from './leads'
 import { rowOf } from './log'
 import type { TeamFiles } from './places'
@@ -312,6 +313,8 @@ export class TaskRegisterSource {
 
     // An area that never ran `inbox read` has no mark: its count is unknown, not everything.
     const mark = area === null ? undefined : byArea.get(area)
+    const lines = this.inbox?.current ?? []
+    const unread = area !== null && mark !== undefined ? unreadOf(area, lines, mark, lineHash) : null
     return {
       tasks: this.tasks,
       area,
@@ -320,7 +323,8 @@ export class TaskRegisterSource {
       areaName: area === null ? null : (this.names?.nameOf(area) ?? null),
       leads: this.names?.leads ?? null,
       work: this.work,
-      unreadInbox: area !== null && this.inbox && mark !== undefined ? unreadOf(area, this.inbox.current, mark, lineHash).lines.length : null,
+      unreadInbox: unread === null ? null : unread.lines.length,
+      inbox: inboxItems(lines, unread === null ? null : unread.total - unread.lines.length, now),
       problem: skippedText(this.paths, this.register.current, this.marks.current),
       ...this.settings,
       now,

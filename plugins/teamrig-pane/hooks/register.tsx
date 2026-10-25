@@ -148,6 +148,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   leads: null,
   work: [],
   unreadInbox: null,
+  inbox: [],
   problem: null,
   notPickedUpAfterHours: DEFAULT_REGISTER.check.notPickedUpAfterHours,
   timeZone: TimeZone.UTC.name,
@@ -159,7 +160,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
  * value reads as absent (the empty snapshot, until the reload's first poll). Bump it whenever the
  * Snapshot or TaskRow type in ../types changes shape.
  */
-const SNAPSHOT_SHAPE = 'register-v9'
+const SNAPSHOT_SHAPE = 'register-v10'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */

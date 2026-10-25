@@ -247,11 +247,23 @@ describe('view', () => {
 
   test('two snapshots draw the same pane unless a field, a task or a time label differs', async () => {
     const tasks = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' }))
-    const base: Snapshot = { tasks, area: 'po', areaSource: 'pinned', unreadInbox: 0, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
+    const base: Snapshot = { tasks, area: 'po', areaSource: 'pinned', unreadInbox: 0, inbox: [], problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
     expect(sameView(base, { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' })) })).toBe(true)
     expect(sameView(base, { ...base, now: NOW + HOUR / 2 })).toBe(true)
     expect(sameView(base, { ...base, now: NOW + 2 * HOUR })).toBe(false)
     expect(sameView(base, { ...base, unreadInbox: 1 })).toBe(false)
+    // The Inbox view: a line read 23 hours before leaves its window an hour on, with no poll; one read an hour before
+    // prints with its weekday from the zone's midnight.
+    const line = { key: 'inbox:0', at: NOW - 23 * HOUR, from: 'lead', text: 'ship it', unread: false }
+    const inbox: Snapshot = { ...base, tasks: [], inbox: [line, { ...line, key: 'inbox:1', at: NOW - HOUR }] }
+    expect(sameView(inbox, { ...inbox, inbox: [line, { ...line, key: 'inbox:1', at: NOW - HOUR }] })).toBe(true)
+    expect(sameView(inbox, { ...inbox, inbox: [{ ...line, unread: true }, { ...line, key: 'inbox:1', at: NOW - HOUR }] })).toBe(false)
+    expect(sameView(inbox, { ...inbox, inbox: [{ ...line, text: 'ship it now' }, { ...line, key: 'inbox:1', at: NOW - HOUR }] })).toBe(false)
+    expect(sameView(inbox, { ...inbox, now: NOW + HOUR / 2 })).toBe(true)
+    expect(sameView(inbox, { ...inbox, now: NOW + 2 * HOUR })).toBe(false)
+    const one: Snapshot = { ...inbox, inbox: [{ ...line, at: NOW - HOUR }] }
+    expect(sameView(one, { ...one, now: Date.UTC(2026, 9, 13, 23, 59) })).toBe(true)
+    expect(sameView(one, { ...one, now: Date.UTC(2026, 9, 14, 0, 1) })).toBe(false)
     expect(sameView(base, { ...base, notPickedUpAfterHours: NOT_PICKED_UP_HOURS * 2 })).toBe(false)
     expect(sameView(base, { ...base, timeZone: 'Asia/Jerusalem' })).toBe(false)
     const leads = { lead: 'lead', leaderOf: { po: 'lead' } }
@@ -330,6 +342,7 @@ describe('rows', () => {
     area,
     areaSource: 'inbox-read',
     unreadInbox: 2,
+    inbox: [],
     problem: null,
     ...NO_TEAM,
     ...TEAM_SETTINGS,
@@ -1126,6 +1139,27 @@ describe('source', () => {
     expect(await unread()).toBe(1)
   })
 
+  test("holds the Inbox view the area's lines of the last 24 hours and its unread ones; with no read mark none is unread", async () => {
+    const files = new MemoryFiles()
+    const lines = ['- 2026-10-11 09:00 lead: read two days ago', '- 2026-10-13 09:00 lead: read this morning', 'undated note', '- 2026-10-11 10:00 qa: unread for two days', '- 2026-10-13 13:30 docs: new']
+    files.write(`${PATHS.inboxDir}/po.md`, lines.join('\n'))
+    files.write(`${PATHS.inboxDir}/etl.md`, lines.join('\n'))
+    files.write(PATHS.marks, markLine('po', 3, S1, NOW, 'undated note'))
+    const marked = await new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null).poll({ claudeSession: S1, pinned: null, now: NOW })
+    expect(marked?.unreadInbox).toBe(2)
+    expect(marked?.inbox).toEqual([
+      { key: 'inbox:1', at: Date.UTC(2026, 9, 13, 9, 0), from: 'lead', text: 'read this morning', unread: false },
+      { key: 'inbox:3', at: Date.UTC(2026, 9, 11, 10, 0), from: 'qa', text: 'unread for two days', unread: true },
+      { key: 'inbox:4', at: Date.UTC(2026, 9, 13, 13, 30), from: 'docs', text: 'new', unread: true },
+    ])
+    const unmarked = await new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null).poll({ claudeSession: S1, pinned: 'etl', now: NOW })
+    expect(unmarked?.unreadInbox).toBe(null)
+    expect(unmarked?.inbox.map(item => [item.key, item.unread])).toEqual([
+      ['inbox:1', false],
+      ['inbox:4', false],
+    ])
+  })
+
   test('a snapshot holds only the tasks a drawing can show: active, or finished within HELD_DAYS of now', async () => {
     const files = new MemoryFiles()
     files.write(PATHS.events, [
@@ -1169,7 +1203,7 @@ describe('source', () => {
   test('a pin wins over the inbox read, and missing files read as an empty register with no unread count', async () => {
     const source = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, null)
     const snap = await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW })
-    expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW })
+    expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW })
   })
 
   test("each snapshot carries the team config's settings the source was made with: its NOT PICKED UP hours and zone", async () => {
@@ -1241,7 +1275,7 @@ describe('source', () => {
 
 /** Ports over a MemoryFiles register, recording what the class publishes and pins; `clock.now` moves its time. */
 function livePorts(files: MemoryFiles, ids: string[]) {
-  let current: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: 0 }
+  let current: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: 0 }
   let writes = 0
   const clock = { now: NOW }
   const pins = new Map<string, string>()

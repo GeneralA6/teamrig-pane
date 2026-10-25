@@ -5,8 +5,9 @@ import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, type TaskTree } from './core/read/index'
 import { sameLeads } from './leads'
 import { metaText, treeOf, whenWords, type PaneTree } from './meta'
+import { inboxShown } from './inbox'
 import { barCounts, barStatusOf, isFinishedOn, type BarCounts } from './status-bar'
-import { dayOf } from './zone'
+import { clockOf, dayOf, momentWords } from './zone'
 
 /** At most this many tasks done today are listed, and this many asked of others; the heading counts them all. */
 export const MAX_FINISHED = 6
@@ -157,7 +158,30 @@ function timeLabel(task: TaskRow, tree: PaneTree): string {
 }
 
 /**
- * Whether two snapshots draw the same pane: the same fields and tasks, and the same labels at
+ * Whether two snapshots' Inbox views show the same lines, each at its own `now` in its own zone: a line that left the
+ * window, or a time label that turned to a weekday with the day, redraws it.
+ */
+function sameInbox(a: Snapshot, b: Snapshot): boolean {
+  const [shownA, shownB] = [inboxShown(a.inbox, a.now), inboxShown(b.inbox, b.now)]
+  const [clockA, clockB] = [clockOf(a), clockOf(b)]
+  return (
+    shownA.length === shownB.length &&
+    shownA.every((item, i) => {
+      const other = shownB[i]
+      return (
+        other !== undefined &&
+        item.key === other.key &&
+        item.from === other.from &&
+        item.text === other.text &&
+        item.unread === other.unread &&
+        momentWords(item.at, clockA) === momentWords(other.at, clockB)
+      )
+    })
+  )
+}
+
+/**
+ * Whether two snapshots draw the same pane: the same fields, tasks and inbox lines, and the same labels at
  * their own `now` in their own zone. Each write of the snapshot redraws the pane, so one that draws the same is skipped.
  */
 export function sameView(a: Snapshot, b: Snapshot): boolean {
@@ -168,6 +192,7 @@ export function sameView(a: Snapshot, b: Snapshot): boolean {
     a.areaName !== b.areaName ||
     !sameLeads(a.leads, b.leads) ||
     a.unreadInbox !== b.unreadInbox ||
+    !sameInbox(a, b) ||
     a.problem !== b.problem ||
     a.notPickedUpAfterHours !== b.notPickedUpAfterHours ||
     a.timeZone !== b.timeZone

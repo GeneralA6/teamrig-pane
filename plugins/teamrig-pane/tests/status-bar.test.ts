@@ -32,6 +32,7 @@ const snapshotOf = (tasks: TaskRow[], area: string | null, now = NOW): Snapshot 
   area,
   areaSource: 'inbox-read',
   unreadInbox: 0,
+  inbox: [],
   problem: null,
   ...NO_TEAM,
   ...TEAM_SETTINGS,

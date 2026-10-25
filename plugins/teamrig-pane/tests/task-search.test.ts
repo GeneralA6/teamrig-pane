@@ -24,7 +24,7 @@ const TASKS = rowsOf([
   createLine('T9', { owner: 'po', by: 'po', at: NOW - 5 * HOUR, title: 'Feed the pages' }),
   statusLine('T9', 'po', NOW - HOUR, 'dropped', 'folded into the feed'),
 ])
-const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
+const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
 
 /** What `query` finds among `tasks`, the active ones in plan order on their tree's effective dues. */
 const search = (tasks: readonly TaskRow[], query: string) => searchTasks(tasks, query, treeAt(tasks, NOW))

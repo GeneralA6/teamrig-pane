@@ -106,7 +106,7 @@ function linesOf(blocks: readonly Block[]): string[] {
   )
 }
 
-const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
+const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
 
 describe('doneBlocks', () => {
   test("mine: the area's head and counts, each day dim, each row opening its page with when it closed", () => {

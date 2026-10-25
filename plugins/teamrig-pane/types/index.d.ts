@@ -80,6 +80,18 @@ export type TeamLeads = {
  */
 export type WorkMark = { readonly session: string; readonly task: string; readonly at: number }
 
+/**
+ * A line of the session's own inbox as the Inbox view shows it (hooks/inbox.ts): its key, when it was posted (ms), who
+ * sent it (null for a line with no `<from>: `), its words, and whether it lies past the area's read mark.
+ */
+export type InboxItem = {
+  readonly key: string
+  readonly at: number
+  readonly from: string | null
+  readonly text: string
+  readonly unread: boolean
+}
+
 /** Everything a drawing needs, rebuilt when a register file changes. */
 export type Snapshot = {
   /** The tasks a drawing can show: the active ones and those finished within HELD_DAYS of the fold (hooks/done.ts isHeldFinished). */
@@ -107,6 +119,11 @@ export type Snapshot = {
   work: readonly WorkMark[]
   /** Unread lines in `<inbox>/<area>.md`, past its read mark as teamrig finds it; null when the area never ran `inbox read`. */
   unreadInbox: number | null
+  /**
+   * The lines of `<inbox>/<area>.md` the Inbox view shows (hooks/inbox.ts inboxItems): those of the last 24 hours and
+   * the unread ones, in the file's order, as the last poll found them; empty with no area.
+   */
+  inbox: readonly InboxItem[]
   /** What the pane could not read: a failed load (the last good tasks stay drawn), or the lines teamrig's reader skipped. */
   problem: string | null
   /**
