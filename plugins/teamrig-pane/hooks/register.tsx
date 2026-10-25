@@ -904,8 +904,9 @@ export const register: Register = on => {
     /**
      * A card's lines with no press as one Text; a line with one as a row of its pieces, each id a press that opens
      * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, an inbox count
-     * one that opens the inbox's, keyed `goto:inbox:`, then where it is drawn (`from`, the card's element); a Changes
-     * file's row one press that opens or closes its diff, keyed `diff:`, then where it is drawn and the row.
+     * one that opens the inbox's, keyed `goto:inbox:`, each Team tab key one that opens or closes it in its span's
+     * style, keyed `team:`, then where it is drawn (`from`, the card's element); a Changes file's row one press that
+     * opens or closes its diff, keyed `diff:`, then where it is drawn and the row.
      */
     const drawPart = (part: CardPart, wrap: Drawn['wrap'], from: string) => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
@@ -939,13 +940,21 @@ export const register: Register = on => {
                     {drawPress(piece.span, 'inbox')}
                   </Button>
                 )
+              case 'toggle': {
+                const key = piece.toggles
+                return (
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void update($, teamToggled, toggled => toggledWith(toggled, key))}>
+                    {styled(piece.span)}
+                  </Button>
+                )
+              }
             }
           })}
         </Box>
       )
     }
     // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
-    // conversation's Log page (`reads`), opens or closes a Team tab node (`folds`), or, inline, a Changes file's diff
+    // conversation's Log page (`reads`), opens or closes a Team tab key (`folds`), or, inline, a Changes file's diff
     // (`expands`), else words alone.
     const headOf = (drawn: Drawn) => {
       const id = drawn.toggle
@@ -986,12 +995,12 @@ export const register: Register = on => {
     }
     // A Button holds strings and Texts alone, so an open card (its links, its ids) draws under the task's Button, not
     // in it. A page's title is no press: its card is always open. An element drawn as parts (the header, its inbox
-    // count a press) is a column Box of them, under its key.
+    // count a press; a Team tab leader, its fold mark and id) is a column Box of them and its open card's, under its key.
     const drawBlock = (drawn: Drawn) => {
       if (drawn.parts !== undefined)
         return (
           <Box key={drawn.key} flexDirection="column">
-            {drawn.parts.map(part => drawPart(part, drawn.wrap, pressesFrom(drawn)))}
+            {[...drawn.parts, ...(drawn.card ?? [])].map(part => drawPart(part, drawn.wrap, drawn.key))}
           </Box>
         )
       const head = headOf(drawn)

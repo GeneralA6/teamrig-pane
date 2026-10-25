@@ -42,6 +42,7 @@ describe('press-keys', () => {
     expect(pieceKey({ kind: 'id', span: { text: 'T7' }, task: 'T7' }, 'T5-open', 'p1', 1)).toBe('goto:T7:T5-open:p1:1')
     expect(pieceKey({ kind: 'file', span: { text: 'a' }, file: { file: 'a', line: 3 } }, 'T5-open', 'p1', 2)).toBe('goto:file:T5-open:p1:2')
     expect(pieceKey({ kind: 'inbox', span: { text: '2' }, area: 'api' }, 'header', 'p0', 0)).toBe('goto:inbox:header:p0:0')
+    expect(pieceKey({ kind: 'toggle', span: { text: 'web' }, toggles: 'card:web' }, 'team:web', 'card:0', 2)).toBe('team:card:web:team:web:card:0:2')
     expect(diffKey('C1-open', 'f1')).toBe('diff:C1-open:f1')
   })
 
@@ -66,6 +67,28 @@ describe('press-keys', () => {
     const header = placesOf([drawn('header', { spans: [{ text: 'what and why\nafter T7' }], parts: [WORDS, LINKS] })], 1)
     expect(header.flatMap(pressesOf).map(press => press.key)).toEqual(['goto:T7:header:p1:1', 'goto:file:header:p1:2', 'goto:inbox:header:p1:3'])
     expect(header.flatMap(pressesOf).every(press => press.top === 1)).toBe(true)
+  })
+
+  test("an element drawn as parts with its card open has its parts' presses, then its card's, all drawn from it", () => {
+    const marks: CardPart = {
+      kind: 'line',
+      key: 'card:0',
+      pieces: [
+        { kind: 'toggle', span: { text: '▾ ' }, toggles: 'web' },
+        { kind: 'words', spans: [{ text: '● ' }] },
+        { kind: 'toggle', span: { text: 'web' }, toggles: 'card:web' },
+      ],
+    }
+    const leader = drawn('team:web', { spans: [{ text: '▾ ● web' }], parts: [marks], card: [WORDS, LINKS] })
+    const places = placesOf([leader], 1)
+    expect(pressesFrom(leader)).toBe('team:web')
+    expect(places.flatMap(pressesOf)).toEqual([
+      { key: 'team:web:team:web:card:0:0', top: 0, rows: 1 },
+      { key: 'team:card:web:team:web:card:0:2', top: 0, rows: 1 },
+      ...['goto:T7:team:web:p1:1', 'goto:file:team:web:p1:2', 'goto:inbox:team:web:p1:3'].map(key => ({ key, top: 2, rows: 1 })),
+    ])
+    expect(placeOf(places, 'team:web')).toEqual({ top: 0, rows: 1 })
+    expect(placeOf(places, openKey('team:web'))).toEqual({ top: 0, rows: 3 })
   })
 
   test('the presses a window leaves out stand in above it and below it, in the order the ring meets them', () => {
