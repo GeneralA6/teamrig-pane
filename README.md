@@ -60,8 +60,9 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   goals, who asked, when it was added and by whom, where its ask is written, its evidence and its links. `c` closes every card. A click on a task
   id in a card opens that task's page, and a click on a file it references opens the file at the line it names, with
   back and forward (`b`, `f`) and a trail of where you went.
-- **Find:** the dock always shows a Find field under its Tasks, Changes, Log and Team switch (`s` or a click puts the cursor in it) that lists, as you type, the
+- **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log and Team switch (`s` or a click puts the cursor in it) that lists, as you type, the
   tasks the pane holds whose id, title, owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.
+  On the Team tab the same field finds sessions by id, name, former names, roles or hire scope.
   A line under it says where your keys go: into the search, to the pane's keys, or to Claude's prompt.
 - **Archive:** `h` lists the tasks finished this week, a day at a time; `p` and `l` step a week back
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.
