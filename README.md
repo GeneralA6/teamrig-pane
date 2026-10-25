@@ -44,6 +44,7 @@ updates by itself unless you turn on its auto-update in `/plugin`, under Marketp
 ![Six cards. Your tasks, always in view: docked beside the conversation, in plan order. The whole team at a glance: every owner's tasks with how many are active or waiting. What needs you stands out: waiting, overdue, new and not picked up are marked. Details on a click. Changes, one press away. Fast, and costs no tokens: it reads files, never the model.](docs/images/features.svg)
 
 It is part of Claude Code's own screen, not another window: nothing to switch to, nothing else to keep running.
+Docked, its title and controls stay put while the list scrolls under them, a scroll bar at its side.
 
 ## What it shows
 

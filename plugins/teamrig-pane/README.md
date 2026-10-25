@@ -14,7 +14,11 @@ labels on. No model calls, so no tokens. Every time is on the team's clock and z
 session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
 to each team session's prompts and replies (Tasks, Changes and Log, below). Docked, its first line
 names the session (`acme-pane`; `team-lead · team acme` when the name does not lead with its team), so
-panes open in several tabs tell apart at a glance.
+panes open in several tabs tell apart at a glance. That line and the controls under it stay put, and the body
+scrolls under them in a window of the pane's own: the mouse wheel moves it 3 rows a tick, PgUp and PgDn a
+window, and Tab or an arrow onto a row out of sight moves it the least that shows the row. A one-column scroll
+bar at its right shows where it stands while the body holds more than the window shows. A dock too narrow for
+its buttons, whose header would take over half its rows, scrolls as one.
 
 - **mine**: the session's area, under its status bar (Status bar, below) and a header counting its
   active tasks and unread inbox lines (`3 active · inbox 1 unread`; a pin names the area first,
@@ -314,8 +318,6 @@ moves.
 
 What the host draws and the mod can't change:
 
-- there is no fixed header: the body scrolls as one, so in a long list the title line and the switch
-  scroll up out of view with the rows (the band above the prompt keeps the session's name in view);
 - the tab strip, and so the title's `Δn`, shows only while more than one pane is open;
 - a mod can't show or focus the built-in Diff pane (`/diff`), so Changes is the plugin's own list of
   git's changes, and its own diff of each file under it.
