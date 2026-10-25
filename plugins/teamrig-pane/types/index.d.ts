@@ -236,9 +236,10 @@ export type RequirementProblem =
 
 /**
  * What the pane's body shows, picked with the switch over it: the register's tasks, the session's git changes
- * (hooks/changes.ts), the team sessions' prompts and replies (hooks/turn-log.ts), or the team tree (hooks/team.ts).
+ * (hooks/changes.ts), the team sessions' prompts and replies (hooks/turn-log.ts), the session's inbox lines
+ * (hooks/inbox.ts), or the team tree (hooks/team.ts).
  */
-export type PaneView = 'tasks' | 'changes' | 'log' | 'team'
+export type PaneView = 'tasks' | 'changes' | 'log' | 'inbox' | 'team'
 
 /**
  * The Team tab's tree (hooks/team-source.ts): the tree of teams that holds the pane's team (hooks/team.ts), its root

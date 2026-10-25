@@ -18,7 +18,9 @@
 // files changed in the git repos the session works in and their lines, changes.ts, counted as Δn on
 // the switch and in the tab title), the Log view: each team session's prompts and replies of the hours teamrig
 // keeps them (the team config's turnLog.keepHours) from the turn logs it writes (turn-log.ts), a press on a session
-// opening its page at its newest lines, back (b) returning to the list, and the Team tab: the tree of teams the
+// opening its page at its newest lines, back (b) returning to the list, the Inbox view: the session's inbox lines of
+// the last 24 hours and its unread ones, newest first, with a search of its own (inbox-rows.ts, inbox-search.ts), a
+// press on the header's unread count opening it, and the Team tab: the tree of teams the
 // session's team is in, each team's lead over the sessions it leads and its retired ones (team.ts, team-source.ts), a
 // press on a row opening or closing what lies under it. The band above the prompt shows the session's
 // name and the task it works on now
@@ -76,6 +78,8 @@ import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 import { LiveDiffs, NO_DIFFS } from './diff'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { logListBlocks, logPageBlocks } from './log-rows'
+import { inboxBlocks } from './inbox-rows'
+import { searchInbox, type InboxHit } from './inbox-search'
 import { LiveTeam } from './team-source'
 import { cardKey, openedWith, teamBlocks, toggledWith } from './team-rows'
 import { searchTeam, TEAM_SEARCH_VIEW, type SessionHit } from './team-search'
@@ -766,6 +770,8 @@ export const register: Register = on => {
     let found: SearchResults = NO_RESULTS
     /** The sessions the Team tab's search shown names (team-search.ts), read once for its body, Enter and the line under the field; none off it. */
     let teamFound: readonly SessionHit[] = []
+    /** The inbox lines the Inbox view's search shown matches (inbox-search.ts), read once for its body and the line under the field; none off it. */
+    let inboxFound: readonly InboxHit[] = []
     /** The session whose Log page shows; null for the list or another view. */
     let logSession: string | null = null
     /** What a project teamrig is not set up for shows (setup.ts), alone, in every view; null once a register is found. */
@@ -780,15 +786,16 @@ export const register: Register = on => {
       isMinimized = (await read($, size)) === 'minimized'
       current = await read($, view)
       changed = await read($, changes)
+      // Minimized too: the strip's Inbox button counts the unread lines.
+      snap = await read($, snapshot)
       if (!isMinimized) {
-        snap = await read($, snapshot)
         shown = await read($, mode)
         open = await read($, expanded)
         const missing = await read($, requirements)
         if (!inline) scroll = await read($, bodyScroll)
-        // The Tasks view and the Team tab draw the Find field, and their searches are one place: the switch between them
+        // The Tasks, Inbox and Team views draw the Find field, and their searches are one place: the switch between them
         // closes it (switchTo).
-        if ((current === 'tasks' || current === 'team') && !inline) {
+        if ((current === 'tasks' || current === 'inbox' || current === 'team') && !inline) {
           at = await read($, nav)
           field = await read($, findField)
           if (current === 'tasks') files = await read($, filePages)
@@ -797,6 +804,7 @@ export const register: Register = on => {
         const team = current === 'team' ? await read($, teamTree) : TEAM_READING
         if (place.kind === 'search' && current === 'tasks') found = searchTasks(snap.tasks, place.query, treeOf(snap))
         if (place.kind === 'search' && team.kind === 'tree') teamFound = searchTeam(team.root, place.query)
+        if (place.kind === 'search' && current === 'inbox') inboxFound = searchInbox(snap.inbox, snap.now, place.query)
         // A project teamrig is not set up for has no tasks, changes or log to show: its setup takes every view,
         // whatever place it is at.
         setupShown = await read($, setup)
@@ -828,6 +836,8 @@ export const register: Register = on => {
                 ? changesBlocks(changed, isGitMissing(missing), await read($, diffs))
                 : current === 'team'
                   ? teamBlocks(team, await read($, teamToggled), clockOf(snap).zone, place.kind === 'search' ? { query: place.query, hits: teamFound } : null)
+                  : current === 'inbox'
+                  ? inboxBlocks(snap, place.kind === 'search' ? { query: place.query, hits: inboxFound } : null)
                   : logShown === null
                   ? logListBlocks(await read($, logList), clockOf(snap), snap)
                   : logPageBlocks(logShown, clockOf(snap), await read($, logList), snap)
@@ -852,6 +862,18 @@ export const register: Register = on => {
       if (task === undefined) return
       const detail = await detailOf(task)
       await update($, expanded, current => ({ ...current, [id]: detail }))
+    }
+    // A press on the switch's buttons, or the header's inbox count. The Tasks button shows the list, from a page too,
+    // scrolled back to where the page was opened from; the Log button shows the sessions, from a session's page too;
+    // the Team button reads the team tree at once. The Tasks, Inbox and Team buttons close a search, which their views
+    // share: one typed in one view is never found shown in another.
+    const switchTo = async (target: PaneView) => {
+      await update($, view, () => target)
+      await sizer?.set('open')
+      if (target === 'tasks' || target === 'inbox' || target === 'team') await go($, current => reset(current, true))
+      if (target === 'changes') await tracked?.refresh()
+      if (target === 'log') await logging?.close()
+      if (target === 'team') await teaming?.refresh()
     }
     // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Team tab session's
     // card, the header's inbox count) shows the Tasks view at it, over its list: back shows the list, never the Team
@@ -880,9 +902,14 @@ export const register: Register = on => {
       await readFilePage(file.file)
       await openPlace({ kind: 'file', file: file.file, line: file.line }, from)
     }
-    // A press on an inbox count (the header's, a Team tab card's) opens the area's inbox as a file's page, landing on
-    // its first unread line (unreadLine). Reading it marks nothing read: the pane writes no inbox, the session's `teamrig inbox read` does.
+    // A press on an inbox count opens that inbox: the area's own (the header's) in the Inbox view, another area's (a
+    // Team tab card's) as a file's page, landing on its first unread line (unreadLine). Reading it marks nothing read:
+    // the pane writes no inbox, the session's `teamrig inbox read` does.
     const openInbox = async (press: InboxPress, from: string) => {
+      if (press.area === snap.area) {
+        await switchTo('inbox')
+        return
+      }
       const file = inboxFile(press.area)
       const found = await readFilePage(file)
       await openPlace({ kind: 'file', file, line: unreadLine(found, press.unread) }, from)
@@ -1151,21 +1178,12 @@ export const register: Register = on => {
     /** Words as a header item. */
     const worded = (node: JSX.Element, text: string): HeaderItem => ({ node, cells: cells(text) })
 
-    // The switch: under the title in every state but setup, so another view is always one press (or t / d / g / e) away,
+    // The switch: under the title in every state but setup, so another view is always one press (or t / d / g / u / e) away,
     // its buttons wrapping under each other in a dock too narrow for all of them. Minimized, it is the whole
-    // pane, one row, and a press on any button opens the pane in full on that view.
-    // The Tasks button shows the list, from a page too, scrolled back to where the page was opened from; the Log
-    // button shows the sessions, from a session's page too; the Team button reads the team tree at once. The Tasks and
-    // Team buttons close a search, which their views share: one typed in one view is never found shown in the other.
-    const switchTo = async (target: PaneView) => {
-      await update($, view, () => target)
-      await sizer?.set('open')
-      if (target === 'tasks' || target === 'team') await go($, current => reset(current, true))
-      if (target === 'changes') await tracked?.refresh()
-      if (target === 'log') await logging?.close()
-      if (target === 'team') await teaming?.refresh()
-    }
+    // pane, one row, and a press on any button opens the pane in full on that view (switchTo).
     const changesWords = changesLabel(changed)
+    // The Inbox button counts the unread lines; none unread, or none known (no read mark yet), it is the word alone.
+    const inboxWords = snap.unreadInbox !== null && snap.unreadInbox > 0 ? `Inbox (${snap.unreadInbox})` : 'Inbox'
     const switchItems = [
       pressed(
         <Button key="tasks" label="Tasks" hotkey="t" variant={current === 'tasks' ? 'primary' : 'secondary'} onPress={() => void switchTo('tasks')} />,
@@ -1185,6 +1203,11 @@ export const register: Register = on => {
         label: 'Log',
         plain: false,
         hotkey: 'g',
+      }),
+      pressed(<Button key="inbox" label={inboxWords} hotkey="u" variant={current === 'inbox' ? 'primary' : 'secondary'} onPress={() => void switchTo('inbox')} />, {
+        label: inboxWords,
+        plain: false,
+        hotkey: 'u',
       }),
       pressed(<Button key="team" label="Team" hotkey="e" variant={current === 'team' ? 'primary' : 'secondary'} onPress={() => void switchTo('team')} />, {
         label: 'Team',
@@ -1208,7 +1231,7 @@ export const register: Register = on => {
       return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>
     }
     // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
-    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, e, s, m, a, h) answers. The minimized strip
+    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, u, e, s, m, a, h) answers. The minimized strip
     // above keeps its switch, so a press on it still opens the pane, onto the setup.
     if (setupShown !== null) return drawPane(titleRow === null ? [] : [titleRow])
 
@@ -1250,32 +1273,36 @@ export const register: Register = on => {
         }),
       )
 
-    // The Find field, under the switch in the dock in the Tasks view whatever it shows, and on the Team tab: the first
-    // change opens a search (a place, so back from a result's page returns to it), each change shows the results for its
-    // words, Enter opens the one match's page (on the Team tab its card) or moves the ring onto the first of more, and
-    // an empty field or clear closes the search. It is drawn under its
+    // The Find field, under the switch in the dock in the Tasks view whatever it shows, and in the Inbox and Team views:
+    // the first change opens a search (a place, so back from a result's page returns to it), each change shows the
+    // results for its words, Enter opens the one match's page (on the Team tab its card) or moves the ring onto the
+    // first of more (in the Inbox view, whose lines open nothing, it does nothing), and an empty field or clear closes
+    // the search. It is drawn under its
     // round's key, holding what the round started with (find-field.ts): the query of the search shown, else nothing;
     // never the person's typing, which the engine would drop on each redraw. `s: Find` before it moves the focus ring
     // into it, and clear moves it back in; the field never takes the focus by itself, as it would then hold every key
     // the pane's hotkeys answer. Esc hands the keys back and leaves the results drawn.
     const isTeam = current === 'team'
-    const matches = isTeam ? teamFound.length : matchCount(found)
+    const isInbox = current === 'inbox'
+    const matches = isTeam ? teamFound.length : isInbox ? inboxFound.length : matchCount(found)
+    // Enter's words, none in the Inbox view.
+    const enterWords = isInbox ? null : submitWords(matches)
     const findRow = inline
       ? null
       : drawFindRow(components, {
           key: fieldKey(field),
-          placeholder: isTeam ? 'id, name, role, scope…' : 'id, title, owner, note…',
+          placeholder: isTeam ? 'id, name, role, scope…' : isInbox ? 'sender, words…' : 'id, title, owner, note…',
           text: field.text,
-          submitLabel: submitWords(matches),
+          submitLabel: enterWords ?? 'search',
           onFind: () => void focusFind($),
           onInput: value => void go($, current => searched(current, value), 'typing'),
-          onSubmit: value => void (isTeam ? submitTeam(value) : submit(value)),
+          onSubmit: value => void (isTeam ? submitTeam(value) : isInbox ? undefined : submit(value)),
           onClear: place.kind === 'search' ? () => void clearSearch($) : null,
         })
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
     // hotkeys or to Claude's prompt, and the key or the click that moves them, wrapped in a narrow dock.
     const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo, place.kind === 'search')
-    const keysLines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, submitWords(matches)) }] }, columns).map(line =>
+    const keysLines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, enterWords) }] }, columns).map(line =>
       line.map(span => span.text).join(''),
     )
     const keysLine = inline ? null : drawKeysLine(components, keys, keysLines.join('\n'))
@@ -1300,9 +1327,9 @@ export const register: Register = on => {
             ),
             rows: (titleRow?.rows ?? 0) + switchRow.rows + (findRow === null ? 0 : 1) + (keysLine === null ? 0 : keysLines.length) + modes.rows,
           }
-        : isTeam
+        : isTeam || isInbox
           ? {
-              // The Team tab draws the Find row and its line under the switch too; it has no modes.
+              // The Inbox and Team views draw the Find row and its line under the switch too; they have no modes.
               node: (
                 <Box key="controls" flexDirection="column">
                   {titleRow?.node}
