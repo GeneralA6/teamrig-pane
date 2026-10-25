@@ -778,7 +778,7 @@ test('a pane left minimized in a project teamrig is not set up for keeps its swi
   await start(on, { paneSize: 'minimized' }, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'team'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
 
   await pane.press({ key: 'changes' })
   expect(await pane.find({ text: SETUP_HEAD })).toBeDefined()
@@ -896,9 +896,10 @@ test('draws each collapsed task as one Text: no Box beyond the frame, the contro
 
   await pane.press({ key: 'all' })
   // The frame is the root, the header, the body's row and its window (T860); the switch and the mode buttons are
-  // packed in code (pack.ts): each a column Box of one row Box a row, one row here.
+  // packed in code (pack.ts): each a column Box of one row Box a row: the switch two rows here, its Inbox (2) wrapping
+  // Team under it, the mode buttons one.
   const drawn = await pane.drawn()
-  expect(countType(drawn, 'Box')).toBe(10)
+  expect(countType(drawn, 'Box')).toBe(11)
   // The list fits its window, so no scroll bar stands beside it.
   expect(childrenOf(keyedNode(drawn, 'body')).filter(child => child !== null)).toHaveLength(1)
 })
@@ -1082,7 +1083,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^WARN the pane could not draw: .*state store unavailable/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'team', 'find-key', 'mine', 'all', 'archive'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'find-key', 'mine', 'all', 'archive'])
 
   isStateDown = false
   await pane.redraw(PANE_PROPS)
@@ -1156,8 +1157,10 @@ test('a session starts minimized when the last one was left so: one row, docked 
   for (const props of [PANE_PROPS, { ...PANE_PROPS, bodyColumns: 23 }, { ...PANE_PROPS, placement: 'inline' as const }]) {
     await pane.redraw(props)
     expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(['minimized'])
-    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'team'])
+    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
   }
+  // The strip counts the unread lines too.
+  expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox (2)' })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
 
   await pane.press({ key: 'tasks' })
@@ -1229,7 +1232,7 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'team'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
   // The strip is the switch alone: the title comes back with the pane.
   expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(['minimized'])
   await pane.press({ key: 'tasks' })
@@ -1318,7 +1321,7 @@ function buttonLabel(node: unknown, key: string): string | null {
   return props !== null && 'label' in props && typeof props.label === 'string' ? props.label : null
 }
 
-test('the Tasks / Changes / Log / Team switch leads the pane in every view, width and placement, wrapping rather than clipping', async ($, on) => {
+test('the Tasks / Changes / Log / Inbox / Team switch leads the pane in every view, width and placement, wrapping rather than clipping', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
@@ -1326,20 +1329,20 @@ test('the Tasks / Changes / Log / Team switch leads the pane in every view, widt
   for (const props of [PANE_PROPS, ...NARROW_AND_INLINE]) {
     await pane.redraw(props)
     const drawn = await pane.drawn()
-    expect(buttonKeys(keyedNode(drawn, 'switch'))).toEqual(['tasks', 'changes', 'log', 'team'])
+    expect(buttonKeys(keyedNode(drawn, 'switch'))).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
     // Then the mode buttons, past the Find row the dock draws between them.
-    expect(buttonKeys(drawn).filter(key => key !== 'find-key').slice(0, 6)).toEqual(['tasks', 'changes', 'log', 'team', 'mine', 'all'])
-    // Packed in code (pack.ts), a row Box a row: `[ Tasks ] [ Changes ] [ Log ] [ Team ]` takes 38 cells, one row in a
-    // 50-column dock; at 20 columns `[ Log ] [ Team ]` (16 cells) share a row, at 12 a row a button.
+    expect(buttonKeys(drawn).filter(key => key !== 'find-key').slice(0, 7)).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'mine', 'all'])
+    // Packed in code (pack.ts), a row Box a row: `[ Tasks ] [ Changes ] [ Log ] [ Inbox (2) ]` takes 43 cells, one row
+    // in a 50-column dock (48 inside its padding), `[ Team ]` wrapping under them; at 20 and 12 columns a row a button.
     const rows = childrenOf(keyedNode(drawn, 'switch')).map(row => buttonKeys(row))
-    const narrowRows = props.bodyColumns === 20 ? [['tasks'], ['changes'], ['log', 'team']] : [['tasks'], ['changes'], ['log'], ['team']]
-    expect(rows).toEqual(props.bodyColumns === 50 ? [['tasks', 'changes', 'log', 'team']] : narrowRows)
+    const narrowRows = [['tasks'], ['changes'], ['log'], ['inbox'], ['team']]
+    expect(rows).toEqual(props.bodyColumns === 50 ? [['tasks', 'changes', 'log', 'inbox'], ['team']] : narrowRows)
   }
   await pane.redraw(PANE_PROPS)
   await pane.press({ key: 'changes' })
   for (const props of [PANE_PROPS, ...NARROW_AND_INLINE]) {
     await pane.redraw(props)
-    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'team'])
+    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
   }
 })
 
@@ -1491,7 +1494,7 @@ test('from the minimized strip, Changes opens the pane in full on the Changes vi
   await pane.press({ key: 'changes' })
   expect(store.get('paneSize')).toBe('open')
   expect(await pane.find({ text: /No git repo yet/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'team'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
 })
 
 const WEB_LOG = '/Homes/tester/.teamrig/teams/web/state/turn-log'
@@ -1557,7 +1560,7 @@ test('a press on a conversation opens its page: its title, its lines oldest firs
 
   await pane.press({ key: 'log' })
   await pane.press({ key: 'log:conv:api:c-1' })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'team', 'back'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'back'])
   expect(await pane.find({ text: /^lead · /m })).toBeUndefined()
   expect(await drawnLines(pane)).toContain('api · last 2 h · 3 lines, the newest last')
   const lines = async () => (await drawnLines(pane)).filter(line => /^(owner|Claude) · |^── |^Ship|^Next/.test(line))
@@ -1580,7 +1583,7 @@ test('a press on a conversation opens its page: its title, its lines oldest firs
   expect((await lines()).at(-1)).toBe('Next step')
 
   await pane.press({ key: 'back' })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'team', 'log:conv:api:c-1', 'log:conv:lead:c-1'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'log:conv:api:c-1', 'log:conv:lead:c-1'])
 
   // Log from a page shows the list too, and inline the list shows alone.
   await pane.press({ key: 'log:conv:api:c-1' })
@@ -1732,6 +1735,8 @@ test("a session's card counts its unread inbox lines, and a press on the count o
   const screen = screenOf(await pane.drawn())
   expect(screen).toContain(' inbox/api.md')
   expect(screen).toContain(` ${inbox} · line 3`)
+  // Landing on its first unread line, drawn bold.
+  expect(await pane.find({ type: 'Text', text: /^line two\n?$/ })).toMatchObject({ props: { bold: true } })
 })
 
 test("the Team tab's Find field draws the sessions it names under their leaders; Enter on one opens its card, and back from a page the card opens shows the tasks list", async ($, on) => {
@@ -1956,6 +1961,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     'tasks',
     'changes',
     'log',
+    'inbox',
     'team',
     'find-key',
     'mine',
@@ -1974,7 +1980,8 @@ test("a task id in an open card opens that task's page: its title and card alone
   await pane.press({ key: gotoKey(drawn, 'T58') })
   expect(screenOf(await pane.drawn())).toEqual([
     ' po',
-    ' Tasks Changes Log Team',
+    ' Tasks Changes Log Inbox (2)',
+    ' Team',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all archive',
@@ -2029,6 +2036,7 @@ test('back, forward and the trail step through the places; the list keeps the he
     'tasks',
     'changes',
     'log',
+    'inbox',
     'team',
     'find-key',
     'mine',
@@ -2103,7 +2111,8 @@ test("a reference file in an open card opens as a page: its name, where it was r
   await pane.press({ key: toFile })
   expect(screenOf(await pane.drawn())).toEqual([
     ' po',
-    ' Tasks Changes Log Team',
+    ' Tasks Changes Log Inbox (2)',
+    ' Team',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all archive',
@@ -2157,13 +2166,77 @@ test("a reference file's line: its page lands on the paragraph that holds it, th
   expect(screen).toContain(' /work/docs/gone.md')
 })
 
-test("the header's inbox count opens the inbox as a page, landing on its first unread line, bold; reading it marks nothing read", async ($, on) => {
-  const { clock, disk } = await start(on)
-  // The fixture's three items, a blank line after the one read: the two unread start on line 3. Wide, so the page's head keeps
-  // the inbox's path and its line on one line.
-  disk.write(INBOX, ['line one', '', 'line two', 'line three'])
+/** An inbox of stamped lines, its first two read: one posted past the last 24 hours before NOW, one inside them. */
+const STAMPED_INBOX = [
+  '- 2026-10-12 09:00 lead: read a day ago',
+  '- 2026-10-13 10:00 docs: read today',
+  '- 2026-10-13 12:00 qa: the checks pass',
+  '- 2026-10-13 13:00 lead: ship the Inbox view',
+]
+
+/** The pane started on STAMPED_INBOX, read up to its third line, mounted wide. */
+async function startOnInbox($: TestEngine, on: On) {
+  const started = await start(on)
+  started.disk.write(INBOX, STAMPED_INBOX)
+  started.disk.write(MARKS, [markLine('po', 2, S1, NOW, '- 2026-10-13 10:00 docs: read today')])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  return { ...started, pane }
+}
+
+test("the switch's Inbox button counts the unread lines and opens the Inbox view: the last 24 hours' lines and the unread ones, the last written first, each unread one marked, under a Find field and no modes", async ($, on) => {
+  const { clock, disk, pane } = await startOnInbox($, on)
+  expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox (2)', hotkey: 'u', variant: 'secondary' })
+
+  await pane.press({ key: 'inbox' })
+  expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ variant: 'primary' })
+  expect(await drawsLine(pane, /^2 unread · 1 read in the last 24 hours$/)).toBe(true)
+  expect(await drawsLine(pane, /^● lead · 13:00 UTC$/)).toBe(true)
+  expect(await drawsLine(pane, /^● qa · 12:00 UTC$/)).toBe(true)
+  expect(await drawsLine(pane, /^docs · 10:00 UTC$/)).toBe(true)
+  const shown = screenOf(await pane.drawn()).map(line => line.trim())
+  const at = ['ship the Inbox view', 'the checks pass', 'read today'].map(words => shown.indexOf(words))
+  expect(at.every(index => index >= 0)).toBe(true)
+  expect(at).toEqual([...at].sort((a, b) => a - b))
+  expect(shown).not.toContain('read a day ago')
+  expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ placeholder: 'sender, words…', value: '', submitLabel: 'search' })
+  expect(buttonKeys(await pane.drawn())).not.toContain('mine')
+
+  // Once the session reads its inbox, the next poll draws the button as the word alone and no line marked.
+  disk.write(MARKS, [markLine('po', 4, S1, NOW, '- 2026-10-13 13:00 lead: ship the Inbox view')])
+  await clock.advance(POLL_MS)
+  expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox' })
+  expect(await drawsLine(pane, /^3 read in the last 24 hours$/)).toBe(true)
+  expect(await drawsLine(pane, /^lead · 13:00 UTC$/)).toBe(true)
+})
+
+test("the Inbox view's Find field draws the lines its words name, by sender or words; Enter opens nothing, and a switch to the Tasks view closes the search", async ($, on) => {
+  const { pane } = await startOnInbox($, on)
+  await pane.press({ key: 'inbox' })
+
+  await pane.input({ key: 'find', text: 'qa', kind: 'change' })
+  expect(await drawsLine(pane, /^1 line matches$/)).toBe(true)
+  expect(await drawsLine(pane, /^● qa · 12:00 UTC$/)).toBe(true)
+  expect(screenOf(await pane.drawn())).not.toContain('ship the Inbox view')
+  expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ submitLabel: 'search' })
+  expect(screenOf(await pane.drawn())).not.toContain('Enter:')
+  // Enter leaves the results as they are: a line has nothing to open.
+  await pane.input({ key: 'find', text: 'qa' })
+  expect(await drawsLine(pane, /^1 line matches$/)).toBe(true)
+
+  await pane.input({ key: 'find', text: 'ship', kind: 'change' })
+  expect(await drawsLine(pane, /^1 line matches$/)).toBe(true)
+  expect(await drawsLine(pane, /^● lead · 13:00 UTC$/)).toBe(true)
+
+  await pane.press({ key: 'tasks' })
+  expect(await drawsLine(pane, /match/)).toBe(false)
+  await pane.press({ key: 'inbox' })
+  expect(await drawsLine(pane, /match/)).toBe(false)
+  expect(await drawsLine(pane, /^2 unread · 1 read in the last 24 hours$/)).toBe(true)
+})
+
+test("the header's inbox count opens the Inbox view; reading it marks nothing read", async ($, on) => {
+  const { clock, pane } = await startOnInbox($, on)
   let drawn = await pane.drawn()
   const presses = buttonKeys(drawn).filter(key => key.startsWith('goto:inbox:'))
   expect(presses).toHaveLength(1)
@@ -2173,16 +2246,12 @@ test("the header's inbox count opens the inbox as a page, landing on its first u
 
   await pane.press({ key: toInbox })
   drawn = await pane.drawn()
-  const screen = screenOf(drawn)
-  expect(screen).toContain(' inbox/po.md')
-  expect(screen).toContain(` ${INBOX} · line 3`)
-  // The page fits its window, so the step to its first unread line leaves the window at the page's top.
-  expect(linesOf(keyedNode(drawn, 'window')).map(line => line.trimEnd())).toContain('line two')
-  expect(await pane.find({ type: 'Text', text: /^line two\n?$/ })).toMatchObject({ props: { bold: true } })
+  expect(keyedProps(drawn, 'inbox')).toMatchObject({ variant: 'primary' })
+  expect(await drawsLine(pane, /^2 unread · 1 read in the last 24 hours$/)).toBe(true)
 
-  // Back on the list after a poll, the two lines are still unread: the pane writes no mark.
-  await pane.press({ key: 'back' })
-  await clock.advance(3_000)
+  // Back on the tasks after a poll, the two lines are still unread: the pane writes no mark.
+  await pane.press({ key: 'tasks' })
+  await clock.advance(POLL_MS)
   expect(await pane.find({ text: /inbox 2 unread/ })).toBeDefined()
 })
 
@@ -2210,7 +2279,8 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   // no words.
   expect(screenOf(drawn)).toEqual([
     ' po',
-    ' Tasks Changes Log Team',
+    ' Tasks Changes Log Inbox (2)',
+    ' Team',
     ' Find  clear',
     ' Keys go to Claude · click the field to search',
     ' mine all archive',
@@ -2316,8 +2386,8 @@ test('the Find field keeps its index among the focusable elements on the list, w
   drawn = await pane.drawn()
   expect(keyedNode(drawn, 'week-steps')).not.toBe(null)
   indexes.push(fieldIndex(drawn))
-  // After Tasks, Changes, Log, Team and s: Find.
-  expect(indexes).toEqual([5, 5, 5, 5, 5])
+  // After Tasks, Changes, Log, Inbox, Team and s: Find.
+  expect(indexes).toEqual([6, 6, 6, 6, 6])
 })
 
 test("the line under the Find field says where the keys go: to Claude's prompt, to the pane, typed into the search, or on a result", async ($, on) => {
@@ -2441,7 +2511,8 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   expect(await pane.find({ type: 'Text', text: /^next ›$/ })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(drawn)).toEqual([
     ' po',
-    ' Tasks Changes Log Team',
+    ' Tasks Changes Log Inbox (2)',
+    ' Team',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all archive',
