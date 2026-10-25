@@ -12,7 +12,8 @@ every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick mov
 labels on. No model calls, so no tokens. Every time is on the team's clock and zone-marked
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
 session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
-to each team session's prompts and replies, or to the team's tree (Tasks, Changes, Log and Team, below). Docked, its first line
+to each team session's prompts and replies, or to its own inbox lines, or to the team's tree (Tasks, Changes, Log,
+Inbox and Team, below). Docked, its first line
 names the session as its tab title does (`[acme] pane`: the team, then the name without the team's prefix), so
 panes open in several tabs tell apart at a glance. That line and the controls under it stay put, and the body
 scrolls under them in a window of the pane's own: the mouse wheel moves it 3 rows a tick, PgUp and PgDn a
@@ -126,11 +127,11 @@ looks for the file where it looks for the lines a card quotes: an inbox in the i
 folder, a relative path in the session's folder and each folder above it, then in the team's folder. A file it does
 not find lists each path it looked at; one over 256 KiB, or not text, says why it is not shown.
 
-In the dock, a click on the header's `inbox 2 unread` opens the area's inbox the same way, as a file's page, at its
-first unread line, drawn bold (at the newest line when none is unread). Reading it there marks nothing read: the
-pane never writes an inbox, so the count drops only when the session runs `teamrig inbox read`.
+In the dock, a click on the header's `inbox 2 unread` opens the Inbox view (see Inbox, below). Reading it there marks
+nothing read: the pane never writes an inbox, so the count drops only when the session runs `teamrig inbox read`.
 
-In the Tasks view, and on the Team tab (see Team, below), the dock shows a Find field under its switch; `s` or a click
+In the Tasks view, the Inbox view and on the Team tab (see Inbox and Team, below), the dock shows a Find field under
+its switch; `s` or a click
 puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
 aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
@@ -217,8 +218,9 @@ empty prompt.
 The close mark (`✕`, or `ctrl+x x`) minimizes the pane to a one-row strip instead of closing it, so a
 stray click never loses it. The close is refused (a `ui.close` veto), so the pane also keeps its place
 among the panes the person opened: a later open needs 110 columns, not the 144 an unasked open needs.
-The strip is the Tasks / Changes / Log switch (below) and a `minimized` mark. To open it in full again, click
-any of its buttons, which opens the pane on that view, press `t`, `d` or `g` while the pane holds the keyboard
+The strip is the view switch (below), its Inbox button counting the unread lines, and a `minimized` mark. To open it
+in full again, click any of its buttons, which opens the pane on that view, press `t`, `d`, `g`, `u` or `e` while the
+pane holds the keyboard
 (`ctrl+x tab` or a click on it), or run `/teamrig-pane`. The size is kept in `$.store` (`paneSize`, one
 for the plugin), so the next session, after a restart or a hot reload too, opens as the last one was
 left. The plugin's own close and an unload still close it.
@@ -271,12 +273,13 @@ too), all of it once when the session starts. When nothing names the register, o
 the pointer file or the team config cannot be used, the pane draws one `WARN` line saying what to set
 or what is wrong.
 
-## Tasks, Changes, Log and Team
+## Tasks, Changes, Log, Inbox and Team
 
-The switch, `[Tasks] [Changes Δ3] [Log] [Team]`, shows in every state: open, in a dock however narrow (its
+The switch, `[Tasks] [Changes Δ3] [Log] [Inbox (2)] [Team]`, shows in every state: open, in a dock however narrow (its
 buttons wrap under each other rather than clip) under the title line, above the prompt, and as the
 minimized strip. While
-the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Log and `e` Team (`c` already closes the cards).
+the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Log, `u` Inbox and `e` Team (`c` already closes the
+cards, `i` shows the waiting tasks alone).
 
 Changes lists the files changed in the git repos the session works in: the repo of the session's folder,
 and the repo of each file the session or one of its agents writes (Edit, Write, NotebookEdit; a file a
@@ -358,6 +361,20 @@ While it shows, the list or the open page is read again on each 3 s poll: the se
 file is read again only when its size or time moved. The Log button, from a page or another view, shows the list.
 Above the prompt the list shows, never a page.
 
+### Inbox
+
+Inbox shows the session's own inbox (`<area>.md` in the inbox folder; a pin's area when pinned): the lines posted in
+the last 24 hours, read ones too, and every line past its last `teamrig inbox read` whatever its age, the newest first.
+A dim line counts them (`2 unread · 1 read in the last 24 hours`); each line gives its sender, bold, and when it was
+posted on the team's clock (`13:00 IDT` today, else `Mon 10-12 09:00 IDT`), over its words drawn whole, an unread
+one marked `●`. A line teamrig did not stamp (`- YYYY-MM-DD HH:MM <from>: <text>`) is left out. The switch's button
+counts the unread lines, `Inbox (2)`, and reads `Inbox` alone with none; an area that never ran `teamrig inbox read`
+marks none unread, its count unknown. With no line to show, the view says so. Reading it marks nothing read.
+
+The Find field searches the lines shown: each word must match, case aside, the start of a word in a line's sender or
+words. The body counts the lines it names (`1 line matches`) and draws each with the matched words underlined. A line
+has nothing to open, so Enter leaves the results as they are. A switch to another view closes the search.
+
 ### Team
 
 Team shows the tree of teams the session's team is in, from the top team down, read from the team folders teamrig
@@ -380,7 +397,7 @@ A card has one labelled line per fact the team's files hold, each only when it h
 it leads, or the area it owns), Led by (its leaders, nearest first), Launch (the model and effort teamrig starts it on),
 Hired or Rehired (the day, who hired it, the review day), Scope and Reason (its job and why), Now (its tasks in
 progress, each id a press that opens the task's page) and Inbox (its unread lines, a press that opens its inbox at the
-first of them). A retired session's card is its retire instead: the day and who retired it, why, the session its tasks
+first of them, the pane's own area's in the Inbox view). A retired session's card is its retire instead: the day and who retired it, why, the session its tasks
 went to (Heir), and its Handover, a press that opens the file, or why it left none. Now and Inbox show only for the pane's
 own team, whose register and inboxes it reads; a session that never marked its inbox read has no Inbox count. A page a
 card opens shows in the Tasks view, and back from it shows the tasks list.

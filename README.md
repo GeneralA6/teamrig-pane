@@ -52,7 +52,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   started; a click shows one status alone), then your tasks under Verifying, Working on, Up next,
   Waiting and Done today, each with a dim line saying why it stands there (what a waiting one waits for,
   what an open one comes after, which other session's task needs it); Waiting also holds what you asked of others, and the header counts your
-  unread inbox lines, a click on that count opening the inbox at its first unread line. `/teamrig-pane all` shows every owner's tasks, and `/teamrig-pane <session>`
+  unread inbox lines, a click on that count opening the Inbox view. `/teamrig-pane all` shows every owner's tasks, and `/teamrig-pane <session>`
   shows another session's, named by its id or its name.
 - **Details:** click a task, or press Enter on it, to open its card in place of its dim line: its
   description, status, note and proof, its priority, due date and week, the tasks it comes after and
@@ -60,9 +60,10 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   goals, who asked, when it was added and by whom, where its ask is written, its evidence and its links. `c` closes every card. A click on a task
   id in a card opens that task's page, and a click on a file it references opens the file at the line it names, with
   back and forward (`b`, `f`) and a trail of where you went.
-- **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log and Team switch (`s` or a click puts the cursor in it) that lists, as you type, the
+- **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log, Inbox and Team switch (`s` or a click puts the cursor in it) that lists, as you type, the
   tasks the pane holds whose id, title, owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.
-  On the Team tab the same field finds sessions by id, name, former names, roles or hire scope.
+  On the Inbox view the same field finds lines by sender or words, and on the Team tab sessions by id, name, former
+  names, roles or hire scope.
   A line under it says where your keys go: into the search, to the pane's keys, or to Claude's prompt.
 - **Archive:** `h` lists the tasks finished this week, a day at a time; `p` and `l` step a week back
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.
@@ -74,11 +75,14 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   lines oldest first, kept current as it writes, each split by who spoke (owner,
   Claude, another session, a subagent, the harness's dim notices) with its markdown drawn, and `b` goes back to the
   list.
+- **Inbox:** the session's own inbox lines of the last 24 hours and every unread one, the newest first, each with
+  its sender and time and the unread ones marked `●`; the switch's button counts them, `Inbox (2)`. Reading them
+  there marks nothing read: `teamrig inbox read` does.
 - **Team:** the tree of teams the session's team is in, read from teamrig's team folders: each team's counts of
   active and closed sessions, its lead over the sessions each leader leads, the retired ones in a closed group and the
   child teams under their parent; each session's row gives its id, its name, its roles, how many it leads and its hire
   or retire. A press on a row closes or opens what lies under it.
-  Press the switch, or `t`, `d`, `g` and `e` while the pane holds the keyboard.
+  Press the switch, or `t`, `d`, `g`, `u` and `e` while the pane holds the keyboard.
 
 ## How it reads teamrig
 
