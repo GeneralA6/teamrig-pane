@@ -10,7 +10,7 @@
 // shortened to its line, ending in `…`. Inline, above the prompt, each row is one truncated screen row and the rows
 // are capped. Widths are display cells (width.ts), so CJK and emoji sequences wrap where the terminal
 // wraps them and a cut never lands inside one.
-import type { RefFile } from '../types'
+import type { LogRead, RefFile } from '../types'
 import type { Block, Row, Span } from './rows'
 import { cells, graphemes } from './width'
 
@@ -34,7 +34,7 @@ export type CardPart =
   | { kind: 'press'; key: string; spans: Span[]; expands: string }
 /**
  * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, its
- * page when `opens` does (a search result), a session's Log page when `reads` does (docked only), or, inline, a
+ * page when `opens` does (a search result), a conversation's Log page when `reads` does (docked only), or, inline, a
  * Changes file's diff when `expands` does. `card`, set while that card is open, is the card's own parts, drawn under
  * the Button and outside it. `parts`, set docked when no press opens the element, it has no card and a line of its
  * holds a press (the header's inbox count), is its lines as parts, drawn in place of its Text.
@@ -45,7 +45,7 @@ export type Drawn = {
   wrap: 'wrap' | 'truncate-end'
   toggle: string | null
   opens?: string
-  reads?: string
+  reads?: LogRead
   expands?: string
   card?: CardPart[]
   parts?: CardPart[]

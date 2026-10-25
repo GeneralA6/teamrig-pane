@@ -6,7 +6,7 @@
 // opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
-import type { BarStatus, ExpandedTasks, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, LogRead, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
 import { cardRows } from './card'
 import { COMMAND } from './command'
 import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
@@ -53,10 +53,10 @@ export type Row = {
  * What draws as one element. `toggle` names the task a press on it opens or closes the card of; `card` holds
  * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press (a repo's files in
  * the Changes view are its header's card too, each a press of its own: changes-rows.ts); `opens` names
- * the task a press on it opens the page of (a search result, search-rows.ts); `reads` names the session a press on
- * it opens the Log page of (log-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.
+ * the task a press on it opens the page of (a search result, search-rows.ts); `reads` names the conversation a press
+ * on it opens the Log page of (log-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.
  */
-export type Block = { key: string; rows: Row[]; toggle?: string; opens?: string; reads?: string; card?: Row[]; opensSection?: boolean }
+export type Block = { key: string; rows: Row[]; toggle?: string; opens?: string; reads?: LogRead; card?: Row[]; opensSection?: boolean }
 
 export const NOTHING_EXPANDED: ExpandedTasks = {}
 /** Between a task's id and its title. */

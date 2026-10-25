@@ -1522,15 +1522,15 @@ async function startWithLogs(on: On, withConfig = true) {
   return started
 }
 
-test("the Log view lists the team's sessions with a turn log of its kept hours, the newest change first, each with its newest prompt", async ($, on) => {
+test('the Log view lists each conversation of its kept hours, the newest last line first, each titled by how it opened', async ($, on) => {
   const { clock, disk } = await startWithLogs(on)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   await pane.press({ key: 'log' })
   expect(await pane.find({ text: /Ship the team register/ })).toBeUndefined()
-  const sessions = async () => (await drawnLines(pane)).filter(line => /^(api|lead) · /.test(line)).map(line => line.slice(0, line.indexOf(' ')))
-  expect(await sessions()).toEqual(['api', 'lead'])
+  const conversations = async () => buttonKeys(await pane.drawn()).filter(key => key.startsWith('log:conv:'))
+  expect(await conversations()).toEqual(['log:conv:api:c-1', 'log:conv:lead:c-1'])
   expect(await drawnLines(pane)).toContain('Ship the log view')
   expect(await drawnLines(pane)).toContain('Plan the week')
 
@@ -1538,26 +1538,33 @@ test("the Log view lists the team's sessions with a turn log of its kept hours, 
   // all shows its team's tasks again.
   disk.write(`${WEB_LOG}/lead/2026-10-13T13.jsonl`, [turnLine(50, 'prompt', 'Plan the week'), turnLine(1, 'prompt', 'Review the plan')])
   await clock.advance(POLL_MS)
-  expect(await sessions()).toEqual(['lead', 'api'])
-  expect(await drawnLines(pane)).toContain('Review the plan')
+  expect(await conversations()).toEqual(['log:conv:lead:c-1', 'log:conv:api:c-1'])
+  expect(await drawnLines(pane)).toContain('lead · 13:10 UTC–13:59 UTC · 2 lines')
   await pane.press({ key: 'tasks' })
-  expect(await drawnLines(pane)).not.toContain('Review the plan')
+  expect(await drawnLines(pane)).not.toContain('lead · 13:10 UTC–13:59 UTC · 2 lines')
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /Ship the team register/ })).toBeDefined()
 })
 
-test('a press on a session opens its page: its lines oldest first, under back, kept current; back returns to the list', async ($, on) => {
+test('a press on a conversation opens its page: its title, its lines oldest first, under back, kept current; back returns to the list', async ($, on) => {
   const { clock, disk } = await startWithLogs(on)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
   await pane.press({ key: 'log' })
-  await pane.press({ key: 'log:session:api' })
+  await pane.press({ key: 'log:conv:api:c-1' })
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'back'])
-  expect(await pane.find({ text: /^lead · / })).toBeUndefined()
-  expect(await drawnLines(pane)).toContain('last 2 h · 3 lines, the newest last')
+  expect(await pane.find({ text: /^lead · /m })).toBeUndefined()
+  expect(await drawnLines(pane)).toContain('api · last 2 h · 3 lines, the newest last')
   const lines = async () => (await drawnLines(pane)).filter(line => /^(owner|Claude) · |^── |^Ship|^Next/.test(line))
-  expect(await lines()).toEqual(['owner · 13:20 UTC', 'Ship the log view', 'Claude · 13:21 UTC', 'Shipped it', '── 13:22 UTC · context cleared (/clear) ──'])
+  expect(await lines()).toEqual([
+    'Ship the log view',
+    'owner · 13:20 UTC',
+    'Ship the log view',
+    'Claude · 13:21 UTC',
+    'Shipped it',
+    '── 13:22 UTC · context cleared (/clear) ──',
+  ])
 
   disk.write(`${WEB_LOG}/api/2026-10-13T13.jsonl`, [
     turnLine(40, 'prompt', 'Ship the log view'),
@@ -1569,15 +1576,30 @@ test('a press on a session opens its page: its lines oldest first, under back, k
   expect((await lines()).at(-1)).toBe('Next step')
 
   await pane.press({ key: 'back' })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'log:session:api', 'log:session:lead'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'log:conv:api:c-1', 'log:conv:lead:c-1'])
 
   // Log from a page shows the list too, and inline the list shows alone.
-  await pane.press({ key: 'log:session:api' })
+  await pane.press({ key: 'log:conv:api:c-1' })
   await pane.press({ key: 'log' })
-  expect(await pane.find({ text: /^lead · / })).toBeDefined()
-  await pane.press({ key: 'log:session:api' })
+  expect(await pane.find({ text: /^lead · /m })).toBeDefined()
+  await pane.press({ key: 'log:conv:api:c-1' })
   await pane.redraw({ ...PANE_PROPS, placement: 'inline', scroll: { offset: 0, bodyRows: 10 } })
-  expect(await pane.find({ text: /^lead · / })).toBeDefined()
+  expect(await pane.find({ text: /^lead · /m })).toBeDefined()
+})
+
+test("the Log view titles a conversation by the task its session worked while it ran, from the register's events", async ($, on) => {
+  const { disk } = await startWithLogs(on)
+  disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
+    createLine('T8', { owner: 'lead', by: 'lead', at: NOW - HOUR, title: 'Plan the week ahead' }),
+    statusLine('T8', 'lead', NOW - 45 * 60_000, 'in-progress'),
+  ])
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  await pane.press({ key: 'log' })
+  expect(await drawnLines(pane)).toContain('T8 Plan the week ahead')
+  expect(await drawnLines(pane)).not.toContain('Plan the week')
+  expect(await drawnLines(pane)).toContain('Ship the log view')
 })
 
 test('the Log view says so when the session has no team', async ($, on) => {

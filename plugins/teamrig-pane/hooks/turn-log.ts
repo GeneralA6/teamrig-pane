@@ -3,23 +3,27 @@
 // removes whole hour files past the team's kept hours (its config's `turnLog.keepHours`), so the oldest file kept
 // can still hold older lines: the pane hides every line older than those hours. Each line is read by teamrig's
 // parseEntry: one of another version, one that does not parse (a torn last line) or one missing a field is
-// skipped, and fields the pane does not know are ignored. The list names the sessions with an hour file of the
-// kept hours, the newest change first, with each one's newest prompt; a session's page holds its newest lines,
-// oldest first, up to LOG_PAGE_CHARS of text, reading its files newest first and none past that. Each file read
-// is kept with its size and mtime, so a poll reads again only a file that moved. While the Log view shows, a
-// POLL_MS poll reads what it shows again, writing only what changed. Reads files only: no git, no model.
-import type { LogList, LogPage, LogSession, TurnEntry } from '../types'
+// skipped, and fields the pane does not know are ignored. A conversation is a session's lines with one Claude Code
+// session id: a /clear writes its clear line with the new id, so it opens the next conversation, and a compaction's
+// keeps the id. The list reads every file of the kept hours and names each conversation with a line in them, the
+// newest last line first, with how it opened (the owner's first words, else Claude's first reply); a
+// conversation's page holds its newest lines, oldest first, up to LOG_PAGE_CHARS of text, reading the session's
+// files newest first and none past that. Each file read is kept with its size and mtime, so a poll reads again only
+// a file that moved. While the Log view shows, a POLL_MS poll reads what it shows again, writing only what changed.
+// Reads files only: no git, no model.
+import type { LogConversation, LogList, LogOpening, LogPage, LogRead, TurnEntry } from '../types'
 import { parseEntry, SESSION_NAME } from './core/read/index'
 import { messageOf } from './errors'
 import { POLL_MS, type Timer } from './live'
+import { turnParts } from './turn-text'
 
 const HOUR_MS = 3_600_000
 /** The most text a session's page holds, its newest lines: as much as a file page shows (ref-file.ts MAX_PAGE_BYTES), so a busy day never lays out megabytes. */
 export const LOG_PAGE_CHARS = 256 * 1024
 /** An hour's file, `2026-10-19T09.jsonl`: the names sort by time. */
 const HOUR_FILE = /^(\d{4}-\d{2}-\d{2}T\d{2})\.jsonl$/
-/** The most of a prompt's first line the list keeps: it draws two lines of it at most. */
-const PROMPT_CHARS = 200
+/** The most of an opening's first line the list keeps: it draws two lines of it at most. */
+const OPENING_CHARS = 200
 
 /** A folder's entry as the reader needs it: the engine's `$.fs.list` answers these. */
 export type LogDirEntry = { name: string; kind: 'file' | 'dir' | 'other'; size: number; mtimeMs: number }
@@ -72,30 +76,76 @@ function isInWindow(entry: TurnEntry, start: number): boolean {
   return !Number.isNaN(at) && at >= start
 }
 
-/** An hour file of a session's folder: its path, its stamp, and when it changed. */
-type HourFile = { path: string; stamp: string; changedAt: number }
+/** An hour file of a session's folder: its path, and its stamp. */
+type HourFile = { path: string; stamp: string }
 
-/** A prompt's first line with text, cut at PROMPT_CHARS. */
+/** A text's first line with words, cut at OPENING_CHARS. */
 function firstLine(text: string): string {
   const line = text.split(/\r?\n/).find(part => part.trim() !== '')?.trim() ?? ''
-  return line.length > PROMPT_CHARS ? `${line.slice(0, PROMPT_CHARS - 1)}…` : line
+  return line.length > OPENING_CHARS ? `${line.slice(0, OPENING_CHARS - 1)}…` : line
 }
 
-/** What a page read found in one file: its entries of the window, and the stamp it was read at. */
+/** What a page read found in one file: its entries, and the stamp it was read at. */
 type FileRead = { stamp: string; entries: readonly TurnEntry[] }
 
-/** The newest prompt a file holds, when, and the stamp it was read at. */
-type PromptRead = { stamp: string; prompt: { at: number; line: string } | null }
+/**
+ * A line as the list needs it: when (ms), its Claude Code session id, the first line of the owner's first words in a
+ * prompt, and of a reply's words; a clear, and a prompt of harness notices alone, have neither.
+ */
+export type ListEntry = { readonly at: number; readonly claude: string; readonly owner: string | null; readonly reply: string | null }
+
+/** What a list read found in one file: its entries with a readable time, and the stamp it was read at. */
+type ListRead = { stamp: string; entries: readonly ListEntry[] }
+
+/** The entry the list keeps of a line; null for one with an unreadable time. */
+function listEntry(entry: TurnEntry): ListEntry | null {
+  const at = Date.parse(entry.at)
+  if (Number.isNaN(at)) return null
+  if (entry.kind === 'clear') return { at, claude: entry.claude, owner: null, reply: null }
+  const parts = turnParts(entry.kind, entry.text)
+  const said = parts.find(part => part.speaker.kind === (entry.kind === 'prompt' ? 'owner' : 'claude'))
+  const line = said === undefined ? null : firstLine(said.text)
+  return { at, claude: entry.claude, owner: entry.kind === 'prompt' ? line : null, reply: entry.kind === 'reply' ? line : null }
+}
+
+/** How a conversation's entries open: the owner's first words, else Claude's first reply; null for neither. */
+function openingOf(entries: readonly ListEntry[]): LogOpening | null {
+  const owner = entries.find(entry => entry.owner !== null)?.owner
+  if (owner !== undefined && owner !== null) return { by: 'owner', line: owner }
+  const reply = entries.find(entry => entry.reply !== null)?.reply
+  return reply === undefined || reply === null ? null : { by: 'claude', line: reply }
+}
+
+/**
+ * A session's conversations in its entries of the window, oldest first: its entries grouped by Claude Code session
+ * id, each conversation's next one the one that began after it. Pure.
+ */
+export function conversationsOf(session: string, entries: readonly ListEntry[]): LogConversation[] {
+  const groups = new Map<string, ListEntry[]>()
+  for (const entry of entries) {
+    const group = groups.get(entry.claude)
+    if (group === undefined) groups.set(entry.claude, [entry])
+    else group.push(entry)
+  }
+  const found = [...groups].flatMap(([claude, group]) => {
+    const first = group[0]
+    const last = group.at(-1)
+    if (first === undefined || last === undefined) return []
+    return [{ claude, firstAt: first.at, lastAt: last.at, lines: group.length, opening: openingOf(group) }]
+  })
+  found.sort((a, b) => a.firstAt - b.firstAt)
+  return found.map((conversation, i) => ({ session, ...conversation, nextAt: found[i + 1]?.firstAt ?? null }))
+}
 
 /**
  * Reads a team's turn log for the Log view, over the hours teamrig keeps it. Each file it reads is kept with its
- * stamp: the list keeps each file's newest prompt, the page the entries of the session it shows, and both drop what
- * a read no longer lists.
+ * stamp: the list keeps each file's entries as it needs them, the page those of the session it shows, and both drop
+ * what a read no longer lists.
  */
 export class TurnLogReader {
   private readonly files: LogFiles
   private readonly log: TurnLogPlace
-  private prompts = new Map<string, PromptRead>()
+  private listReads = new Map<string, ListRead>()
   private pageReads = new Map<string, FileRead>()
   /** The page it last read, and what it was read from: an unmoved read answers that same page. */
   private lastPage: { page: LogPage; from: string } | null = null
@@ -105,7 +155,7 @@ export class TurnLogReader {
     this.log = log
   }
 
-  /** The sessions with an hour file in the window at `now`, the newest change first. */
+  /** Each session's conversations with a line in the window at `now`, the newest last line first. */
   async list(now: number): Promise<LogList> {
     const { dir, keepHours } = this.log
     const start = windowStart(now, keepHours)
@@ -113,30 +163,34 @@ export class TurnLogReader {
       const entries = await this.files.list(dir)
       if (entries === null) return { kind: 'no-log' }
       const ids = entries.filter(entry => entry.kind === 'dir' && SESSION_NAME.test(entry.name)).map(entry => entry.name)
-      const kept = new Map<string, PromptRead>()
-      const sessions: LogSession[] = []
+      const kept = new Map<string, ListRead>()
+      const conversations: LogConversation[] = []
       for (const id of ids) {
-        const hours = await this.hours(dir, id, start)
-        const newest = hours.at(-1)
-        if (newest === undefined) continue
-        sessions.push({ id, changedAt: newest.changedAt, lastPrompt: await this.lastPrompt(hours, start, kept) })
+        const inWindow: ListEntry[] = []
+        for (const hour of await this.hours(dir, id, start)) {
+          const read = await this.listRead(hour)
+          kept.set(hour.path, read)
+          inWindow.push(...read.entries.filter(entry => entry.at >= start))
+        }
+        conversations.push(...conversationsOf(id, inWindow))
       }
-      this.prompts = kept
-      return { kind: 'sessions', hours: keepHours, sessions: sessions.sort((a, b) => b.changedAt - a.changedAt || a.id.localeCompare(b.id)) }
+      this.listReads = kept
+      conversations.sort((a, b) => b.lastAt - a.lastAt || a.session.localeCompare(b.session) || a.claude.localeCompare(b.claude))
+      return { kind: 'conversations', hours: keepHours, conversations }
     } catch (error) {
       return { kind: 'failed', reason: messageOf(error) }
     }
   }
 
-  /** The session's newest lines of the window at `now`, oldest first, up to LOG_PAGE_CHARS of text. */
-  async page(session: string, now: number): Promise<LogPage> {
+  /** The newest lines of the session's conversation `claude` in the window at `now`, oldest first, up to LOG_PAGE_CHARS of text. */
+  async page(session: string, claude: string, now: number): Promise<LogPage> {
     const { dir, keepHours } = this.log
     const start = windowStart(now, keepHours)
     let hours: HourFile[]
     try {
       hours = await this.hours(dir, session, start)
     } catch (error) {
-      return { session, hours: keepHours, entries: [], isCut: false, problem: messageOf(error) }
+      return { session, claude, hours: keepHours, entries: [], isCut: false, problem: messageOf(error) }
     }
     const kept = new Map<string, FileRead>()
     const newestFirst: TurnEntry[] = []
@@ -147,13 +201,14 @@ export class TurnLogReader {
       if (isCut) break
       let read: FileRead
       try {
-        read = await this.pageRead(hour, start)
+        read = await this.pageRead(hour)
       } catch (error) {
         problem ??= `${hour.path}: ${messageOf(error)}`
         continue
       }
       kept.set(hour.path, read)
-      for (const entry of [...read.entries].reverse()) {
+      const shown = read.entries.filter(entry => entry.claude === claude && isInWindow(entry, start))
+      for (const entry of shown.reverse()) {
         // The newest line always shows; teamrig cuts each to 64k characters, under the page's cap.
         if (newestFirst.length > 0 && chars + entry.text.length > LOG_PAGE_CHARS) {
           isCut = true
@@ -166,9 +221,9 @@ export class TurnLogReader {
     this.pageReads = kept
     const entries = newestFirst.reverse()
     // The window moves on with `now`, so what was read is the files' stamps and the first line shown.
-    const from = [session, problem, ...[...kept.entries()].map(([path, read]) => `${path}@${read.stamp}`), entries[0]?.at, entries.length].join('|')
+    const from = [session, claude, problem, ...[...kept.entries()].map(([path, read]) => `${path}@${read.stamp}`), entries[0]?.at, entries.length].join('|')
     if (this.lastPage?.from === from) return this.lastPage.page
-    const page: LogPage = { session, hours: keepHours, entries, isCut, problem }
+    const page: LogPage = { session, claude, hours: keepHours, entries, isCut, problem }
     this.lastPage = { page, from }
     return page
   }
@@ -181,36 +236,28 @@ export class TurnLogReader {
       .flatMap(entry => {
         const hour = entry.kind === 'file' ? HOUR_FILE.exec(entry.name)?.[1] : undefined
         if (hour === undefined || Date.parse(`${hour}:00:00Z`) + HOUR_MS <= start) return []
-        return [{ hour, file: { path: `${folder}/${entry.name}`, stamp: `${entry.mtimeMs}:${entry.size}`, changedAt: entry.mtimeMs } }]
+        return [{ hour, file: { path: `${folder}/${entry.name}`, stamp: `${entry.mtimeMs}:${entry.size}` } }]
       })
       .sort((a, b) => a.hour.localeCompare(b.hour))
       .map(found => found.file)
   }
 
-  /** The first line of the session's newest prompt in the window, reading its files newest first; null for none. */
-  private async lastPrompt(hours: readonly HourFile[], start: number, kept: Map<string, PromptRead>): Promise<string | null> {
-    for (const hour of [...hours].reverse()) {
-      const known = this.prompts.get(hour.path)
-      const read: PromptRead = known?.stamp === hour.stamp ? known : { stamp: hour.stamp, prompt: newestPrompt(await this.files.read(hour.path)) }
-      kept.set(hour.path, read)
-      if (read.prompt !== null && read.prompt.at >= start) return read.prompt.line
-    }
-    return null
+  /** The file's entries as the list keeps them, read again only when its stamp moved. */
+  private async listRead(hour: HourFile): Promise<ListRead> {
+    const known = this.listReads.get(hour.path)
+    if (known?.stamp === hour.stamp) return known
+    const entries = parseTurnLines(await this.files.read(hour.path)).flatMap(entry => listEntry(entry) ?? [])
+    return { stamp: hour.stamp, entries }
   }
 
-  /** The file's entries in the window, read again only when its stamp moved. */
-  private async pageRead(hour: HourFile, start: number): Promise<FileRead> {
+  /**
+   * The file's entries, read again only when its stamp moved: all of them, as a page of another conversation of the
+   * session reads the same file.
+   */
+  private async pageRead(hour: HourFile): Promise<FileRead> {
     const known = this.pageReads.get(hour.path)
-    const read = known?.stamp === hour.stamp ? known : { stamp: hour.stamp, entries: parseTurnLines(await this.files.read(hour.path)) }
-    return { stamp: read.stamp, entries: read.entries.filter(entry => isInWindow(entry, start)) }
+    return known?.stamp === hour.stamp ? known : { stamp: hour.stamp, entries: parseTurnLines(await this.files.read(hour.path)) }
   }
-}
-
-/** A file's newest prompt with a readable time, and its first line; null for none. */
-function newestPrompt(text: string): PromptRead['prompt'] {
-  const prompts = parseTurnLines(text).filter(entry => entry.kind === 'prompt' && !Number.isNaN(Date.parse(entry.at)))
-  const newest = prompts.at(-1)
-  return newest === undefined ? null : { at: Date.parse(newest.at), line: firstLine(newest.text) }
 }
 
 /** What the Log view's poll needs: the reader, the clock, what the view shows, and the writes that redraw it. */
@@ -219,22 +266,40 @@ export type LogPorts = {
   now: () => Promise<number>
   /** True while the pane shows the Log view, open (not minimized). */
   isShown: () => Promise<boolean>
-  /** The session whose page shows, null for the list. */
-  shownPage: () => Promise<string | null>
+  /** The conversation whose page shows, null for the list. */
+  shownPage: () => Promise<LogRead | null>
   publishList: (list: LogList) => Promise<void>
   /** Writes the page, or with null goes back to the list. */
   publishPage: (page: LogPage | null) => Promise<void>
 }
 
+/** Two openings that draw the same. */
+function sameOpening(a: LogOpening | null, b: LogOpening | null): boolean {
+  return a === null || b === null ? a === b : a.by === b.by && a.line === b.line
+}
+
+/** Two conversations that draw the same. */
+function sameConversation(a: LogConversation, b: LogConversation): boolean {
+  return (
+    a.session === b.session &&
+    a.claude === b.claude &&
+    a.firstAt === b.firstAt &&
+    a.lastAt === b.lastAt &&
+    a.nextAt === b.nextAt &&
+    a.lines === b.lines &&
+    sameOpening(a.opening, b.opening)
+  )
+}
+
 /** Two lists that draw the same. */
 function sameList(a: LogList, b: LogList): boolean {
-  if (a.kind !== 'sessions' || b.kind !== 'sessions') return JSON.stringify(a) === JSON.stringify(b)
+  if (a.kind !== 'conversations' || b.kind !== 'conversations') return JSON.stringify(a) === JSON.stringify(b)
   return (
     a.hours === b.hours &&
-    a.sessions.length === b.sessions.length &&
-    a.sessions.every((session, i) => {
-      const other = b.sessions[i]
-      return other !== undefined && session.id === other.id && session.changedAt === other.changedAt && session.lastPrompt === other.lastPrompt
+    a.conversations.length === b.conversations.length &&
+    a.conversations.every((conversation, i) => {
+      const other = b.conversations[i]
+      return other !== undefined && sameConversation(conversation, other)
     })
   )
 }
@@ -279,16 +344,16 @@ export class LiveLog {
     if (this.isPolling) return
     this.isPolling = true
     try {
-      const session = await this.ports.shownPage()
+      const shown = await this.ports.shownPage()
       const now = await this.ports.now()
-      if (session === null) {
+      if (shown === null) {
         const list = await this.ports.reader.list(now)
         if (this.shownList === null || !sameList(this.shownList, list)) {
           await this.ports.publishList(list)
           this.shownList = list
         }
       } else {
-        const page = await this.ports.reader.page(session, now)
+        const page = await this.ports.reader.page(shown.session, shown.claude, now)
         if (page !== this.shownPage) {
           await this.ports.publishPage(page)
           this.shownPage = page
@@ -301,9 +366,9 @@ export class LiveLog {
     }
   }
 
-  /** Opens the session's page, read now. */
-  async open(session: string): Promise<void> {
-    const page = await this.ports.reader.page(session, await this.ports.now())
+  /** Opens the conversation's page, read now. */
+  async open(read: LogRead): Promise<void> {
+    const page = await this.ports.reader.page(read.session, read.claude, await this.ports.now())
     await this.ports.publishPage(page)
     this.shownPage = page
   }

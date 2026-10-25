@@ -437,11 +437,11 @@ describe('rows', () => {
     ])
     // The Text it replaces holds the same line, so the window counts the same rows.
     expect(header?.spans.map(span => span.text).join('')).toBe(`1 active · inbox 2 unread ${'─'.repeat(14)}`)
-    // A block a press opens, a task's, keeps its one Text; so does a Log session's, which opens its page.
+    // A block a press opens, a task's, keeps its one Text; so does a Log conversation's, which opens its page.
     expect(task?.parts).toBeUndefined()
-    const session: Block = { key: 'log:session:api', rows: [{ key: 'log:session:api', spans: [count] }] }
-    expect(dockLayout([session], 40)[0]?.parts).toBeDefined()
-    expect(dockLayout([{ ...session, reads: 'api' }], 40)[0]?.parts).toBeUndefined()
+    const conversation: Block = { key: 'log:conv:api:c-1', rows: [{ key: 'log:conv:api:c-1', spans: [count] }] }
+    expect(dockLayout([conversation], 40)[0]?.parts).toBeDefined()
+    expect(dockLayout([{ ...conversation, reads: { session: 'api', claude: 'c-1' } }], 40)[0]?.parts).toBeUndefined()
     expect(inlineLayout(blocks, 6)[0]).toEqual({ key: 'header', spans: [{ text: '1 active · ', dim: true }, count], wrap: 'truncate-end', toggle: null })
     expect(piecesOf([count, { ...count, inbox: 'etl' }])).toHaveLength(2)
     // With no count, the header holds no press and stays one Text.
