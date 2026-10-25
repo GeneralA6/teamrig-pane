@@ -876,7 +876,7 @@ export const register: Register = on => {
       if (target === 'team') await teaming?.refresh()
     }
     // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Team tab session's
-    // card, the header's inbox count) shows the Tasks view at it, over its list: back shows the list, never the Team
+    // card, or another area's inbox count on it) shows the Tasks view at it, over its list: back shows the list, never the Team
     // tab's search; from the Tasks view's list, the list remembers `from`, the element the press was in, to scroll back to.
     const openPlace = async (place: Place, from: string) => {
       const shown = await read($, view)
