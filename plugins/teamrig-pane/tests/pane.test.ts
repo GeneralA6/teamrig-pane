@@ -583,6 +583,44 @@ test("docked, a long list's first and last tasks are drawn wherever the window s
   expect(shown).not.toContain('1')
 })
 
+test('docked, the focus ring landing on a press out of the window moves the window the least that shows it; a landing in view leaves the window where it is', async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(
+    EVENTS,
+    Array.from({ length: 200 }, (_, i) => createLine(`T${i + 1}`, { owner: 'po', by: 'lead', at: NOW - HOUR, title: `Long list task ${i + 1}` })),
+  )
+  // Beneath the plugin, the engine moves the focus ring.
+  on('ui.focus', async () => ({}))
+  const land = (element: string) => $.ui.focus({ component: 'Pane', requestId: 'teamrig-pane', plugin: 'teamrig-pane', element, origin: { kind: 'person' } })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'all' })
+  const numbers = async () =>
+    (await pane.findAll({ type: 'Text', text: /Long list task \d+/ })).map(found => Number(/Long list task (\d+)/.exec(found.text)?.[1]))
+  const header = linesOf(keyedNode(await pane.drawn(), 'header'))
+  const top = await numbers()
+  expect(top).toContain(1)
+  // Tab on from the last task the window shows lands on the next one's stand-in: the window moves down just enough
+  // that it is the last task shown, the header put above it.
+  const next = Math.max(...top) + 1
+  expect(await land(`po:T${next}`)).toEqual({})
+  const moved = await numbers()
+  expect(Math.max(...moved)).toBe(next)
+  expect(moved).not.toContain(1)
+  expect(linesOf(keyedNode(await pane.drawn(), 'header'))).toEqual(header)
+  // A landing on a task already in view, and one on a header button, keep the window still.
+  await land(`po:T${Math.min(...moved)}`)
+  expect(await numbers()).toEqual(moved)
+  await land('all')
+  expect(await numbers()).toEqual(moved)
+  // Shift+Tab back onto task 1, its title above the window's top, moves the window up just enough that task 1 leads it
+  // (the owner's heading above it stays out of view).
+  await land('po:T1')
+  const back = await numbers()
+  expect(back[0]).toBe(1)
+  expect(back).not.toContain(next + 1)
+})
+
 /** A drawn element's props, when it has any. */
 function propsOf(node: unknown): object | null {
   return typeof node === 'object' && node !== null && 'props' in node && typeof node.props === 'object' && node.props !== null ? node.props : null

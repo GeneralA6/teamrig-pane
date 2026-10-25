@@ -55,10 +55,10 @@ import { RefFileReader } from './ref-file'
 import { DEFAULT_REGISTER, TimeZone } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
-import { diffKey, pieceKey, pressesFrom, standInsOf } from './press-keys'
+import { diffKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
 import { buttonCells, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
-import { barSpans, blankSpans, frameOf, placesOf, scrolledBy, viewOf, type FrameSlot, type View } from './frame'
+import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, type FrameSlot, type Placed, type View } from './frame'
 import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
@@ -655,14 +655,6 @@ export const register: Register = on => {
   // task. A task's block is a plain Button around its Text, so a press (or Enter on it) expands or
   // collapses the task. Docked, the header stays put and the body scrolls under it in a window the pane keeps
   // itself (frame.ts), cut to the rows it shows, a blank Text of a row between two blocks.
-  // Each landing of the pane's focus ring the engine let through is counted, the line under the Find field reading
-  // where the keys go from it (find-field.ts). A failed count lets the ring move as it would have.
-  on('ui.focus', { requestId: PANE }, async ($, e, next) => {
-    const moved = await next(e)
-    if (moved.deny === undefined) await update($, ring, current => landedOn(current, e.element))
-    return moved
-  }).catch(($, e, next) => next(e))
-
   /** Where the keys were as the pane last drew (find-field.ts): every drawing updates it, whatever it shows. */
   let keysMemo = FIRST_MEMO
   /** The rows the last docked layout wrapped: a drawing re-wraps only the rows that changed since. */
@@ -674,6 +666,25 @@ export const register: Register = on => {
   let lastView: View | null = null
   /** The reveal the window last settled on (body-scroll.ts settle), held while no new step comes. */
   let settled: Settled | null = null
+  /** Where the last docked drawing placed the body's elements (frame.ts placesOf); none while it draws no window of its own. */
+  let lastPlaces: readonly Placed[] = []
+
+  // Each landing of the pane's focus ring the engine let through is counted, the line under the Find field reading
+  // where the keys go from it (find-field.ts). A landing on a body press the docked window does not show whole (Tab or
+  // an arrow on from the last row it shows, onto a stand-in or a cut element) moves the window the least that shows
+  // it, so the ring is never out of sight; a landing in view or in the header leaves it. A failed count or move lets
+  // the ring move as it would have.
+  on('ui.focus', { requestId: PANE }, async ($, e, next) => {
+    const moved = await next(e)
+    if (moved.deny !== undefined) return moved
+    await update($, ring, current => landedOn(current, e.element))
+    const view = lastView
+    const place = view === null || e.element === undefined ? null : placeOf(lastPlaces, e.element)
+    if (view === null || place === null) return moved
+    const offset = revealed(place, view, 'nearest')
+    if (offset !== view.offset) await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset }))
+    return moved
+  }).catch(($, e, next) => next(e))
   // A person's wheel tick, arrow or page key over the docked pane moves the body's own window from where it last stood
   // (frame.ts scrolledBy), never the engine's, so the header stays put. A plugin's scroll, or one while the pane draws
   // no window of its own, goes on to the engine. A failed write lets the engine take the scroll as it would have.
@@ -971,8 +982,13 @@ export const register: Register = on => {
     // The header and body as they are, one under the other, in no window of their own. Inline (gap 0) inlineLayout cut
     // the rows to fit; a dock whose header is too tall to stay put (HEADER_MAX_SHARE) draws every block, a blank row
     // apart, and the engine's window scrolls the pane as one.
-    const drawFlat = (header: readonly HeaderPart[], gap: number) => {
+    // A drawing with no window of its own: the engine's window takes the scrolls, and every press is drawn in it.
+    const drawnWithoutWindow = () => {
       lastView = null
+      lastPlaces = []
+    }
+    const drawFlat = (header: readonly HeaderPart[], gap: number) => {
+      drawnWithoutWindow()
       return (
         <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={gap}>
           {header.map(part => part.node)}
@@ -995,6 +1011,7 @@ export const register: Register = on => {
       settled = landed.settled
       const frame = viewOf(places, landed.offset, visibleRows)
       lastView = frame
+      lastPlaces = places
       const out = standInsOf(places, frame)
       const bar = barSpans(frame)
       return (
@@ -1091,7 +1108,7 @@ export const register: Register = on => {
     ]
     const switchRow = drawPacked('switch', switchItems, 1)
     if (isMinimized && body.length === 0) {
-      lastView = null
+      drawnWithoutWindow()
       return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>
     }
     // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
