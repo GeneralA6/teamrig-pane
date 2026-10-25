@@ -1,8 +1,9 @@
-// What any search draws under its Find field (search-rows.ts draws the Tasks view's on it; the Inbox, Log and Changes
-// searches, T772-T774, will too): the hint while the query has no word, one line that says so when nothing matches,
-// else a dim line counting the matches, then one block per result shown, keyed by the view and its id (resultKey), so
-// the focus ring can be told on a result. A result underlines the words that matched (markedSpans) and shows a long
-// field from a little before its first match (excerpt). Pure: blocks of rows (rows.ts) that layout.ts wraps.
+// What any search draws under its Find field (search-rows.ts draws the Tasks view's on it, team-rows.ts the Team tab's;
+// the Inbox, Log and Changes searches, T772-T774, will too): the hint while the query has no word, one line that says
+// so when nothing matches, else a dim line counting the matches, then the results' blocks, each result's keyed by the
+// view and its id (resultKey), so the focus ring can be told on a result. A result underlines the words that matched
+// (markedSpans) and shows a long field from a little before its first match (excerpt). Pure: blocks of rows (rows.ts)
+// that layout.ts wraps.
 import { single, type Block, type Span } from './rows'
 import { queryWords, type Mark } from './search'
 
@@ -23,8 +24,13 @@ export type SearchView = {
   /** What a query nothing matches shows. */
   nothing: string
   noun: Noun
-  /** One block per result shown, in order, the search's cap already applied, each keyed `resultKey(key, <its id>)`. */
+  /**
+   * The blocks drawn under the count, in order, the search's cap already applied: one per result shown, each keyed
+   * `resultKey(key, <its id>)`, and, for a search drawn as a tree (the Team tab's), the rows that lead to them.
+   */
   results: readonly Block[]
+  /** How many results those blocks show. */
+  shown: number
   /** How many results matched, those past the cap too. */
   total: number
 }
@@ -70,5 +76,5 @@ export function countWords(total: number, shown: number, noun: Noun): string {
 export function searchViewBlocks(view: SearchView): Block[] {
   if (queryWords(view.query).length === 0) return [single(`${view.key}-hint`, [{ text: view.hint, dim: true }])]
   if (view.total === 0) return [single(`${view.key}-none`, [{ text: view.nothing, dim: true }])]
-  return [single(`${view.key}-count`, [{ text: countWords(view.total, view.results.length, view.noun), dim: true }]), ...view.results]
+  return [single(`${view.key}-count`, [{ text: countWords(view.total, view.shown, view.noun), dim: true }]), ...view.results]
 }

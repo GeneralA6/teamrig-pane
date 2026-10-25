@@ -11,6 +11,7 @@ const VIEW: SearchView = {
   nothing: 'No note matches.',
   noun: NOTES,
   results: [single('notes:1', [{ text: 'the feed' }]), single('notes:2', [{ text: 'feed it' }])],
+  shown: 2,
   total: 2,
 }
 /** Each block's rows as text. */
@@ -48,11 +49,20 @@ describe('search view', () => {
     const blocks = searchViewBlocks(VIEW)
     expect(blocks.map(block => block.key)).toEqual(['notes-count', 'notes:1', 'notes:2'])
     expect(blocks[0]?.rows[0]?.spans).toEqual([{ text: '2 notes match', dim: true }])
-    expect(textOf(searchViewBlocks({ ...VIEW, results: VIEW.results.slice(0, 1), total: 5 }))).toEqual([
+    expect(textOf(searchViewBlocks({ ...VIEW, results: VIEW.results.slice(0, 1), shown: 1, total: 5 }))).toEqual([
       '5 notes match, 1 shown: add a word to narrow them',
       'the feed',
     ])
     expect(searchViewBlocks({ ...VIEW, query: '  ' })).toEqual([single('notes-hint', [{ text: 'Type words to find a note.', dim: true }])])
-    expect(searchViewBlocks({ ...VIEW, results: [], total: 0 })).toEqual([single('notes-none', [{ text: 'No note matches.', dim: true }])])
+    expect(searchViewBlocks({ ...VIEW, results: [], shown: 0, total: 0 })).toEqual([single('notes-none', [{ text: 'No note matches.', dim: true }])])
+  })
+
+  test('a search drawn as a tree counts the results its blocks show, never the rows that lead to them', async () => {
+    const tree = [single('notes-folder', [{ text: 'folder' }]), ...VIEW.results.slice(0, 1)]
+    expect(textOf(searchViewBlocks({ ...VIEW, results: tree, shown: 1, total: 3 }))).toEqual([
+      '3 notes match, 1 shown: add a word to narrow them',
+      'folder',
+      'the feed',
+    ])
   })
 })
