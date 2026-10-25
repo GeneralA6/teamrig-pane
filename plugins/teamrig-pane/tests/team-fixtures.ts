@@ -31,8 +31,9 @@ export function tasksOf(...lines: string[]): TaskRow[] {
 }
 
 /**
- * Team acme: lead over web and ops, web a sub-lead over api and ui; ops the security reviewer. ui was hired; qa was
- * hired, renamed and retired; ops was hired, retired and hired again. api was renamed acme-backend.
+ * Team acme: lead over web and ops, web a sub-lead over api and ui; ops the security reviewer. ui was hired, and
+ * launches on its own model and effort; qa was hired, renamed and retired; ops was hired, retired and hired again. api
+ * was renamed acme-backend. api has 2 unread inbox lines, lead none, ui never marked its inbox read.
  */
 export const ACME: TeamRead = {
   team: 'acme',
@@ -41,6 +42,7 @@ export const ACME: TeamRead = {
     sessions: ['lead', 'web', 'api', 'ui', 'ops'],
     roles: { lead: 'lead', securityReviewer: 'ops' },
     leads: { web: ['api', 'ui'] },
+    launch: { ui: { model: 'claude-opus-5-5', effort: 'xhigh' } },
   }),
   renames: [rename('api', 'acme-api', 'acme-backend'), rename('qa', 'acme-qa', 'acme-tester')],
   hires: [
@@ -58,6 +60,11 @@ export const ACME: TeamRead = {
     createLine('T3', { at: NOW - 10 * HOUR, by: 'lead', owner: 'web', title: 'Plan the page' }),
     statusLine('T3', 'web', NOW - 8 * HOUR, 'in-progress'),
   ),
+  unread: new Map([
+    ['api', 2],
+    ['lead', 0],
+    ['qa', 1],
+  ]),
 }
 
 /** Team tools, a child team of acme: boss over dev. */
@@ -67,6 +74,7 @@ export const TOOLS: TeamRead = {
   renames: [],
   hires: [],
   tasks: null,
+  unread: null,
 }
 
 /** Another root team on the machine: another project. */
@@ -76,6 +84,7 @@ export const OTHER: TeamRead = {
   renames: [],
   hires: [],
   tasks: null,
+  unread: null,
 }
 
 /** The tree that holds `own`, failing the test when there is none. */
