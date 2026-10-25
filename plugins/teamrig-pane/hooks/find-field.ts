@@ -9,6 +9,7 @@
 // search, another element), and a drawing without the keys after one with them remembers the count they were let go
 // at. Pure.
 import type { FindField, Nav, RingLandings, RingStop } from '../types'
+import { CHANGES_SEARCH_VIEW } from './changes-search'
 import { LOG_SEARCH_VIEW } from './log-search'
 import { currentPlace } from './nav'
 import { SEARCH_VIEW } from './search-rows'
@@ -56,7 +57,7 @@ export function isFieldKey(key: string): boolean {
 function stopOf(element: string | undefined): RingStop {
   if (element === undefined) return 'other'
   if (isFieldKey(element)) return 'field'
-  const views = [SEARCH_VIEW, TEAM_SEARCH_VIEW, LOG_SEARCH_VIEW]
+  const views = [SEARCH_VIEW, TEAM_SEARCH_VIEW, LOG_SEARCH_VIEW, CHANGES_SEARCH_VIEW]
   return views.some(view => isResultOf(view, element)) ? 'result' : 'other'
 }
 

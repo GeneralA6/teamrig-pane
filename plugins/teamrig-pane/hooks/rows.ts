@@ -62,9 +62,20 @@ export type Row = {
  * the task a press on it opens the page of (a search result, search-rows.ts); `reads` names the conversation a press
  * on it opens the Log page of (log-rows.ts); `folds` names the Team tab key a press on it opens or closes, a node or a
  * session's card (team-rows.ts), docked only while its rows hold no press of their own (`toggles`), which take its
- * place there; `opensSection` leads it with a blank line, past the gap every block has.
+ * place there; `expands` names the Changes file whose diff a press on it opens or closes, docked (a Changes search
+ * result, changes-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.
  */
-export type Block = { key: string; rows: Row[]; toggle?: string; opens?: string; reads?: LogRead; folds?: string; card?: Row[]; opensSection?: boolean }
+export type Block = {
+  key: string
+  rows: Row[]
+  toggle?: string
+  opens?: string
+  reads?: LogRead
+  folds?: string
+  expands?: string
+  card?: Row[]
+  opensSection?: boolean
+}
 
 export const NOTHING_EXPANDED: ExpandedTasks = {}
 /** Between a task's id and its title. */

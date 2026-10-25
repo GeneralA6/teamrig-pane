@@ -1342,7 +1342,8 @@ test('the Tasks / Changes / Log / Inbox / Team switch leads the pane in every vi
   await pane.press({ key: 'changes' })
   for (const props of [PANE_PROPS, ...NARROW_AND_INLINE]) {
     await pane.redraw(props)
-    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
+    // The Changes view has no modes: the switch alone, past the Find row the dock draws under it.
+    expect(buttonKeys(await pane.drawn()).filter(key => key !== 'find-key')).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
   }
 })
 
@@ -1366,6 +1367,58 @@ test("the Changes view lists each repo's changed files with their lines, counted
 
   await pane.press({ key: 'tasks' })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
+})
+
+test("the Changes view's Find field draws the files it names; Enter on one opens its diff, and another view closes the search", async ($, on) => {
+  const patch = ['diff --git a/hooks/a.ts b/hooks/a.ts', '--- a/hooks/a.ts', '+++ b/hooks/a.ts', '@@ -1,2 +1,2 @@', ' const x = 1', '-const y = 2', '+const y = 3', ''].join('\n')
+  const repos: FakeRepos = { roots: { '/work': '/work' }, statuses: { '/work': REPO_STATUS }, numstats: { '/work': REPO_NUMSTAT }, greps: { '/work': REPO_GREP }, patches: { 'hooks/a.ts': patch } }
+  const { clock } = await start(on, {}, repos)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  await clock.settle()
+  await pane.redraw(WIDE)
+  const results = async () => buttonKeys(await pane.drawn()).filter(key => key.startsWith('changes-search:'))
+
+  await pane.press({ key: 'changes' })
+  expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ placeholder: 'path, repo, branch…', value: '' })
+  await pane.input({ key: 'find', text: 'hooks', kind: 'change' })
+  // The count, then the two files it names over their repo and branch; the list's repo header is not drawn.
+  expect(await drawsLine(pane, /^2 files match$/)).toBe(true)
+  expect(await drawsLine(pane, /^R {2}hooks\/new\.ts \+2 -2 ← hooks\/old\.ts$/)).toBe(true)
+  expect(await drawsLine(pane, /^work · pane-v2$/)).toBe(true)
+  expect(await drawsLine(pane, /3 changed/)).toBe(false)
+  expect(await results()).toEqual(['changes-search:/work:hooks/a.ts', 'changes-search:/work:hooks/new.ts'])
+  expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ submitLabel: 'to the results' })
+  // Enter on more matches opens no diff.
+  await pane.input({ key: 'find', text: 'hooks' })
+  await clock.settle()
+  expect(await pane.find({ text: /-const y = 2/ })).toBeUndefined()
+
+  // Enter on the one match opens its diff under it, and Enter again leaves it open.
+  await pane.input({ key: 'find', text: 'a.ts', kind: 'change' })
+  expect(await drawsLine(pane, /^1 file matches$/)).toBe(true)
+  expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ submitLabel: 'open' })
+  await pane.input({ key: 'find', text: 'a.ts' })
+  await clock.settle()
+  expect(await pane.find({ text: /-const y = 2/ })).toBeDefined()
+  await pane.input({ key: 'find', text: 'a.ts' })
+  await clock.settle()
+  expect(await pane.find({ text: /-const y = 2/ })).toBeDefined()
+  // A press on the result closes it.
+  await pane.press({ key: 'changes-search:/work:hooks/a.ts' })
+  await clock.settle()
+  expect(await pane.find({ text: /-const y = 2/ })).toBeUndefined()
+
+  // An untracked folder is found, with no diff to open.
+  await pane.input({ key: 'find', text: 'tests', kind: 'change' })
+  expect(await drawsLine(pane, /^\?\? tests\/ \+9$/)).toBe(true)
+  expect(await results()).toEqual([])
+
+  // Another view and back to Changes: the list, the search gone.
+  await pane.press({ key: 'tasks' })
+  await pane.press({ key: 'changes' })
+  expect(await drawsLine(pane, /match/)).toBe(false)
+  expect(await pane.find({ text: /work · pane-v2 · 3 changed/ })).toBeDefined()
 })
 
 test('a press on a Changes file opens its diff under it, kept current as the file changes, and a second press closes it', async ($, on) => {
@@ -1494,7 +1547,8 @@ test('from the minimized strip, Changes opens the pane in full on the Changes vi
   await pane.press({ key: 'changes' })
   expect(store.get('paneSize')).toBe('open')
   expect(await pane.find({ text: /No git repo yet/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
+  // The switch, then the Find row under it.
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'find-key'])
 })
 
 const WEB_LOG = '/Homes/tester/.teamrig/teams/web/state/turn-log'
