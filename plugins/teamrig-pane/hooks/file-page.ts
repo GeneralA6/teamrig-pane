@@ -1,6 +1,6 @@
 // A reference file's page (nav.ts): a file a card's Reference row names (ref-file.ts), as it was read when the page
 // opened. Its name and the path it was read at over its text, one block per paragraph, so the window draws only the
-// paragraphs in sight (window.ts) and the gap between blocks stands for the blank lines; a run of over BLOCK_LINES
+// paragraphs in sight (frame.ts) and the gap between blocks stands for the blank lines; a run of over BLOCK_LINES
 // lines with no blank line splits too, a gap at each split. Tabs draw as two spaces, and a wrapped line keeps its
 // indent. The line its ref points at is bold, and the page lands on its paragraph (lineBlockKey). A file not found
 // names each path looked at; one not shown says why. Pure: blocks that layout.ts wraps and register.tsx draws under
