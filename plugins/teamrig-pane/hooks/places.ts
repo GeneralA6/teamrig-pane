@@ -47,11 +47,12 @@ type DirKey = Exclude<SettingKey, 'goalsDoc'>
 
 /**
  * The session's team and where teamrig keeps it: its folder (which holds the team's notes, read for a card's
- * reference files), the files that name its sessions, its config and its rename log, and its sessions' turn log
- * (turn-log.ts): its folder and the config's `turnLog.keepHours`, null with no config file, a team teamrig refuses and
- * writes no turn log for; any file may not be there.
+ * reference files), the kit home's teams folder that holds it and its peers (the Team tab, team-source.ts), the files
+ * that name its sessions, its config and its rename log, and its sessions' turn log (turn-log.ts): its folder and the
+ * config's `turnLog.keepHours`, null with no config file, a team teamrig refuses and writes no turn log for; any file
+ * may not be there.
  */
-export type TeamFiles = { team: string; dir: string; config: string; renames: string; turnLog: TurnLogPlace | null }
+export type TeamFiles = { team: string; dir: string; teamsDir: string; config: string; renames: string; turnLog: TurnLogPlace | null }
 
 /**
  * The register's folders, the session's team's files (null when no team was found) and its settings (teamSettings:
@@ -200,29 +201,36 @@ async function teamFolders(
   if (!team.ok) return team
   if (kit === null) return { ok: false, problem: nothingNamed(settingsPath, true) }
   if (team.value === null) return { ok: true, value: null }
-  const teamHome = `${kit}/teams/${team.value}`
+  const teamsDir = `${kit}/teams`
+  const teamHome = `${teamsDir}/${team.value}`
   const configPath = `${teamHome}/config.json`
   const config = await readIfThere(input.files, configPath)
   if (!config.ok) return config
   const read = config.value === null ? null : parseConfigText(config.value)
   if (read?.status === 'unreadable') return { ok: false, problem: `${configPath}: ${issueText(read.issue)}` }
-  const inTeamHome = (path: string | undefined): string | undefined => {
-    if (path === undefined) return undefined
-    const forward = slashed(path)
-    return isAbsolute(forward) ? forward : `${teamHome}/${forward}`
-  }
-  const paths = read?.config.paths ?? {}
-  const state = inTeamHome(paths.state) ?? `${teamHome}/state`
+  const state = teamStateDir(teamHome, read?.config ?? null)
   const turnLog = read === null ? null : { dir: `${state}/turn-log`, keepHours: read.config.turnLog.keepHours }
   return {
     ok: true,
     value: {
       state,
-      inbox: inTeamHome(paths.inbox) ?? `${state}/inbox`,
-      files: { team: team.value, dir: teamHome, config: configPath, renames: `${state}/renames.jsonl`, turnLog },
+      inbox: inTeamHome(teamHome, read?.config.paths.inbox) ?? `${state}/inbox`,
+      files: { team: team.value, dir: teamHome, teamsDir, config: configPath, renames: `${state}/renames.jsonl`, turnLog },
       settings: teamSettings(read?.config ?? null, input.machineZone),
     },
   }
+}
+
+/** A path a team config names, as teamrig takes it: an absolute one as written, else under the team's home. */
+function inTeamHome(teamHome: string, path: string | undefined): string | undefined {
+  if (path === undefined) return undefined
+  const forward = slashed(path)
+  return isAbsolute(forward) ? forward : `${teamHome}/${forward}`
+}
+
+/** The team's state folder: its config's `paths.state` (inTeamHome), else `state` in the team's home. */
+export function teamStateDir(teamHome: string, config: KitConfig | null): string {
+  return inTeamHome(teamHome, config?.paths.state) ?? `${teamHome}/state`
 }
 
 /** Why teamrig cannot read a config, as one line: where in it, then what. */
@@ -260,10 +268,15 @@ function checkTeam(team: string, from: string): Found<string> {
  */
 async function kitTeams(folders: PlacesInput['folders'], teamsDir: string): Promise<string[]> {
   try {
-    return (await folders(teamsDir)).filter(name => TEAM_ID.test(name)).sort()
+    return teamIds(await folders(teamsDir))
   } catch {
     return []
   }
+}
+
+/** The folder names that name a team, as teamrig names one, sorted. */
+export function teamIds(names: readonly string[]): string[] {
+  return names.filter(name => TEAM_ID.test(name)).sort()
 }
 
 /** `dir` and each folder above it, up to its root (`C:` or the empty slash root), without a trailing slash. */

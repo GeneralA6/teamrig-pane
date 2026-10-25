@@ -1152,7 +1152,7 @@ describe('source', () => {
   })
 
   /** Team web, whose config calls api web-backend and gives ui the team's default name. */
-  const WEB: TeamFiles = { team: 'web', dir: 'K/teams/web', config: 'K/teams/web/config.json', renames: 'R/tasks/renames.jsonl', turnLog: null }
+  const WEB: TeamFiles = { team: 'web', dir: 'K/teams/web', teamsDir: 'K/teams', config: 'K/teams/web/config.json', renames: 'R/tasks/renames.jsonl', turnLog: null }
   const WEB_TEAM = { sessions: ['lead', 'api', 'ui'], roles: { lead: 'lead' }, names: { api: 'web-backend' } }
   const WEB_CONFIG = JSON.stringify(WEB_TEAM)
   const namesOf = (snap: Snapshot | null) => (snap === null ? null : { team: snap.team, areaName: snap.areaName })
