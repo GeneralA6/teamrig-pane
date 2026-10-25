@@ -185,6 +185,7 @@ try {
   mkdirSync(project)
 
   // Every event kind, a null ref (no --ref, then update --ref none), a priority-only update, a goal with a space.
+  // team create opens the lead's own T1 (set up the team), so the tasks added below start at T2.
   teamrig(['team', 'create', TEAM, '--sessions', 'lead,alpha,beta', '--project', project])
   // The team's zone, so every later run reads and prints times on its clock, not the machine's.
   writeFileSync(configFile, withTimeZone(read(configFile), GOLDEN_TIME_ZONE))
@@ -193,24 +194,24 @@ try {
   as('lead', 'add', '--owner', 'alpha', '--priority', 'p2', '--title', 'Goals task', '--description', 'A task with goals, a due and a week', '--ref', 'doc:1', '--goals', 'G1,roadmap goal', '--due', '2026-10-20', '--week', '2026-10-12')
   as('alpha', 'add', '--owner', 'beta', '--priority', 'p4', '--title', 'Beta task from alpha', '--description', 'A task one session asks of another', '--ref', 'x')
   as('lead', 'add', '--owner', 'alpha', '--priority', 'p5', '--title', 'To be dropped', '--description', 'A task dropped later', '--ref', 'r')
-  as('alpha', 'set', 'T1', '--status', 'in-progress')
+  as('alpha', 'set', 'T2', '--status', 'in-progress')
   // A wait on the owner's decision carries the card the owner decides from; its time is typed on the team's clock.
-  as('alpha', 'set', 'T2', '--status', 'waiting', '--waits', 'decision:owner,time:2030-01-09 12:00', '--note', 'waiting on beta',
+  as('alpha', 'set', 'T3', '--status', 'waiting', '--waits', 'decision:owner,time:2030-01-09 12:00', '--note', 'waiting on beta',
     '--question', 'Which loader does the demo ship', '--options', 'the fast loader, 2 s a page | the safe loader, 5 s a page',
-    '--recommend', 'the fast loader, as beta tested it', '--default', 'the safe loader ships after the wait')
-  as('alpha', 'update', 'T3', '--after', 'T1')
-  as('beta', 'set', 'T4', '--status', 'done', '--note', 'shipped', '--evidence', 'sha abc', '--skill', 'none', '--followups', 'none')
-  as('alpha', 'set', 'T5', '--status', 'dropped', '--note', 'not needed')
-  as('lead', 'update', 'T2', '--priority', 'p2')
-  as('alpha', 'update', 'T1', '--ref', 'none')
-  as('alpha', 'update', 'T3', '--priority', 'p1', '--title', 'Goals task renamed')
+    '--recommend', 'the fast loader, as beta tested it', '--default', 'the safe loader ships after the wait', '--gate', 'product and design decisions')
+  as('alpha', 'update', 'T4', '--after', 'T2')
+  as('beta', 'set', 'T5', '--status', 'done', '--note', 'shipped', '--evidence', 'sha abc', '--skill', 'none', '--followups', 'none')
+  as('alpha', 'set', 'T6', '--status', 'dropped', '--note', 'not needed')
+  as('lead', 'update', 'T3', '--priority', 'p2')
+  as('alpha', 'update', 'T2', '--ref', 'none')
+  as('alpha', 'update', 'T4', '--priority', 'p1', '--title', 'Goals task renamed')
   // A rename the pane never reads: owners stay session ids.
   as('lead', 'rename', 'alpha', 'alpha-team')
   // A priority only the team config names.
   writeFileSync(configFile, withPriority(read(configFile), { id: 7, name: 'icebox' }))
   as('lead', 'add', '--owner', 'alpha', '--priority', 'p7', '--title', 'Icebox task', '--description', 'A task at a priority only the config names')
   // A task of another session that needs one of alpha's, so alpha's row says whom it holds up.
-  as('beta', 'add', '--owner', 'beta', '--priority', 'p3', '--title', 'Beta task after T1', '--description', 'A task that needs a task of another session', '--after', 'T1', '--due', '2026-10-22')
+  as('beta', 'add', '--owner', 'beta', '--priority', 'p3', '--title', 'Beta task after T2', '--description', 'A task that needs a task of another session', '--after', 'T2', '--due', '2026-10-22')
 
   // The inbox: read to its second line, one more line, then trimmed from the top, then rewritten.
   as('lead', 'inbox', 'add', '--to', 'alpha', '--text', 'first line')
@@ -225,8 +226,8 @@ try {
 
   // Lines teamrig skips: one from a newer teamrig, one torn, one naming no task.
   const events = read(eventsFile)
-  const newer = JSON.stringify({ v: 3, type: 'vote', id: 'T1', at: new Date(clock.next()).toISOString(), by: 'lead', choice: 'ship' })
-  writeFileSync(eventsFile, `${events}${newer}\n{"v":2,"type":"status","id":"T2"\n${orphanOf(events)}\n`)
+  const newer = JSON.stringify({ v: 3, type: 'vote', id: 'T2', at: new Date(clock.next()).toISOString(), by: 'lead', choice: 'ship' })
+  writeFileSync(eventsFile, `${events}${newer}\n{"v":2,"type":"status","id":"T3"\n${orphanOf(events)}\n`)
   const listed = teamrig(['list', '--status', 'all', '--all'])
   const generatedAt = listed.at
   const files: Record<string, string> = {
