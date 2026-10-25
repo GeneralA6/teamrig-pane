@@ -1,8 +1,8 @@
 // Copied from teamrig's src/config/tree.ts by scripts/sync-core.ts: change it there, then run the sync.
-import type { SessionAddress } from '../core/address.ts';
+import { formatAddress, type SessionAddress } from '../core/address.ts';
 import { TREE_LIMITS } from './limits.ts';
-import type { Roster } from './roster.ts';
-import type { KitConfig } from './types.ts';
+import { ANCESTOR_ROLES, roleHolderOf, type AncestorRole, type Roster } from './roster.ts';
+import type { KitConfig, RolesConfig } from './types.ts';
 
 /**
  * A tree of teams: each team config names its parent (`team.parent`), and the tree is read from
@@ -20,6 +20,8 @@ export interface TeamNode {
   readonly parent: string | undefined;
   /** The lead's session id. */
   readonly lead: string;
+  /** The config's roles as written: a holder on a team above reads `<team>/<id>` (roleHolderOf). */
+  readonly roles: RolesConfig;
   /** Every session id, the lead included. */
   readonly sessions: readonly string[];
   /** Each session's current name, by id: the Claude Code session name it runs under. */
@@ -33,6 +35,7 @@ export function teamNodeOf(team: string, config: Pick<KitConfig, 'team' | 'roles
     statedId: config.team?.id,
     parent: config.team?.parent,
     lead: config.roles.lead,
+    roles: config.roles,
     sessions: config.sessions,
     names: new Map(config.sessions.map((id) => [id, roster.nameOf(id) ?? id])),
   };
@@ -52,14 +55,17 @@ export function ownerAsk(config: Pick<KitConfig, 'team'>): string {
  * - `tree-parent`: a parent with no team config;
  * - `tree-loop`: teams whose parent links go round in a loop, so none reaches a root;
  * - `tree-depth`: a team below the deepest level a tree allows;
- * - `tree-children`: a team with more child teams than a team may have.
+ * - `tree-children`: a team with more child teams than a team may have;
+ * - `tree-role`: a role left to another team (`<team>/<id>`) whose team is not above it (`not-above`), or whose
+ *   session does not hold that role there (`not-holder`).
  */
 export type TreeProblem =
   | { readonly kind: 'tree-id'; readonly team: string; readonly stated: string }
   | { readonly kind: 'tree-parent'; readonly team: string; readonly parent: string }
   | { readonly kind: 'tree-loop'; readonly teams: readonly string[] }
   | { readonly kind: 'tree-depth'; readonly team: string; readonly level: number }
-  | { readonly kind: 'tree-children'; readonly team: string; readonly children: readonly string[] };
+  | { readonly kind: 'tree-children'; readonly team: string; readonly children: readonly string[] }
+  | { readonly kind: 'tree-role'; readonly team: string; readonly role: AncestorRole; readonly holder: SessionAddress; readonly reason: 'not-above' | 'not-holder' };
 
 /** A session name more than one team uses: Claude Code session names are machine-wide. */
 export interface NameClash {
@@ -122,6 +128,17 @@ export class TeamTree {
     return parent === undefined ? undefined : { team: parent.team, id: parent.lead };
   }
 
+  /**
+   * The lead who asks the owner the team's decisions when the team's own lead does not (T509): for a child team, the
+   * lead at its tree's root, the one lead the owner meets; its parent's lead while its parents go round a loop.
+   * Undefined for a root team, whose own lead asks them.
+   */
+  ownerLeadAbove(team: string): SessionAddress | undefined {
+    const parentLead = this.parentLeadOf(team);
+    const root = this.nodes.get(this.rootOf(team) ?? '');
+    return parentLead === undefined || root === undefined ? parentLead : { team: root.team, id: root.lead };
+  }
+
   childrenOf(team: string): string[] {
     return this.teams.filter((child) => this.nodes.get(child)?.parent === team);
   }
@@ -130,6 +147,15 @@ export class TeamTree {
   rootOf(team: string): string | undefined {
     const chain = this.chain(team);
     return chain.loop === undefined ? chain.teams.at(-1) : undefined;
+  }
+
+  /**
+   * The teams above a team, its root first and its parent last: empty for a root, for a team with no config and for
+   * one whose parents go round a loop, which `doctor` names.
+   */
+  ancestorsOf(team: string): string[] {
+    const chain = this.chain(team);
+    return chain.loop === undefined ? chain.teams.slice(1).reverse() : [];
   }
 
   /** The team's level, its root being 1; undefined when its parents go round a loop. */
@@ -219,6 +245,9 @@ export class TeamTree {
       if (children.length > TREE_LIMITS.childTeams) {
         problems.push({ kind: 'tree-children', team, children });
       }
+      if (node !== undefined) {
+        problems.push(...this.roleProblemsOf(node));
+      }
     }
     for (const teams of loops.values()) {
       problems.push({ kind: 'tree-loop', teams });
@@ -238,6 +267,21 @@ export class TeamTree {
       .filter(([, held]) => new Set(held.map((holder) => holder.team)).size > 1)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, held]) => ({ name, holders: held.sort((a, b) => a.team.localeCompare(b.team)) }));
+  }
+
+  /** The roles a team leaves to another team: each must name that role's own holder on a team above it. */
+  private roleProblemsOf(node: TeamNode): TreeProblem[] {
+    const above = this.ancestorsOf(node.team);
+    return ANCESTOR_ROLES.flatMap((role): TreeProblem[] => {
+      const holder = roleHolderOf(node.roles, role, node.team);
+      if (holder === undefined || holder.team === node.team) {
+        return [];
+      }
+      if (!above.includes(holder.team)) {
+        return [{ kind: 'tree-role', team: node.team, role, holder, reason: 'not-above' }];
+      }
+      return this.nodes.get(holder.team)?.roles[role] === holder.id ? [] : [{ kind: 'tree-role', team: node.team, role, holder, reason: 'not-holder' }];
+    });
   }
 
   private chain(team: string): Chain {
@@ -268,6 +312,13 @@ export function describeTreeProblem(problem: TreeProblem, command: string): stri
       return `team ${problem.team} is at level ${problem.level} of its tree, and a tree has at most ${TREE_LIMITS.levels} levels: hang it under a team nearer the root`;
     case 'tree-children':
       return `team ${problem.team} has ${problem.children.length} child teams (${problem.children.join(', ')}), and a team has at most ${TREE_LIMITS.childTeams}: hang some under another team`;
+    case 'tree-role': {
+      const named = `team ${problem.team}'s roles.${problem.role} names ${formatAddress(problem.holder)}`;
+      const fix = `or one of ${problem.team}'s own sessions`;
+      return problem.reason === 'not-above'
+        ? `${named}, but team ${problem.holder.team} is not above ${problem.team}: name the holder on a team above it, ${fix}`
+        : `${named}, which does not hold roles.${problem.role} on team ${problem.holder.team}: name the session that does, ${fix}`;
+    }
   }
 }
 

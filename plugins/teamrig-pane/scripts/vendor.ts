@@ -43,6 +43,7 @@ export const CORE_FILES: readonly string[] = [
   'register/card.ts',
   'register/events.ts',
   'register/fold.ts',
+  'register/item-types.ts',
   'register/layout.ts',
   'register/marker.ts',
   'register/model.ts',
