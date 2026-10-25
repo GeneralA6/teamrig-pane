@@ -103,6 +103,6 @@ export function searchBlocks(snap: Snapshot, query: string, results: SearchResul
   const reading = readingBlock(snap)
   if (reading !== null) return [reading]
   const shown = [...results.active.map(activeBlock), ...results.done.map(hit => doneBlock(hit, clockOf(snap)))]
-  const view = { key: SEARCH_VIEW, query, hint: SEARCH_HINT, nothing: NOTHING_FOUND, noun: TASK_NOUN, results: shown, total: matchCount(results) }
+  const view = { key: SEARCH_VIEW, query, hint: SEARCH_HINT, nothing: NOTHING_FOUND, noun: TASK_NOUN, results: shown, shown: shown.length, total: matchCount(results) }
   return [...problemBlocks(snap), ...searchViewBlocks(view)]
 }
