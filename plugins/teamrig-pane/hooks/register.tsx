@@ -78,6 +78,7 @@ import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 import { LiveDiffs, NO_DIFFS } from './diff'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { logListBlocks, logPageBlocks } from './log-rows'
+import { logResultKey, searchLog, type LogHit } from './log-search'
 import { inboxBlocks } from './inbox-rows'
 import { searchInbox, type InboxHit } from './inbox-search'
 import { LiveTeam } from './team-source'
@@ -116,7 +117,7 @@ import { pageBlocks } from './page'
 import { matchCount, NO_RESULTS, searchTasks, topResult, type SearchResults } from './task-search'
 import { SEARCH_VIEW, searchBlocks } from './search-rows'
 import { resultKey } from './search-view'
-import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
+import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldAnew, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -757,11 +758,11 @@ export const register: Register = on => {
     let snap = EMPTY_SNAPSHOT
     let shown: ViewMode = 'mine'
     let open: ExpandedTasks = NOTHING_EXPANDED
-    /** Where the tasks view is, or the Team tab's search; the list in the Changes and Log views and inline, where a page never shows. */
+    /** Where the tasks view is, or the Inbox, Team or Log view's search; the list in the Changes view and inline, where a page never shows. */
     let at: Nav = AT_LIST
     /** What the file pages the places name read, drawn with the tasks view docked. */
     let files: FilePages = NO_FILES
-    /** The Find field's round (find-field.ts), drawn in the tasks view and the Team tab docked. */
+    /** The Find field's round (find-field.ts), drawn docked in the tasks, Inbox and Team views and over the Log view's list. */
     let field: FindField = FIRST_FIELD
     let landings: RingLandings = NO_LANDINGS
     /** Where the docked body's window is to stand, the last step that moved it; at the top inline. */
@@ -772,6 +773,8 @@ export const register: Register = on => {
     let teamFound: readonly SessionHit[] = []
     /** The inbox lines the Inbox view's search shown matches (inbox-search.ts), read once for its body and the line under the field; none off it. */
     let inboxFound: readonly InboxHit[] = []
+    /** The conversations the Log view's search shown names (log-search.ts), read once for its body and the line under the field; none off it. */
+    let logFound: readonly LogHit[] = []
     /** The session whose Log page shows; null for the list or another view. */
     let logSession: string | null = null
     /** What a project teamrig is not set up for shows (setup.ts), alone, in every view; null once a register is found. */
@@ -793,18 +796,20 @@ export const register: Register = on => {
         open = await read($, expanded)
         const missing = await read($, requirements)
         if (!inline) scroll = await read($, bodyScroll)
-        // The Tasks, Inbox and Team views draw the Find field, and their searches are one place: the switch between them
-        // closes it (switchTo).
-        if ((current === 'tasks' || current === 'inbox' || current === 'team') && !inline) {
+        // The Tasks, Inbox, Team and Log views draw the Find field (the Log view over its list), and their searches are
+        // one place: the switch between them closes it (switchTo).
+        if ((current === 'tasks' || current === 'inbox' || current === 'team' || current === 'log') && !inline) {
           at = await read($, nav)
           field = await read($, findField)
           if (current === 'tasks') files = await read($, filePages)
         }
         const place = currentPlace(at)
         const team = current === 'team' ? await read($, teamTree) : TEAM_READING
+        const logs = current === 'log' ? await read($, logList) : LOG_READING
         if (place.kind === 'search' && current === 'tasks') found = searchTasks(snap.tasks, place.query, treeOf(snap))
         if (place.kind === 'search' && team.kind === 'tree') teamFound = searchTeam(team.root, place.query)
         if (place.kind === 'search' && current === 'inbox') inboxFound = searchInbox(snap.inbox, snap.now, place.query)
+        if (place.kind === 'search' && current === 'log') logFound = searchLog(logs, snap, place.query)
         // A project teamrig is not set up for has no tasks, changes or log to show: its setup takes every view,
         // whatever place it is at.
         setupShown = await read($, setup)
@@ -839,8 +844,8 @@ export const register: Register = on => {
                   : current === 'inbox'
                   ? inboxBlocks(snap, place.kind === 'search' ? { query: place.query, hits: inboxFound } : null)
                   : logShown === null
-                  ? logListBlocks(await read($, logList), clockOf(snap), snap)
-                  : logPageBlocks(logShown, clockOf(snap), await read($, logList), snap)
+                  ? logListBlocks(logs, clockOf(snap), snap, place.kind === 'search' ? { query: place.query, hits: logFound } : null)
+                  : logPageBlocks(logShown, clockOf(snap), logs, snap)
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
@@ -865,12 +870,12 @@ export const register: Register = on => {
     }
     // A press on the switch's buttons, or the header's inbox count. The Tasks button shows the list, from a page too,
     // scrolled back to where the page was opened from; the Log button shows the sessions, from a session's page too;
-    // the Team button reads the team tree at once. The Tasks, Inbox and Team buttons close a search, which their views
-    // share: one typed in one view is never found shown in another.
+    // the Team button reads the team tree at once. The Tasks, Inbox, Team and Log buttons close a search, which their
+    // views share: one typed in one view is never found shown in another.
     const switchTo = async (target: PaneView) => {
       await update($, view, () => target)
       await sizer?.set('open')
-      if (target === 'tasks' || target === 'inbox' || target === 'team') await go($, current => reset(current, true))
+      if (target === 'tasks' || target === 'inbox' || target === 'team' || target === 'log') await go($, current => reset(current, true))
       if (target === 'changes') await tracked?.refresh()
       if (target === 'log') await logging?.close()
       if (target === 'team') await teaming?.refresh()
@@ -915,13 +920,16 @@ export const register: Register = on => {
       await openPlace({ kind: 'file', file, line: unreadLine(found, press.unread) }, from)
     }
     // A press on a conversation in the Log view's list opens its page, read now, at its end: the newest lines are
-    // last. Back shows the list, read again, from its top.
+    // last. Back shows the list, read again, from its top, or the search the page was opened from: the page drew no
+    // Find field, so it comes back a fresh round holding the search's words (fieldAnew).
     const openLog = async (conversation: LogRead) => {
       await logging?.open(conversation)
       await update($, bodyScroll, current => scrolledTo(current, { kind: 'end' }))
     }
     const closeLog = async () => {
       await logging?.close()
+      const shown = await read($, nav)
+      await update($, findField, field => fieldAnew(field, shown))
       await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
     }
     // Enter in the Find field, on its words as typed (a redraw may lag behind them): with more than one match it moves
@@ -948,6 +956,21 @@ export const register: Register = on => {
       if (first === undefined) return
       if (top.length === 1) await update($, teamToggled, toggled => openedWith(toggled, cardKey(first.row.key)))
       await focusOn($, resultKey(TEAM_SEARCH_VIEW, first.row.key))
+    }
+    // Enter in the Find field on the Log view's list: with more than one match it moves the ring onto the first drawn;
+    // with one it opens that conversation's page and moves the ring onto the page's back step, as submit does. Back
+    // from the page shows the search again: its place is still the search.
+    const submitLog = async (query: string) => {
+      const top = searchLog(await read($, logList), snap, query)
+      const first = top[0]
+      if (first === undefined) return
+      if (top.length > 1) {
+        await focusOn($, logResultKey(first.row.conversation))
+        return
+      }
+      const { session, claude } = first.row.conversation
+      await openLog({ session, claude })
+      await focusOn($, 'back')
     }
 
     const spanComponents = { Text, Link }
@@ -1273,30 +1296,39 @@ export const register: Register = on => {
         }),
       )
 
-    // The Find field, under the switch in the dock in the Tasks view whatever it shows, and in the Inbox and Team views:
-    // the first change opens a search (a place, so back from a result's page returns to it), each change shows the
-    // results for its words, Enter opens the one match's page (on the Team tab its card) or moves the ring onto the
-    // first of more (in the Inbox view, whose lines open nothing, it does nothing), and an empty field or clear closes
-    // the search. It is drawn under its
+    // The Find field, under the switch in the dock in the Tasks view whatever it shows, in the Inbox and Team views and
+    // over the Log view's list: the first change opens a search (a place, so back from a result's page returns to it),
+    // each change shows the results for its words, Enter opens the one match's page (on the Team tab its card) or moves
+    // the ring onto the first of more (in the Inbox view, whose lines open nothing, it does nothing), and an empty field
+    // or clear closes the search. It is drawn under its
     // round's key, holding what the round started with (find-field.ts): the query of the search shown, else nothing;
     // never the person's typing, which the engine would drop on each redraw. `s: Find` before it moves the focus ring
     // into it, and clear moves it back in; the field never takes the focus by itself, as it would then hold every key
     // the pane's hotkeys answer. Esc hands the keys back and leaves the results drawn.
     const isTeam = current === 'team'
     const isInbox = current === 'inbox'
-    const matches = isTeam ? teamFound.length : isInbox ? inboxFound.length : matchCount(found)
+    // A Log page shows one conversation: the Find field is the list's.
+    const isLogList = current === 'log' && logSession === null
+    // The field in the view shown: what it shows empty, how many results its words match, and what Enter does.
+    const find: { placeholder: string; matches: number; submit: ((query: string) => Promise<void>) | null } = isTeam
+      ? { placeholder: 'id, name, role, scope…', matches: teamFound.length, submit: submitTeam }
+      : isInbox
+        ? { placeholder: 'sender, words…', matches: inboxFound.length, submit: null }
+        : isLogList
+          ? { placeholder: 'task, title, session…', matches: logFound.length, submit: submitLog }
+          : { placeholder: 'id, title, owner, note…', matches: matchCount(found), submit }
     // Enter's words, none in the Inbox view.
-    const enterWords = isInbox ? null : submitWords(matches)
+    const enterWords = find.submit === null ? null : submitWords(find.matches)
     const findRow = inline
       ? null
       : drawFindRow(components, {
           key: fieldKey(field),
-          placeholder: isTeam ? 'id, name, role, scope…' : isInbox ? 'sender, words…' : 'id, title, owner, note…',
+          placeholder: find.placeholder,
           text: field.text,
           submitLabel: enterWords ?? 'search',
           onFind: () => void focusFind($),
           onInput: value => void go($, current => searched(current, value), 'typing'),
-          onSubmit: value => void (isTeam ? submitTeam(value) : isInbox ? undefined : submit(value)),
+          onSubmit: value => void find.submit?.(value),
           onClear: place.kind === 'search' ? () => void clearSearch($) : null,
         })
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
@@ -1327,9 +1359,10 @@ export const register: Register = on => {
             ),
             rows: (titleRow?.rows ?? 0) + switchRow.rows + (findRow === null ? 0 : 1) + (keysLine === null ? 0 : keysLines.length) + modes.rows,
           }
-        : isTeam || isInbox
+        : isTeam || isInbox || isLogList
           ? {
-              // The Inbox and Team views draw the Find row and its line under the switch too; they have no modes.
+              // The Inbox and Team views and the Log view's list draw the Find row and its line under the switch too;
+              // they have no modes.
               node: (
                 <Box key="controls" flexDirection="column">
                   {titleRow?.node}

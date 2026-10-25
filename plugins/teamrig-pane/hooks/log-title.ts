@@ -8,7 +8,7 @@ import { graphemes } from './width'
 /** The most characters of each task's title in the title of a conversation that worked several. */
 const SHARED_TITLE_CHARS = 48
 /** What titles a conversation with no task worked and no prompt or reply. */
-const UNTITLED: Span = { text: 'no prompt or reply', dim: true }
+export const UNTITLED: Span = { text: 'no prompt or reply', dim: true }
 
 /** What titles a conversation: each session's work on its own tasks, and the tasks it names. */
 export type Worked = Pick<Snapshot, 'work' | 'tasks'>

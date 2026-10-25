@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { FindField, Nav, RingLandings } from '../types'
-import { FIND, FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldKey, fieldText, isFieldKey, keysAt, keysHint, landedOn, submitWords } from '../hooks/find-field'
+import { FIND, FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldAnew, fieldKey, fieldText, isFieldKey, keysAt, keysHint, landedOn, submitWords } from '../hooks/find-field'
 import { AT_LIST, pushed, searched } from '../hooks/nav'
 
 const page = (nav: Nav, id: string): Nav => pushed(nav, { kind: 'task', id })
@@ -33,6 +33,12 @@ describe('find field', () => {
     expect(fieldAfter(field, AT_LIST, pushed(AT_LIST, { kind: 'done', week: '2026-10-12' }))).toBe(field)
   })
 
+  test('a field drawn again after a page that drew none starts a round holding what it should hold', () => {
+    // Back from a Log page to the search that opened it: its words, in a field the engine draws fresh.
+    expect(fieldAnew({ round: 2, text: '' }, searched(AT_LIST, 'api'))).toEqual({ round: 3, text: 'api' })
+    expect(fieldAnew({ round: 2, text: 'api' }, AT_LIST)).toEqual({ round: 3, text: '' })
+  })
+
   test('the first round draws under find, each later one under its own key', () => {
     expect(fieldKey(FIRST_FIELD)).toBe(FIND)
     expect(fieldKey({ round: 1, text: '' })).toBe('find:1')
@@ -54,6 +60,9 @@ describe('where the keys go', () => {
     // The Team tab's search draws its results under a view key of its own.
     expect(landedOn(onField, 'team-search:session:acme/api')).toEqual({ count: 2, on: 'result' })
     expect(landedOn(onField, 'team-search-count')).toEqual({ count: 2, on: 'other' })
+    // So does the Log view's.
+    expect(landedOn(onField, 'log-search:api:c-1')).toEqual({ count: 2, on: 'result' })
+    expect(landedOn(onField, 'log-search-count')).toEqual({ count: 2, on: 'other' })
     expect(landedOn(onField, 'mine')).toEqual({ count: 2, on: 'other' })
     // One of the engine's own stops.
     expect(landedOn(onField, undefined)).toEqual({ count: 2, on: 'other' })

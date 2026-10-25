@@ -1583,7 +1583,8 @@ test('a press on a conversation opens its page: its title, its lines oldest firs
   expect((await lines()).at(-1)).toBe('Next step')
 
   await pane.press({ key: 'back' })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'log:conv:api:c-1', 'log:conv:lead:c-1'])
+  // The list draws the Find field again (s: Find before it), the page none.
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'find-key', 'log:conv:api:c-1', 'log:conv:lead:c-1'])
 
   // Log from a page shows the list too, and inline the list shows alone.
   await pane.press({ key: 'log:conv:api:c-1' })
@@ -1592,6 +1593,50 @@ test('a press on a conversation opens its page: its title, its lines oldest firs
   await pane.press({ key: 'log:conv:api:c-1' })
   await pane.redraw({ ...PANE_PROPS, placement: 'inline', scroll: { offset: 0, bodyRows: 10 } })
   expect(await pane.find({ text: /^lead · /m })).toBeDefined()
+})
+
+test("the Log view's Find field draws the conversations it names; Enter on one opens its page, and back shows the search again", async ($, on) => {
+  await startWithLogs(on)
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  const results = async () => buttonKeys(await pane.drawn()).filter(key => key.startsWith('log-search:'))
+
+  await pane.press({ key: 'log' })
+  expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ placeholder: 'task, title, session…', value: '' })
+  await pane.input({ key: 'find', text: 'api', kind: 'change' })
+  // The count, then the one conversation it names; the list's rows are not drawn.
+  expect(await drawsLine(pane, /^1 conversation matches$/)).toBe(true)
+  expect(await drawsLine(pane, /^Ship the log view$/)).toBe(true)
+  expect(await drawsLine(pane, /^Plan the week$/)).toBe(false)
+  expect(await results()).toEqual(['log-search:api:c-1'])
+  expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ submitLabel: 'open' })
+
+  // Enter on the one match opens its page, which draws no field.
+  await pane.input({ key: 'find', text: 'api' })
+  expect(await drawnLines(pane)).toContain('api · last 2 h · 3 lines, the newest last')
+  expect(buttonKeys(await pane.drawn())).toContain('back')
+  expect(drawnField(await pane.drawn())).toBe(null)
+  // Back shows the search again, in a fresh field holding its words.
+  await pane.press({ key: 'back' })
+  expect(await drawsLine(pane, /^1 conversation matches$/)).toBe(true)
+  expect(drawnField(await pane.drawn())).toEqual({ key: 'find:1', value: 'api' })
+
+  // Words both conversations hold: Enter moves the ring to the results and opens no page.
+  await pane.input({ key: 'find:1', text: 'the', kind: 'change' })
+  expect(await drawsLine(pane, /^2 conversations match$/)).toBe(true)
+  expect(await results()).toEqual(['log-search:api:c-1', 'log-search:lead:c-1'])
+  expect(keyedProps(await pane.drawn(), 'find:1')).toMatchObject({ submitLabel: 'to the results' })
+  await pane.input({ key: 'find:1', text: 'the' })
+  expect(buttonKeys(await pane.drawn())).not.toContain('back')
+  // A press on a result opens its page.
+  await pane.press({ key: 'log-search:lead:c-1' })
+  expect(await drawnLines(pane)).toContain('lead · last 2 h · 2 lines, the newest last')
+
+  // Another view and back to Log: the list, the search gone.
+  await pane.press({ key: 'tasks' })
+  await pane.press({ key: 'log' })
+  expect(await drawsLine(pane, /match/)).toBe(false)
+  expect(await drawnLines(pane)).toContain('Plan the week')
 })
 
 test("the Log view titles a conversation by the task its session worked while it ran, from the register's events", async ($, on) => {

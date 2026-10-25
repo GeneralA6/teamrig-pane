@@ -3,11 +3,13 @@
 // change back would lose the keys typed while a redraw lagged behind them. Typing never starts a round, so the drawn
 // text stays put and every key stays in the field. A step that changes what the field should hold (back to a search,
 // a page opened, clear, mine or all) starts one: a new key, which the engine draws as a fresh field holding the new
-// text. The line under the field says where the person's keys go: the engine raises an event as the pane's focus ring
-// lands on an element (ui.focus), none as it clears the ring when the pane lets the keys go, so the landings are
-// counted with what each was on (the field, a result of the search, another element), and a drawing without the keys
-// after one with them remembers the count they were let go at. Pure.
+// text; so does a return from a Log page, which draws no field. The line under the field says where the person's keys
+// go: the engine raises an event as the pane's focus ring lands on an element (ui.focus), none as it clears the ring
+// when the pane lets the keys go, so the landings are counted with what each was on (the field, a result of the
+// search, another element), and a drawing without the keys after one with them remembers the count they were let go
+// at. Pure.
 import type { FindField, Nav, RingLandings, RingStop } from '../types'
+import { LOG_SEARCH_VIEW } from './log-search'
 import { currentPlace } from './nav'
 import { SEARCH_VIEW } from './search-rows'
 import { isResultOf } from './search-view'
@@ -35,6 +37,11 @@ export function fieldAfter(field: FindField, before: Nav, next: Nav): FindField 
   return text === fieldText(before) ? field : { round: field.round + 1, text }
 }
 
+/** The field drawn again after a page that drew none (a Log page): a new round holding what it should hold at `nav`. */
+export function fieldAnew(field: FindField, nav: Nav): FindField {
+  return { round: field.round + 1, text: fieldText(nav) }
+}
+
 /** The key the field is drawn under in its round. */
 export function fieldKey(field: FindField): string {
   return field.round === 0 ? FIND : `${FIND}:${field.round}`
@@ -49,7 +56,8 @@ export function isFieldKey(key: string): boolean {
 function stopOf(element: string | undefined): RingStop {
   if (element === undefined) return 'other'
   if (isFieldKey(element)) return 'field'
-  return isResultOf(SEARCH_VIEW, element) || isResultOf(TEAM_SEARCH_VIEW, element) ? 'result' : 'other'
+  const views = [SEARCH_VIEW, TEAM_SEARCH_VIEW, LOG_SEARCH_VIEW]
+  return views.some(view => isResultOf(view, element)) ? 'result' : 'other'
 }
 
 /** The landings once the ring landed on the element keyed `element`; absent for one of the engine's own stops. */

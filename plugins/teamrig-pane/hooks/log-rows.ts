@@ -1,7 +1,9 @@
 // The Log view as blocks of rows (rows.ts). The list: each conversation of the hours teamrig keeps the turn log
 // (turn-log.ts), the newest last line first, titled by the tasks its session worked while it ran, else by how it
-// opened (log-title.ts), over its session, its times and its count of lines; a press on one opens its page. The page: the
-// conversation's lines of those hours, oldest first (the view opens it at its end), under the same title. Each
+// opened (log-title.ts), over its session, its times and its count of lines; a press on one opens its page. While the
+// Find field holds a query, the list draws its search (log-search.ts) on the shared search view (search-view.ts)
+// instead: the count, then the conversations it names as the list draws them, the words that matched underlined. The
+// page: the conversation's lines of those hours, oldest first (the view opens it at its end), under the same title. Each
 // prompt and reply is split by who spoke (turn-text.ts): the owner's
 // words, Claude's reply, another session's message and a subagent's report each a head (who, when, whether teamrig
 // cut it) over its words with their markdown drawn as styles (markdown.ts); a harness notice dim lines led by its
@@ -10,9 +12,12 @@
 // clock, zone-marked (zone.ts). Pure.
 import type { LogConversation, LogList, LogPage, LogRead, TurnEntry } from '../types'
 import { paragraphs } from './file-page'
-import { titleSpans, type Worked } from './log-title'
+import { LOG_SEARCH_VIEW, logResultKey, type LogHit } from './log-search'
+import { titleSpans, UNTITLED, type Worked } from './log-title'
 import { markdownParagraphs, type MarkParagraph } from './markdown'
 import { SEPARATOR, single, type Block, type Row, type Span } from './rows'
+import { marksOf, type Mark } from './search'
+import { markedRun, markedSpans, searchViewBlocks, type Noun } from './search-view'
 import { LOG_PAGE_CHARS } from './turn-log'
 import { turnParts, type Speaker, type TurnPart } from './turn-text'
 import { momentWords, type Clock } from './zone'
@@ -21,6 +26,18 @@ const LIST = 'log'
 const PAGE = 'log-page'
 /** The most lines a conversation's title takes in the list. */
 const TITLE_LINES = 2
+/** What an empty Find field shows on the Log view's list. */
+export const LOG_SEARCH_HINT = 'Type words to find a conversation by its tasks, how it opened or its session.'
+/** A Log search counts conversations. */
+const CONVERSATION_NOUN: Noun = { one: 'conversation', many: 'conversations' }
+
+/** What a query no conversation matches shows: the list holds those of the last `hours`. */
+export function logNothingFound(hours: number): string {
+  return `Nothing matches. The Log view searches its conversations of the last ${hours} h.`
+}
+
+/** The Find field's query on the Log view's list and the conversations it names (log-search.ts searchLog), in the list's order. */
+export type LogSearch = { query: string; hits: readonly LogHit[] }
 
 /** The key of a conversation's row in the list, the press that opens its page: a return from the page lands on it. */
 export function conversationKey(read: LogRead): string {
@@ -42,25 +59,40 @@ function lineCount(count: number): string {
   return `${count} ${count === 1 ? 'line' : 'lines'}`
 }
 
-/** A conversation's row: its title, over its session, when its first and last lines of the window came and how many; a press opens its page. */
-function conversationBlock(conversation: LogConversation, clock: Clock, worked: Worked): Block {
+/**
+ * A conversation's row keyed `key`: `title`, over its session (`sessionMarks` underlined), when its first and last
+ * lines of the window came and how many; a press opens its page.
+ */
+function conversationBlock(conversation: LogConversation, clock: Clock, key: string, title: Span[], sessionMarks: readonly Mark[]): Block {
   const read: LogRead = { session: conversation.session, claude: conversation.claude }
-  const key = conversationKey(read)
   const first = timeWords(new Date(conversation.firstAt).toISOString(), clock)
   const last = timeWords(new Date(conversation.lastAt).toISOString(), clock)
   const when = first === last ? first : `${first}–${last}`
   return {
     key,
     rows: [
-      { key, spans: titleSpans(conversation, worked), maxLines: TITLE_LINES },
-      { key: `${key}:what`, spans: [{ text: `${conversation.session} · ${when} · ${lineCount(conversation.lines)}`, dim: true }] },
+      { key, spans: title, maxLines: TITLE_LINES },
+      { key: `${key}:what`, spans: markedSpans(`${conversation.session} · ${when} · ${lineCount(conversation.lines)}`, sessionMarks, { dim: true }) },
     ],
     reads: read,
   }
 }
 
-/** The Log view's list at the clock, each conversation titled by what it worked, or why it has none. */
-export function logListBlocks(list: LogList, clock: Clock, worked: Worked): Block[] {
+/** The search's body: the hint, the line that says nothing matched, or the count and the conversations it names. */
+function foundBlocks(search: LogSearch, hours: number, clock: Clock): Block[] {
+  const results = search.hits.map(hit => {
+    const { conversation, title } = hit.row
+    return conversationBlock(conversation, clock, logResultKey(conversation), markedRun(title ?? [UNTITLED], marksOf(hit, 'title')), marksOf(hit, 'session'))
+  })
+  const total = search.hits.length
+  return searchViewBlocks({ key: LOG_SEARCH_VIEW, query: search.query, hint: LOG_SEARCH_HINT, nothing: logNothingFound(hours), noun: CONVERSATION_NOUN, results, shown: total, total })
+}
+
+/**
+ * The Log view's list at the clock, each conversation titled by what it worked, or why it has none; while `search`
+ * holds the Find field's query, the search's body instead.
+ */
+export function logListBlocks(list: LogList, clock: Clock, worked: Worked, search: LogSearch | null = null): Block[] {
   switch (list.kind) {
     case 'reading':
       return [note(`${LIST}:note`, 'Reading the turn logs…')]
@@ -73,10 +105,11 @@ export function logListBlocks(list: LogList, clock: Clock, worked: Worked): Bloc
     case 'failed':
       return [single(`${LIST}:note`, [{ text: `The turn logs could not be read: ${list.reason.replace(/\.$/, '')}.`, color: 'warning' }])]
     case 'conversations':
+      if (search !== null) return foundBlocks(search, list.hours, clock)
       if (list.conversations.length === 0) return [note(`${LIST}:note`, `No session wrote a prompt or a reply in the last ${list.hours} h.`)]
       return [
         note(`${LIST}:intro`, `Each conversation of the last ${list.hours} h, titled by the task it worked, the newest first.`),
-        ...list.conversations.map(conversation => conversationBlock(conversation, clock, worked)),
+        ...list.conversations.map(conversation => conversationBlock(conversation, clock, conversationKey(conversation), titleSpans(conversation, worked), [])),
       ]
   }
 }
