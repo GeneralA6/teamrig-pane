@@ -1,5 +1,5 @@
 // The plugin through the engine: env, clock, store, session id and fs answered beneath it.
-import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiFocusInput } from 'claude-code'
+import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiFocusInput, UiScrollInput } from 'claude-code'
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
 import { BANNER_KEY, NOTHING_CURRENT } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
@@ -92,6 +92,14 @@ const PANE_PROPS = {
   scroll: { offset: 0, bodyRows: 40 },
   view: {},
 } as const
+
+/**
+ * A person's scroll of the docked pane by `by` rows, sized as the engine sizes it: the pane's tree fills the engine's
+ * 40 rows exactly, so the engine's own window has nowhere to move.
+ */
+function personScroll(by: number): UiScrollInput {
+  return { component: 'Pane', requestId: 'teamrig-pane', offset: 0, by, bodyRows: 40, contentRows: 40, origin: { kind: 'person' } }
+}
 
 /** A dock wide enough that a requirement's WARN line is one drawn line, so a test can match all of it. */
 const WIDE = { ...PANE_PROPS, bodyColumns: 200 } as const
@@ -488,6 +496,44 @@ test("docked, a list of 2,000 tasks draws the words of only the tasks its window
   expect(top.length).toBeLessThan(20)
   // Every task's press is drawn, in the window or as a stand-in, so the focus ring's indexes stay put as it moves.
   expect(buttonKeys(await pane.drawn()).filter(key => /^po:T\d+$/.test(key))).toHaveLength(2_000)
+  // The person's page key moves the window down its rows, on from the last task it showed, the header put above it;
+  // the presses stay 2,000. Back up, the window shows the first tasks again.
+  const header = linesOf(keyedNode(await pane.drawn(), 'header'))
+  expect(await $.ui.scroll(personScroll(40))).toEqual({})
+  const paged = await numbers()
+  expect(paged).not.toContain(1)
+  expect(Math.min(...paged)).toBeGreaterThanOrEqual(Math.max(...top))
+  expect(linesOf(keyedNode(await pane.drawn(), 'header'))).toEqual(header)
+  expect(buttonKeys(await pane.drawn()).filter(key => /^po:T\d+$/.test(key))).toHaveLength(2_000)
+  await $.ui.scroll(personScroll(-40))
+  expect(await numbers()).toEqual(top)
+})
+
+test("a person's scroll moves the docked pane's own window and goes no further; a plugin's, or one inline or in a dock too narrow for the header to stay put, goes on to the engine", async ($, on) => {
+  const { disk } = await start(on)
+  const engine: UiScrollInput[] = []
+  on('ui.scroll', async ($, e) => {
+    engine.push(e)
+    return {}
+  })
+  disk.write(
+    EVENTS,
+    Array.from({ length: 200 }, (_, i) => createLine(`T${i + 1}`, { owner: 'po', by: 'lead', at: NOW - HOUR, title: `Long list task ${i + 1}` })),
+  )
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'all' })
+  await $.ui.scroll(personScroll(1))
+  expect(engine).toEqual([])
+  const moved: UiScrollInput = { ...personScroll(40), origin: { kind: 'plugin', name: 'other' } }
+  await $.ui.scroll(moved)
+  expect(engine).toEqual([moved])
+  await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
+  await $.ui.scroll(personScroll(1))
+  expect(engine).toEqual([moved, personScroll(1)])
+  await pane.redraw({ ...PANE_PROPS, bodyColumns: 2 })
+  await $.ui.scroll(personScroll(-1))
+  expect(engine).toEqual([moved, personScroll(1), personScroll(-1)])
 })
 
 test('docked, the header and the body\'s window fill the rows the engine gives the pane, a scroll bar beside a body taller than its window', async ($, on) => {
@@ -525,12 +571,16 @@ test("docked, a long list's first and last tasks are drawn wherever the window s
   await pane.press({ key: 'all' })
   // The engine's focus ring runs over the drawing's focusable elements in order and wraps at its ends: Shift+Tab on its
   // first lands on its last, the list's last task's press; Tab on from the buttons and the Find field reaches its first.
-  for (const offset of [0, 3_000, 6_000]) {
-    await pane.redraw({ ...PANE_PROPS, scroll: { offset, bodyRows: 40 } })
+  // So wherever the person scrolled the window: at the top, then 5 and 10 page keys down, where task 1 is out of sight.
+  for (const pages of [0, 5, 5]) {
+    for (let page = 0; page < pages; page += 1) await $.ui.scroll(personScroll(40))
     const ring = focusables(await pane.drawn()).map(element => element.key)
     expect(ring.find(key => /^po:T\d+$/.test(key))).toBe('po:T1')
     expect(ring.at(-1)).toBe('po:T2000')
   }
+  const shown = (await pane.findAll({ type: 'Text', text: /Long list task \d+/ })).map(found => /Long list task (\d+)/.exec(found.text)?.[1])
+  expect(shown.length).toBeGreaterThan(0)
+  expect(shown).not.toContain('1')
 })
 
 /** A drawn element's props, when it has any. */

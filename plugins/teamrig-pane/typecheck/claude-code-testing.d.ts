@@ -3,7 +3,7 @@
 // each test file in the engine with this kit.
 
 declare module 'claude-code/testing' {
-  import type { On, RenderComponent, RenderInput, RenderProps, SessionStart, CommandRun, ToolCall, ToolName, ToolResult, UiFocusInput, UiFocusResult } from 'claude-code'
+  import type { On, RenderComponent, RenderInput, RenderProps, SessionStart, CommandRun, ToolCall, ToolName, ToolResult, UiFocusInput, UiFocusResult, UiScrollInput, UiScrollResult } from 'claude-code'
 
   export interface Matchers {
     toBe(expected: unknown): void
@@ -52,6 +52,8 @@ declare module 'claude-code/testing' {
       mount<C extends RenderComponent>(request: RenderInput<C>): Promise<Mounted<C>>
       /** Raises `ui.focus` as the engine does when the ring moves: through the plugin's hooks, then the test's own beneath them. */
       focus(e: UiFocusInput): Promise<UiFocusResult>
+      /** Raises `ui.scroll` as the engine does when a window is asked to move: through the plugin's hooks, then the test's own beneath them. */
+      scroll(e: UiScrollInput): Promise<UiScrollResult>
     }
     readonly tool: { call<T extends ToolName>(input: ToolCall<T>): Promise<ToolResult> }
   }
