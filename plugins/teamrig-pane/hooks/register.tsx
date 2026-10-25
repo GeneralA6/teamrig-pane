@@ -58,7 +58,7 @@ import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardP
 import { diffKey, pieceKey, pressesFrom, standInsOf } from './press-keys'
 import { buttonCells, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
-import { barSpans, blankSpans, frameOf, placesOf, viewOf, type FrameSlot, type View } from './frame'
+import { barSpans, blankSpans, frameOf, placesOf, scrolledBy, viewOf, type FrameSlot, type View } from './frame'
 import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
@@ -667,10 +667,22 @@ export const register: Register = on => {
   let keysMemo = FIRST_MEMO
   /** The rows the last docked layout wrapped: a drawing re-wraps only the rows that changed since. */
   const wraps = new WrapCache()
-  /** Where the docked body's window stood as last drawn: a reveal moves it from there. */
-  let lastView: View = viewOf([], 0, 0)
+  /**
+   * Where the docked body's window stood as last drawn: a reveal and the person's scrolls move it from there. Null
+   * while the pane draws no window of its own (inline, minimized or flat), where the engine's window moves as it would.
+   */
+  let lastView: View | null = null
   /** The reveal the window last settled on (body-scroll.ts settle), held while no new step comes. */
   let settled: Settled | null = null
+  // A person's wheel tick, arrow or page key over the docked pane moves the body's own window from where it last stood
+  // (frame.ts scrolledBy), never the engine's, so the header stays put. A plugin's scroll, or one while the pane draws
+  // no window of its own, goes on to the engine. A failed write lets the engine take the scroll as it would have.
+  on('ui.scroll', { requestId: PANE }, async ($, e, next) => {
+    const view = lastView
+    if (e.origin.kind !== 'person' || view === null) return next(e)
+    await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: scrolledBy(view, e) }))
+    return {}
+  }).catch(($, e, next) => next(e))
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const components = $.ui.resolve(e)
     const { Box, Text, Button, Link } = components
@@ -956,15 +968,18 @@ export const register: Register = on => {
           ))}
         </Box>
       )
-    // The header and body as they are, one under the other. Inline (gap 0) inlineLayout cut the rows to fit; a dock
-    // whose header is too tall to stay put (HEADER_MAX_SHARE) draws every block, a blank row apart, and the engine's
-    // window scrolls the pane as one.
-    const drawFlat = (header: readonly HeaderPart[], gap: number) => (
-      <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={gap}>
-        {header.map(part => part.node)}
-        {body.map(drawBlock)}
-      </Box>
-    )
+    // The header and body as they are, one under the other, in no window of their own. Inline (gap 0) inlineLayout cut
+    // the rows to fit; a dock whose header is too tall to stay put (HEADER_MAX_SHARE) draws every block, a blank row
+    // apart, and the engine's window scrolls the pane as one.
+    const drawFlat = (header: readonly HeaderPart[], gap: number) => {
+      lastView = null
+      return (
+        <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={gap}>
+          {header.map(part => part.node)}
+          {body.map(drawBlock)}
+        </Box>
+      )
+    }
     // Docked, the header stays put and the body scrolls under it (T860): the two are as tall together as the
     // engine's window, so the engine has no rows to scroll, and the body's window takes the rows the header, counted
     // as drawn, and the blank row under it leave. It shows the body from the offset the last step settles on
@@ -976,7 +991,7 @@ export const register: Register = on => {
       if (headerRows + 1 > rows * HEADER_MAX_SHARE) return drawFlat(header, 1)
       const visibleRows = rows - headerRows - 1
       const places = placesOf(body, 1)
-      const landed = settle(scroll, settled, places, viewOf(places, lastView.offset, visibleRows))
+      const landed = settle(scroll, settled, places, viewOf(places, lastView?.offset ?? 0, visibleRows))
       settled = landed.settled
       const frame = viewOf(places, landed.offset, visibleRows)
       lastView = frame
@@ -1075,7 +1090,10 @@ export const register: Register = on => {
         : []),
     ]
     const switchRow = drawPacked('switch', switchItems, 1)
-    if (isMinimized && body.length === 0) return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>
+    if (isMinimized && body.length === 0) {
+      lastView = null
+      return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>
+    }
     // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
     // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, s, m, a, h) answers. The minimized strip
     // above keeps its switch, so a press on it still opens the pane, onto the setup.
