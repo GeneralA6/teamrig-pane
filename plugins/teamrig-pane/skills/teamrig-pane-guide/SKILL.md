@@ -488,8 +488,11 @@ away what a tab showed. With no team, a team with no config file (teamrig writes
 (teamrig writes none while the team's `turnLog.enabled` is off) or a folder it cannot read, the view says which.
 
 A press on a session (a click, or Enter on it) opens its page under `back` (`b`): its lines oldest first, the newest at
-the end where the page opens. Each prompt and reply is a head line (`prompt · 20:05 IDT`) over its text; a `/clear` is a dim
-rule. teamrig keeps a text's last 64,000 characters, and a cut one says `cut, its end kept`. The page holds the newest
+the end where the page opens. Each prompt and reply is split by who spoke, each part a head line over its words:
+`owner · 20:05 IDT` (the words typed at the tab), `Claude` (a reply), `message from <session>` and `subagent report`.
+The harness's notices and reminders in a prompt are dim lines led by their time, without their tags and ids, and
+markdown is drawn as styles (bold, code, links, headings, items, quotes, code blocks, rules, tables), never as its
+marks. A `/clear` is a dim rule. teamrig keeps a text's last 64,000 characters, and a cut one says `cut, its end kept`. The page holds the newest
 256 KiB of text and says when it left older lines out. Log, from a page or another view, shows the list; above the
 prompt the list shows, never a page.
 
