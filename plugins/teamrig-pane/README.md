@@ -329,14 +329,20 @@ session of the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`, one fil
 `turnLog.keepHours`, 24 by default), so a `/clear` or a compaction never takes away what a tab showed. It reads each
 line with teamrig's own reader, and files only, only while it shows: no model calls, no tokens.
 
-The view lists the team's sessions that wrote a line in those hours, the one whose log changed last first: each its
-id and when its log last changed, over its newest prompt in two lines at most (`no prompt in the last 24 h` when it has
-replies alone, with the team's hours). Until there is one it says why: no team, a team with no config file (teamrig
-writes no turn log for one), no turn log yet (teamrig writes none while the team's `turnLog.enabled` is off), a
-folder it could not read, or no session in the window.
+The view lists each conversation that wrote a line in those hours, the one with the newest line first. A conversation
+is what one session said from a `/clear` to its next one: a `/clear` starts a new conversation, a compaction keeps it.
+Each is titled by the tasks its session worked while it ran, read from the register: a task the session owns whose
+status or details it changed, from the conversation's first line until its next one began, its id bold before its
+title (each title cut to 48 characters when it worked several, in the order it first worked them). One that worked no
+task is titled by how it opened, in two lines at most: the owner's first words plain, else Claude's first reply dim,
+else `no prompt or reply`; teamrig's own wake-up prompts still read as the owner's words. Under the title, dim, its
+session, the times of its first and last lines and how many lines it holds. Until there is one it says why: no team, a
+team with no config file (teamrig writes no turn log for one), no turn log yet (teamrig writes none while the team's
+`turnLog.enabled` is off), a folder it could not read, or no conversation in the window.
 
-A press on a session (a click, or Enter on it) opens its page under a `back` button (`b`): a head with the session and
-how many lines it shows, then its lines oldest first, so the newest is at the end, where the page opens. Each prompt and
+A press on a conversation (a click, or Enter on it) opens its page under a `back` button (`b`): its title as the list
+draws it, over its session and how many lines it shows, then its lines oldest first, so the newest is at the end, where
+the page opens. Each prompt and
 reply is split by who spoke, each part a head line over its words: `owner · 20:05 IDT` for the words typed at the tab,
 `Claude · 20:06 IDT` for a reply, `message from <session>` for another session's message and `subagent report` for a
 subagent's (a time of an earlier day with its day). The harness's own words in a prompt, a background command's or a
