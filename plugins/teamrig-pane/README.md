@@ -207,10 +207,11 @@ first open task in plan order after a
 dim `next`, else a dim `nothing in progress or open`. It follows the register as the list does, cut at one
 line, whether the pane is open, minimized or never drawn; a session with no area gets no band from the pane. A
 click on it opens the task's description, status, note, proof, priority and due under its title; a second
-click closes it. The band is the engine's, directly above the prompt input, in the terminal and the desktop
-app: the one place outside a pane where a plugin draws a part a click reaches, as no plugin gets a row atop the
+click closes it. The `open in pane` button beside it opens the pane, minimized or never opened too, at the
+task's page; back from there shows the list at the task's row. The band is the engine's, directly above the
+prompt input, in the terminal and the desktop app: the one place outside a pane where a plugin draws a part a click reaches, as no plugin gets a row atop the
 terminal. A survey takes the band while it is up, its `[-]` (or `ctrl+x ctrl+a`) folds it, and a card taller
-than the band scrolls in it. The press has no key of its own: a band's key would answer that key typed in an
+than the band scrolls in it. Neither press has a key of its own: a band's key would answer that key typed in an
 empty prompt.
 
 ## Minimizing, not closing

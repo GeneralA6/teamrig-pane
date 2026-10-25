@@ -112,6 +112,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
 | A click on the header's `inbox n unread` | In the dock: opens the Inbox view; it marks nothing read |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
+| A click on the banner's `open in pane` | Opens the pane, minimized or never opened too, at the current task's page; back shows the list at its row |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's Log page, back to the list |
 | `f` | Forward to the place back left, while there is one |
 | `s` | In the dock's Tasks, Inbox, Changes and Team views and on the Log view's list: puts the cursor in the Find field under the switch, which searches what the view holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
@@ -127,8 +128,9 @@ The banner, in the band above the prompt, leads with the session's name, then th
 (`acme-po · ◐ T595  Current-task banner`): its area's task in progress that took its status last, else its
 first open task in plan order after a dim `next`. It follows the register
 as the list does, whether the pane is open, minimized or never drawn. A click opens that task's description,
-status, note, proof, priority and due under it; a second click closes it. A survey takes the band while it is
-up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
+status, note, proof, priority and due under it; a second click closes it. Its `open in pane` button opens the
+pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
+band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
 Minimized, the pane is one row: the `[Tasks] [Changes Δn] [Log] [Inbox (n)] [Team]` switch and a `minimized` mark. A
 click on any of its buttons, `t`, `d`, `g`, `u` or `e`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
