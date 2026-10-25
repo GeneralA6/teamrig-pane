@@ -130,7 +130,8 @@ In the dock, a click on the header's `inbox 2 unread` opens the area's inbox the
 first unread line, drawn bold (at the newest line when none is unread). Reading it there marks nothing read: the
 pane never writes an inbox, so the count drops only when the session runs `teamrig inbox read`.
 
-The dock always shows a Find field under its Tasks, Changes, Log and Team switch; `s` or a click puts the cursor in it, and
+In the Tasks view, and on the Team tab (see Team, below), the dock shows a Find field under its switch; `s` or a click
+puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
 aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
 evidence or ref (one that starts with a mark, `.md`, matches anywhere), and the body lists the matches as
@@ -369,13 +370,33 @@ dim: its roles (lead, coordinator, security reviewer), how many it leads, and it
 Teams under another top team are left out. Until there is a tree, the tab says why: no team, a team with no config
 file teamrig can read, or a folder it could not read.
 
-A press on a row that has rows under it (a click, or Enter or Space on it) closes it (`▸`), and a second press opens it
-again (`▾`). Teams and leaders start open, and a closed group starts closed. What was opened or closed stays so across a
+A press on a team's or a closed group's row (a click, or Enter or Space on it) closes it (`▸`), and a second press opens
+it again (`▾`). Teams and leaders start open, and a closed group starts closed. A press on a session's row opens its card
+under it, and a second closes it. A leader's row holds two presses: its mark closes or opens the sessions it leads, its
+id opens its card; inline, where a row is one press, the row does the first. What was opened or closed stays so across a
 hot reload. ↑ and ↓ move between rows. There are no ← and → keys, since the engine binds keys only to buttons.
 
-It reads each team's config and, in the state folder that config names, its rename log and hire log, with teamrig's own
-readers. It reads files only, and only while it shows: on each 3 s poll a file is read again only when its size or time
-moved. No model calls, no tokens.
+A card has one labelled line per fact the team's files hold, each only when it has a value: Role (its roles and how many
+it leads, or the area it owns), Led by (its leaders, nearest first), Launch (the model and effort teamrig starts it on),
+Hired or Rehired (the day, who hired it, the review day), Scope and Reason (its job and why), Now (its tasks in
+progress, each id a press that opens the task's page) and Inbox (its unread lines, a press that opens its inbox at the
+first of them). A retired session's card is its retire instead: the day and who retired it, why, the session its tasks
+went to (Heir), and its Handover, a press that opens the file, or why it left none. Now and Inbox show only for the pane's
+own team, whose register and inboxes it reads; a session that never marked its inbox read has no Inbox count. A page a
+card opens shows in the Tasks view, and back from it shows the tasks list.
+
+The Find field searches the tree here. Each word must match, case aside, the start of a word in a session's id, name,
+former names, roles or hire scope, retired sessions too. The body counts the sessions it names (`1 session matches`) and
+draws each under its team and the leaders over it, the matched words underlined and a matched scope on a dim line under
+its row; a press on one opens or closes its card. Enter moves the cursor onto the first match, and with one match opens
+its card too. The Tasks view and the Team tab share the search, so a switch between them closes it. Cleared, the
+tree draws as it stood: a session found under a closed row stays hidden there, though a card the search opened stays
+open.
+
+It reads each team's config and, in the state folder that config names, its rename log and hire log, and for the pane's
+own team its register and inbox read marks and each marked session's inbox, with teamrig's own readers. It reads files
+only, and only while it shows: on each 3 s poll a file is read again only when its size or time moved. No model calls,
+no tokens.
 
 ## Reading the register
 

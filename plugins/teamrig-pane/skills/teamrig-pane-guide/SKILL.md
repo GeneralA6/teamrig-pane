@@ -375,7 +375,8 @@ not shown. The page shows the file as it was when the page opened: open it again
 
 ### Find
 
-The dock always shows a Find field under its Tasks, Changes, Log and Team switch. `s` or a click puts the cursor in it; it
+In the Tasks view, and on the Team tab (see [The Team view](#the-team-view)), the dock shows a Find field under its
+switch. `s` or a click puts the cursor in it; it
 never takes the keys by itself, so the pane's other keys keep working. As you type, the body counts the tasks
 the pane holds that every word matches, on a dim line, then lists them, the matched words underlined:
 
@@ -510,10 +511,21 @@ its size or time moved; on another view, or minimized, it reads nothing.
 counts its active and closed sessions. Under it are its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a closed group, and its child teams (`team.parent`). A session's row gives its id
 (bold), its current name where it differs, then, dim: its roles, how many it leads, and its hire and review day or its
-retire day, then its former names. A retired session is a dim `○`. A press on a row that has rows under it (a click,
-Enter or Space) closes it or opens it again. Teams and leaders start open, a closed group closed, and the state stays
-across a hot reload. There are no ← and → keys: the engine binds keys only to buttons. With no team, no config teamrig
-can read, or a folder it cannot read, the view says which.
+retire day, then its former names. A retired session is a dim `○`. A press on a team's or closed group's row (a click,
+Enter or Space) closes it or opens it again; on a session's row it opens or closes its card. A leader's row has two
+presses: its mark folds the sessions it leads, its id opens its card. Teams and leaders start open, a closed group
+closed, and the state stays across a hot reload. There are no ← and → keys: the engine binds keys only to buttons. With
+no team, no config teamrig can read, or a folder it cannot read, the view says which.
+
+A card lists, each only when known: Role, Led by, Launch (model and effort), Hired or Rehired (day, by whom, review day),
+Scope, Reason, Now (its tasks in progress, each id opening its page) and Inbox (unread lines, opening its inbox); a
+retired session's card gives its retire: day, by whom, why, Heir and Handover (a press opens it). Now and Inbox show for
+the pane's own team only. A page a card opens shows in the Tasks view; back shows the tasks list.
+
+The Find field (`s`) searches the tree: each word matches the start of a word in a session's id, name, former names,
+roles or hire scope, retired ones too. The body counts the matches and draws each under its team and leaders; a press
+opens or closes its card, and Enter with one match opens it. Switching to Tasks closes the search, as Team does a Tasks
+search. Cleared, the tree draws as before: a match under a closed row stays hidden there.
 
 It reads each team folder's config, rename log and hire log (`~/.teamrig/teams/<team>`) with teamrig's own readers.
 While the view shows, it reads a file again on a 3 second poll only when its size or time moved; on another view, or
