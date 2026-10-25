@@ -16,7 +16,7 @@ const TASKS = rowsOf([
   createLine('T58', { owner: 'etl', by: 'lead', at: NOW - HOUR, title: 'Load the feed' }),
   createLine('T50', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the pages', ref: 'docs/x.md:3', taskKeys: { after: ['T58'] } }),
 ])
-const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: 'pinned', unreadInbox: null, problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
+const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: 'pinned', unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
 const textOf = (row: Row) => row.spans.map(span => span.text).join('')
 /** A card row's first line on a page: the label padded to the value column, then the value. */
 const labelled = (label: string, value: string) => `${label.padEnd(LABEL_CELLS)}${value}`
