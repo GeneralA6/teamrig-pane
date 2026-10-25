@@ -1191,6 +1191,22 @@ describe('source', () => {
     const noConfig = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, WEB)
     expect((await noConfig.poll({ claudeSession: S1, pinned: 'api', now: NOW }))?.leads).toBe(null)
   })
+
+  test("carries each session's work on its own tasks over the turn log's kept hours, and none with no turn log", async () => {
+    const files = new MemoryFiles()
+    files.write(PATHS.events, [
+      createLine('T1', { owner: 'api', by: 'lead', at: NOW - 30 * HOUR }),
+      statusLine('T1', 'api', NOW - 25 * HOUR, 'in-progress'),
+      statusLine('T1', 'api', NOW - 2 * HOUR, 'waiting'),
+      statusLine('T1', 'lead', NOW - HOUR, 'in-progress'),
+    ].join('\n'))
+    const logged: TeamFiles = { ...WEB, turnLog: { dir: 'K/teams/web/state/turn-log', keepHours: 24 } }
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, logged)
+    expect((await source.poll({ claudeSession: S1, pinned: 'api', now: NOW }))?.work).toEqual([{ session: 'api', task: 'T1', at: NOW - 2 * HOUR }])
+
+    const unlogged = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, WEB)
+    expect((await unlogged.poll({ claudeSession: S1, pinned: 'api', now: NOW }))?.work).toEqual([])
+  })
 })
 
 
