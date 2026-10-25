@@ -4,7 +4,7 @@
 // pane's edge, and the root Box's gap spaces the blocks. Wrapping here instead of nesting a Box per row
 // keeps a block one element, the cost rows.ts explains; an open card is one more Text, but for each line that
 // holds a press (a task id, a reference file), drawn as a row of its pieces so the press can be one of its own, as a
-// block's own line is when no press opens the block (the header's inbox count). A
+// block's own line is when no press opens the block (a Team tab leader's fold mark and id). A
 // row can be cut at a few lines, ending in `…`, and can carry an `end` drawn at its first line's right edge. A link
 // or a press is never split: it starts a fresh line when that gives it more room, and one wider still is
 // shortened to its line, ending in `…`. Inline, above the prompt, each row is one truncated screen row and the rows
@@ -39,7 +39,7 @@ export type CardPart =
  * key it opens or closes when `folds` does, or a Changes file's diff when `expands` does (inline a file's row, docked
  * a Changes search result). `card`, set while that card is open, is the card's own parts, drawn under the Button and
  * outside it. `parts`, set docked when no press but a Team tab key's opens the element and a line of its holds a press
- * (the header's inbox count, a leader's fold mark and id), is its lines as parts, drawn in place of its Text and its
+ * (a leader's fold mark and id), is its lines as parts, drawn in place of its Text and its
  * `folds` press, its open card under them.
  */
 export type Drawn = {

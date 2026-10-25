@@ -359,7 +359,7 @@ describe('rows', () => {
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
     expect(blocks.map(b => b.key)).toEqual(['header', 'next', 'next:T1', 'waiting', 'waiting:T2', 'done', 'done:T3'])
-    expect(textAt(blocks, 'header')).toBe('2 active · inbox 2 unread')
+    expect(textAt(blocks, 'header')).toBe('2 active')
     expect(rowAt(blocks, 'header')?.rule).toBe(true)
     expect(rowAt(blocks, 'next:T1')?.spans).toEqual([{ text: '○' }, { text: ' T1', bold: true }, { text: '  Ship it' }])
     expect(rowAt(blocks, 'next:T1')?.hang).toEqual({ text: '      ' })
@@ -422,44 +422,41 @@ describe('rows', () => {
 
   test('the header leaves the session\'s own area unnamed, its tab names it, and names a pinned one', async () => {
     const tasks = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po' }))
-    expect(rowAt(paneBlocks(snapshotOf(tasks, 'po'), 'mine'), 'header')?.spans).toEqual([
-      { text: '1 active', dim: true },
-      { text: ' · ', dim: true },
-      { text: 'inbox 2 unread', color: 'warning', inbox: { area: 'po', unread: 2 } },
-    ])
+    const own = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
+    expect(rowAt(own, 'header')?.spans).toEqual([{ text: '1 active', dim: true }])
+    // The unread lines are the switch's Inbox button's to count: the header holds no press and stays one Text.
+    expect(dockLayout(own, 40)[0]?.parts).toBeUndefined()
     const pinned = paneBlocks({ ...snapshotOf(tasks, 'po'), areaSource: 'pinned' }, 'mine')
     expect(rowAt(pinned, 'header')?.spans.slice(0, 2)).toEqual([{ text: 'po', bold: true }, { text: ' (pinned) · ', dim: true }])
-    expect(textAt(pinned, 'header')).toBe('po (pinned) · 1 active · inbox 2 unread')
+    expect(textAt(pinned, 'header')).toBe('po (pinned) · 1 active')
   })
 
-  test("docked, the header's inbox count is a press of its own, its line drawn as pieces; inline it is words, as a card's ids are", async () => {
+  test("docked, a line holding an inbox count is drawn as pieces, the count a press of its own; inline it is words, as a card's ids are", async () => {
     const tasks = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po' }))
-    const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
-    const [header, task] = dockLayout(blocks, 40)
-    const count: Span = { text: 'inbox 2 unread', color: 'warning', inbox: { area: 'po', unread: 2 } }
-    expect(header?.parts).toEqual([
+    const [, task] = dockLayout(paneBlocks(snapshotOf(tasks, 'po'), 'mine'), 40)
+    const count: Span = { text: '2 unread', color: 'warning', inbox: { area: 'po', unread: 2 } }
+    const line: Block = { key: 'counts', rows: [{ key: 'counts', spans: [{ text: 'inbox ', dim: true }, count] }] }
+    const [drawn] = dockLayout([line], 40)
+    expect(drawn?.parts).toEqual([
       {
         kind: 'line',
         key: 'card:0',
         pieces: [
-          { kind: 'words', spans: [{ text: '1 active · ', dim: true }] },
+          { kind: 'words', spans: [{ text: 'inbox ', dim: true }] },
           { kind: 'inbox', span: count, inbox: { area: 'po', unread: 2 } },
-          { kind: 'words', spans: [{ text: ` ${'─'.repeat(14)}`, dim: true }] },
         ],
       },
     ])
     // The Text it replaces holds the same line, so the window counts the same rows.
-    expect(header?.spans.map(span => span.text).join('')).toBe(`1 active · inbox 2 unread ${'─'.repeat(14)}`)
+    expect(drawn?.spans.map(span => span.text).join('')).toBe('inbox 2 unread')
     // A block a press opens, a task's, keeps its one Text; so does a Log conversation's, which opens its page.
     expect(task?.parts).toBeUndefined()
     const conversation: Block = { key: 'log:conv:api:c-1', rows: [{ key: 'log:conv:api:c-1', spans: [count] }] }
     expect(dockLayout([conversation], 40)[0]?.parts).toBeDefined()
     expect(dockLayout([{ ...conversation, reads: { session: 'api', claude: 'c-1' } }], 40)[0]?.parts).toBeUndefined()
-    expect(inlineLayout(blocks, 6)[0]).toEqual({ key: 'header', spans: [{ text: '1 active · ', dim: true }, count], wrap: 'truncate-end', toggle: null })
+    expect(inlineLayout([line], 6)[0]).toEqual({ key: 'counts', spans: [{ text: 'inbox ', dim: true }, count], wrap: 'truncate-end', toggle: null })
     // Each count is its own press, one of another area or another count too.
     expect(piecesOf([count, { ...count, inbox: { area: 'etl', unread: 2 } }, { ...count, inbox: { area: 'po', unread: 3 } }])).toHaveLength(3)
-    // With no count, the header holds no press and stays one Text.
-    expect(dockLayout(paneBlocks({ ...snapshotOf(tasks, 'po'), unreadInbox: null }, 'mine'), 40)[0]?.parts).toBeUndefined()
   })
 
   test("docked, a Team tab row's own presses draw it as parts in place of its fold press, its open card's parts keyed past them", () => {
@@ -523,7 +520,7 @@ describe('rows', () => {
       'done',
       'done:T5',
     ])
-    expect(textAt(blocks, 'header')).toBe('4 active · inbox 2 unread')
+    expect(textAt(blocks, 'header')).toBe('4 active')
     expect(rowAt(blocks, 'verifying')?.spans).toEqual([{ text: 'Verifying', color: 'success', bold: true }, { text: ' (1)', dim: true }])
     expect(textAt(blocks, 'verifying:T3')).toBe('◑ T3  Shipped')
     expect(rowAt(blocks, 'verifying:T3')?.spans[0]).toEqual({ text: '◑', color: 'success' })
