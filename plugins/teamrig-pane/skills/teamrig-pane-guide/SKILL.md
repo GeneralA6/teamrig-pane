@@ -114,7 +114,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's Log page, back to the list |
 | `f` | Forward to the place back left, while there is one |
-| `s` | In the dock's Tasks, Inbox and Team views: puts the cursor in the Find field under the switch, which searches what the view holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
+| `s` | In the dock's Tasks, Inbox and Team views and on the Log view's list: puts the cursor in the Find field under the switch, which searches what the view holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
 | `h` | In the dock: `archive`, the Archive page of this week's finished tasks (see [Archive](#archive)) |
 | `p` | On the Archive page: the week before, while the pane holds it |
 | `l` | On the Archive page: the week after, up to this week |
@@ -375,8 +375,8 @@ not shown. The page shows the file as it was when the page opened: open it again
 
 ### Find
 
-In the Tasks view, the Inbox view and on the Team tab (see [The Inbox view](#the-inbox-view) and
-[The Team view](#the-team-view)), the dock shows a Find field under its switch. `s` or a click puts the cursor in it; it
+In the Tasks view, the Inbox view, over the Log view's list and on the Team tab (see [The Log view](#the-log-view),
+[The Inbox view](#the-inbox-view) and [The Team view](#the-team-view)), the dock shows a Find field under its switch. `s` or a click puts the cursor in it; it
 never takes the keys by itself, so the pane's other keys keep working. As you type, the body counts the tasks
 the pane holds that every word matches, on a dim line, then lists them, the matched words underlined:
 
@@ -492,6 +492,12 @@ log teamrig writes for every session of the team (`<team state>/turn-log/<sessio
 or a compaction never takes away what a tab showed. With no team, a team with no config file (teamrig writes no turn
 log for one), no turn log yet (teamrig writes none while the team's `turnLog.enabled` is off) or a folder it cannot
 read, the view says which.
+
+The Find field (`s`) over the list searches its conversations: each word matches the start of a word in a
+conversation's title as the list draws it (a task's id among them) or in its session's name. The body counts the
+matches (`1 conversation matches`) and draws them as the list does, the matched words underlined. Enter with one match
+opens its page, with more moves the cursor onto the first; back from the page returns to the results. A page draws no
+field; switching views closes the search.
 
 A press on a conversation (a click, or Enter on it) opens its page under `back` (`b`): its title, then its lines oldest
 first, the newest at the end where the page opens. Each prompt and reply is split by who spoke, each part a head line over its words:

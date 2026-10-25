@@ -62,8 +62,8 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   back and forward (`b`, `f`) and a trail of where you went.
 - **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log, Inbox and Team switch (`s` or a click puts the cursor in it) that lists, as you type, the
   tasks the pane holds whose id, title, owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.
-  On the Inbox view the same field finds lines by sender or words, and on the Team tab sessions by id, name, former
-  names, roles or hire scope.
+  On the Inbox view the same field finds lines by sender or words, over the Log view's list conversations by their
+  tasks, how they opened or their session, and on the Team tab sessions by id, name, former names, roles or hire scope.
   A line under it says where your keys go: into the search, to the pane's keys, or to Claude's prompt.
 - **Archive:** `h` lists the tasks finished this week, a day at a time; `p` and `l` step a week back
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.

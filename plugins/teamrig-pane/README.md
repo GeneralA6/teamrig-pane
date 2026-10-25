@@ -130,8 +130,8 @@ not find lists each path it looked at; one over 256 KiB, or not text, says why i
 In the dock, a click on the header's `inbox 2 unread` opens the Inbox view (see Inbox, below). Reading it there marks
 nothing read: the pane never writes an inbox, so the count drops only when the session runs `teamrig inbox read`.
 
-In the Tasks view, the Inbox view and on the Team tab (see Inbox and Team, below), the dock shows a Find field under
-its switch; `s` or a click
+In the Tasks view, the Inbox view, over the Log view's list and on the Team tab (see Log, Inbox and Team, below), the
+dock shows a Find field under its switch; `s` or a click
 puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
 aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
@@ -343,6 +343,12 @@ else `no prompt or reply`; teamrig's own wake-up prompts still read as the owner
 session, the times of its first and last lines and how many lines it holds. Until there is one it says why: no team, a
 team with no config file (teamrig writes no turn log for one), no turn log yet (teamrig writes none while the team's
 `turnLog.enabled` is off), a folder it could not read, or no conversation in the window.
+
+The Find field over the list searches its conversations: each word must match, case aside, the start of a word in a
+conversation's title as the list draws it (a task's id among them) or in its session's name. The body counts the
+conversations it names (`1 conversation matches`) and draws each as the list does, the matched words underlined. Enter
+with one match opens its page, with more moves the cursor onto the first; back from the page returns to the results.
+A page draws no field. A switch to another view closes the search.
 
 A press on a conversation (a click, or Enter on it) opens its page under a `back` button (`b`): its title as the list
 draws it, over its session and how many lines it shows, then its lines oldest first, so the newest is at the end, where
