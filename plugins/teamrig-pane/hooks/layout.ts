@@ -34,10 +34,11 @@ export type CardPart =
   | { kind: 'press'; key: string; spans: Span[]; expands: string }
 /**
  * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, its
- * page when `opens` does (a search result), a conversation's Log page when `reads` does (docked only), or, inline, a
- * Changes file's diff when `expands` does. `card`, set while that card is open, is the card's own parts, drawn under
- * the Button and outside it. `parts`, set docked when no press opens the element, it has no card and a line of its
- * holds a press (the header's inbox count), is its lines as parts, drawn in place of its Text.
+ * page when `opens` does (a search result), a conversation's Log page when `reads` does (docked only), the Team tab's
+ * node it opens or closes when `folds` does, or, inline, a Changes file's diff when `expands` does. `card`, set while
+ * that card is open, is the card's own parts, drawn under the Button and outside it. `parts`, set docked when no press
+ * opens the element, it has no card and a line of its holds a press (the header's inbox count), is its lines as parts,
+ * drawn in place of its Text.
  */
 export type Drawn = {
   key: string
@@ -46,6 +47,7 @@ export type Drawn = {
   toggle: string | null
   opens?: string
   reads?: LogRead
+  folds?: string
   expands?: string
   card?: CardPart[]
   parts?: CardPart[]
@@ -341,9 +343,11 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps:
       toggle: block.toggle ?? null,
       ...(block.opens === undefined ? {} : { opens: block.opens }),
       ...(block.reads === undefined ? {} : { reads: block.reads }),
+      ...(block.folds === undefined ? {} : { folds: block.folds }),
     }
     if (block.card !== undefined) return { ...drawn, card: rowParts(block.card, row => wraps.wrap(row, columns)) }
-    const pressed = block.toggle === undefined && block.opens === undefined && block.reads === undefined && lines.some(line => line.some(isPress))
+    const pressed =
+      block.toggle === undefined && block.opens === undefined && block.reads === undefined && block.folds === undefined && lines.some(line => line.some(isPress))
     return pressed ? { ...drawn, parts: cardParts(lines) } : drawn
   })
   wraps.settle()
@@ -368,6 +372,7 @@ export function inlineLayout(blocks: readonly Block[], maxRows: number): Drawn[]
       spans: merged(row.end === undefined ? row.spans : [...row.spans, { text: END_GAP }, row.end]),
       wrap: 'truncate-end',
       toggle: i === 0 ? (block.toggle ?? null) : null,
+      ...(i === 0 && block.folds !== undefined ? { folds: block.folds } : {}),
       ...(row.expands === undefined ? {} : { expands: row.expands }),
     })),
   )
