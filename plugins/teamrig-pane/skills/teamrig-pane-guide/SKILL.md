@@ -1,6 +1,6 @@
 ---
 name: teamrig-pane-guide
-description: Use when a session runs the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes, Log, Inbox and Team views, where it finds the register, requirements.
+description: Use when a session runs the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes, Log, Inbox, Team views, where it finds the register, requirements.
 ---
 
 # teamrig-pane guide
