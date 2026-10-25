@@ -1,7 +1,6 @@
 // The Log view as blocks of rows (rows.ts). The list: each conversation of the hours teamrig keeps the turn log
-// (turn-log.ts), the newest last line first, titled by the tasks its session worked while it ran (work.ts: its own
-// events on its own tasks, from the conversation's first line until the session's next conversation began), else by
-// how it opened, over its session, its times and its count of lines; a press on one opens its page. The page: the
+// (turn-log.ts), the newest last line first, titled by the tasks its session worked while it ran, else by how it
+// opened (log-title.ts), over its session, its times and its count of lines; a press on one opens its page. The page: the
 // conversation's lines of those hours, oldest first (the view opens it at its end), under the same title. Each
 // prompt and reply is split by who spoke (turn-text.ts): the owner's
 // words, Claude's reply, another session's message and a subagent's report each a head (who, when, whether teamrig
@@ -9,24 +8,19 @@
 // time. One block per paragraph, as a file page splits them (file-page.ts), so the window draws only the paragraphs
 // in sight; a clear or compaction of the context is one dim rule. teamrig writes UTC times; each prints on the team's
 // clock, zone-marked (zone.ts). Pure.
-import type { LogConversation, LogList, LogPage, LogRead, Snapshot, TurnEntry } from '../types'
+import type { LogConversation, LogList, LogPage, LogRead, TurnEntry } from '../types'
 import { paragraphs } from './file-page'
+import { titleSpans, type Worked } from './log-title'
 import { markdownParagraphs, type MarkParagraph } from './markdown'
 import { SEPARATOR, single, type Block, type Row, type Span } from './rows'
 import { LOG_PAGE_CHARS } from './turn-log'
 import { turnParts, type Speaker, type TurnPart } from './turn-text'
-import { graphemes } from './width'
 import { momentWords, type Clock } from './zone'
 
 const LIST = 'log'
 const PAGE = 'log-page'
 /** The most lines a conversation's title takes in the list. */
 const TITLE_LINES = 2
-/** The most characters of each task's title in the title of a conversation that worked several. */
-const SHARED_TITLE_CHARS = 48
-
-/** What titles a conversation: each session's work on its own tasks, and the tasks it names. */
-export type Worked = Pick<Snapshot, 'work' | 'tasks'>
 
 /** The key of a conversation's row in the list, the press that opens its page: a return from the page lands on it. */
 export function conversationKey(read: LogRead): string {
@@ -41,38 +35,6 @@ function timeWords(iso: string, clock: Clock): string {
 
 function note(key: string, text: string): Block {
   return single(key, [{ text, dim: true }])
-}
-
-/** `text` cut to `max` characters, counted in graphemes so a character is never split, ending in `…` when cut. */
-function cut(text: string, max: number): string {
-  const parts = graphemes(text)
-  return parts.length <= max ? text : `${parts.slice(0, max - 1).join('').trimEnd()}…`
-}
-
-/** The tasks the conversation's session worked from its first line until its next conversation began, in the order first worked. */
-function tasksOf(conversation: LogConversation, work: Worked['work']): string[] {
-  const until = conversation.nextAt ?? Number.POSITIVE_INFINITY
-  const worked = work.filter(mark => mark.session === conversation.session && mark.at >= conversation.firstAt && mark.at < until)
-  return [...new Set(worked.map(mark => mark.task))]
-}
-
-/**
- * A conversation's title: each task it worked, its id bold before its title (cut when it worked several; the id
- * alone for a task the snapshot does not hold), else how it opened, the owner's words plain and Claude's dim.
- */
-function titleSpans(conversation: LogConversation, { work, tasks }: Worked): Span[] {
-  const ids = tasksOf(conversation, work)
-  if (ids.length === 0) {
-    const opening = conversation.opening
-    if (opening === null) return [{ text: 'no prompt or reply', dim: true }]
-    return [opening.by === 'owner' ? { text: opening.line } : { text: opening.line, dim: true }]
-  }
-  const titles = new Map(tasks.map(task => [task.id, task.title]))
-  return ids.flatMap((id, i): Span[] => {
-    const title = titles.get(id)
-    const words: Span[] = title === undefined ? [] : [{ text: ` ${ids.length === 1 ? title : cut(title, SHARED_TITLE_CHARS)}` }]
-    return [...(i === 0 ? [] : [SEPARATOR]), { text: id, bold: true }, ...words]
-  })
 }
 
 /** `3 lines`, `1 line`. */
