@@ -19,8 +19,8 @@ import { cells } from './width'
  * text color. With `href` the text is a link to that address (a card's Links row), never split across lines. With
  * `task` the text is that task's id in an open card (ids.ts), which a press on opens as a page; never split either.
  * With `file` the text names a file a card's Reference row lists (ref-file.ts), which a press on opens as a page too
- * (file-page.ts); never split. With `inbox` the text is the header's unread count, which a press on opens that area's
- * inbox as a file's page; never split. With `toggles` the text is a press that opens or closes that Team tab key
+ * (file-page.ts); never split. With `inbox` the text is an unread count (the header's, a Team tab card's), which a press
+ * on opens that area's inbox as a file's page at its first unread line; never split. With `toggles` the text is a press that opens or closes that Team tab key
  * (team-rows.ts): a leader's fold mark its node, its id its card; never split. `underline` marks the words a search
  * matched (search-view.ts).
  */
@@ -33,9 +33,12 @@ export type Span = {
   href?: string
   task?: string
   file?: RefFile
-  inbox?: string
+  inbox?: InboxPress
   toggles?: string
 }
+
+/** What an unread count's press opens: the area whose inbox it is, and how many of its newest lines are unread. */
+export type InboxPress = { readonly area: string; readonly unread: number }
 /**
  * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
  * undefined as `single` passes it on, starts them at the edge); a `rule` row ends in a rule.
@@ -205,7 +208,7 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   const activeTotal = view.verifying.length + view.working.length + view.upNext.length + waiting
   header.push({ text: `${activeTotal} active`, dim: true })
   if (snap.unreadInbox !== null)
-    header.push(SEPARATOR, { text: `inbox ${snap.unreadInbox} unread`, color: snap.unreadInbox > 0 ? 'warning' : 'subtle', inbox: view.area })
+    header.push(SEPARATOR, { text: `inbox ${snap.unreadInbox} unread`, color: snap.unreadInbox > 0 ? 'warning' : 'subtle', inbox: { area: view.area, unread: snap.unreadInbox } })
   const blocks: Block[] = [{ key: 'header', rows: [{ key: 'header', spans: header, rule: true }] }]
   // Filtered from the status bar, the header leads that status's tasks alone.
   if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]

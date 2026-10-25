@@ -17,7 +17,7 @@ const LINKS: CardPart = {
     { kind: 'words', spans: [{ text: 'after ' }] },
     { kind: 'id', span: { text: 'T7' }, task: 'T7' },
     { kind: 'file', span: { text: 'notes/a.md' }, file: { file: 'notes/a.md', line: null } },
-    { kind: 'inbox', span: { text: '2 unread' }, area: 'api' },
+    { kind: 'inbox', span: { text: '2 unread' }, inbox: { area: 'api', unread: 2 } },
   ],
 }
 const WORDS: CardPart = { kind: 'text', key: 'p0', spans: [{ text: 'what and why' }] }
@@ -41,7 +41,7 @@ describe('press-keys', () => {
   test('each press piece is keyed by its kind, then where it is drawn, its line and its place', () => {
     expect(pieceKey({ kind: 'id', span: { text: 'T7' }, task: 'T7' }, 'T5-open', 'p1', 1)).toBe('goto:T7:T5-open:p1:1')
     expect(pieceKey({ kind: 'file', span: { text: 'a' }, file: { file: 'a', line: 3 } }, 'T5-open', 'p1', 2)).toBe('goto:file:T5-open:p1:2')
-    expect(pieceKey({ kind: 'inbox', span: { text: '2' }, area: 'api' }, 'header', 'p0', 0)).toBe('goto:inbox:header:p0:0')
+    expect(pieceKey({ kind: 'inbox', span: { text: '2' }, inbox: { area: 'api', unread: 2 } }, 'header', 'p0', 0)).toBe('goto:inbox:header:p0:0')
     expect(pieceKey({ kind: 'toggle', span: { text: 'web' }, toggles: 'card:web' }, 'team:web', 'card:0', 2)).toBe('team:card:web:team:web:card:0:2')
     expect(diffKey('C1-open', 'f1')).toBe('diff:C1-open:f1')
   })
