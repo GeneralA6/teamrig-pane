@@ -12,7 +12,7 @@ every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick mov
 labels on. No model calls, so no tokens. Every time is on the team's clock and zone-marked
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
 session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
-to each team session's prompts and replies (Tasks, Changes and Log, below). Docked, its first line
+to each team session's prompts and replies, or to the team's tree (Tasks, Changes, Log and Team, below). Docked, its first line
 names the session as its tab title does (`[acme] pane`: the team, then the name without the team's prefix), so
 panes open in several tabs tell apart at a glance. That line and the controls under it stay put, and the body
 scrolls under them in a window of the pane's own: the mouse wheel moves it 3 rows a tick, PgUp and PgDn a
@@ -130,7 +130,7 @@ In the dock, a click on the header's `inbox 2 unread` opens the area's inbox the
 first unread line, drawn bold (at the newest line when none is unread). Reading it there marks nothing read: the
 pane never writes an inbox, so the count drops only when the session runs `teamrig inbox read`.
 
-The dock always shows a Find field under its Tasks, Changes and Log switch; `s` or a click puts the cursor in it, and
+The dock always shows a Find field under its Tasks, Changes, Log and Team switch; `s` or a click puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
 aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
 evidence or ref (one that starts with a mark, `.md`, matches anywhere), and the body lists the matches as
@@ -270,12 +270,12 @@ too), all of it once when the session starts. When nothing names the register, o
 the pointer file or the team config cannot be used, the pane draws one `WARN` line saying what to set
 or what is wrong.
 
-## Tasks, Changes and Log
+## Tasks, Changes, Log and Team
 
-The switch, `[Tasks] [Changes Δ3] [Log]`, shows in every state: open, in a dock however narrow (its
+The switch, `[Tasks] [Changes Δ3] [Log] [Team]`, shows in every state: open, in a dock however narrow (its
 buttons wrap under each other rather than clip) under the title line, above the prompt, and as the
 minimized strip. While
-the pane holds the keyboard, `t` presses Tasks, `d` Changes and `g` Log (`c` already closes the cards).
+the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Log and `e` Team (`c` already closes the cards).
 
 Changes lists the files changed in the git repos the session works in: the repo of the session's folder,
 and the repo of each file the session or one of its agents writes (Edit, Write, NotebookEdit; a file a
@@ -356,6 +356,26 @@ shows.
 While it shows, the list or the open page is read again on each 3 s poll: the session folders are listed, and an hour's
 file is read again only when its size or time moved. The Log button, from a page or another view, shows the list.
 Above the prompt the list shows, never a page.
+
+### Team
+
+Team shows the tree of teams the session's team is in, from the top team down, read from the team folders teamrig
+keeps under the kit home (`~/.teamrig/teams/<team>`). A team's row counts its active and closed sessions
+(`▾ acme · 4 active · 1 closed`). Under it come its lead, each leader over the sessions it leads (the config's
+`leads`), the retired sessions in a closed group (`▸ closed (1)`), and each child team (whose config names it as
+`team.parent`). A session's row is a `●` and its id in bold, then its current name where it differs from the id, then,
+dim: its roles (lead, coordinator, security reviewer), how many it leads, and its hire and review day
+(`hired Fri 10-09 · review 10-25`) or its retire day, then its former names. A retired session's row is a dim `○`.
+Teams under another top team are left out. Until there is a tree, the tab says why: no team, a team with no config
+file teamrig can read, or a folder it could not read.
+
+A press on a row that has rows under it (a click, or Enter or Space on it) closes it (`▸`), and a second press opens it
+again (`▾`). Teams and leaders start open, and a closed group starts closed. What was opened or closed stays so across a
+hot reload. ↑ and ↓ move between rows. There are no ← and → keys, since the engine binds keys only to buttons.
+
+It reads each team's config and, in the state folder that config names, its rename log and hire log, with teamrig's own
+readers. It reads files only, and only while it shows: on each 3 s poll a file is read again only when its size or time
+moved. No model calls, no tokens.
 
 ## Reading the register
 
