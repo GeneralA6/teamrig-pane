@@ -1,5 +1,5 @@
-// What any search draws under its Find field (search-rows.ts draws the Tasks view's on it, team-rows.ts the Team tab's;
-// the Inbox, Log and Changes searches, T772-T774, will too): the hint while the query has no word, one line that says
+// What any search draws under its Find field (search-rows.ts draws the Tasks view's on it, team-rows.ts the Team tab's,
+// inbox-rows.ts and log-rows.ts the Inbox and Log views'): the hint while the query has no word, one line that says
 // so when nothing matches, else a dim line counting the matches, then the results' blocks, each result's keyed by the
 // view and its id (resultKey), so the focus ring can be told on a result. A result underlines the words that matched
 // (markedSpans) and shows a long field from a little before its first match (excerpt). Pure: blocks of rows (rows.ts)
@@ -55,6 +55,20 @@ export function markedSpans(text: string, marks: readonly Mark[], style: Omit<Sp
   }
   spans.push({ ...style, text: text.slice(at) })
   return spans.filter(span => span.text !== '')
+}
+
+/** `spans`, each in its own style, the `marks` runs underlined: the marks count characters through the spans' texts joined. */
+export function markedRun(spans: readonly Span[], marks: readonly Mark[]): Span[] {
+  let at = 0
+  return spans.flatMap(({ text, ...style }) => {
+    const start = at
+    const end = start + text.length
+    at = end
+    const inside = marks
+      .filter(mark => mark.start < end && mark.end > start)
+      .map(mark => ({ start: Math.max(mark.start, start) - start, end: Math.min(mark.end, end) - start }))
+    return markedSpans(text, inside, style)
+  })
 }
 
 /** A field's text from EXCERPT_LEAD characters before its first match, `…` where it was cut, its marks moved with it. */

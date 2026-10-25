@@ -5,7 +5,8 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { LogConversation, LogList, LogPage, TaskRow, TurnEntry } from '../types'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { conversationKey, logListBlocks, logPageBlocks } from '../hooks/log-rows'
+import { conversationKey, LOG_SEARCH_HINT, logListBlocks, logPageBlocks } from '../hooks/log-rows'
+import { searchLog } from '../hooks/log-search'
 import type { Worked } from '../hooks/log-title'
 import type { Block } from '../hooks/rows'
 import { clockOf } from '../hooks/zone'
@@ -130,6 +131,36 @@ describe('logListBlocks', () => {
       ['log:conv:api:c-1', ['no prompt or reply', 'api · 19:00 UTC · 1 line']],
     ])
     expect(kept([])).toEqual([['log:note', ['No session wrote a prompt or a reply in the last 2 h.']]])
+  })
+
+  test('while the Find field holds a query, the list draws the search: the hint, nothing found, or the count and the conversations it names', () => {
+    const list: LogList = {
+      kind: 'conversations',
+      hours: 24,
+      conversations: [
+        conversation('lead', 'c-1', '2026-10-19T20:05:00Z', '2026-10-19T20:05:00Z', { lines: 1, opening: { by: 'owner', line: 'plan the week' } }),
+        conversation('api', 'c-2', '2026-10-19T19:00:00Z', '2026-10-19T19:01:00Z'),
+      ],
+    }
+    const searched = (query: string) => logListBlocks(list, UTC, IDLE, { query, hits: searchLog(list, IDLE, query) })
+    expect(words(searched(' '))).toEqual([['log-search-hint', [LOG_SEARCH_HINT]]])
+    expect(words(searched('nothing'))).toEqual([['log-search-none', ['Nothing matches. The Log view searches its conversations of the last 24 h.']]])
+    const week = searched('week')
+    expect(words(week)).toEqual([
+      ['log-search-count', ['1 conversation matches']],
+      ['log-search:lead:c-1', ['plan the week', 'lead · 20:05 UTC · 1 line']],
+    ])
+    // A result opens its conversation's page, as the list's row does, the words that matched underlined.
+    expect(week[1]?.reads).toEqual({ session: 'lead', claude: 'c-1' })
+    expect(week[1]?.rows[0]?.spans).toEqual([{ text: 'plan the ' }, { text: 'week', underline: true }])
+    // A session's name matches on the line under the title, which keeps its dim style.
+    const api = searched('api')
+    expect(words(api).slice(1)).toEqual([['log-search:api:c-2', ['no prompt or reply', 'api · 19:00 UTC–19:01 UTC · 2 lines']]])
+    expect(api[1]?.rows[1]?.key).toBe('log-search:api:c-2:what')
+    expect(api[1]?.rows[1]?.spans).toEqual([
+      { text: 'api', dim: true, underline: true },
+      { text: ' · 19:00 UTC–19:01 UTC · 2 lines', dim: true },
+    ])
   })
 })
 

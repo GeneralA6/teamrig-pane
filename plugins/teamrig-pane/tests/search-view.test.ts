@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { single, type Block } from '../hooks/rows'
-import { countWords, EXCERPT_LEAD, excerpt, isResultOf, markedSpans, resultKey, searchViewBlocks, type Noun, type SearchView } from '../hooks/search-view'
+import { countWords, EXCERPT_LEAD, excerpt, isResultOf, markedRun, markedSpans, resultKey, searchViewBlocks, type Noun, type SearchView } from '../hooks/search-view'
 
 const NOTES: Noun = { one: 'note', many: 'notes' }
 /** Two notes found, the hint and the nothing line in a notes search's words. */
@@ -30,6 +30,24 @@ describe('search view', () => {
     ])
     expect(markedSpans('the feed', [{ start: 4, end: 8 }], {})).toEqual([{ text: 'the ' }, { text: 'feed', underline: true }])
     expect(markedSpans('feed', [], {})).toEqual([{ text: 'feed' }])
+  })
+
+  test('marks over styled spans underline their runs, each span keeping its own style', async () => {
+    const title = [{ text: 'T855', bold: true }, { text: ' Pane: a readable view' }]
+    expect(markedRun(title, [{ start: 0, end: 4 }, { start: 13, end: 21 }])).toEqual([
+      { text: 'T855', bold: true, underline: true },
+      { text: ' Pane: a ' },
+      { text: 'readable', underline: true },
+      { text: ' view' },
+    ])
+    // A mark across two spans underlines its part of each.
+    expect(markedRun([{ text: 'ab', dim: true }, { text: 'cd' }], [{ start: 1, end: 3 }])).toEqual([
+      { text: 'a', dim: true },
+      { text: 'b', dim: true, underline: true },
+      { text: 'c', underline: true },
+      { text: 'd' },
+    ])
+    expect(markedRun(title, [])).toEqual(title)
   })
 
   test('a long field shows from a little before its first match, its marks moved with it', async () => {
