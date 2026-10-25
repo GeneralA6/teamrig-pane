@@ -9,6 +9,7 @@ import {
   doneAt,
   filesKept,
   forward,
+  fromList,
   isPage,
   landing,
   leavingList,
@@ -108,6 +109,13 @@ describe('nav', () => {
     // The newest list place at or before the one shown: a list left out of the kept places remembers none.
     const long = through(...Array.from({ length: NAV_PLACES }, (_, i) => `T${i + 1}`))
     expect(reset(long, true)).toBe(AT_LIST)
+  })
+
+  test('a press outside the pane shows the page over the list at its row alone, whatever the trail held; back lands on the row', async () => {
+    const nav = fromList('working:T9', page('T9'))
+    expect(nav).toEqual({ places: [{ kind: 'list', row: 'working:T9' }, page('T9')], at: 1 })
+    expect(landing(through('T52', 'T50'), nav)).toEqual({ kind: 'top' })
+    expect(landing(nav, back(nav))).toEqual({ kind: 'row', key: 'working:T9' })
   })
 
   test('names the ids of the pages it holds', async () => {

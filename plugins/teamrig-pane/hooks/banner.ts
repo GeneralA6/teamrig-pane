@@ -4,19 +4,23 @@
 // that took its status last. With none in progress, its next: the first open task in plan order (teamrig's list
 // order), after a dim `next`. With neither, a dim line says so. It leads with the session's name (T824), the band's one
 // line that stays in view while the pane scrolls. A press opens it to the card's facts the person reads
-// first (what it is, where it stands, when it is due) and a second press closes it. Pure: one block of rows that
-// layout.ts wraps and register.tsx draws as one press.
-import type { Snapshot, TaskDetail, TaskRow } from '../types'
+// first (what it is, where it stands, when it is due) and a second press closes it. Beside it a button opens the
+// pane, minimized or never opened too, at the task's page, over the list at the task's row (T775). Pure: one block
+// of rows that layout.ts wraps and register.tsx draws as one press, and the row the button's page goes back to.
+import type { Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
 import { cardRows, type CardField } from './card'
 import type { TaskTree } from './core/read/index'
 import type { PaneTree } from './meta'
-import { SEPARATOR, indentOf, titleRow, type Block, type Row, type Span } from './rows'
+import { SEPARATOR, indentOf, listRowKey, titleRow, type Block, type Row, type Span } from './rows'
 import { newestFirst } from './view'
 import { cells } from './width'
 
 /** The block's key, and its press's. */
 export const BANNER_KEY = 'banner'
 export const NOTHING_CURRENT = 'nothing in progress or open'
+/** The key and label of the button beside the banner that opens the pane at the task's page. */
+export const BANNER_OPEN_KEY = 'banner-open'
+export const BANNER_OPEN_LABEL = 'open in pane'
 
 /** Before the title of the task up next, when none is in progress. */
 const NEXT: Span = { text: 'next ', dim: true }
@@ -35,6 +39,14 @@ export function currentTask(snap: Snapshot, tree: TaskTree<TaskRow>): Current | 
   if (working !== undefined) return { kind: 'now', task: working }
   const next = own.filter(task => task.status === 'open').sort((a, b) => tree.byPlanOrder(a, b))[0]
   return next === undefined ? null : { kind: 'next', task: next }
+}
+
+/**
+ * The key of the row `current` sits at on the pane's list of `mode` (rows.ts listRowKey): under Working on while in
+ * progress, Up next while next, on every owner's under the area's own.
+ */
+export function currentRowKey(current: Current, mode: ViewMode): string {
+  return listRowKey(current.task, mode, current.kind === 'now' ? 'working' : 'not-started')
 }
 
 /**

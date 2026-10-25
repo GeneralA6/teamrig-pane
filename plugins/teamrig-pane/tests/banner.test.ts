@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { Snapshot, TaskRow } from '../types'
-import { BANNER_KEY, NOTHING_CURRENT, bannerBlock, currentTask } from '../hooks/banner'
+import type { Snapshot, TaskRow, ViewMode } from '../types'
+import { BANNER_KEY, NOTHING_CURRENT, bannerBlock, currentRowKey, currentTask, type Current } from '../hooks/banner'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { treeOf } from '../hooks/meta'
-import { SEPARATOR, type Row } from '../hooks/rows'
+import { SEPARATOR, paneBlocks, type Row } from '../hooks/rows'
 import { HOUR, NOW, NO_TEAM, TEAM_SETTINGS, createLine, statusLine, treeAt } from './fixtures'
 
 function rowsOf(lines: readonly string[]): TaskRow[] {
@@ -55,6 +55,25 @@ describe('currentTask', () => {
   test('none with no open task either, or no area', () => {
     expect(picked(snapOf(LINES.slice(4, 5)))).toBeNull()
     expect(picked(snapOf(LINES, null))).toBeNull()
+  })
+})
+
+describe('currentRowKey', () => {
+  function currentOf(snap: Snapshot): Current {
+    const current = currentTask(snap, treeOf(snap))
+    if (current === null) throw new Error('no current task')
+    return current
+  }
+  const keysOf = (snap: Snapshot, mode: ViewMode) => paneBlocks(snap, mode).map(block => block.key)
+
+  test("the key of the task's row on the pane's list: under Working on or Up next on the area's, under its owner on every owner's", () => {
+    const working = snapOf(LINES)
+    const next = snapOf([...LINES, statusLine('T3', 'po', NOW - 30 * 60_000, 'done', 'shipped'), statusLine('T4', 'po', NOW - 20 * 60_000, 'verifying', 'merged')])
+    expect(currentRowKey(currentOf(working), 'mine')).toBe('working:T4')
+    expect(currentRowKey(currentOf(next), 'mine')).toBe('next:T2')
+    expect(currentRowKey(currentOf(next), 'all')).toBe('po:T2')
+    // Each is a block the list draws, so a step back to it scrolls to the task.
+    for (const snap of [working, next]) for (const mode of ['mine', 'all'] as const) expect(keysOf(snap, mode)).toContain(currentRowKey(currentOf(snap), mode))
   })
 })
 
