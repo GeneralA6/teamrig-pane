@@ -376,15 +376,14 @@ a redraw takes 43-48 ms and a switch to `all` 36-40 ms (three runs, 2026-10-15);
 new reads nothing.
 
 Every scroll, focus move, keystroke and poll write draws the pane again, so a docked draw lays out
-only the rows near what you see (`hooks/window.ts`): those within two screenfuls of the scroll window,
-plus the focused element, the row a page was opened from and the list's first and last rows, each with
-a screenful around it. Each run of the other rows is one empty box as tall as they are, so the body
-keeps its height and the scrollbar its place, and the wrapped lines of a row that did not change are
-kept from the draw before. The plugin's own work per draw (`mine` view, 56 columns, 40 rows shown,
-median, 2026-10-18, before the first and last rows were kept) at 100, 500 and 2,000 tasks fell from
-11, 53 and 212 ms to 1.7, 7 and 28 ms, and the elements the host lays out from 576, 2,843 and 11,676
-to 102 at each size. Keeping the list's ends adds at most two screenfuls of rows at any size, so Tab
-from the last row and Shift+Tab from the top wrap to the list's true ends.
+only the rows its window shows (`hooks/frame.ts`), under a header that stays put. The body's blocks out
+of the window are not drawn; each of their presses is a hidden stand-in under its key, a Button in a box
+no row tall (`hooks/press-keys.ts`), so the focus ring's stops are the same wherever the window stands:
+Tab from the last row and Shift+Tab from the top wrap to the list's true ends, and a landing on a
+stand-in moves the window the least that shows it. The wrapped lines of a row that did not change are kept
+from the draw before. Measured 2026-10-18 on the window before this one, which laid out the rows within
+two screenfuls of the host's scroll window (`mine` view, 56 columns, 40 rows shown, median), the
+plugin's own work per draw at 100, 500 and 2,000 tasks fell from 11, 53 and 212 ms to 1.7, 7 and 28 ms.
 
 `$.state` outlives a hot reload, so the snapshot is kept under a shape tag (`SNAPSHOT_SHAPE` in
 `hooks/register.tsx`): bump it whenever the `Snapshot` or `TaskRow` type changes, and a reloaded pane
