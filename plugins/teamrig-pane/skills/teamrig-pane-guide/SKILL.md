@@ -1,6 +1,6 @@
 ---
 name: teamrig-pane-guide
-description: Use when a session runs the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes and Log views, where it finds the register, requirements.
+description: Use when a session runs the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes, Log and Team views, where it finds the register, requirements.
 ---
 
 # teamrig-pane guide
@@ -97,7 +97,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | `t` | The Tasks view |
 | `d` | The Changes view |
 | `g` | The Log view: each conversation of the team's sessions, titled by its task (see [The Log view](#the-log-view)) |
-| `e` | The Team tab: the tree of teams the session's team is in, each lead over the sessions it leads; a press on a row opens or closes what lies under it |
+| `e` | The Team view: the tree of teams the session's team is in, each lead over the sessions it leads (see [The Team view](#the-team-view)) |
 | `m` | Tasks: this session's area (`mine`) |
 | `a` | Tasks: every owner (`all`) |
 | `o` | mine: only the tasks done today (the status bar's `done today`); again shows every task |
@@ -375,7 +375,7 @@ not shown. The page shows the file as it was when the page opened: open it again
 
 ### Find
 
-The dock always shows a Find field under its Tasks, Changes and Log switch. `s` or a click puts the cursor in it; it
+The dock always shows a Find field under its Tasks, Changes, Log and Team switch. `s` or a click puts the cursor in it; it
 never takes the keys by itself, so the pane's other keys keep working. As you type, the body counts the tasks
 the pane holds that every word matches, on a dim line, then lists them, the matched words underlined:
 
@@ -503,6 +503,21 @@ prompt the list shows, never a page.
 
 While the view shows, it lists the session folders on each 3 second poll and reads an hour's file again only when
 its size or time moved; on another view, or minimized, it reads nothing.
+
+## The Team view
+
+`e`, or Team on the switch, shows the tree of teams the session's team is in, from the top team down. Each team's row
+counts its active and closed sessions. Under it are its lead, each leader over the sessions it leads (the config's
+`leads`), the retired sessions in a closed group, and its child teams (`team.parent`). A session's row gives its id
+(bold), its current name where it differs, then, dim: its roles, how many it leads, and its hire and review day or its
+retire day, then its former names. A retired session is a dim `○`. A press on a row that has rows under it (a click,
+Enter or Space) closes it or opens it again. Teams and leaders start open, a closed group closed, and the state stays
+across a hot reload. There are no ← and → keys: the engine binds keys only to buttons. With no team, no config teamrig
+can read, or a folder it cannot read, the view says which.
+
+It reads each team folder's config, rename log and hire log (`~/.teamrig/teams/<team>`) with teamrig's own readers.
+While the view shows, it reads a file again on a 3 second poll only when its size or time moved; on another view, or
+minimized, it reads nothing.
 
 ## How it relates to the teamrig CLI
 
