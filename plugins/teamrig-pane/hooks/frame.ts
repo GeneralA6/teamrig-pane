@@ -1,8 +1,8 @@
 // The docked body cut to the rows its window shows. The dock's header stays fixed above the body, and the body
 // scrolls under it in a window the pane keeps itself (T860): the engine scrolls a pane's whole tree, so the pane's
 // tree stays as tall as the engine's window and holds only the body rows that meet the pane's own. Rows are counted
-// as dockLayout wrapped them, one a line: an element's head (its Text's lines, or its parts when drawn as parts),
-// then its open card's parts, a Text or a press cut by lines and a line of presses kept whole or left out. The rows
+// as dockLayout wrapped them, one a line: an element's head (its Text's lines, or its parts when drawn as parts, the
+// same lines), then its open card's parts, a Text or a press cut by lines and a line of presses kept whole or left out. The rows
 // between two elements are slots of their own, so the window may start or end on one. Here too are what reads the
 // window: a reveal's offset, the scroll bar, and a scroll move's offset.
 import type { UiScrollInput } from 'claude-code'
@@ -19,10 +19,10 @@ const BLANK: Span = { text: ' ' }
 /** A run of the body's rows: its first, and how many. */
 export type Place = { readonly top: number; readonly rows: number }
 
-/** A body element where it stands in the body, with its head's rows and each part's place (its card's, or its own when drawn as parts). */
+/** A body element where it stands in the body, with its head's rows and each part's place: its own when drawn as parts, then its card's. */
 export type Placed = Place & {
   readonly drawn: Drawn
-  /** The head's rows: its Text's lines, or all its rows when drawn as parts. */
+  /** The head's rows: its Text's lines, its parts' when drawn as parts. */
   readonly headRows: number
   readonly parts: readonly (Place & { readonly part: CardPart })[]
 }
@@ -107,18 +107,26 @@ function cutParts(parts: readonly CardPart[], top: number, from: number, to: num
 }
 
 /**
- * A body element's rows `skip` to `skip + take`, as a slot draws it. Every key stays (the element's, its parts'),
- * and a line of presses is never cut, so a press's key names the same press wherever the window stands. An element
- * the cut leaves whole is itself.
+ * A body element's rows `skip` to `skip + take`, as a slot draws it: `head` false when the cut leaves none of its
+ * head's lines, so the slot draws its card alone. Every key stays (the element's, its parts'), and a line of presses
+ * is never cut, so a press's key names the same press wherever the window stands. An element the cut leaves whole is
+ * itself.
  */
 export function cutDrawn(drawn: Drawn, skip: number, take: number): { readonly drawn: Drawn; readonly head: boolean } {
   if (skip <= 0 && skip + take >= rowsOf(drawn)) return { drawn, head: true }
   const end = skip + take
-  if (drawn.parts !== undefined) return { drawn: { ...drawn, spans: cutSpans(drawn.spans, skip, take), parts: cutParts(drawn.parts, 0, skip, end) }, head: true }
   const headRows = linesOf(drawn.spans)
   const head = skip < headRows
   const spans = head ? cutSpans(drawn.spans, skip, Math.min(end, headRows) - skip) : []
-  return { drawn: drawn.card === undefined ? { ...drawn, spans } : { ...drawn, spans, card: cutParts(drawn.card, headRows, skip, end) }, head }
+  return {
+    drawn: {
+      ...drawn,
+      spans,
+      ...(drawn.parts === undefined ? {} : { parts: cutParts(drawn.parts, 0, skip, end) }),
+      ...(drawn.card === undefined ? {} : { card: cutParts(drawn.card, headRows, skip, end) }),
+    },
+    head,
+  }
 }
 
 /** Each body element's place, `gap` rows between two, with its head's rows and its parts' places. */
@@ -126,9 +134,9 @@ export function placesOf(body: readonly Drawn[], gap: number): Placed[] {
   let top = 0
   return body.map(drawn => {
     const rows = rowsOf(drawn)
-    const headRows = drawn.parts === undefined ? linesOf(drawn.spans) : rows
+    const headRows = linesOf(drawn.spans)
     let partTop = drawn.parts === undefined ? top + headRows : top
-    const parts = (drawn.parts ?? drawn.card ?? []).map(part => {
+    const parts = [...(drawn.parts ?? []), ...(drawn.card ?? [])].map(part => {
       const place = { part, top: partTop, rows: partRows(part) }
       partTop += place.rows
       return place

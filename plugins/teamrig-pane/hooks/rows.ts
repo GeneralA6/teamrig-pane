@@ -20,7 +20,9 @@ import { cells } from './width'
  * `task` the text is that task's id in an open card (ids.ts), which a press on opens as a page; never split either.
  * With `file` the text names a file a card's Reference row lists (ref-file.ts), which a press on opens as a page too
  * (file-page.ts); never split. With `inbox` the text is the header's unread count, which a press on opens that area's
- * inbox as a file's page; never split. `underline` marks the words a search matched (search-view.ts).
+ * inbox as a file's page; never split. With `toggles` the text is a press that opens or closes that Team tab key
+ * (team-rows.ts): a leader's fold mark its node, its id its card; never split. `underline` marks the words a search
+ * matched (search-view.ts).
  */
 export type Span = {
   text: string
@@ -32,6 +34,7 @@ export type Span = {
   task?: string
   file?: RefFile
   inbox?: string
+  toggles?: string
 }
 /**
  * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
@@ -54,8 +57,9 @@ export type Row = {
  * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press (a repo's files in
  * the Changes view are its header's card too, each a press of its own: changes-rows.ts); `opens` names
  * the task a press on it opens the page of (a search result, search-rows.ts); `reads` names the conversation a press
- * on it opens the Log page of (log-rows.ts); `folds` names the Team tab's node a press on it opens or closes
- * (team-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.
+ * on it opens the Log page of (log-rows.ts); `folds` names the Team tab key a press on it opens or closes, a node or a
+ * session's card (team-rows.ts), docked only while its rows hold no press of their own (`toggles`), which take its
+ * place there; `opensSection` leads it with a blank line, past the gap every block has.
  */
 export type Block = { key: string; rows: Row[]; toggle?: string; opens?: string; reads?: LogRead; folds?: string; card?: Row[]; opensSection?: boolean }
 

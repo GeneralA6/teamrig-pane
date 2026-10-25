@@ -34,16 +34,36 @@ const PARTED: Drawn = {
   ],
 }
 
-/** One of each: a line, three lines, a card, parts, and two lines whose spans change look across a new line. */
+/** A Team tab leader drawn as parts, its fold mark and its id presses, its card open under them: a line, then a two-line Text. */
+const LED: Drawn = {
+  key: 'f',
+  spans: [{ text: '▾ f' }],
+  wrap: 'wrap',
+  toggle: null,
+  parts: [
+    {
+      kind: 'line',
+      key: 'f.l',
+      pieces: [
+        { kind: 'toggle', toggles: 'f', span: { text: '▾ ' } },
+        { kind: 'toggle', toggles: 'card:f', span: { text: 'f' } },
+      ],
+    },
+  ],
+  card: [{ kind: 'text', key: 'f.t', spans: [{ text: 'ft0\nft1' }] }],
+}
+
+/** One of each: a line, three lines, a card, parts, two lines whose spans change look across a new line, and parts with a card. */
 const BODY: readonly Drawn[] = [
   { key: 'a', spans: [{ text: 'a0' }], wrap: 'wrap', toggle: 'a' },
   { key: 'b', spans: [{ text: 'b0\nb1\nb2' }], wrap: 'wrap', toggle: 'b' },
   CARDED,
   PARTED,
   { key: 'e', spans: [{ text: 'e0\n', bold: true }, { text: 'e1', dim: true }], wrap: 'wrap', toggle: 'e' },
+  LED,
 ]
-/** BODY's rows with a gap of one between two elements: 1 + 3 + 7 + 2 + 2, and 4 gaps. */
-const BODY_ROWS = 19
+/** BODY's rows with a gap of one between two elements: 1 + 3 + 7 + 2 + 2 + 3, and 5 gaps. */
+const BODY_ROWS = 23
 
 function textLines(spans: readonly Span[]): string[] {
   return spans.map(span => span.text).join('').split('\n')
@@ -57,10 +77,11 @@ function partLines(part: CardPart): string[] {
   return part.kind === 'line' ? [part.pieces.map(pieceText).join('')] : textLines(part.spans)
 }
 
-/** The lines an element draws, row by row: its parts when drawn as parts, else its head's (when drawn) and its card's. */
+/** The lines an element draws, row by row: its parts when drawn as parts, else its head's (when drawn), then its card's. */
 function drawnLines(drawn: Drawn, head: boolean): string[] {
-  if (drawn.parts !== undefined) return drawn.parts.flatMap(partLines)
-  return [...(head ? textLines(drawn.spans) : []), ...(drawn.card ?? []).flatMap(partLines)]
+  const card = (drawn.card ?? []).flatMap(partLines)
+  if (drawn.parts !== undefined) return [...drawn.parts.flatMap(partLines), ...card]
+  return [...(head ? textLines(drawn.spans) : []), ...card]
 }
 
 /** The body's rows as text, a gap row as ''. */
@@ -84,6 +105,7 @@ describe('rowsOf', () => {
     expect(rowsOf({ ...element('a', 2), card })).toBe(5)
     const pressed: Drawn['card'] = [{ kind: 'press', key: 'C:/r:a.ts', spans: [{ text: ' M a-long\n' }, { text: '   name.ts' }], expands: 'C:/r:a.ts' }]
     expect(rowsOf({ ...element('a', 1), card: pressed })).toBe(3)
+    expect(rowsOf(LED)).toBe(3)
   })
 })
 
@@ -132,10 +154,21 @@ describe('cutDrawn', () => {
     expect(cut.drawn.parts?.map(part => part.key)).toEqual(['d.l'])
     expect(cut.drawn.spans).toEqual([{ text: 'd1 in' }])
   })
+
+  test('an element drawn as parts with its card open is cut by both, its card alone once the cut passes its head', () => {
+    const card = cutDrawn(LED, 1, 1)
+    expect(card.head).toBe(false)
+    expect(card.drawn.parts).toEqual([])
+    expect(drawnLines(card.drawn, card.head)).toEqual(['ft0'])
+    const both = cutDrawn(LED, 0, 2)
+    expect(both.head).toBe(true)
+    expect(both.drawn.parts?.[0]).toBe(LED.parts?.[0])
+    expect(drawnLines(both.drawn, both.head)).toEqual(['▾ f', 'ft0'])
+  })
 })
 
 describe('placesOf', () => {
-  test('places each element a gap after the last, its parts after its head, an element drawn as parts from its top', () => {
+  test('places each element a gap after the last, its parts after its head, an element drawn as parts from its top, its card after them', () => {
     const places = placesOf(BODY, 1)
     expect(places.map(({ drawn, top, rows, headRows }) => ({ key: drawn.key, top, rows, headRows }))).toEqual([
       { key: 'a', top: 0, rows: 1, headRows: 1 },
@@ -143,6 +176,7 @@ describe('placesOf', () => {
       { key: 'c', top: 6, rows: 7, headRows: 2 },
       { key: 'd', top: 14, rows: 2, headRows: 2 },
       { key: 'e', top: 17, rows: 2, headRows: 2 },
+      { key: 'f', top: 20, rows: 3, headRows: 1 },
     ])
     const partPlaces = (i: number) => places[i]?.parts.map(({ part, top, rows }) => ({ key: part.key, top, rows }))
     expect(partPlaces(2)).toEqual([
@@ -154,6 +188,10 @@ describe('placesOf', () => {
       { key: 'd.t', top: 14, rows: 1 },
       { key: 'd.l', top: 15, rows: 1 },
     ])
+    expect(partPlaces(5)).toEqual([
+      { key: 'f.l', top: 20, rows: 1 },
+      { key: 'f.t', top: 21, rows: 2 },
+    ])
     expect(places[2]?.parts[1]?.part).toBe(CARDED.card?.[1])
   })
 })
@@ -161,7 +199,7 @@ describe('placesOf', () => {
 describe('viewOf', () => {
   test("holds the offset to 0 to the body's last, and counts the body's rows, gaps too", () => {
     const places = placesOf(BODY, 1)
-    expect(viewOf(places, 30, 4)).toEqual({ offset: 15, visibleRows: 4, contentRows: BODY_ROWS, maxOffset: 15 })
+    expect(viewOf(places, 30, 4)).toEqual({ offset: 19, visibleRows: 4, contentRows: BODY_ROWS, maxOffset: 19 })
     expect(viewOf(places, -2, 4).offset).toBe(0)
     expect(viewOf(places, 3, 40)).toEqual({ offset: 0, visibleRows: 40, contentRows: BODY_ROWS, maxOffset: 0 })
   })

@@ -448,6 +448,34 @@ describe('rows', () => {
     expect(dockLayout(paneBlocks({ ...snapshotOf(tasks, 'po'), unreadInbox: null }, 'mine'), 40)[0]?.parts).toBeUndefined()
   })
 
+  test("docked, a Team tab row's own presses draw it as parts in place of its fold press, its open card's parts keyed past them", () => {
+    const mark: Span = { text: '▾ ', dim: true, toggles: 'web' }
+    const id: Span = { text: 'web', bold: true, toggles: 'card:web' }
+    const card = [{ key: 'team:web:role', spans: [{ text: '  │ Role lead' }] }]
+    const leader: Block = { key: 'team:web', folds: 'web', rows: [{ key: 'team:web', spans: [mark, { text: '● ' }, id] }], card }
+    const [drawn] = dockLayout([leader], 40)
+    expect(drawn?.folds).toBeUndefined()
+    expect(drawn?.parts).toEqual([
+      {
+        kind: 'line',
+        key: 'card:0',
+        pieces: [
+          { kind: 'toggle', span: mark, toggles: 'web' },
+          { kind: 'words', spans: [{ text: '● ' }] },
+          { kind: 'toggle', span: id, toggles: 'card:web' },
+        ],
+      },
+    ])
+    expect(drawn?.card).toEqual([{ kind: 'text', key: 'card:1', spans: [{ text: '  │ Role lead' }] }])
+    // A row with no press of its own is its fold press whole, its open card under it.
+    const leaf: Block = { key: 'team:api', folds: 'card:api', rows: [{ key: 'team:api', spans: [{ text: '● api' }] }], card }
+    const [whole] = dockLayout([leaf], 40)
+    expect([whole?.folds, whole?.parts, whole?.card?.map(part => part.key)]).toEqual(['card:api', undefined, ['card:0']])
+    // Two keys side by side stay two presses; inline, a row's presses are words and its first row folds.
+    expect(piecesOf([mark, { ...mark, toggles: 'api' }])).toHaveLength(2)
+    expect(inlineLayout([leader], 6)[0]?.folds).toBe('web')
+  })
+
   test("the more line names how many the cap cut and the key of the status bar's filter that lists them all", async () => {
     expect(moreText('done-today', 3)).toBe('3 more: press o to list them all')
     expect(moreText('waiting', 2)).toBe('2 more asked of others: press i to list them all')

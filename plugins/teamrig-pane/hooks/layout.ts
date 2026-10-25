@@ -22,6 +22,7 @@ export type Piece =
   | { kind: 'id'; span: Span; task: string }
   | { kind: 'file'; span: Span; file: RefFile }
   | { kind: 'inbox'; span: Span; area: string }
+  | { kind: 'toggle'; span: Span; toggles: string }
   | { kind: 'words'; spans: Span[] }
 /**
  * A run of a card's lines: a Text of the lines that hold no press (`text`), one line that holds one (`line`), its
@@ -35,10 +36,10 @@ export type CardPart =
 /**
  * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, its
  * page when `opens` does (a search result), a conversation's Log page when `reads` does (docked only), the Team tab's
- * node it opens or closes when `folds` does, or, inline, a Changes file's diff when `expands` does. `card`, set while
+ * key it opens or closes when `folds` does, or, inline, a Changes file's diff when `expands` does. `card`, set while
  * that card is open, is the card's own parts, drawn under the Button and outside it. `parts`, set docked when no press
- * opens the element, it has no card and a line of its holds a press (the header's inbox count), is its lines as parts,
- * drawn in place of its Text.
+ * but a Team tab key's opens the element and a line of its holds a press (the header's inbox count, a leader's fold
+ * mark and id), is its lines as parts, drawn in place of its Text and its `folds` press, its open card under them.
  */
 export type Drawn = {
   key: string
@@ -98,13 +99,14 @@ function sameStyle(a: Span, b: Span): boolean {
     a.href === b.href &&
     a.task === b.task &&
     a.file === b.file &&
-    a.inbox === b.inbox
+    a.inbox === b.inbox &&
+    a.toggles === b.toggles
   )
 }
 
-/** Whether `span` is a press drawn as a piece of its line: a task id or a reference file in a card, an inbox count. */
+/** Whether `span` is a press drawn as a piece of its line: a task id or a reference file in a card, an inbox count, a Team tab key. */
 function isPress(span: Span): boolean {
-  return span.task !== undefined || span.file !== undefined || span.inbox !== undefined
+  return span.task !== undefined || span.file !== undefined || span.inbox !== undefined || span.toggles !== undefined
 }
 
 /** Spans with each run of one style joined into one span, so a block draws as few elements as it can. */
@@ -269,7 +271,7 @@ function joinedLines(lines: Lines): Span[] {
   return merged(lines.flatMap((line, i) => (i === 0 ? line : [NEW_LINE, ...line])))
 }
 
-/** A line's spans as pieces: each task id, reference file and inbox count its own, each run of words between them one. */
+/** A line's spans as pieces: each task id, reference file, inbox count and Team tab key its own, each run of words between them one. */
 export function piecesOf(line: readonly Span[]): Piece[] {
   const pieces: Piece[] = []
   for (const span of line) {
@@ -277,6 +279,7 @@ export function piecesOf(line: readonly Span[]): Piece[] {
     if (span.task !== undefined) pieces.push({ kind: 'id', span, task: span.task })
     else if (span.file !== undefined) pieces.push({ kind: 'file', span, file: span.file })
     else if (span.inbox !== undefined) pieces.push({ kind: 'inbox', span, area: span.inbox })
+    else if (span.toggles !== undefined) pieces.push({ kind: 'toggle', span, toggles: span.toggles })
     else if (last?.kind === 'words') last.spans.push(span)
     else pieces.push({ kind: 'words', spans: [span] })
   }
@@ -304,12 +307,15 @@ export function cardParts(lines: Lines, first = 0): CardPart[] {
   return parts
 }
 
-/** A card's rows as parts: each row with `expands` a press of its own, its lines one Text; each run of the others as cardParts makes it. */
-export function rowParts(rows: readonly Row[], wrap: (row: Row) => Lines): CardPart[] {
+/**
+ * A card's rows as parts: each row with `expands` a press of its own, its lines one Text; each run of the others as
+ * cardParts makes it, keyed from `first` on (past the parts of a head drawn as parts).
+ */
+export function rowParts(rows: readonly Row[], wrap: (row: Row) => Lines, first = 0): CardPart[] {
   const parts: CardPart[] = []
   let run: Row[] = []
   const endRun = () => {
-    parts.push(...cardParts(run.flatMap(wrap), parts.length))
+    parts.push(...cardParts(run.flatMap(wrap), first + parts.length))
     run = []
   }
   for (const row of rows) {
@@ -327,8 +333,8 @@ export function rowParts(rows: readonly Row[], wrap: (row: Row) => Lines): CardP
 /**
  * Each block one Text of its rows wrapped to the body's own width (one column at least, for a body
  * resized below the pane's padding), a block that opens a section led by a blank line; an open card's
- * rows wrapped the same way into its parts, and a block's own lines too when they hold a press and no press opens
- * it (Drawn's `parts`). `wraps` carries the rows wrapped by the layout before (WrapCache); by default none are.
+ * rows wrapped the same way into its parts, and a block's own lines too when they hold a press and no press but a
+ * Team tab key's opens it (Drawn's `parts`). `wraps` carries the rows wrapped by the layout before (WrapCache); by default none are.
  */
 export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps: WrapCache = new WrapCache()): Drawn[] {
   const columns = Math.max(1, bodyColumns)
@@ -343,12 +349,15 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps:
       toggle: block.toggle ?? null,
       ...(block.opens === undefined ? {} : { opens: block.opens }),
       ...(block.reads === undefined ? {} : { reads: block.reads }),
-      ...(block.folds === undefined ? {} : { folds: block.folds }),
     }
-    if (block.card !== undefined) return { ...drawn, card: rowParts(block.card, row => wraps.wrap(row, columns)) }
-    const pressed =
-      block.toggle === undefined && block.opens === undefined && block.reads === undefined && block.folds === undefined && lines.some(line => line.some(isPress))
-    return pressed ? { ...drawn, parts: cardParts(lines) } : drawn
+    const pressed = block.toggle === undefined && block.opens === undefined && block.reads === undefined && lines.some(line => line.some(isPress))
+    const parts = pressed ? cardParts(lines) : null
+    return {
+      ...drawn,
+      ...(parts === null ? {} : { parts }),
+      ...(parts !== null || block.folds === undefined ? {} : { folds: block.folds }),
+      ...(block.card === undefined ? {} : { card: rowParts(block.card, row => wraps.wrap(row, columns), parts?.length ?? 0) }),
+    }
   })
   wraps.settle()
   return body
