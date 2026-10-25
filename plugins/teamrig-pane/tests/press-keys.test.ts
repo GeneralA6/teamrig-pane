@@ -49,7 +49,7 @@ describe('press-keys', () => {
     expect(headPresses(drawn('a'))).toBe(false)
     expect(headPresses(drawn('a', { toggle: 'T1' }))).toBe(true)
     expect(headPresses(drawn('a', { opens: 'T1' }))).toBe(true)
-    expect(headPresses(drawn('a', { reads: 'api' }))).toBe(true)
+    expect(headPresses(drawn('a', { reads: { session: 'api', claude: 'c-1' } }))).toBe(true)
     expect(headPresses(drawn('a', { expands: 'src/a.ts' }))).toBe(true)
   })
 

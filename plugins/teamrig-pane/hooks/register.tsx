@@ -32,6 +32,7 @@ import type {
   FindField,
   LogList,
   LogPage,
+  LogRead,
   Nav,
   PageDetails,
   PaneView,
@@ -173,7 +174,7 @@ const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KN
 const DIFFS_SHAPE = 'diffs-v1'
 const diffs = atom({ plugin: 'teamrig-pane', key: 'diffs' } as const, NO_DIFFS, { shape: DIFFS_SHAPE })
 /** The Log view's list and page are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when LogList, LogPage or TurnEntry changes shape. */
-const LOG_SHAPE = 'log-v2'
+const LOG_SHAPE = 'log-v3'
 const LOG_READING: LogList = { kind: 'reading' }
 const NO_TEAM_LOG: LogList = { kind: 'no-team' }
 const NO_CONFIG_LOG: LogList = { kind: 'no-config' }
@@ -488,7 +489,10 @@ export const register: Register = on => {
               reader: new TurnLogReader(logFiles, turnLog),
               now: () => $.clock.now(),
               isShown: async () => (await read($, view)) === 'log' && (await read($, size)) !== 'minimized',
-              shownPage: async () => (await read($, logPage))?.session ?? null,
+              shownPage: async () => {
+                const page = await read($, logPage)
+                return page === null ? null : { session: page.session, claude: page.claude }
+              },
               publishList: async list => {
                 await update($, logList, () => list)
               },
@@ -775,8 +779,8 @@ export const register: Register = on => {
               : current === 'changes'
                 ? changesBlocks(changed, isGitMissing(missing), await read($, diffs))
                 : logShown === null
-                  ? logListBlocks(await read($, logList), clockOf(snap))
-                  : logPageBlocks(logShown, clockOf(snap))
+                  ? logListBlocks(await read($, logList), clockOf(snap), snap)
+                  : logPageBlocks(logShown, clockOf(snap), await read($, logList), snap)
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
@@ -826,10 +830,10 @@ export const register: Register = on => {
       const found = await readFilePage(file)
       await go($, current => pushed(leavingList(current, from), { kind: 'file', file, line: unreadLine(found, snap.unreadInbox ?? 0) }))
     }
-    // A press on a session in the Log view's list opens its page, read now, at its end: the newest lines are last.
-    // Back shows the list, read again, from its top.
-    const openLog = async (session: string) => {
-      await logging?.open(session)
+    // A press on a conversation in the Log view's list opens its page, read now, at its end: the newest lines are
+    // last. Back shows the list, read again, from its top.
+    const openLog = async (conversation: LogRead) => {
+      await logging?.open(conversation)
       await update($, bodyScroll, current => scrolledTo(current, { kind: 'end' }))
     }
     const closeLog = async () => {
@@ -905,7 +909,7 @@ export const register: Register = on => {
       )
     }
     // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
-    // session's Log page (`reads`), or, inline, a Changes file's diff (`expands`), else words alone.
+    // conversation's Log page (`reads`), or, inline, a Changes file's diff (`expands`), else words alone.
     const headOf = (drawn: Drawn) => {
       const id = drawn.toggle
       const opens = drawn.opens

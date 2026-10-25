@@ -239,17 +239,37 @@ export type TurnEntry = {
   readonly isCut: boolean
 }
 
-/** A session the Log view lists: its id, when its newest turn log file changed, and its newest prompt's first line (null for none). */
-export type LogSession = { readonly id: string; readonly changedAt: number; readonly lastPrompt: string | null }
+/** How a conversation opened: the first line of the owner's first words in it, else of Claude's first reply. */
+export type LogOpening = { readonly by: 'owner' | 'claude'; readonly line: string }
 
 /**
- * The Log view's list (hooks/turn-log.ts): the sessions with a turn log file of the last `hours` (the team config's
- * `turnLog.keepHours`), newest first; or that it is not read yet, that the pane found no team, that the team has no
- * config file (teamrig refuses such a team and writes it no turn log), that it has no turn log folder (teamrig writes
- * none before its turn log version or with turnLog.enabled false), or why the folder could not be read.
+ * A conversation the Log view lists (hooks/turn-log.ts): a session's lines with one Claude Code session id (a /clear
+ * starts a new one, a compaction keeps it), when its first and last lines of the window were written (ms), when the
+ * session's next conversation began (null for its newest), how many lines it has in the window, and how it opened
+ * (null when it holds harness notices alone).
+ */
+export type LogConversation = {
+  readonly session: string
+  readonly claude: string
+  readonly firstAt: number
+  readonly lastAt: number
+  readonly nextAt: number | null
+  readonly lines: number
+  readonly opening: LogOpening | null
+}
+
+/** What a press on the Log view's list opens: a session's conversation, by its Claude Code session id. */
+export type LogRead = { readonly session: string; readonly claude: string }
+
+/**
+ * The Log view's list (hooks/turn-log.ts): each session's conversations with a line in the last `hours` (the team
+ * config's `turnLog.keepHours`), the newest last line first; or that it is not read yet, that the pane found no team,
+ * that the team has no config file (teamrig refuses such a team and writes it no turn log), that it has no turn log
+ * folder (teamrig writes none before its turn log version or with turnLog.enabled false), or why the folder could not
+ * be read.
  */
 export type LogList =
-  | { readonly kind: 'sessions'; readonly hours: number; readonly sessions: readonly LogSession[] }
+  | { readonly kind: 'conversations'; readonly hours: number; readonly conversations: readonly LogConversation[] }
   | { readonly kind: 'reading' }
   | { readonly kind: 'no-team' }
   | { readonly kind: 'no-config' }
@@ -257,12 +277,13 @@ export type LogList =
   | { readonly kind: 'failed'; readonly reason: string }
 
 /**
- * A session's page in the Log view: its newest lines of the last `hours` (the team config's `turnLog.keepHours`),
- * oldest first, at most LOG_PAGE_CHARS of text (`isCut` when older lines are left out), and why a file of it could
- * not be read (null when all were).
+ * A conversation's page in the Log view: the session's newest lines with its Claude Code session id `claude`, of the
+ * last `hours` (the team config's `turnLog.keepHours`), oldest first, at most LOG_PAGE_CHARS of text (`isCut` when
+ * older lines are left out), and why a file of it could not be read (null when all were).
  */
 export type LogPage = {
   readonly session: string
+  readonly claude: string
   readonly hours: number
   readonly entries: readonly TurnEntry[]
   readonly isCut: boolean
@@ -349,9 +370,9 @@ declare module 'claude-code' {
       known: Shaped<KnownChanges>
       /** The Changes files whose diffs are open (hooks/diff.ts), as git last read them. */
       diffs: Shaped<OpenDiffs>
-      /** The sessions the Log view lists (hooks/turn-log.ts), as last read. */
+      /** The conversations the Log view lists (hooks/turn-log.ts), as last read. */
       logList: Shaped<LogList>
-      /** The session page the Log view shows, as last read; null while it shows the list. */
+      /** The conversation page the Log view shows, as last read; null while it shows the list. */
       logPage: Shaped<LogPage | null>
       requirements: RequirementProblem[]
       /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
