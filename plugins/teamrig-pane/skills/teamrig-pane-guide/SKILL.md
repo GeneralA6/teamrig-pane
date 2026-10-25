@@ -114,7 +114,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's Log page, back to the list |
 | `f` | Forward to the place back left, while there is one |
-| `s` | In the dock's Tasks, Inbox and Team views and on the Log view's list: puts the cursor in the Find field under the switch, which searches what the view holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
+| `s` | In the dock's Tasks, Inbox, Changes and Team views and on the Log view's list: puts the cursor in the Find field under the switch, which searches what the view holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
 | `h` | In the dock: `archive`, the Archive page of this week's finished tasks (see [Archive](#archive)) |
 | `p` | On the Archive page: the week before, while the pane holds it |
 | `l` | On the Archive page: the week after, up to this week |
@@ -375,8 +375,9 @@ not shown. The page shows the file as it was when the page opened: open it again
 
 ### Find
 
-In the Tasks view, the Inbox view, over the Log view's list and on the Team tab (see [The Log view](#the-log-view),
-[The Inbox view](#the-inbox-view) and [The Team view](#the-team-view)), the dock shows a Find field under its switch. `s` or a click puts the cursor in it; it
+In the Tasks view, the Inbox view, the Changes view, over the Log view's list and on the Team tab (see
+[The Changes view](#the-changes-view), [The Log view](#the-log-view), [The Inbox view](#the-inbox-view) and
+[The Team view](#the-team-view)), the dock shows a Find field under its switch. `s` or a click puts the cursor in it; it
 never takes the keys by itself, so the pane's other keys keep working. As you type, the body counts the tasks
 the pane holds that every word matches, on a dim line, then lists them, the matched words underlined:
 
@@ -470,6 +471,12 @@ dim, `+` lines green, `-` lines red, the lines around them plain. It is git's di
 commit (its staged and unstaged edits, as the row counts them; an untracked file's every line added), the first 200
 lines shown and the rest counted, each line cut at 3 screen lines. An open diff follows the file's edits and closes
 when the file leaves the list; an untracked folder opens none.
+
+The Find field (`s`) in the dock searches the listed files: each word matches the start of a word in a file's path, the
+path it was renamed from, or its repo's folder name or branch. The body counts the matches (`2 files match`) and draws
+each as its row does, over its repo and branch, the matched words underlined; a press on one opens its diff under it.
+Enter with one match opens its diff, with more moves the cursor onto the first match that has a diff; switching views
+closes the search.
 
 `Δn` counts the listed files, on the button and in the pane's tab title (`Tasks · Δ3`, shown while more than one
 pane is open). The view cannot open Claude Code's own `/diff` pane: the diff under a file is the pane's own.
