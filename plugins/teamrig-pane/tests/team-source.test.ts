@@ -1,13 +1,14 @@
 // The Team tab's source (hooks/team-source.ts): each team folder's config and, in the state folder it names, its rename
 // and hire logs, each re-read only when its stamp moves; the tree of the folders a team id names, written only when it
-// changed and read only while the tab shows; the own team's tasks with it, a peer's none.
+// changed and read only while the tab shows; the own team's tasks and unread inbox lines with it, a peer's none.
 import { describe, expect, test } from 'claude-code/testing'
 import type { TeamView } from '../types'
 import { POLL_MS } from '../hooks/live'
 import type { TeamFiles } from '../hooks/places'
 import { teamTree, type TeamRead } from '../hooks/team'
+import type { InboxPaths } from '../hooks/team-inboxes'
 import { LiveTeam, TeamFolder } from '../hooks/team-source'
-import { HOUR, MemoryFiles, NOW, createLine, iso, statusLine } from './fixtures'
+import { HOUR, MemoryFiles, NOW, S1, createLine, iso, markLine, statusLine } from './fixtures'
 import { configOf, hire, rename, tasksOf } from './team-fixtures'
 
 const TEAMS = 'K/teams'
@@ -16,6 +17,8 @@ const ACME_STATE = `${ACME_HOME}/state`
 const ACME_CONFIG_PATH = `${ACME_HOME}/config.json`
 const TOOLS_CONFIG_PATH = `${TEAMS}/tools/config.json`
 const FILES: TeamFiles = { team: 'acme', dir: ACME_HOME, teamsDir: TEAMS, config: ACME_CONFIG_PATH, renames: `${ACME_STATE}/renames.jsonl`, turnLog: null }
+/** The own team's register: its inbox read marks and its inbox folder. */
+const INBOX: InboxPaths = { marks: 'K/tasks/inbox-marks.jsonl', inboxDir: 'K/inbox' }
 
 const ACME_CONFIG = { team: { id: 'acme' }, sessions: ['lead', 'api'], roles: { lead: 'lead' } }
 const TOOLS_CONFIG = { team: { id: 'tools', parent: 'acme' }, sessions: ['boss', 'dev'], roles: { lead: 'boss' } }
@@ -59,27 +62,27 @@ describe('TeamFolder', () => {
   test('reads the config, then the rename and hire logs in its state folder; again only the files whose stamp moved', async () => {
     const disk = teamsDisk()
     const folder = new TeamFolder(disk, TEAMS, 'acme')
-    expect(await folder.read(TASKS, null)).toEqual(ACME_READ)
+    expect(await folder.read({ tasks: TASKS, inboxes: null })).toEqual(ACME_READ)
     expect(disk.reads).toEqual([ACME_CONFIG_PATH, `${ACME_STATE}/renames.jsonl`, `${ACME_STATE}/hires.jsonl`])
 
     disk.reads.length = 0
-    expect(await folder.read(TASKS, null)).toEqual(ACME_READ)
+    expect(await folder.read({ tasks: TASKS, inboxes: null })).toEqual(ACME_READ)
     expect(disk.reads).toEqual([])
 
     disk.write(`${ACME_STATE}/hires.jsonl`, '')
-    expect((await folder.read(null, null))?.hires).toEqual([])
+    expect((await folder.read(null))?.hires).toEqual([])
     expect(disk.reads).toEqual([`${ACME_STATE}/hires.jsonl`])
   })
 
   test("a config that names another state folder reads the logs from there, a relative one under the team's folder", async () => {
     const disk = teamsDisk()
     const folder = new TeamFolder(disk, TEAMS, 'acme')
-    await folder.read(null, null)
+    await folder.read(null)
     disk.write(ACME_CONFIG_PATH, JSON.stringify({ ...ACME_CONFIG, paths: { state: 'kept' } }))
     disk.write(`${ACME_HOME}/kept/hires.jsonl`, `${API_HIRE_LINE}\n`)
     disk.reads.length = 0
 
-    const read = await folder.read(null, null)
+    const read = await folder.read(null)
     expect(disk.reads).toEqual([ACME_CONFIG_PATH, `${ACME_HOME}/kept/hires.jsonl`])
     expect([read?.renames, read?.hires]).toEqual([[], [API_HIRE]])
   })
@@ -87,21 +90,24 @@ describe('TeamFolder', () => {
   test('no config file, or one teamrig refuses, reads as no team; a read that fails throws, and the next one tries again', async () => {
     const disk = new MemoryFiles()
     const folder = new TeamFolder(disk, TEAMS, 'acme')
-    expect(await folder.read(null, null)).toBeNull()
+    expect(await folder.read(null)).toBeNull()
     expect(disk.reads).toEqual([])
 
     disk.write(ACME_CONFIG_PATH, '{ not json')
-    expect(await folder.read(null, null)).toBeNull()
+    expect(await folder.read(null)).toBeNull()
 
     disk.write(ACME_CONFIG_PATH, JSON.stringify(ACME_CONFIG))
     disk.failNextRead = 'EBUSY: resource busy or locked'
-    expect(await failure(() => folder.read(null, null))).toBe('EBUSY: resource busy or locked')
-    expect((await folder.read(null, null))?.config).toEqual(configOf(ACME_CONFIG))
+    expect(await failure(() => folder.read(null))).toBe('EBUSY: resource busy or locked')
+    expect((await folder.read(null))?.config).toEqual(configOf(ACME_CONFIG))
   })
 })
 
-/** A LiveTeam over the fake disk and a fake folder list, with whether the tab shows set by the test, and each write it made. */
-function fakeTeam(disk: MemoryFiles) {
+/**
+ * A LiveTeam over the fake disk and a fake folder list, with whether the tab shows set by the test, and each write it
+ * made; it counts the own team's inboxes at `inbox`, none when null (a pane that found no register).
+ */
+function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
   const shown = { tab: true }
   const listed: { names: readonly string[]; failure: string | null } = { names: ['acme', 'tools'], failure: null }
   const views: TeamView[] = []
@@ -117,7 +123,7 @@ function fakeTeam(disk: MemoryFiles) {
       if (failWrites) throw new Error('write refused')
       views.push(view)
     },
-  })
+  }, inbox)
   const setFailWrites = (fails: boolean) => {
     failWrites = fails
   }
@@ -137,6 +143,21 @@ describe('LiveTeam', () => {
     await live.refresh()
     expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, { ...TOOLS_READ, config: configOf(grown) }], 'acme') })
     expect(views.length).toBe(2)
+  })
+
+  test("the own team's sessions carry their unread inbox lines, a peer team's none; a pane with no register counts none", async () => {
+    const disk = teamsDisk()
+    disk.write(INBOX.marks, `${markLine('api', 0, S1, NOW)}\n`)
+    disk.write(`${INBOX.inboxDir}/api.md`, 'lead: add the route\nlead: by noon\n')
+    disk.write(`${INBOX.inboxDir}/dev.md`, 'boss: fix the build\n')
+    const { live, views } = fakeTeam(disk, INBOX)
+    await live.refresh()
+    expect(views).toEqual([{ kind: 'tree', root: teamTree([{ ...ACME_READ, unread: new Map([['api', 2]]) }, TOOLS_READ], 'acme') }])
+    expect(disk.reads).not.toContain(`${INBOX.inboxDir}/dev.md`)
+
+    const alone = fakeTeam(disk)
+    await alone.live.refresh()
+    expect(alone.views).toEqual([{ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme') }])
   })
 
   test('a folder that names no team is never read; one no longer listed leaves the tree, and one listed again is read anew', async () => {

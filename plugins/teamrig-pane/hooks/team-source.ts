@@ -1,14 +1,19 @@
 // The Team tab's source (T780): the kit home's team folders and, in each, the team's config and the rename and hire
 // logs in the state folder that config names, each file re-read only when its stamp moves (source.ts WatchedFile). It
 // puts them into the tree (team.ts teamTree) and writes it only when it changed, reading every POLL_MS (live.ts) and
-// only while the tab shows, as the Log view's LiveLog does. The pane's own team's register tasks go with its read, for
-// each session's tasks in progress; a peer team's register is not the pane's, so its sessions show none.
+// only while the tab shows, as the Log view's LiveLog does. The pane's own team's register tasks and its sessions'
+// unread inbox lines (team-inboxes.ts) go with its read; a peer team's register and inboxes are not the pane's, so its
+// sessions show neither.
 import type { TaskRow, TeamView } from '../types'
 import { parseConfigText, readHiringLog, readRenames, type ConfigRead, type HiringRecord, type Rename } from './core/read/index'
 import { POLL_MS, type Timer } from './live'
 import { teamIds, teamStateDir, type TeamFiles } from './places'
 import { WatchedFile, type Files } from './source'
 import { teamTree, type TeamRead } from './team'
+import { TeamInboxes, type InboxPaths } from './team-inboxes'
+
+/** What the pane reads of its own team beside its folder: the register's tasks, and its inboxes when it found them. */
+export type OwnReads = { readonly tasks: readonly TaskRow[]; readonly inboxes: TeamInboxes | null }
 
 /** A team's rename and hire logs, in the state folder its config named when they were made. */
 type TeamLogs = { readonly state: string; readonly renames: WatchedFile<readonly Rename[]>; readonly hires: WatchedFile<readonly HiringRecord[]> }
@@ -29,11 +34,12 @@ export class TeamFolder {
   }
 
   /**
-   * The team's files as read now, with `tasks` and `unread`; null when it has no config file or teamrig refuses the
-   * one there. A config that moves its state folder reads the logs from the new one. A failed read throws, keeping the
-   * stamps of the files read before it, so the next read tries the rest again.
+   * The team's files as read now, with `own` for the pane's own team (null for a peer's): its tasks, and the unread
+   * inbox lines of the sessions on its config. Null when it has no config file or teamrig refuses the one there. A
+   * config that moves its state folder reads the logs from the new one. A failed read throws, keeping the stamps of
+   * the files read before it, so the next read tries the rest again.
    */
-  async read(tasks: readonly TaskRow[] | null, unread: ReadonlyMap<string, number> | null): Promise<TeamRead | null> {
+  async read(own: OwnReads | null): Promise<TeamRead | null> {
     await this.config.refresh()
     const config = this.config.current
     if (config?.status !== 'loaded') return null
@@ -42,7 +48,8 @@ export class TeamFolder {
     this.logs = logs
     await logs.renames.refresh()
     await logs.hires.refresh()
-    return { team: this.team, config: config.config, renames: logs.renames.current, hires: logs.hires.current, tasks, unread }
+    const unread = own === null || own.inboxes === null ? null : await own.inboxes.unread(config.config.sessions)
+    return { team: this.team, config: config.config, renames: logs.renames.current, hires: logs.hires.current, tasks: own?.tasks ?? null, unread }
   }
 
   private logsIn(state: string): TeamLogs {
@@ -74,6 +81,8 @@ export class LiveTeam {
   private readonly files: Files
   private readonly team: TeamFiles
   private readonly ports: TeamPorts
+  /** The own team's inboxes; null when the pane found no register, so no inbox marks. */
+  private readonly inboxes: TeamInboxes | null
   /** Each team folder read, by id; a folder no longer listed is dropped, so a team made again is read anew. */
   private readonly teams = new Map<string, TeamFolder>()
   private timers: Timer[] = []
@@ -81,10 +90,11 @@ export class LiveTeam {
   /** The view last written, as JSON: a read that finds the same tree writes nothing. */
   private shown: string | null = null
 
-  constructor(files: Files, team: TeamFiles, ports: TeamPorts) {
+  constructor(files: Files, team: TeamFiles, ports: TeamPorts, inbox: InboxPaths | null) {
     this.files = files
     this.team = team
     this.ports = ports
+    this.inboxes = inbox === null ? null : new TeamInboxes(files, inbox)
   }
 
   startTimers(every: (ms: number, fn: () => void) => Timer): void {
@@ -129,12 +139,12 @@ export class LiveTeam {
     try {
       const ids = teamIds(await this.ports.folders(this.team.teamsDir))
       for (const id of this.teams.keys()) if (!ids.includes(id)) this.teams.delete(id)
-      const tasks = await this.ports.tasks()
+      const own: OwnReads = { tasks: await this.ports.tasks(), inboxes: this.inboxes }
       const reads: TeamRead[] = []
       for (const id of ids) {
         const folder = this.teams.get(id) ?? new TeamFolder(this.files, this.team.teamsDir, id)
         this.teams.set(id, folder)
-        const read = await folder.read(id === this.team.team ? tasks : null, null)
+        const read = await folder.read(id === this.team.team ? own : null)
         if (read !== null) reads.push(read)
       }
       return { kind: 'tree', root: teamTree(reads, this.team.team) }
