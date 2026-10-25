@@ -32,9 +32,9 @@ const PATHS = registerPaths({ tasksDir: `${KIT}/teams/demo/state`, inboxDir: `${
 
 /**
  * A row in the words of `teamrig list --all` (formatTask, src/register/views.ts): each fact it prints, from the pane's
- * row and the tree of the rows read with it, each stored time in the tree's zone (showStored): a due a task takes from a task that needs it reads `due 10-20 (from T3)`,
- * and an active task another session's task needs ends `· needed by T7 (beta, due 10-22)` (neededByText), the due
- * left out when the row's own `(from T7)` names it.
+ * row and the tree of the rows read with it, each stored time in the tree's zone (showStored): a due a task takes from a task that needs it reads `due 10-20 (from T4)`,
+ * and an active task another session's task needs ends `· needed by T8 (beta, due 10-22)` (neededByText), the due
+ * left out when the row's own `(from T8)` names it.
  */
 function listLine(row: TaskRow, tree: TaskTree<TaskRow>): string {
   const parts = [`${row.id} ${row.status}`, priorityText(row.priority), `owner ${row.owner}`]
@@ -50,7 +50,7 @@ function listLine(row: TaskRow, tree: TaskTree<TaskRow>): string {
   return `${parts.join(', ')} | ${row.title}${waiting}${neededBy(row, tree)}`
 }
 
-/** ` · needed by T7 (beta, due 10-22) +1`, as listLine's row ends; empty when no other session's task needs it. */
+/** ` · needed by T8 (beta, due 10-22) +1`, as listLine's row ends; empty when no other session's task needs it. */
 function neededBy(row: TaskRow, tree: TaskTree<TaskRow>): string {
   const [first, ...rest] = tree.neededByOthers(row.id)
   if (first === undefined) return ''
@@ -60,8 +60,17 @@ function neededBy(row: TaskRow, tree: TaskTree<TaskRow>): string {
   return ` · needed by ${first.id} (${facts.join(', ')})${rest.length > 0 ? ` +${rest.length}` : ''}`
 }
 
-/** The task lines teamrig printed, sorted as the test sorts the pane's. */
-const linesOf = (printed: string) => printed.split('\n').filter(line => line !== '').sort()
+/**
+ * The task lines teamrig printed, sorted as the test sorts the pane's. Each loses the ` · ahead: due` tail (aheadText):
+ * why the row sorts before the next in teamrig's plan order, a fact of the list's order, not of the task, which the
+ * pane, sorting its own way, never draws.
+ */
+const linesOf = (printed: string) =>
+  printed
+    .split('\n')
+    .filter(line => line !== '')
+    .map(line => line.replace(/ · ahead: [^·]*$/, ''))
+    .sort()
 
 /** teamrig's WARN line as the pane words it, the file named by its name alone; '' when teamrig printed none. */
 const warnOf = (printed: string) => printed.trim().replace(/^WARN .*[\\/](events\.jsonl: )/, 'WARN $1')
@@ -114,7 +123,8 @@ describe('golden', () => {
   test('draws every task teamrig lists, field for field, and counts the lines it skips as its WARN line does', async () => {
     const snap = await paneSnapshot(goldenFiles())
     expect(snap.timeZone).toBe(GOLDEN_TIME_ZONE)
-    expect(linesOf(GOLDEN.list).length).toBe(7)
+    // The lead's T1 that team create opens, and alpha's and beta's seven.
+    expect(linesOf(GOLDEN.list).length).toBe(8)
     const tree = treeOf(snap)
     expect(snap.tasks.map(row => listLine(row, tree)).sort()).toEqual(linesOf(GOLDEN.list))
     expect(`WARN ${snap.problem}`).toBe(warnOf(GOLDEN.warn))
@@ -122,21 +132,21 @@ describe('golden', () => {
 
   test('keeps what list does not print: a ref cleared or never given, the evidence', async () => {
     const tasks = new Map((await paneSnapshot(goldenFiles())).tasks.map(task => [task.id, task]))
-    expect([tasks.get('T1')?.ref, tasks.get('T2')?.ref, tasks.get('T3')?.ref]).toEqual([null, null, 'doc:1'])
-    expect(tasks.get('T4')?.evidence).toBe('sha abc')
+    expect([tasks.get('T2')?.ref, tasks.get('T3')?.ref, tasks.get('T4')?.ref]).toEqual([null, null, 'doc:1'])
+    expect(tasks.get('T5')?.evidence).toBe('sha abc')
   })
 
   test('draws its rows from what teamrig wrote: a waiting task\'s typed reasons and note, an open one\'s unfinished after', async () => {
     const snap = await paneSnapshot(goldenFiles())
     const blocks = paneBlocks(snap, 'mine')
-    // Since when T1 works and T2 waits is the moment the capture ran.
+    // Since when T2 works and T3 waits is the moment the capture ran.
     const since = (id: string) => whenWords(snap.tasks.find(task => task.id === id)?.statusAt ?? '', clockOf(snap))
-    expect(rowText(blocks, 'working:T1')).toBe('◐ T1  First task with ref')
-    // T3 comes after T1, so T1 works to T3's date, as teamrig's list says it; beta's T7 needs it too, by a later date.
-    expect(rowText(blocks, 'working-meta:T1')).toBe(`      p1 · due Tue 10-20 (from T3) · in progress since ${since('T1')} · needed by T7 (beta, due Thu 10-22)`)
-    expect(rowText(blocks, 'waiting-meta:T2')).toBe(`      p2 · waiting since ${since('T2')}: decision owner, until Wed 01-09 12:00 IST; waiting on beta`)
-    expect(rowText(blocks, 'next:T3')).toBe('○ T3  Goals task renamed')
-    expect(rowText(blocks, 'next-meta:T3')).toBe('      p1 · due Tue 10-20 · after T1 · asked by lead')
+    expect(rowText(blocks, 'working:T2')).toBe('◐ T2  First task with ref')
+    // T4 comes after T2, so T2 works to T4's date, as teamrig's list says it; beta's T8 needs it too, by a later date.
+    expect(rowText(blocks, 'working-meta:T2')).toBe(`      p1 · due Tue 10-20 (from T4) · in progress since ${since('T2')} · needed by T8 (beta, due Thu 10-22)`)
+    expect(rowText(blocks, 'waiting-meta:T3')).toBe(`      p2 · waiting since ${since('T3')}: decision owner, until Wed 01-09 12:00 IST; waiting on beta`)
+    expect(rowText(blocks, 'next:T4')).toBe('○ T4  Goals task renamed')
+    expect(rowText(blocks, 'next-meta:T4')).toBe('      p1 · due Tue 10-20 · after T2 · asked by lead')
   })
 
   test('finds the session area from the mark teamrig inbox read wrote for the session', async () => {

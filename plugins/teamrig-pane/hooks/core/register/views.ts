@@ -5,7 +5,8 @@ import { cardLines } from './card.ts';
 import { PROBLEM_KINDS, type RegisterEvent } from './events.ts';
 import type { ApprovalAnswer, Task } from './fold.ts';
 import { ACTIVE_STATUSES, GITHUB_SOURCE, priorityText, type TaskStatus } from './model.ts';
-import { planOrder, type TaskTree, type WaitingOnYou } from './tree.ts';
+import { reviewLines, reviewPartNames } from './review.ts';
+import { decidingKey, planOrder, type TaskTree, type Unblocks, type WaitingOnYou } from './tree.ts';
 import { waitsText, weekdayText, type PersonWait } from './waits.ts';
 import { proofOf, proofText } from './verify.ts';
 
@@ -78,7 +79,8 @@ export function taskLabel(task: Task, team?: string): string {
  */
 function rowHead(task: Task, team: string | undefined, tree: TaskTree): string[] {
   const kind = task.kind !== null && PROBLEM_KINDS.includes(task.kind) ? [task.kind] : [];
-  const parts = [`${taskLabel(task, team)} ${task.status}`, priorityText(task.priority), ...kind, `owner ${task.owner}`];
+  const pinned = task.pin === null ? [] : ['pinned'];
+  const parts = [`${taskLabel(task, team)} ${task.status}`, priorityText(task.priority), ...pinned, ...kind, `owner ${task.owner}`];
   const inherited = tree.effectiveDue(task.id);
   if (inherited !== undefined && inherited.from !== null) {
     parts.push(`due ${showStored(inherited.due, tree.zone)} (from ${inherited.from})`);
@@ -162,6 +164,51 @@ function neededByText(task: Task, tree: TaskTree): string {
   const shown = due !== undefined && tree.effectiveDue(task.id)?.from === (due.from ?? first.id);
   const facts = due === undefined || shown ? [first.owner] : [first.owner, `due ${showStored(due.due, tree.zone)}`];
   return ` · needed by ${first.id} (${facts.join(', ')})${rest.length > 0 ? ` +${rest.length}` : ''}`;
+}
+
+/** A task and the tree of its register, which places it in plan order ({@link TaskTree.placeOf}). */
+export interface PlacedRow {
+  readonly task: Task;
+  readonly tree: TaskTree;
+}
+
+/**
+ * Why `row` sorts ahead of `next`, the row after it, in plan order: the first plan key on which they differ, in words:
+ * `in progress`, `due` (the row shows the date), `unblocks T566 p1 +2` (the best task that needs it, its priority
+ * and how many more), `in week 01-07`, `size 0.5%`. Undefined when the row shows it already (priority), when only the
+ * number decides (age, the older first), when they tie, or when `next` sorts ahead. Each row is placed by its own
+ * register's tree.
+ */
+export function aheadReason(row: PlacedRow, next: PlacedRow): string | undefined {
+  const place = row.tree.placeOf(row.task);
+  const other = next.tree.placeOf(next.task);
+  const key = decidingKey(place, other);
+  if (key === undefined || key === 'pinned' || key === 'priority' || key === 'age' || planOrder(place, other) > 0) {
+    return undefined;
+  }
+  switch (key) {
+    case 'started':
+      return 'in progress';
+    case 'due':
+      return 'due';
+    case 'unblocks':
+      return place.unblocks === undefined ? undefined : unblocksText(place.unblocks);
+    case 'week':
+      return row.task.week === null ? undefined : `in week ${showStored(row.task.week, row.tree.zone)}`;
+    case 'size':
+      return row.task.size === null ? undefined : `size ${sizeText(row.task.size)}`;
+  }
+}
+
+/** `unblocks T566 p1 +2`: the first needer of the best priority, that priority, and how many others need the task. */
+function unblocksText({ first, priority, count }: Unblocks): string {
+  return `unblocks ${first} ${priorityText(priority)}${count > 1 ? ` +${count - 1}` : ''}`;
+}
+
+/** ` · ahead: in progress`: {@link aheadReason} as the tail of a row; empty for the last row or when there is none. */
+export function aheadText(row: PlacedRow, next: PlacedRow | undefined): string {
+  const reason = next === undefined ? undefined : aheadReason(row, next);
+  return reason === undefined ? '' : ` · ahead: ${reason}`;
 }
 
 /** The GitHub issue a task was imported from, as its ref (`gh:acme/web#7`); undefined for any other task. */
@@ -264,6 +311,7 @@ export function formatEvent(event: RegisterEvent, zone: TimeZone): string {
         event.evidence === null ? undefined : `evidence=${event.evidence}`,
         event.skill === null ? undefined : `skill=${event.skill}`,
         event.followups === undefined ? undefined : `followups=${event.followups.length === 0 ? 'none' : event.followups.join(',')}`,
+        event.review === undefined ? undefined : `review=${reviewPartNames(event.review)}`,
       ]
         .filter((part) => part !== undefined)
         .join(' ');
@@ -292,6 +340,9 @@ export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], t
   if (task.ref !== null) {
     lines.push(`ref: ${task.ref}`);
   }
+  if (task.pin !== null) {
+    lines.push(`pinned by ${task.pin}: above every other task of ${task.owner}`);
+  }
   if (task.size !== null) {
     const cost = sizeCost(task.size);
     lines.push(`size: ${sizeText(task.size)} of the weekly limit${cost === undefined ? '' : `, ${cost}`}`);
@@ -317,6 +368,10 @@ export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], t
   if (task.followups.length > 0) {
     lines.push(`followups: ${task.followups.join(', ')}`);
   }
+  const review = reviewLines(task.review, '  ');
+  if (review.length > 0) {
+    lines.push('review:', ...review);
+  }
   lines.push('history:', ...events.filter((event) => event.id === task.id).map((event) => `  ${formatEvent(event, tree.zone)}`));
   return lines.join('\n');
 }
@@ -324,14 +379,20 @@ export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], t
 /**
  * `show --tree`: what the task needs, down to tasks that need nothing unfinished (`needs:`), then the active tasks
  * that need it, up to those nothing needs (`needed by:`), each level indented two more spaces, then
- * {@link formatNextMove}. A finished need ends its branch, and one the read lacks reads `T3 finished` (only a
- * compaction retires a task, and only a finished one). Within a part, a task met again reads `T4 (shown above)`,
- * and one already on its own branch `T2 (loop)`. Needs come in plan order, so the first branch leads to the next move.
+ * {@link formatNextMove}. A finished need ends its branch, and so does one another register of the team tree holds,
+ * read as its row there (`web/T3 open, ...`); one no register holds reads `T3 finished` (only a compaction retires a
+ * task, and only a finished one). Within a part, a task met again reads `T4 (shown above)`, and one already on its
+ * own branch `T2 (loop)`. Needs come in plan order, so the first branch leads to the next move. With `team`, the
+ * read is that team's register, another than the caller's: its rows and its next move name it too (`web/T4`).
  */
-export function formatTaskTree(task: Task, tree: TaskTree, titleChars: number): string[] {
+export function formatTaskTree(task: Task, tree: TaskTree, titleChars: number, team: string | undefined = undefined): string[] {
   const node = (id: string) => {
     const found = tree.task(id);
-    return found === undefined ? `${id} finished` : shortRow(found, titleChars, undefined, tree);
+    const away = tree.elsewhereOf(id);
+    if (found !== undefined) {
+      return shortRow(found, titleChars, team, tree);
+    }
+    return away === undefined ? `${id} finished` : shortRow(away.task, titleChars, away.team, tree);
   };
   const down = (id: string) => {
     const found = tree.task(id);
@@ -347,7 +408,7 @@ export function formatTaskTree(task: Task, tree: TaskTree, titleChars: number): 
     const lines = branchLines(task.id, next, node, new Set([task.id]), [task.id]);
     return lines.length === 0 ? [`${name}: none`] : [`${name}:`, ...lines];
   };
-  return [...part('needs', down), ...part('needed by', up), formatNextMove(task, tree)];
+  return [...part('needs', down), ...part('needed by', up), formatNextMove(task, tree, team)];
 }
 
 /** The lines under `id` along `next`, depth first, two spaces deeper per level; see {@link formatTaskTree}. */
@@ -368,19 +429,25 @@ function branchLines(id: string, next: (id: string) => string[], node: (id: stri
 /**
  * `Next move: beta (T3)`: who moves first so the task can finish, on which task ({@link TaskTree.nextMove}), with
  * `, decision` or `, approval` when the lead or the owner decides, `, from Thu 01-10` when a time must pass first,
- * and `, behind T7 (p1)` when that session works a higher-priority task first. `Next move: none` says why: the task
- * is finished, or what it needs runs in a loop.
+ * and `, behind T7 (p1)` when that session works a higher-priority task first; `Next move: lead on team web (web/T5)`
+ * when an unfinished task of another register of the team tree comes first. `Next move: none` says why: the task
+ * is finished, or what it needs runs in a loop. With `team`, the read is that team's register, another than the
+ * caller's, which each move and task names: `Next move: beta on team web (web/T3)`.
  */
-export function formatNextMove(task: Task, tree: TaskTree): string {
+export function formatNextMove(task: Task, tree: TaskTree, team: string | undefined = undefined): string {
   const move = tree.nextMove(task.id);
   if (move === undefined) {
     return ACTIVE_STATUSES.includes(task.status)
-      ? `Next move: none, what ${task.id} needs runs in a loop (check flags it LOOP)`
-      : `Next move: none, ${task.id} is ${task.status}`;
+      ? `Next move: none, what ${taskLabel(task, team)} needs runs in a loop (check flags it LOOP)`
+      : `Next move: none, ${taskLabel(task, team)} is ${task.status}`;
   }
+  if (move.kind === 'elsewhere') {
+    return `Next move: ${move.who} on team ${move.team} (${taskLabel(move.need, move.team)})`;
+  }
+  const who = team === undefined ? move.who : `${move.who} on team ${team}`;
   const what = move.kind === 'work' ? '' : move.kind === 'time' ? `, from ${weekdayText(move.at, tree.zone)}` : `, ${move.kind}`;
-  const behind = move.behind === undefined ? '' : `, behind ${move.behind.id} (${priorityText(move.behind.priority)})`;
-  return `Next move: ${move.who} (${move.task.id})${what}${behind}`;
+  const behind = move.behind === undefined ? '' : `, behind ${taskLabel(move.behind, team)} (${priorityText(move.behind.priority)})`;
+  return `Next move: ${who} (${taskLabel(move.task, team)})${what}${behind}`;
 }
 
 /**
@@ -411,6 +478,15 @@ export function approvalNotice(task: Pick<Task, 'id'>, answer: ApprovalAnswer): 
   return answer.verdict === 'approved'
     ? `${answer.by} approved ${task.id}${note}; push or merge it now, then set its next status`
     : `${answer.by} declined ${task.id}${note}; set it in-progress, fix that, then ask again (--status waiting --waits approval:${answer.by})`;
+}
+
+/**
+ * The inbox line a parent team's lead gets when a task it handed `team` ends (T509), the task named `<team>/<id>`: a
+ * done one with its evidence, a dropped one with its note, `web/T1 done: Ship login | evidence: PR #12 merged`.
+ */
+export function endedNotice(task: Pick<Task, 'id' | 'status' | 'title' | 'note' | 'evidence'>, team: string): string {
+  const [label, why] = task.status === 'done' ? ['evidence', task.evidence] : ['note', task.note];
+  return `${team}/${task.id} ${task.status}: ${task.title}${why === null ? '' : ` | ${label}: ${why.replace(/\s+/g, ' ')}`}`;
 }
 
 /**

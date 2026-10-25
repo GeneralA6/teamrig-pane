@@ -24,8 +24,13 @@ export const CONFIG_LIMITS = {
   forbidFrontmatter: { maxItems: 8, maxLength: 32 },
   requireNoteOn: { maxItems: 5 },
   requireFollowupsOn: { maxItems: 3 },
+  reviewRequireOn: { maxItems: 2 },
+  criticalOwners: { maxItems: 32 },
   maxVerifying: { min: 0, max: 100 },
   maxSelfMadePerDay: { min: 0, max: 200 },
+  /** Its span (these days and today) stays inside compaction's RETAIN_DAYS, so every task moved in it is still read. */
+  goalProgressDays: { min: 0, max: 7 },
+  overSizeMultiple: { min: 0, max: 10 },
   stopgapFiles: { maxItems: 20, maxLength: 260 },
   persistentFailureHours: { min: 1, max: 720 },
   decisionBatchTimes: { maxItems: 8 },
@@ -33,6 +38,7 @@ export const CONFIG_LIMITS = {
   chainNudgeAt: { min: 0, max: 50 },
   leadOwnPaths: { maxItems: 16, maxLength: 256 },
   readonlyShellPrefixes: { maxItems: 16, maxLength: 120 },
+  keepAllow: { maxItems: 64, maxLength: 120 },
   secretPaths: { maxItems: 32, maxLength: 200 },
   secretEnvNames: { maxItems: 16, maxLength: 120 },
   packageCooldownDays: { min: 0, max: 365 },
@@ -101,6 +107,9 @@ export const RULE_CONFLICT_LIMITS = {
   textMaxLength: 300,
   reasonMaxLength: 200,
 } as const;
+
+/** The longest `budget.account` name, on one line. */
+export const BUDGET_ACCOUNT_MAX_LENGTH = 100;
 
 /**
  * Bounds on a tree of teams, which `team create` and `doctor` enforce. A lead's `--tree` roll-up reads

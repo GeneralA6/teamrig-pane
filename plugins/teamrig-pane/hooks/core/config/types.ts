@@ -22,6 +22,12 @@ export interface PriorityConfig {
 
 /** How a problem task's review is asked (T916). */
 export interface RegisterReviewConfig {
+  /** What `set` does when a problem task reaches a `requireOn` status with review parts missing. */
+  readonly mode: ReviewMode;
+  /** The statuses (of verifying and done) a problem task cannot reach with review parts missing. */
+  readonly requireOn: readonly TaskStatus[];
+  /** Sessions whose every problem task counts as critical and so is asked `--harden` too: a team's security or data areas. */
+  readonly criticalOwners: readonly string[];
   /**
    * A regular expression, matched case-insensitively against an unmarked task's title and description: a match prints
    * a hint to mark the task `--problem` (or `--problem none`) when it is added and when it starts.
@@ -41,6 +47,16 @@ export interface RegisterCheckConfig {
    * SELF-MADE; 0 turns the flag off.
    */
   readonly maxSelfMadePerDay: number;
+  /**
+   * The whole days (the team's day: `wake.dayStartUtc`, else UTC) that may end with no goal or week-plan task moved
+   * while the week has usage left, before NO-PROGRESS; 0 turns the flag off.
+   */
+  readonly goalProgressDays: number;
+  /**
+   * An active sized task whose metered cost passed this many times its size (`--size`) is OVER-SIZE; 0 turns the
+   * flag off.
+   */
+  readonly overSizeMultiple: number;
   readonly weekLengthDays: number;
   /**
    * The files `check` scans for `stopgap T<id>` tags besides every skill: paths relative to the team's project
@@ -102,6 +118,17 @@ export function isVerifyGate(value: unknown): value is VerifyGate {
   return VERIFY_GATES.some((gate) => gate === value);
 }
 
+export const REVIEW_MODES = ['refuse', 'warn', 'off'] as const;
+/**
+ * A problem task reaching a `register.review.requireOn` status with review parts missing: `refuse` the change and
+ * name the missing flags, `warn` (make it and print them), or `off` (ask nothing).
+ */
+export type ReviewMode = (typeof REVIEW_MODES)[number];
+
+export function isReviewMode(value: unknown): value is ReviewMode {
+  return REVIEW_MODES.some((mode) => mode === value);
+}
+
 export const CONFLICT_WINNERS = ['local', 'teamrig'] as const;
 /** Which side of a recorded conflict wins: the local rule over the core rule, or the core rule over the local text kept. */
 export type ConflictWinner = (typeof CONFLICT_WINNERS)[number];
@@ -125,6 +152,18 @@ export interface RuleConflict {
   readonly reason?: string;
 }
 
+/**
+ * How a launched session's Claude Code lists a skill of another session's area, as its `skillOverrides` setting takes
+ * it: `on` in full, `name-only` without its description, `user-invocable-only` only as a `/name` command the model is
+ * not shown, `off` not at all.
+ */
+export const OTHER_AREA_LISTINGS = ['on', 'name-only', 'user-invocable-only', 'off'] as const;
+export type OtherAreaListing = (typeof OTHER_AREA_LISTINGS)[number];
+
+export function isOtherAreaListing(value: unknown): value is OtherAreaListing {
+  return OTHER_AREA_LISTINGS.some((listing) => listing === value);
+}
+
 export interface SkillsConfig {
   /** The area prefix of skills shared by the whole team, e.g. `team-...`. */
   readonly sharedPrefix: string;
@@ -133,6 +172,8 @@ export interface SkillsConfig {
   readonly maxVerifiedAgeDays: number;
   /** Frontmatter keys a team skill may not set, e.g. `allowed-tools` (a skill is never a permission). */
   readonly forbidFrontmatter: readonly string[];
+  /** How a launched session lists a skill of another area whose `Used by:` line does not name it. */
+  readonly otherAreas: OtherAreaListing;
 }
 
 export interface LockConfig {
@@ -265,6 +306,19 @@ export interface ReadonlyShellConfig {
    * every argument after it.
    */
   readonly allowPrefixes: readonly string[];
+}
+
+/**
+ * The local allow rules a team keeps (src/permissions/allow-rules.ts). An allow rule in a Claude Code settings file
+ * approves a call before auto mode's classifier sees it; `permissions trim` removes the rules off this list, and doctor
+ * flags the ones that approve a whole tool or program or hold a credential.
+ */
+export interface PermissionsConfig {
+  /**
+   * Rules kept as they are (`Bash(kubectl get *)`, `WebSearch`); `:*` and ` *` read as the same, `Tool(x *)` keeps
+   * `Tool(x)`, and a shell rule's leading `MSYS_NO_PATHCONV=1 ` reads as absent. A team's list replaces the default.
+   */
+  readonly keepAllow: readonly string[];
 }
 
 export const AD_HOC_RUNNERS: readonly AdHocRunners[] = ['deny', 'ask', 'allow'];
@@ -453,14 +507,14 @@ export interface QuietHours {
   readonly paceWeight?: number;
 }
 
-/** One session's weight in the split of the team's daily budget (`sessionBudgetPct`). */
+/** One session's weight in the split of the team's daily budget (src/budget/parts.ts `dailyBudgetOf`). */
 export interface SessionBudget {
   /** Times its queued work: the session gets the team's budget × that / the sum over the sessions. */
   readonly share: number;
 }
 
 /**
- * The bounds on a lead's lift of a session's daily budget. Every lift carries a stop %, the share of
+ * The bounds on a leader's lift of a session's or a sub-lead's group's daily budget. Every lift carries a stop %, the share of
  * the week at which it ends; the reserve stop % is only for the one reserve release shortly before the reset.
  */
 export interface BudgetLiftConfig {
@@ -477,6 +531,11 @@ export interface BudgetLiftConfig {
 export interface BudgetConfig {
   /** Turns on the live warning and the core rules' pacing sentence; `teamrig budget` shows usage either way. */
   readonly enabled: boolean;
+  /**
+   * The Claude account the team's week is on: teams with the same account share one week and split its daily
+   * budget. Unset: the Claude config dir, since one config dir signs in one account.
+   */
+  readonly account?: string;
   /** The weekly limit in weighted tokens (W). Unset: derived from the status line's weekly %. */
   readonly weeklyLimitW?: number;
   /**
@@ -605,7 +664,7 @@ export interface RollConfig {
   /** Asked in order before the host lock and again under it; the first that does not pass holds the roll. */
   readonly gates: readonly RollGateConfig[];
   /**
-   * Installs a pulled range's dependency change (package-lock.json, or package.json beyond its scripts), such as
+   * Installs a pulled range's dependency change (package-lock.json, or package.json fields an install reads), such as
    * `npm ci --ignore-scripts`: run after the pull and the `dependencyCheck`, before `afterPull`. A failed install
    * moves the main checkout back and runs again to restore its dependencies. With `dependencyGate`, a dependency
    * change rolls only when this and `dependencyCheck` are set.
@@ -686,7 +745,7 @@ export interface RefreshConfig {
   readonly everyTasks: number;
   /** The smallest context the task count refreshes at: under it a fresh start saves little. */
   readonly everyTasksMinTokens: number;
-  /** Title the tab once the session's handover is written: `<name>: restarting`, or `<name>: type /clear`. */
+  /** Title the tab once the session's handover is written: `[<team>] <name>: restarting`, or `[<team>] <name>: type /clear`. */
   readonly tabTitle: boolean;
   /**
    * Once the handover is written and the turn has ended, start the session fresh, which reads the handover:
@@ -718,6 +777,11 @@ export interface RefreshConfig {
    */
   readonly compactCeilingTokens: number;
   /**
+   * `teamrig refresh --ready` refuses a handover larger than this many bytes: the fresh start reads all of it, so a
+   * handover that grows section by section fills the next session's context before its work begins. 0: no cap.
+   */
+  readonly handoverMaxBytes: number;
+  /**
    * A program (its path, then its arguments) run after an automatic restart ended a session, given Claude
    * Code's SessionEnd hook input (reason `clear`) on stdin: for a SessionEnd hook the end skipped, since on
    * Windows a process is ended without running them. Empty: none.
@@ -728,9 +792,9 @@ export interface RefreshConfig {
 }
 
 /**
- * Who may hire a session onto the team (`teamrig hire`): `off` nobody; `owner` the lead, once the owner
- * approved (`--approved-by`, kept with the hire); `lead` the lead, within the caps; `automatic` as `lead`,
- * and a hired session whose tasks are all closed may also retire itself (`teamrig retire`).
+ * Who may hire a session onto the team (`teamrig hire`): `off` nobody; `owner` a lead (the lead, or a sub-lead
+ * into its own group), once the owner approved (`--approved-by`, kept with the hire); `lead` a lead, within the
+ * caps; `automatic` as `lead`, and a hired session whose tasks are all closed may also retire itself (`teamrig retire`).
  */
 export const HIRING_POLICIES = ['off', 'owner', 'lead', 'automatic'] as const;
 export type HiringPolicy = (typeof HIRING_POLICIES)[number];
@@ -786,7 +850,7 @@ export interface BurstConfig {
   readonly policy: BurstPolicy;
   /** A surplus burst starts at the earliest this many hours before the week's reset. */
   readonly surplusHours: number;
-  /** The least share of the week, in %, projected unused at the pace end for a surplus burst. */
+  /** The least share of the week, in %, projected unused at the pace end for a surplus burst: the team's part of the account's (src/budget/parts.ts `teamShareOf`). */
   readonly minSparePct: number;
   /** The most helpers each burst session runs at once. */
   readonly maxHelpers: number;
@@ -818,9 +882,28 @@ export interface HeadroomConfig {
   readonly closeIdleMinutes: number;
 }
 
+/**
+ * What the idle pass does with a session it would close or reopen (src/cli/idle-pass.ts): `off` runs no pass,
+ * `dry-run` logs each step it would take and takes none, `on` also starts each close and reopen its steps ask for.
+ */
+export const IDLE_MODES = ['off', 'dry-run', 'on'] as const;
+export type IdleMode = (typeof IDLE_MODES)[number];
+
+export function isIdleMode(value: unknown): value is IdleMode {
+  return IDLE_MODES.some((mode) => mode === value);
+}
+
+/** The idle pass: it closes a session the wake check would not wake once it is quiet, and reopens it when work arrives. */
+export interface IdleConfig {
+  readonly mode: IdleMode;
+  /** Sessions never closed for being quiet (by the pass or `teamrig close`), on top of the lead and the coordinator owner. */
+  readonly keepOpen: readonly string[];
+}
+
 export interface OpenConfig {
   readonly terminal: TerminalChoice;
   readonly headroom: HeadroomConfig;
+  readonly idle: IdleConfig;
 }
 
 /** What `teamrig statusline` shows beside the model and the plan's use of the week. */
@@ -842,13 +925,16 @@ export function isEffortLevel(value: unknown): value is EffortLevel {
 }
 
 /**
- * The Claude Code model and effort a session starts on (`claude --model`, `claude --effort`); an unset
- * key leaves Claude Code's own choice. The lead takes `DEFAULT_LEAD_LAUNCH` for each key it leaves unset.
+ * The Claude Code model and effort a session starts on (`claude --model`, `claude --effort`), and the folder it
+ * starts in; an unset key leaves Claude Code's own choice. The lead takes `DEFAULT_LEAD_LAUNCH` for each model
+ * and effort key it leaves unset.
  */
 export interface LaunchConfig {
   /** A Claude Code model alias, such as `best` or `opus`, or a full model id starting `claude-`. */
   readonly model?: string;
   readonly effort?: EffortLevel;
+  /** The session's project folder, an absolute path; unset, the team's (`TeamLink.project`). */
+  readonly project?: string;
 }
 
 /** Character budgets for the text Claude Code puts in every call's context; `doctor` flags a file over its budget. */
@@ -875,6 +961,11 @@ export interface TeamLink {
   readonly id: string;
   /** The team whose lead this team's lead reports to; a team with none is the root of its own tree. */
   readonly parent?: string;
+  /**
+   * The team's project folder, an absolute path: where its CLAUDE.md and rule files sit, and where its sessions
+   * work unless their own `launch` entry names another. Unset, the folder holding the team's pointer file.
+   */
+  readonly project?: string;
 }
 
 export interface KitConfig {
@@ -943,6 +1034,8 @@ export interface KitConfig {
   readonly turnLog: TurnLogConfig;
   /** Lets a shell line that only reads run without a permission prompt; off by default. */
   readonly readonlyShell: ReadonlyShellConfig;
+  /** Which local allow rules stay when `permissions trim` removes the rest. */
+  readonly permissions: PermissionsConfig;
   readonly refresh: RefreshConfig;
   readonly hiring: HiringConfig;
   readonly burst: BurstConfig;
