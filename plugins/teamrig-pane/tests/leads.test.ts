@@ -1,14 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TeamLeads } from '../types'
-import { parseConfigText, type KitConfig } from '../hooks/core/read/index'
 import { leadOf, sameLeads, teamLeads } from '../hooks/leads'
-
-/** The config teamrig's parser reads from `json`, failing the test on any issue it finds. */
-function configOf(json: object): KitConfig {
-  const read = parseConfigText(JSON.stringify(json))
-  if (read.status !== 'loaded' || read.issues.length > 0) throw new Error(`teamrig refuses the config: ${JSON.stringify(read)}`)
-  return read.config
-}
+import { configOf } from './team-fixtures'
 
 /** Team acme: lead over web and ops; web a sub-lead over api and ui. */
 const ACME = { sessions: ['lead', 'web', 'api', 'ui', 'ops'], roles: { lead: 'lead' }, leads: { web: ['api', 'ui'] } }
