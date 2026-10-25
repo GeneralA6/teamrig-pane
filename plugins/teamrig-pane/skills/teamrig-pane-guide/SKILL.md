@@ -148,8 +148,11 @@ the whole list.
 Docked, a title line leads every view and page, so with panes open in several tabs a glance tells them apart:
 the session's name as teamrig messages it, bold (` (pinned)` after it for a pin), then dim its team when the
 name does not lead with it: `acme-pane` alone, `team-lead · team acme`. The area id is left out. With no area it reads
-`no session · team <name>`. It scrolls with the body, as the host keeps no pane row fixed; the band above the
-prompt keeps the name in view. Above the prompt and in the minimized strip the pane draws no title.
+`no session · team <name>`. Docked, it heads the controls, which stay put while the body scrolls under them in a
+window of its own, a scroll bar at its right while the body holds more than the window shows: the mouse wheel
+scrolls it in every view, and Tab onto a row out of sight brings it into view. A dock too narrow for its buttons,
+whose header would take over half its rows, scrolls as one. Above the prompt and in the minimized strip the pane
+draws no title.
 
 ## The Tasks view
 

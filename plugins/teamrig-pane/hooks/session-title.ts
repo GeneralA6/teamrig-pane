@@ -1,9 +1,9 @@
 // The session title (T824): whose pane this is, so with several panes open across tabs a glance tells them apart.
 // The pane's first line, in every view and page, names the session as teamrig messages it (its name on the team, from
 // the team's config and rename log: source.ts), then dim its team where the name does not lead with it; the area id is
-// left out (T935: it read as unclear). The band above the prompt leads its banner with the name alone
-// (banner.ts), the one line that stays in view while the pane's body scrolls, as the engine keeps no pane row fixed. A
-// pinned area is the area the pane shows, so the title names it and says it is pinned.
+// left out (T935: it read as unclear). Docked, it heads the header that stays put while the body scrolls (frame.ts);
+// the band above the prompt leads its banner with the name alone (banner.ts). A pinned area is the area the pane
+// shows, so the title names it and says it is pinned.
 // Pure: spans that register.tsx draws on one line, cut at the pane's width.
 import type { Snapshot } from '../types'
 import { SEPARATOR, type Span } from './rows'
