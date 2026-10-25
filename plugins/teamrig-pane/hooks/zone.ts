@@ -45,6 +45,12 @@ export function dayOf(ms: number, zone: TimeZone): string {
   return zone.day(new Date(ms))
 }
 
+/** `21:04 IDT` on the zone's day of the clock's `now`, else `Mon 10-19 21:04 IDT`: an instant as a list of the day's lines prints it. */
+export function momentWords(ms: number, { now, zone }: Clock): string {
+  const date = new Date(ms)
+  return dayOf(ms, zone) === dayOf(now, zone) ? zone.clock(date) : zone.weekdayMinute(date)
+}
+
 /**
  * The `YYYY-MM-DD` Monday of the week `ms` falls in, on the zone's calendar: the zone's day of `ms`, then back to its
  * Monday by calendar days (a day's UTC midnight stands for the day itself).
