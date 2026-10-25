@@ -13,7 +13,7 @@ labels on. No model calls, so no tokens. Every time is on the team's clock and z
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
 session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
 to each team session's prompts and replies (Tasks, Changes and Log, below). Docked, its first line
-names the session (`acme-pane`; `team-lead · team acme` when the name does not lead with its team), so
+names the session as its tab title does (`[acme] pane`: the team, then the name without the team's prefix), so
 panes open in several tabs tell apart at a glance. That line and the controls under it stay put, and the body
 scrolls under them in a window of the pane's own: the mouse wheel moves it 3 rows a tick, PgUp and PgDn a
 window, and Tab or an arrow onto a row out of sight moves it the least that shows the row. A one-column scroll
