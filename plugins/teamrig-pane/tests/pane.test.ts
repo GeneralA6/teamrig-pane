@@ -4,9 +4,10 @@ import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/t
 import { BANNER_KEY, NOTHING_CURRENT } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
 import { POLL_MS } from '../hooks/live'
+import { openKey } from '../hooks/press-keys'
 import { cells } from '../hooks/width'
 import type { HireRecord, RetireRecord } from '../hooks/core/read/index'
-import { HOUR, NOW, S1, bigRegister, createLine, iso, markLine, statusLine, updateLine, verifyingLine } from './fixtures'
+import { HOUR, NOW, S1, S2, bigRegister, createLine, iso, markLine, statusLine, updateLine, verifyingLine } from './fixtures'
 import { hire, retire } from './team-fixtures'
 
 const HOME = '\\Homes\\tester'
@@ -1667,9 +1668,19 @@ async function startWithTeam(on: On) {
   return started
 }
 
-/** True when a line the pane draws matches `pattern`. */
+/**
+ * True when a line on the pane's screen, its padding trimmed, matches `pattern`: the screen, as a row whose presses
+ * are pieces of their own (a leader's row, a card's inbox count) draws as several Texts side by side.
+ */
 async function drawsLine(pane: Mounted<'Pane'>, pattern: RegExp): Promise<boolean> {
-  return (await drawnLines(pane)).some(line => pattern.test(line))
+  return screenOf(await pane.drawn()).some(line => pattern.test(line.trim()))
+}
+
+/** The key of the press within a Team tab row that opens or closes the tab's key `toggles`. */
+async function pressOn(pane: Mounted<'Pane'>, toggles: string): Promise<string> {
+  const key = buttonKeys(await pane.drawn()).find(found => found.startsWith(`team:${toggles}:`))
+  if (key === undefined) throw new Error(`no press on ${toggles}`)
+  return key
 }
 
 test("the Team tab lists the tree of teams the session's team is in; a press on a row closes or opens what lies under it", async ($, on) => {
@@ -1687,14 +1698,40 @@ test("the Team tab lists the tree of teams the session's team is in; a press on 
   expect(await drawsLine(pane, /\bother\b/)).toBe(false)
   expect(await pane.find({ text: /Add the route/ })).toBeUndefined()
 
-  // web's press closes what it leads, a second opens it again; the closed group's opens the retired sessions.
-  await pane.press({ key: 'session:acme/web' })
+  // web leads, so its row holds two presses: its mark closes what it leads and a second opens it again, its id opens its
+  // card. The closed group's row opens the retired sessions; api's row, a press of its own, opens api's card.
+  await pane.press({ key: await pressOn(pane, 'session:acme/web') })
   expect(await drawsLine(pane, /● api  acme-api$/)).toBe(false)
   expect(await drawsLine(pane, /▸ ● web  acme-web · leads 2$/)).toBe(true)
-  await pane.press({ key: 'session:acme/web' })
+  await pane.press({ key: await pressOn(pane, 'session:acme/web') })
   expect(await drawsLine(pane, /● api  acme-api$/)).toBe(true)
+  expect(await drawsLine(pane, /│ Role {9}leads 2$/)).toBe(false)
+  await pane.press({ key: await pressOn(pane, 'card:session:acme/web') })
+  expect(await drawsLine(pane, /│ Role {9}leads 2$/)).toBe(true)
   await pane.press({ key: 'closed:acme' })
   expect(await drawsLine(pane, /○ qa  acme-qa · retired /)).toBe(true)
+  await pane.press({ key: 'session:acme/api' })
+  expect(await drawsLine(pane, /│ Led by {7}web, then lead$/)).toBe(true)
+  expect(await drawsLine(pane, /│ Now {10}nothing in progress$/)).toBe(true)
+})
+
+test("a session's card counts its unread inbox lines, and a press on the count opens that inbox at the first of them", async ($, on) => {
+  const { disk } = await startWithTeam(on)
+  const inbox = `${TEAMS}/acme/state/inbox/api.md`
+  disk.write(`${TEAMS}/acme/state/inbox-marks.jsonl`, [markLine('api', 1, S2, NOW, 'line one')])
+  disk.write(inbox, ['line one', '', 'line two', 'line three'])
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  await pane.press({ key: 'team' })
+  await pane.press({ key: 'session:acme/api' })
+  expect(await drawsLine(pane, /│ Inbox {8}2 unread$/)).toBe(true)
+  const toInbox = buttonKeys(await pane.drawn()).find(key => key.startsWith(`goto:inbox:${openKey('session:acme/api')}:`))
+  if (toInbox === undefined) throw new Error("no press on api's inbox count")
+  await pane.press({ key: toInbox })
+  const screen = screenOf(await pane.drawn())
+  expect(screen).toContain(' inbox/api.md')
+  expect(screen).toContain(` ${inbox} · line 3`)
 })
 
 test('the Team tab reads no team folder while another view shows, and reads what moved when it shows again', async ($, on) => {

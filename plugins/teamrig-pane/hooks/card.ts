@@ -35,7 +35,7 @@ export const LABEL_CELLS = 13
 const SEPARATOR: Span = { text: ' · ', dim: true }
 
 /** A value's lines, each its spans; a row with none is left out. */
-type Lines = Span[][]
+export type Lines = Span[][]
 
 /** A fact a card shows on its labelled row, named as its row's key ends. */
 export type CardField =
@@ -57,12 +57,12 @@ export type CardField =
   | 'links'
 
 /** Spans between dim dots. */
-function joined(parts: readonly Span[]): Span[] {
+export function joined(parts: readonly Span[]): Span[] {
   return parts.flatMap((part, i) => (i === 0 ? [part] : [SEPARATOR, part]))
 }
 
 /** Each line of `text` with something on it, a line of its own in `style`; none for no text. */
-function textLines(text: string | null, style: Omit<Span, 'text'> = {}): Lines {
+export function textLines(text: string | null, style: Omit<Span, 'text'> = {}): Lines {
   if (text === null) return []
   return text
     .split(/\r?\n/)
@@ -175,7 +175,7 @@ function linkLines(task: TaskRow): Lines {
  * `isKnown` holds in a value's words is a span of its own (ids.ts); a link's address and a file's name are left
  * whole. No lines, no row.
  */
-function labelled(key: string, label: string, lines: Lines, isKnown: (id: string) => boolean, lead: Span | null): Row[] {
+export function labelled(key: string, label: string, lines: Lines, isKnown: (id: string) => boolean, lead: Span | null): Row[] {
   const hang: Span = { text: `${lead?.text ?? ''}${' '.repeat(LABEL_CELLS)}`, dim: true }
   const first = [...(lead === null ? [] : [lead]), { text: label.padEnd(LABEL_CELLS), dim: true }]
   return lines.map((spans, i) => {
