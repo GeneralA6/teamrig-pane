@@ -128,6 +128,11 @@ export function changeCount(changes: ChangesSnapshot): number {
   return changes.repos.reduce((sum, repo) => sum + repo.files.items.length + repo.files.more, 0) + changes.outside.length
 }
 
+/** The folder name a repo's root ends in. */
+export function repoName(root: string): string {
+  return root.split(/[\\/]/).filter(part => part !== '').at(-1) ?? root
+}
+
 function kept<T>(items: readonly T[], most: number): Cut<T> {
   return { items: items.slice(0, most), more: Math.max(0, items.length - most) }
 }

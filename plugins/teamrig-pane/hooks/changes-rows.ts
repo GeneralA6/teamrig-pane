@@ -6,7 +6,7 @@
 // DIFF_LINE_ROWS screen lines; an untracked folder has no diff to open. The switch's badge and the tab
 // title count the same files.
 import type { ChangesSnapshot, DiffLine, FileChange, FileDiff, LineCount, OpenDiffs, RepoChanges } from '../types'
-import { changeCount } from './changes'
+import { changeCount, repoName } from './changes'
 import { NO_DIFFS } from './diff'
 import { heading, single, type Block, type Row, type Span } from './rows'
 
@@ -27,11 +27,6 @@ export function changesLabel(changes: ChangesSnapshot): string {
 export function paneTitle(changes: ChangesSnapshot): string {
   const count = changeCount(changes)
   return count > 0 ? `Tasks · Δ${count}` : 'Tasks'
-}
-
-/** The folder name a repo's root ends in. */
-function repoName(root: string): string {
-  return root.split(/[\\/]/).filter(part => part !== '').at(-1) ?? root
 }
 
 /** The code's index letter in green (staged), its work-tree letter in yellow; `??` (untracked) dim. */
