@@ -130,8 +130,8 @@ not find lists each path it looked at; one over 256 KiB, or not text, says why i
 In the dock, a click on the header's `inbox 2 unread` opens the Inbox view (see Inbox, below). Reading it there marks
 nothing read: the pane never writes an inbox, so the count drops only when the session runs `teamrig inbox read`.
 
-In the Tasks view, the Inbox view, over the Log view's list and on the Team tab (see Log, Inbox and Team, below), the
-dock shows a Find field under its switch; `s` or a click
+In the Tasks view, the Inbox view, the Changes view, over the Log view's list and on the Team tab (see Changes, Log,
+Inbox and Team, below), the dock shows a Find field under its switch; `s` or a click
 puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
 aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
@@ -307,6 +307,13 @@ and the rest are counted (`… 40 more lines`); a line wraps under its text and 
 can't read a `WARN` line with git's first error line. An untracked folder opens no diff. An open diff is read
 again with each read of the changes below, one git run per open file, so it follows the edits; a file that
 leaves the list (committed, say) closes its diff. The open diffs stay open across a hot reload.
+
+The Find field in the dock searches the listed files: each word must match, case aside, the start of a word in a
+file's path, the path it was renamed from, or its repo's folder name or branch (a file written outside any repo by its
+path alone). The body counts the files it names (`2 files match`) and draws each as its row does, over its repo and
+branch (`written outside git` for a file outside any repo), the matched words underlined. A press on a result opens
+its diff under it, as on its row. Enter with one match opens its diff, with more moves the cursor onto the first match
+that has a diff. A switch to another view closes the search.
 
 Each repo costs one `git --no-optional-locks status --porcelain=v1 -b -z` (no index lock, so it never
 blocks a commit; 10 s timeout), and while it has changed files one `git diff HEAD --numstat -z` and up
