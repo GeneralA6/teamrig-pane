@@ -11,17 +11,17 @@
 // are capped. Widths are display cells (width.ts), so CJK and emoji sequences wrap where the terminal
 // wraps them and a cut never lands inside one.
 import type { LogRead, RefFile } from '../types'
-import type { Block, Row, Span } from './rows'
+import type { Block, InboxPress, Row, Span } from './rows'
 import { cells, graphemes } from './width'
 
 /**
  * A piece of a line that holds a press: a task id and the task it names, a reference file and the file it names, an
- * inbox count and the area whose inbox it is, or the words between them.
+ * unread count and the inbox it opens, a Team tab key, or the words between them.
  */
 export type Piece =
   | { kind: 'id'; span: Span; task: string }
   | { kind: 'file'; span: Span; file: RefFile }
-  | { kind: 'inbox'; span: Span; area: string }
+  | { kind: 'inbox'; span: Span; inbox: InboxPress }
   | { kind: 'toggle'; span: Span; toggles: string }
   | { kind: 'words'; spans: Span[] }
 /**
@@ -99,7 +99,8 @@ function sameStyle(a: Span, b: Span): boolean {
     a.href === b.href &&
     a.task === b.task &&
     a.file === b.file &&
-    a.inbox === b.inbox &&
+    a.inbox?.area === b.inbox?.area &&
+    a.inbox?.unread === b.inbox?.unread &&
     a.toggles === b.toggles
   )
 }
@@ -278,7 +279,7 @@ export function piecesOf(line: readonly Span[]): Piece[] {
     const last = pieces[pieces.length - 1]
     if (span.task !== undefined) pieces.push({ kind: 'id', span, task: span.task })
     else if (span.file !== undefined) pieces.push({ kind: 'file', span, file: span.file })
-    else if (span.inbox !== undefined) pieces.push({ kind: 'inbox', span, area: span.inbox })
+    else if (span.inbox !== undefined) pieces.push({ kind: 'inbox', span, inbox: span.inbox })
     else if (span.toggles !== undefined) pieces.push({ kind: 'toggle', span, toggles: span.toggles })
     else if (last?.kind === 'words') last.spans.push(span)
     else pieces.push({ kind: 'words', spans: [span] })

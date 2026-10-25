@@ -412,7 +412,7 @@ describe('rows', () => {
     expect(rowAt(paneBlocks(snapshotOf(tasks, 'po'), 'mine'), 'header')?.spans).toEqual([
       { text: '1 active', dim: true },
       { text: ' · ', dim: true },
-      { text: 'inbox 2 unread', color: 'warning', inbox: 'po' },
+      { text: 'inbox 2 unread', color: 'warning', inbox: { area: 'po', unread: 2 } },
     ])
     const pinned = paneBlocks({ ...snapshotOf(tasks, 'po'), areaSource: 'pinned' }, 'mine')
     expect(rowAt(pinned, 'header')?.spans.slice(0, 2)).toEqual([{ text: 'po', bold: true }, { text: ' (pinned) · ', dim: true }])
@@ -423,14 +423,14 @@ describe('rows', () => {
     const tasks = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po' }))
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
     const [header, task] = dockLayout(blocks, 40)
-    const count: Span = { text: 'inbox 2 unread', color: 'warning', inbox: 'po' }
+    const count: Span = { text: 'inbox 2 unread', color: 'warning', inbox: { area: 'po', unread: 2 } }
     expect(header?.parts).toEqual([
       {
         kind: 'line',
         key: 'card:0',
         pieces: [
           { kind: 'words', spans: [{ text: '1 active · ', dim: true }] },
-          { kind: 'inbox', span: count, area: 'po' },
+          { kind: 'inbox', span: count, inbox: { area: 'po', unread: 2 } },
           { kind: 'words', spans: [{ text: ` ${'─'.repeat(14)}`, dim: true }] },
         ],
       },
@@ -443,7 +443,8 @@ describe('rows', () => {
     expect(dockLayout([conversation], 40)[0]?.parts).toBeDefined()
     expect(dockLayout([{ ...conversation, reads: { session: 'api', claude: 'c-1' } }], 40)[0]?.parts).toBeUndefined()
     expect(inlineLayout(blocks, 6)[0]).toEqual({ key: 'header', spans: [{ text: '1 active · ', dim: true }, count], wrap: 'truncate-end', toggle: null })
-    expect(piecesOf([count, { ...count, inbox: 'etl' }])).toHaveLength(2)
+    // Each count is its own press, one of another area or another count too.
+    expect(piecesOf([count, { ...count, inbox: { area: 'etl', unread: 2 } }, { ...count, inbox: { area: 'po', unread: 3 } }])).toHaveLength(3)
     // With no count, the header holds no press and stays one Text.
     expect(dockLayout(paneBlocks({ ...snapshotOf(tasks, 'po'), unreadInbox: null }, 'mine'), 40)[0]?.parts).toBeUndefined()
   })

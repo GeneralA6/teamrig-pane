@@ -66,7 +66,7 @@ import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, 
 import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
 import { BANNER_KEY, bannerBlock, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
-import { NOTHING_EXPANDED, paneBlocks, type Block, type Span } from './rows'
+import { NOTHING_EXPANDED, paneBlocks, type Block, type InboxPress, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
 import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
@@ -866,10 +866,10 @@ export const register: Register = on => {
     }
     // A press on the header's inbox count opens the area's inbox as a file's page, landing on its first unread line
     // (unreadLine). Reading it marks nothing read: the pane writes no inbox, the session's `teamrig inbox read` does.
-    const openInbox = async (area: string, from: string) => {
-      const file = inboxFile(area)
+    const openInbox = async (press: InboxPress, from: string) => {
+      const file = inboxFile(press.area)
       const found = await readFilePage(file)
-      await go($, current => pushed(leavingList(current, from), { kind: 'file', file, line: unreadLine(found, snap.unreadInbox ?? 0) }))
+      await go($, current => pushed(leavingList(current, from), { kind: 'file', file, line: unreadLine(found, press.unread) }))
     }
     // A press on a conversation in the Log view's list opens its page, read now, at its end: the newest lines are
     // last. Back shows the list, read again, from its top.
@@ -941,7 +941,7 @@ export const register: Register = on => {
                 )
               case 'inbox':
                 return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void openInbox(piece.area, from)}>
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void openInbox(piece.inbox, from)}>
                     {drawPress(piece.span, 'inbox')}
                   </Button>
                 )

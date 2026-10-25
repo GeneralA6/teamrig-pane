@@ -30,7 +30,7 @@ const PARTED: Drawn = {
   toggle: null,
   parts: [
     { kind: 'text', key: 'd.t', spans: [{ text: 'd0' }] },
-    { kind: 'line', key: 'd.l', pieces: [{ kind: 'words', spans: [{ text: 'd1 ' }] }, { kind: 'inbox', area: 'po', span: { text: 'in' } }] },
+    { kind: 'line', key: 'd.l', pieces: [{ kind: 'words', spans: [{ text: 'd1 ' }] }, { kind: 'inbox', inbox: { area: 'po', unread: 1 }, span: { text: 'in' } }] },
   ],
 }
 
