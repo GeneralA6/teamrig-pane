@@ -29,11 +29,11 @@ export class TeamFolder {
   }
 
   /**
-   * The team's files as read now, with `tasks`; null when it has no config file or teamrig refuses the one there. A
-   * config that moves its state folder reads the logs from the new one. A failed read throws, keeping the stamps of
-   * the files read before it, so the next read tries the rest again.
+   * The team's files as read now, with `tasks` and `unread`; null when it has no config file or teamrig refuses the
+   * one there. A config that moves its state folder reads the logs from the new one. A failed read throws, keeping the
+   * stamps of the files read before it, so the next read tries the rest again.
    */
-  async read(tasks: readonly TaskRow[] | null): Promise<TeamRead | null> {
+  async read(tasks: readonly TaskRow[] | null, unread: ReadonlyMap<string, number> | null): Promise<TeamRead | null> {
     await this.config.refresh()
     const config = this.config.current
     if (config?.status !== 'loaded') return null
@@ -42,7 +42,7 @@ export class TeamFolder {
     this.logs = logs
     await logs.renames.refresh()
     await logs.hires.refresh()
-    return { team: this.team, config: config.config, renames: logs.renames.current, hires: logs.hires.current, tasks }
+    return { team: this.team, config: config.config, renames: logs.renames.current, hires: logs.hires.current, tasks, unread }
   }
 
   private logsIn(state: string): TeamLogs {
@@ -134,7 +134,7 @@ export class LiveTeam {
       for (const id of ids) {
         const folder = this.teams.get(id) ?? new TeamFolder(this.files, this.team.teamsDir, id)
         this.teams.set(id, folder)
-        const read = await folder.read(id === this.team.team ? tasks : null)
+        const read = await folder.read(id === this.team.team ? tasks : null, null)
         if (read !== null) reads.push(read)
       }
       return { kind: 'tree', root: teamTree(reads, this.team.team) }

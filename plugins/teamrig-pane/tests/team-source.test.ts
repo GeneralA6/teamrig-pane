@@ -42,8 +42,8 @@ function teamsDisk(): MemoryFiles {
   return disk
 }
 
-const ACME_READ: TeamRead = { team: 'acme', config: configOf(ACME_CONFIG), renames: [API_RENAME], hires: [API_HIRE], tasks: TASKS }
-const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], tasks: null }
+const ACME_READ: TeamRead = { team: 'acme', config: configOf(ACME_CONFIG), renames: [API_RENAME], hires: [API_HIRE], tasks: TASKS, unread: null }
+const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], tasks: null, unread: null }
 
 /** The message `run` rejects with. */
 async function failure(run: () => Promise<unknown>): Promise<string> {
@@ -59,27 +59,27 @@ describe('TeamFolder', () => {
   test('reads the config, then the rename and hire logs in its state folder; again only the files whose stamp moved', async () => {
     const disk = teamsDisk()
     const folder = new TeamFolder(disk, TEAMS, 'acme')
-    expect(await folder.read(TASKS)).toEqual(ACME_READ)
+    expect(await folder.read(TASKS, null)).toEqual(ACME_READ)
     expect(disk.reads).toEqual([ACME_CONFIG_PATH, `${ACME_STATE}/renames.jsonl`, `${ACME_STATE}/hires.jsonl`])
 
     disk.reads.length = 0
-    expect(await folder.read(TASKS)).toEqual(ACME_READ)
+    expect(await folder.read(TASKS, null)).toEqual(ACME_READ)
     expect(disk.reads).toEqual([])
 
     disk.write(`${ACME_STATE}/hires.jsonl`, '')
-    expect((await folder.read(null))?.hires).toEqual([])
+    expect((await folder.read(null, null))?.hires).toEqual([])
     expect(disk.reads).toEqual([`${ACME_STATE}/hires.jsonl`])
   })
 
   test("a config that names another state folder reads the logs from there, a relative one under the team's folder", async () => {
     const disk = teamsDisk()
     const folder = new TeamFolder(disk, TEAMS, 'acme')
-    await folder.read(null)
+    await folder.read(null, null)
     disk.write(ACME_CONFIG_PATH, JSON.stringify({ ...ACME_CONFIG, paths: { state: 'kept' } }))
     disk.write(`${ACME_HOME}/kept/hires.jsonl`, `${API_HIRE_LINE}\n`)
     disk.reads.length = 0
 
-    const read = await folder.read(null)
+    const read = await folder.read(null, null)
     expect(disk.reads).toEqual([ACME_CONFIG_PATH, `${ACME_HOME}/kept/hires.jsonl`])
     expect([read?.renames, read?.hires]).toEqual([[], [API_HIRE]])
   })
@@ -87,16 +87,16 @@ describe('TeamFolder', () => {
   test('no config file, or one teamrig refuses, reads as no team; a read that fails throws, and the next one tries again', async () => {
     const disk = new MemoryFiles()
     const folder = new TeamFolder(disk, TEAMS, 'acme')
-    expect(await folder.read(null)).toBeNull()
+    expect(await folder.read(null, null)).toBeNull()
     expect(disk.reads).toEqual([])
 
     disk.write(ACME_CONFIG_PATH, '{ not json')
-    expect(await folder.read(null)).toBeNull()
+    expect(await folder.read(null, null)).toBeNull()
 
     disk.write(ACME_CONFIG_PATH, JSON.stringify(ACME_CONFIG))
     disk.failNextRead = 'EBUSY: resource busy or locked'
-    expect(await failure(() => folder.read(null))).toBe('EBUSY: resource busy or locked')
-    expect((await folder.read(null))?.config).toEqual(configOf(ACME_CONFIG))
+    expect(await failure(() => folder.read(null, null))).toBe('EBUSY: resource busy or locked')
+    expect((await folder.read(null, null))?.config).toEqual(configOf(ACME_CONFIG))
   })
 })
 

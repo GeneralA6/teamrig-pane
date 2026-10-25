@@ -49,7 +49,7 @@ describe('teamTree', () => {
     expect(tools?.kind === 'team' ? tools.team : null).toEqual({ team: 'tools', parent: 'acme', active: 2, closed: 0 })
   })
 
-  test("a session's name, former names, roles, the sessions it leads and its tasks in progress", () => {
+  test("a session's name, former names, roles, the sessions it leads and its leaders, its launch, tasks in progress and unread lines", () => {
     const root = treeOf([ACME], 'acme')
     expect(sessionOf(root, 'acme', 'api')).toEqual({
       team: 'acme',
@@ -59,13 +59,22 @@ describe('teamTree', () => {
       active: true,
       roles: [],
       leads: 0,
+      ledBy: ['web', 'lead'],
+      launch: {},
       hire: null,
       rehiredFrom: null,
       retire: null,
       now: [{ id: 'T1', title: 'Add the route' }],
+      unread: 2,
     })
-    expect(sessionOf(root, 'acme', 'lead')).toMatchObject({ name: 'acme-lead', roles: ['lead'], leads: 2, now: [] })
-    expect(sessionOf(root, 'acme', 'web')).toMatchObject({ leads: 2, now: [{ id: 'T3', title: 'Plan the page' }] })
+    expect(sessionOf(root, 'acme', 'lead')).toMatchObject({ name: 'acme-lead', roles: ['lead'], leads: 2, ledBy: [], now: [], unread: 0 })
+    expect(sessionOf(root, 'acme', 'web')).toMatchObject({ leads: 2, ledBy: ['lead'], now: [{ id: 'T3', title: 'Plan the page' }] })
+  })
+
+  test("the launch teamrig starts a session on: its own entry, the lead's defaults under the keys it leaves unset", () => {
+    const root = treeOf([ACME], 'acme')
+    expect(sessionOf(root, 'acme', 'ui')).toMatchObject({ launch: { model: 'claude-opus-5-5', effort: 'xhigh' }, unread: null })
+    expect(sessionOf(root, 'acme', 'lead').launch).toEqual({ model: 'opus', effort: 'xhigh' })
   })
 
   test('a hired session carries its hire; one hired again also the retire it came back from', () => {
@@ -74,7 +83,7 @@ describe('teamTree', () => {
     expect(sessionOf(root, 'acme', 'ops')).toMatchObject({ active: true, roles: ['securityReviewer'], hire: ACME.hires[5], rehiredFrom: ACME.hires[3], retire: null })
   })
 
-  test('the closed group opens on a toggle: a retired session under its last name, with its retire and no roles or tasks', () => {
+  test('the closed group opens on a toggle: a retired session under its last name, with its retire and no roles, leaders, launch, tasks or unread lines', () => {
     const root = treeOf([ACME], 'acme')
     expect(outline(teamRows(root, new Set(['closed:acme']))).slice(-2)).toEqual(['  ▾ closed', '    · qa'])
     expect(sessionOf(root, 'acme', 'qa')).toEqual({
@@ -85,15 +94,18 @@ describe('teamTree', () => {
       active: false,
       roles: [],
       leads: 0,
+      ledBy: [],
+      launch: null,
       hire: null,
       rehiredFrom: null,
       retire: ACME.hires[4],
       now: [],
+      unread: null,
     })
   })
 
-  test("a team with no register read lists no session's tasks", () => {
-    expect(sessionOf(treeOf([ACME, TOOLS], 'acme'), 'tools', 'dev').now).toEqual([])
+  test("a team whose register and inbox the pane does not read knows no session's tasks or unread lines", () => {
+    expect(sessionOf(treeOf([ACME, TOOLS], 'acme'), 'tools', 'dev')).toMatchObject({ now: null, unread: null })
   })
 
   test('a parent with no config: the team is the root of its own tree, its parent still named', () => {

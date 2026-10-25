@@ -6,6 +6,7 @@
 import type { TaskRow } from '../types'
 import {
   activeHires,
+  launchOf,
   LeadTree,
   rehiredFrom,
   retiredSessions,
@@ -15,6 +16,7 @@ import {
   type HireRecord,
   type HiringRecord,
   type KitConfig,
+  type LaunchConfig,
   type Rename,
   type RetireRecord,
 } from './core/read/index'
@@ -27,6 +29,11 @@ export type TeamRead = {
   readonly hires: readonly HiringRecord[]
   /** The team's register tasks, for each session's current tasks; null when the pane does not read that register. */
   readonly tasks: readonly TaskRow[] | null
+  /**
+   * Each session's unread inbox lines, by id, for those that ever marked their inbox read; null when the pane does
+   * not read the team's inbox (a peer team's).
+   */
+  readonly unread: ReadonlyMap<string, number> | null
 }
 
 /** A role a team config gives a session (`roles`), as teamrig's Roster names it. */
@@ -56,14 +63,23 @@ export type SessionFacts = {
   readonly roles: readonly Role[]
   /** How many sessions it leads directly, as the lead or a sub-lead; 0 when it leads none. */
   readonly leads: number
+  /** The leaders over it, nearest first, ending at the lead (LeadTree chainOf); none for the lead and a closed session. */
+  readonly ledBy: readonly string[]
+  /**
+   * The model and effort teamrig launches it on (launchOf: its `launch` entry, and for the lead teamrig's lead defaults
+   * under the keys it leaves unset); null for a closed session, which teamrig no longer launches.
+   */
+  readonly launch: LaunchConfig | null
   /** Its newest hire, for a hired session; null for one the team was set up with. */
   readonly hire: HireRecord | null
   /** The retire a rehired session came back from; null for a first hire and a session never hired. */
   readonly rehiredFrom: RetireRecord | null
   /** Its retire, for a closed session; null for an active one. */
   readonly retire: RetireRecord | null
-  /** Its tasks in progress, in the register's order; none when the pane does not read its team's register. */
-  readonly now: readonly CurrentTask[]
+  /** Its tasks in progress, in the register's order; none for a closed session, null when the pane does not read its team's register. */
+  readonly now: readonly CurrentTask[] | null
+  /** Its unread inbox lines; null for a closed session, one that never marked its inbox read, or a team whose inbox the pane does not read. */
+  readonly unread: number | null
 }
 
 type NodeBase = { readonly key: string; readonly children: readonly TeamTreeNode[] }
@@ -87,9 +103,10 @@ function partOf(read: TeamRead): TeamPart {
   return { read, roster, closed }
 }
 
-/** The tasks `id` has in progress; none when the register is not read. */
-function currentTasks(tasks: readonly TaskRow[] | null, id: string): CurrentTask[] {
-  return (tasks ?? []).filter(task => task.owner === id && task.status === 'in-progress').map(({ id: task, title }) => ({ id: task, title }))
+/** The tasks `id` has in progress; null when the register is not read. */
+function currentTasks(tasks: readonly TaskRow[] | null, id: string): CurrentTask[] | null {
+  if (tasks === null) return null
+  return tasks.filter(task => task.owner === id && task.status === 'in-progress').map(({ id: task, title }) => ({ id: task, title }))
 }
 
 /** The session nodes of one team: the lead, each session under its leader, and the closed group. */
@@ -107,10 +124,13 @@ function sessionNodes({ read, roster, closed }: TeamPart): TeamTreeNode[] {
       active: retire === null,
       roles: retire === null ? roster.rolesOf(id) : [],
       leads: retire === null ? leads.membersOf(id).length : 0,
+      ledBy: retire === null ? leads.chainOf(id) : [],
+      launch: retire === null ? launchOf(config, id) : null,
       hire,
       rehiredFrom: hire === null ? null : (rehiredFrom(hires, id) ?? null),
       retire,
       now: retire === null ? currentTasks(read.tasks, id) : [],
+      unread: retire === null ? (read.unread?.get(id) ?? null) : null,
     }
   }
   // The parser keeps the lead tree whole; the seen set only keeps a hand-built config from looping.
