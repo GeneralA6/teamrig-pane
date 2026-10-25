@@ -532,14 +532,19 @@ export const register: Register = on => {
       const teamLive =
         team === null
           ? null
-          : new LiveTeam(files, team.paths, {
-              folders,
-              tasks: async () => (await read($, snapshot)).tasks,
-              isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
-              publish: async tree => {
-                await update($, teamTree, () => tree)
+          : new LiveTeam(
+              files,
+              team.paths,
+              {
+                folders,
+                tasks: async () => (await read($, snapshot)).tasks,
+                isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
+                publish: async tree => {
+                  await update($, teamTree, () => tree)
+                },
               },
-            })
+              'missing' in registerAt ? null : registerAt.paths,
+            )
       teaming = teamLive
       if (teamLive === null) await update($, teamTree, () => NO_TEAM_TREE)
       await started.refresh()
