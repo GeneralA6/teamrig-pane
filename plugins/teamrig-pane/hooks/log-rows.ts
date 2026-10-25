@@ -16,7 +16,7 @@ import { SEPARATOR, single, type Block, type Row, type Span } from './rows'
 import { LOG_PAGE_CHARS } from './turn-log'
 import { turnParts, type Speaker, type TurnPart } from './turn-text'
 import { graphemes } from './width'
-import { dayOf, type Clock } from './zone'
+import { momentWords, type Clock } from './zone'
 
 const LIST = 'log'
 const PAGE = 'log-page'
@@ -34,11 +34,9 @@ export function conversationKey(read: LogRead): string {
 }
 
 /** `21:04 IDT` on the zone's day of the clock's `now`, else `Mon 10-19 21:04 IDT`; an unreadable time as written. */
-function timeWords(iso: string, { now, zone }: Clock): string {
+function timeWords(iso: string, clock: Clock): string {
   const ms = Date.parse(iso)
-  if (Number.isNaN(ms)) return iso
-  const date = new Date(ms)
-  return dayOf(ms, zone) === dayOf(now, zone) ? zone.clock(date) : zone.weekdayMinute(date)
+  return Number.isNaN(ms) ? iso : momentWords(ms, clock)
 }
 
 function note(key: string, text: string): Block {

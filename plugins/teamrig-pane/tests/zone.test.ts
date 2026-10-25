@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { TimeZone } from '../hooks/core/read/index'
-import { clockOf, dayOf, machineZoneOf, weekAfter, weekOf, zoneNamed } from '../hooks/zone'
+import { clockOf, dayOf, machineZoneOf, momentWords, weekAfter, weekOf, zoneNamed } from '../hooks/zone'
 import { JERUSALEM, NOW } from './fixtures'
 
 // NOW is Tue 2026-10-13 14:00 UTC: 17:00 IDT in Jerusalem (summer time until 10-25), in the week of Mon 10-12.
@@ -31,6 +31,17 @@ describe('zone', () => {
     expect(dayOf(midnight, TimeZone.UTC)).toBe('2026-10-13')
     expect(dayOf(midnight, JERUSALEM)).toBe('2026-10-14')
     expect(dayOf(midnight - 60_000, JERUSALEM)).toBe('2026-10-13')
+  })
+
+  test("an instant prints as its clock time on the zone's day of now, else with its weekday and day", () => {
+    const jerusalem = clockOf({ now: NOW, timeZone: 'Asia/Jerusalem' })
+    const utc = clockOf({ now: NOW, timeZone: 'UTC' })
+    expect(momentWords(NOW - 3_600_000, jerusalem)).toBe('16:00 IDT')
+    // 21:00 UTC on NOW's day is the next day in Jerusalem.
+    const midnight = Date.UTC(2026, 9, 13, 21, 0)
+    expect(momentWords(midnight, jerusalem)).toBe('Wed 10-14 00:00 IDT')
+    expect(momentWords(midnight, utc)).toBe('21:00 UTC')
+    expect(momentWords(Date.UTC(2026, 9, 12, 20, 0), jerusalem)).toBe('Mon 10-12 23:00 IDT')
   })
 
   test('in UTC, a week starts Monday 00:00: Sunday 23:59 is the week before', () => {
