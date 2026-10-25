@@ -118,6 +118,14 @@ export function reset(nav: Nav, keepRow: boolean): Nav {
   return list === undefined ? AT_LIST : { places: [list], at: 0 }
 }
 
+/**
+ * `place` over the list remembering `row`, and nothing else: what a press outside the pane opens (the band above the
+ * prompt, banner.ts), so back shows the list scrolled to `row`, whatever the trail held before.
+ */
+export function fromList(row: string, place: Place): Nav {
+  return pushed({ places: [{ kind: 'list', row }], at: 0 }, place)
+}
+
 /** The task ids the places name: the pages whose details are worth keeping. */
 export function placeIds(nav: Nav): Set<string> {
   return new Set(nav.places.flatMap(place => (place.kind === 'task' ? [place.id] : [])))

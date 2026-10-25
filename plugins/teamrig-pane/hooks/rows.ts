@@ -130,7 +130,7 @@ export function titleRow(key: string, task: TaskRow, maxLines?: number): Row {
 function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, tree: PaneTree, viewer: string | null): Block {
   const detail = expanded[task.id]
   const indent = indentOf(task)
-  const key = `${section}:${task.id}`
+  const key = taskKey(section, task.id)
   const title = titleRow(key, task, detail === undefined ? TITLE_LINES : undefined)
   if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: cardRows(section, task, detail, tree) }
   const meta: Row = { key: `${section}-meta:${task.id}`, spans: [indent, ...metaSpans(task, tree, viewer)], hang: indent, maxLines: META_LINES }
@@ -182,6 +182,17 @@ const SECTION_KEY: Readonly<Record<BarStatus, string>> = {
   working: 'working',
   waiting: 'waiting',
   'not-started': 'next',
+}
+
+/** A task's block key: its section's key on the area's list, its owner on every owner's (taskBlock). */
+const taskKey = (section: string, id: string) => `${section}:${id}`
+
+/**
+ * The key of `task`'s block on the list `mode` shows: under its section, `status` (status-bar.ts barStatusOf), on
+ * the area's, under its owner on every owner's. A step back to the list scrolls to it (nav.ts).
+ */
+export function listRowKey(task: TaskRow, mode: ViewMode, status: BarStatus): string {
+  return taskKey(mode === 'mine' ? SECTION_KEY[status] : task.owner, task.id)
 }
 
 /**

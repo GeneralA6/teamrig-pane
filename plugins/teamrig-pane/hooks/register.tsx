@@ -24,7 +24,8 @@
 // session's team is in, each team's lead over the sessions it leads and its retired ones (team.ts, team-source.ts), a
 // press on a row opening or closing what lies under it. The band above the prompt shows the session's
 // name and the task it works on now
-// (banner.ts), a press opening its card, whether the pane is open, minimized or never drawn. Reads
+// (banner.ts), a press opening its card and a button beside it the pane at the task's page, whether the pane is
+// open, minimized or never drawn. Reads
 // files and runs git (status, diff, grep; no model calls); /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Components, Context, Register } from 'claude-code'
@@ -67,7 +68,7 @@ import { buttonCells, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
 import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, type FrameSlot, type Placed, type View } from './frame'
 import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
-import { BANNER_KEY, bannerBlock, currentTask } from './banner'
+import { BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, bannerBlock, currentRowKey, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
 import { NOTHING_EXPANDED, paneBlocks, type Block, type InboxPress, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
@@ -96,6 +97,7 @@ import {
   doneAt,
   filesKept,
   forward,
+  fromList,
   isPage,
   landing,
   leavingList,
@@ -1560,8 +1562,8 @@ export const register: Register = on => {
   // The band above the prompt (AbovePrompt): the banner (banner.ts), the task the session works on now, one press that
   // opens its card and a second that closes it, wrapped at the band's width. A survey takes the band, and a session
   // with no area draws none, so a session outside a team gets no band from the pane. The engine scrolls a card
-  // taller than the band and folds the band from its [-] (ctrl+x ctrl+a). The press has no hotkey: a band's hotkey
-  // answers a bare key typed in an empty prompt.
+  // taller than the band and folds the band from its [-] (ctrl+x ctrl+a). Beside a current task, a button opens the
+  // pane at its page (T775). Neither press has a hotkey: a band's hotkey answers a bare key typed in an empty prompt.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const snap = await read($, snapshot)
@@ -1570,13 +1572,32 @@ export const register: Register = on => {
     const tree = treeOf(snap)
     const isOpen = await read($, bannerOpen)
     const name = sessionName(snap.area, snap.areaName)
-    const [banner] = dockLayout([bannerBlock(currentTask(snap, tree), isOpen, tree, name)], e.props.bodyColumns, bannerWraps)
+    const current = currentTask(snap, tree)
+    // The open button and the gap before it take their cells from the banner's width.
+    const openCells = current === null ? 0 : buttonCells({ label: BANNER_OPEN_LABEL, plain: false, hotkey: null }) + 1
+    const [banner] = dockLayout([bannerBlock(current, isOpen, tree, name)], e.props.bodyColumns - openCells, bannerWraps)
     if (banner === undefined) return next(e)
+    const press = (
+      <Button key={BANNER_KEY} plain onPress={() => void update($, bannerOpen, wasOpen => !wasOpen)}>
+        {drawSpans({ Text, Link }, banner.spans, banner.wrap)}
+      </Button>
+    )
+    if (current === null) return <Box>{press}</Box>
+    // Opens the pane as /teamrig-pane does, minimized or never opened too, at the task's page (read as its card's is)
+    // over the list at the task's row (nav.ts fromList): back shows the list scrolled to it.
+    const openInPane = async () => {
+      await sizer?.set('open')
+      await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
+      const detail = await detailOf(current.task)
+      await update($, pages, kept => ({ ...kept, [current.task.id]: detail }))
+      await update($, view, () => 'tasks')
+      const row = currentRowKey(current, await read($, mode))
+      await go($, () => fromList(row, { kind: 'task', id: current.task.id }))
+    }
     return (
-      <Box>
-        <Button key={BANNER_KEY} plain onPress={() => void update($, bannerOpen, wasOpen => !wasOpen)}>
-          {drawSpans({ Text, Link }, banner.spans, banner.wrap)}
-        </Button>
+      <Box flexDirection="row" columnGap={1}>
+        {press}
+        <Button key={BANNER_OPEN_KEY} label={BANNER_OPEN_LABEL} variant="secondary" onPress={() => void openInPane()} />
       </Box>
     )
   })

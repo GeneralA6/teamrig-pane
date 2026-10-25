@@ -1,7 +1,7 @@
 // The plugin through the engine: env, clock, store, session id and fs answered beneath it.
 import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiFocusInput, UiScrollInput } from 'claude-code'
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
-import { BANNER_KEY, NOTHING_CURRENT } from '../hooks/banner'
+import { BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
 import { POLL_MS } from '../hooks/live'
 import { openKey } from '../hooks/press-keys'
@@ -1201,12 +1201,15 @@ test('the band above the prompt names the task up next, follows a status change,
   const band = await mountBand($)
   const banner = () => bannerText(band)
 
-  // Nothing in progress: the area's first open task, after a dim next, cut at one line; one press and no hotkey, as a
-  // band's hotkey would answer a bare key typed in an empty prompt.
-  expect(buttonKeys(await band.drawn())).toEqual([BANNER_KEY])
+  // Nothing in progress: the area's first open task, after a dim next, cut at one line; its press and the open button
+  // beside it, neither with a hotkey, as a band's hotkey would answer a bare key typed in an empty prompt.
+  expect(buttonKeys(await band.drawn())).toEqual([BANNER_KEY, BANNER_OPEN_KEY])
   const press = keyedProps(await band.drawn(), BANNER_KEY)
   expect(press).toMatchObject({ plain: true })
   expect(press !== null && 'hotkey' in press).toBe(false)
+  const opens = keyedProps(await band.drawn(), BANNER_OPEN_KEY)
+  expect(opens).toMatchObject({ label: BANNER_OPEN_LABEL, variant: 'secondary' })
+  expect(opens !== null && 'hotkey' in opens).toBe(false)
   expect(await banner()).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
 
   disk.write(EVENTS, [
@@ -1243,6 +1246,37 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
 })
 
+test("the band's open button opens the pane, minimized or on another view, at the task's page; back shows the list at the task's row", async ($, on) => {
+  const { disk, opened, store } = await start(on, { paneSize: 'minimized' })
+  disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane '.repeat(6).trim() })])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  opened.length = 0
+  const band = await mountBand($)
+  // The banner is cut short of the button and the gap before it.
+  const text = await bannerText(band)
+  expect(text).not.toBeNull()
+  expect(text?.length ?? 0).toBeLessThanOrEqual(BAND_PROPS.bodyColumns - `[ ${BANNER_OPEN_LABEL} ]`.length - 1)
+
+  await band.press({ key: BANNER_OPEN_KEY })
+  expect(opened).toEqual(['teamrig-pane'])
+  expect(store.get('paneSize')).toBe('open')
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  expect(buttonKeys(await pane.drawn())).toContain('back')
+  expect(await pane.find({ type: 'Text', text: /^○ T1 {2}Ship the task pane/ })).toBeDefined()
+
+  await pane.press({ key: 'back' })
+  let drawn = await pane.drawn()
+  expect(buttonKeys(drawn)).not.toContain('back')
+  expect(keyedNode(drawn, 'next:T1')).not.toBe(null)
+
+  // From another view the press shows the Tasks view at the page too.
+  await pane.press({ key: 'log' })
+  await band.press({ key: BANNER_OPEN_KEY })
+  drawn = await pane.drawn()
+  expect(buttonKeys(drawn)).toContain('back')
+  expect(keyedProps(drawn, 'tasks')).toMatchObject({ variant: 'primary' })
+})
+
 test('a survey takes the band: the plugin passes it to the engine, and draws the banner again once the survey is gone', async ($, on) => {
   await start(on)
   const passes = engineBand(on)
@@ -1271,6 +1305,8 @@ test('the band draws nothing for a session with no area, then says its area has 
   disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
   await clock.advance(3_000)
   expect(await bannerText(band)).toBe(`po · ${NOTHING_CURRENT}`)
+  // With nothing current there is no page to open: no open button.
+  expect(buttonKeys(await band.drawn())).toEqual([BANNER_KEY])
 
   disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' })])
   await clock.advance(3_000)
