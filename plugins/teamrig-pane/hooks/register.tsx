@@ -1275,7 +1275,7 @@ export const register: Register = on => {
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
     // hotkeys or to Claude's prompt, and the key or the click that moves them, wrapped in a narrow dock.
     const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo, place.kind === 'search')
-    const keysLines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, matches) }] }, columns).map(line =>
+    const keysLines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, submitWords(matches)) }] }, columns).map(line =>
       line.map(span => span.text).join(''),
     )
     const keysLine = inline ? null : drawKeysLine(components, keys, keysLines.join('\n'))

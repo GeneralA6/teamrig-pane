@@ -100,11 +100,14 @@ export function submitWords(matches: number): string {
   return matches > 1 ? 'to the results' : 'open'
 }
 
-/** The line under the Find field: where the keys go and how to move them, Enter's step by the `matches` of the search shown. */
-export function keysHint(at: KeysAt, matches: number): string {
+/**
+ * The line under the Find field: where the keys go and how to move them, `enter` naming what Enter in the field does
+ * (submitWords), null for a search whose results have nothing to open, where it does nothing.
+ */
+export function keysHint(at: KeysAt, enter: string | null): string {
   switch (at) {
     case 'search':
-      return `Typing searches · Enter: ${submitWords(matches)} · Esc: to Claude`
+      return enter === null ? 'Typing searches · Esc: to Claude' : `Typing searches · Enter: ${enter} · Esc: to Claude`
     case 'result':
       return 'On a result · Enter: open · ↑↓: move · s: search · Esc: to Claude'
     case 'pane':

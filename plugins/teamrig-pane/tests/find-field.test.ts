@@ -89,10 +89,15 @@ describe('where the keys go', () => {
   })
 
   test('the line names where the keys go and the key or click that moves them', () => {
-    expect(keysHint('search', 1)).toBe('Typing searches · Enter: open · Esc: to Claude')
-    expect(keysHint('search', 2)).toBe('Typing searches · Enter: to the results · Esc: to Claude')
-    expect(keysHint('result', 2)).toBe('On a result · Enter: open · ↑↓: move · s: search · Esc: to Claude')
-    expect(keysHint('pane', 0)).toBe('Keys on the pane · s: search · Esc: to Claude')
-    expect(keysHint('claude', 0)).toBe('Keys go to Claude · click the field to search')
+    expect(keysHint('search', submitWords(1))).toBe('Typing searches · Enter: open · Esc: to Claude')
+    expect(keysHint('search', submitWords(2))).toBe('Typing searches · Enter: to the results · Esc: to Claude')
+    expect(keysHint('result', submitWords(2))).toBe('On a result · Enter: open · ↑↓: move · s: search · Esc: to Claude')
+    expect(keysHint('pane', submitWords(0))).toBe('Keys on the pane · s: search · Esc: to Claude')
+    expect(keysHint('claude', submitWords(0))).toBe('Keys go to Claude · click the field to search')
+  })
+
+  test('a search whose results have nothing to open names no Enter step', () => {
+    expect(keysHint('search', null)).toBe('Typing searches · Esc: to Claude')
+    expect(keysHint('pane', null)).toBe('Keys on the pane · s: search · Esc: to Claude')
   })
 })
