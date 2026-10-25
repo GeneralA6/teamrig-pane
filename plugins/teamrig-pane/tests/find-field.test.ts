@@ -63,6 +63,9 @@ describe('where the keys go', () => {
     // So does the Log view's.
     expect(landedOn(onField, 'log-search:api:c-1')).toEqual({ count: 2, on: 'result' })
     expect(landedOn(onField, 'log-search-count')).toEqual({ count: 2, on: 'other' })
+    // And the Changes view's.
+    expect(landedOn(onField, 'changes-search:/work:hooks/a.ts')).toEqual({ count: 2, on: 'result' })
+    expect(landedOn(onField, 'changes-search-count')).toEqual({ count: 2, on: 'other' })
     expect(landedOn(onField, 'mine')).toEqual({ count: 2, on: 'other' })
     // One of the engine's own stops.
     expect(landedOn(onField, undefined)).toEqual({ count: 2, on: 'other' })

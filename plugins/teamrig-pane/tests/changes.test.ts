@@ -20,7 +20,8 @@ import {
   type ChangesPorts,
   type GitRun,
 } from '../hooks/changes'
-import { changesBlocks, changesLabel, DIFF_LINE_ROWS, diffRows, lineSpans, paneTitle } from '../hooks/changes-rows'
+import { CHANGES_NOTHING_FOUND, CHANGES_SEARCH_HINT, changesBlocks, changesLabel, DIFF_LINE_ROWS, diffRows, lineSpans, paneTitle } from '../hooks/changes-rows'
+import { searchChanges } from '../hooks/changes-search'
 import type { Block } from '../hooks/rows'
 
 const REPO = 'C:/work/repo'
@@ -591,5 +592,44 @@ describe('changes rows', () => {
       "   … some more lines: git's diff ran past 4 MiB and stops short",
     ])
     expect(words({ kind: 'read', lines: [], more: 2, isCut: true })).toEqual(["   … 2+ more lines: git's diff ran past 4 MiB and stops short"])
+  })
+
+  test('while the Find field holds a query, the view draws the search: the hint, nothing found, or the count and the files it names over their repo and branch', () => {
+    const files = [change(' M', 'hooks/a.ts', null, text(4, 1)), change('R ', 'hooks/new.ts', 'hooks/old.ts'), change('??', 'tests/')]
+    const changes: ChangesSnapshot = { repos: [repo({ branch: 'pane-v2', files: { items: files, more: 0 } })], outside: ['C:/n.md'], isRead: true }
+    const searchedIn = (shown: ChangesSnapshot, query: string, diffs: OpenDiffs = {}) => changesBlocks(shown, false, diffs, { query, hits: searchChanges(shown, query) })
+    const searched = (query: string, diffs: OpenDiffs = {}) => searchedIn(changes, query, diffs)
+    const words = (blocks: Block[]) => blocks.map(block => [block.key, block.rows.map(row => row.spans.map(span => span.text).join(''))])
+    const underlined = (block: Block | undefined) => block?.rows.flatMap(row => row.spans.filter(span => span.underline === true))
+    expect(words(searched(' '))).toEqual([['changes-search-hint', [CHANGES_SEARCH_HINT]]])
+    expect(words(searched('nothing'))).toEqual([['changes-search-none', [CHANGES_NOTHING_FOUND]]])
+    // Before git is read there is nothing to search yet.
+    expect(changesBlocks(EMPTY_CHANGES, false, {}, { query: 'hooks', hits: [] }).map(block => block.key)).toEqual(['reading'])
+
+    const hooks = searched('hooks')
+    expect(words(hooks)).toEqual([
+      ['changes-search-count', ['2 files match']],
+      [`changes-search:${REPO}:hooks/a.ts`, [' M hooks/a.ts +4 -1', '   repo · pane-v2']],
+      [`changes-search:${REPO}:hooks/new.ts`, ['R  hooks/new.ts ← hooks/old.ts', '   repo · pane-v2']],
+    ])
+    // A result opens its file's diff, keyed as the list's row opens it, the words that matched underlined.
+    expect(hooks[1]?.expands).toBe(`${REPO}:hooks/a.ts`)
+    expect(underlined(hooks[1])).toEqual([{ text: 'hooks', underline: true }])
+    // The path a file was renamed from, and the branch, keep their dim style.
+    expect(underlined(searched('old')[1])).toEqual([{ text: 'old', dim: true, underline: true }])
+    expect(underlined(searched('v2')[1])).toEqual([{ text: 'v2', dim: true, underline: true }])
+
+    // An untracked folder has no diff to open; a file outside git says where it is; a detached repo says so.
+    const tests = searched('tests')
+    expect(words(tests).slice(1)).toEqual([[`changes-search:${REPO}:tests/`, ['?? tests/', '   repo · pane-v2']]])
+    expect(tests[1]?.expands).toBeUndefined()
+    expect(words(searched('n.md')).slice(1)).toEqual([['changes-search:outside:C:/n.md', ['C:/n.md', '   written outside git']]])
+    const detached: ChangesSnapshot = { ...changes, repos: [repo({ branch: null, files: { items: files, more: 0 } })] }
+    expect(words(searchedIn(detached, 'tests')).at(1)).toEqual([`changes-search:${REPO}:tests/`, ['?? tests/', '   repo · detached']])
+
+    // An open diff draws under its result, as its card.
+    const opened: OpenDiffs = { [`${REPO}:hooks/a.ts`]: { kind: 'read', lines: [{ kind: 'del', text: 'old' }], more: 0, isCut: false } }
+    expect(searched('a.ts', opened)[1]?.card?.map(row => row.spans.map(span => span.text).join(''))).toEqual(['   -old'])
+    expect(searched('hooks', opened)[2]?.card).toBeUndefined()
   })
 })

@@ -36,10 +36,11 @@ export type CardPart =
 /**
  * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, its
  * page when `opens` does (a search result), a conversation's Log page when `reads` does (docked only), the Team tab's
- * key it opens or closes when `folds` does, or, inline, a Changes file's diff when `expands` does. `card`, set while
- * that card is open, is the card's own parts, drawn under the Button and outside it. `parts`, set docked when no press
- * but a Team tab key's opens the element and a line of its holds a press (the header's inbox count, a leader's fold
- * mark and id), is its lines as parts, drawn in place of its Text and its `folds` press, its open card under them.
+ * key it opens or closes when `folds` does, or a Changes file's diff when `expands` does (inline a file's row, docked
+ * a Changes search result). `card`, set while that card is open, is the card's own parts, drawn under the Button and
+ * outside it. `parts`, set docked when no press but a Team tab key's opens the element and a line of its holds a press
+ * (the header's inbox count, a leader's fold mark and id), is its lines as parts, drawn in place of its Text and its
+ * `folds` press, its open card under them.
  */
 export type Drawn = {
   key: string
@@ -350,8 +351,10 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps:
       toggle: block.toggle ?? null,
       ...(block.opens === undefined ? {} : { opens: block.opens }),
       ...(block.reads === undefined ? {} : { reads: block.reads }),
+      ...(block.expands === undefined ? {} : { expands: block.expands }),
     }
-    const pressed = block.toggle === undefined && block.opens === undefined && block.reads === undefined && lines.some(line => line.some(isPress))
+    const pressed =
+      block.toggle === undefined && block.opens === undefined && block.reads === undefined && block.expands === undefined && lines.some(line => line.some(isPress))
     const parts = pressed ? cardParts(lines) : null
     return {
       ...drawn,

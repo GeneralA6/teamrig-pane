@@ -1,9 +1,9 @@
 // What any search draws under its Find field (search-rows.ts draws the Tasks view's on it, team-rows.ts the Team tab's,
-// inbox-rows.ts and log-rows.ts the Inbox and Log views'): the hint while the query has no word, one line that says
-// so when nothing matches, else a dim line counting the matches, then the results' blocks, each result's keyed by the
-// view and its id (resultKey), so the focus ring can be told on a result. A result underlines the words that matched
-// (markedSpans) and shows a long field from a little before its first match (excerpt). Pure: blocks of rows (rows.ts)
-// that layout.ts wraps.
+// inbox-rows.ts, log-rows.ts and changes-rows.ts the Inbox, Log and Changes views'): the hint while the query has no
+// word, one line that says so when nothing matches, else a dim line counting the matches, then the results' blocks,
+// each result's keyed by the view and its id (resultKey), so the focus ring can be told on a result. A result
+// underlines the words that matched (markedSpans) and shows a long field from a little before its first match
+// (excerpt). Pure: blocks of rows (rows.ts) that layout.ts wraps.
 import { single, type Block, type Span } from './rows'
 import { queryWords, type Mark } from './search'
 
