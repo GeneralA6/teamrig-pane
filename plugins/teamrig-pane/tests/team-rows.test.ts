@@ -1,11 +1,11 @@
 // The Team tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts,
-// a session's name, roles, leads, hire or retire and former names, a closed group's count, a press on each row with
-// rows under it, and the notes for a tree it cannot show.
+// a session's name, roles, leads, hire or retire and former names, a closed group's count, a press on each row that
+// opens what lies under it or a session's card, a leader's two, and the notes for a tree it cannot show.
 import { describe, expect, test } from 'claude-code/testing'
 import type { TeamView } from '../types'
 import { TimeZone } from '../hooks/core/read/index'
 import type { Block } from '../hooks/rows'
-import { teamBlocks, toggledWith } from '../hooks/team-rows'
+import { cardKey, teamBlocks, toggledWith } from '../hooks/team-rows'
 import { HOUR, JERUSALEM, NOW } from './fixtures'
 import { ACME, TOOLS, configOf, hire, treeOf } from './team-fixtures'
 
@@ -36,18 +36,48 @@ describe('teamBlocks', () => {
     ])
   })
 
-  test('a press opens or closes only a row with rows under it; its wrapped lines start under its words', () => {
+  test("a team's or a leader's press opens or closes what lies under it, any other session's its card; its wrapped lines start under its words", () => {
     const blocks = teamBlocks(TREE, [], UTC)
-    expect(blocks.filter(block => block.folds !== undefined).map(block => block.folds)).toEqual([
+    expect(blocks.map(block => block.folds)).toEqual([
       'team:acme',
       'session:acme/lead',
       'session:acme/web',
+      cardKey('session:acme/api'),
+      cardKey('session:acme/ui'),
+      cardKey('session:acme/ops'),
       'closed:acme',
       'team:tools',
       'session:tools/boss',
+      cardKey('session:tools/dev'),
     ])
     expect(blockOf(blocks, 'team:acme').rows[0]?.hang?.text).toBe('  ')
     expect(blockOf(blocks, 'session:acme/api').rows[0]?.hang?.text).toBe('        ')
+    const holdsPresses = (block: Block) => block.rows.some(row => row.spans.some(span => span.toggles !== undefined))
+    expect(blocks.filter(holdsPresses).map(block => block.key)).toEqual(['session:acme/lead', 'session:acme/web', 'session:tools/boss'])
+  })
+
+  test("a leader's row holds two presses, docked: its mark opens or closes the sessions it leads, its id its card", () => {
+    const web = blockOf(teamBlocks(TREE, [], UTC), 'session:acme/web').rows[0]?.spans ?? []
+    expect(web.filter(span => span.toggles !== undefined)).toEqual([
+      { text: '▾ ', dim: true, toggles: 'session:acme/web' },
+      { text: 'web', bold: true, toggles: cardKey('session:acme/web') },
+    ])
+  })
+
+  test("a session's card follows its row while its key is toggled, each line behind a guide under the session's mark", () => {
+    const shut = teamBlocks(TREE, [], UTC)
+    expect(shut.some(block => block.card !== undefined)).toBe(false)
+    const open = teamBlocks(TREE, [cardKey('session:acme/api'), cardKey('session:acme/web')], UTC)
+    const api = blockOf(open, 'session:acme/api').card ?? []
+    expect(api.map(row => row.spans[0])).toEqual(api.map(() => ({ text: '        │ ', dim: true })))
+    expect(api.map(row => row.key)[0]).toBe('team-card:acme/api:role')
+    expect(blockOf(open, 'session:acme/web').card?.[0]?.spans[0]).toEqual({ text: '      │ ', dim: true })
+    // A card open under its leader's closed row is not drawn: the row is not there.
+    expect(teamBlocks(TREE, [cardKey('session:acme/api'), 'session:acme/web'], UTC).some(block => block.key === 'session:acme/api')).toBe(false)
+    // A closed session's card is its retire.
+    const qa = blockOf(teamBlocks(TREE, ['closed:acme', cardKey('session:acme/qa')], UTC), 'session:acme/qa')
+    expect(qa.folds).toBe(cardKey('session:acme/qa'))
+    expect(qa.card?.map(row => row.key)[0]).toBe('team-card:acme/qa:retired')
   })
 
   test('the closed group opens on a toggle: a retired session dim behind ○, its retire day and its former names', () => {
@@ -62,7 +92,7 @@ describe('teamBlocks', () => {
       { text: 'qa', dim: true },
       { text: '  acme-tester', dim: true },
     ])
-    expect(blockOf(blocks, 'session:acme/lead').rows[0]?.spans.slice(2, 4)).toEqual([{ text: '● ' }, { text: 'lead', bold: true }])
+    expect(blockOf(blocks, 'session:acme/lead').rows[0]?.spans.slice(2, 4)).toEqual([{ text: '● ' }, { text: 'lead', bold: true, toggles: cardKey('session:acme/lead') }])
   })
 
   test("days print on the team's clock", () => {

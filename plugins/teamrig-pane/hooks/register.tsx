@@ -38,6 +38,7 @@ import type {
   Nav,
   PageDetails,
   PaneView,
+  Place,
   RefFile,
   RefFileRead,
   RequirementProblem,
@@ -217,7 +218,7 @@ const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, fals
 const SCROLL_SHAPE = 'scroll-v1'
 const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, AT_TOP, { shape: SCROLL_SHAPE })
 /** The Team tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
-const TEAM_SHAPE = 'team-v1'
+const TEAM_SHAPE = 'team-v2'
 const TEAM_READING: TeamView = { kind: 'reading' }
 const NO_TEAM_TREE: TeamView = { kind: 'no-team' }
 const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, TEAM_READING, { shape: TEAM_SHAPE })
@@ -844,14 +845,21 @@ export const register: Register = on => {
       const detail = await detailOf(task)
       await update($, expanded, current => ({ ...current, [id]: detail }))
     }
-    // A press on a task id opens its page, read as a card's is; from the list, the list remembers `from`, the
-    // element the press was in, to scroll back to.
+    // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Team tab session's
+    // card, the header's inbox count) shows the Tasks view at it; from the Tasks view's list, the list remembers
+    // `from`, the element the press was in, to scroll back to.
+    const openPlace = async (place: Place, from: string) => {
+      const shown = await read($, view)
+      if (shown !== 'tasks') await update($, view, () => 'tasks')
+      await go($, current => pushed(shown === 'tasks' ? leavingList(current, from) : current, place))
+    }
+    // A press on a task id opens its page, read as a card's is.
     const openPage = async (id: string, from: string) => {
       const task = snap.tasks.find(t => t.id === id)
       if (task === undefined) return
       const detail = await detailOf(task)
       await update($, pages, current => ({ ...current, [id]: detail }))
-      await go($, current => pushed(leavingList(current, from), { kind: 'task', id }))
+      await openPlace({ kind: 'task', id }, from)
     }
     // A file's page is read once as it opens (ref-file.ts). With no reader yet it says there was no folder to look in.
     const readFilePage = async (file: string): Promise<RefFileRead> => {
@@ -859,17 +867,17 @@ export const register: Register = on => {
       await update($, filePages, current => ({ ...current, [file]: found }))
       return found
     }
-    // A press on a reference file opens its page; from the list, the list remembers `from` as openPage's does.
+    // A press on a reference file opens its page.
     const openFile = async (file: RefFile, from: string) => {
       await readFilePage(file.file)
-      await go($, current => pushed(leavingList(current, from), { kind: 'file', file: file.file, line: file.line }))
+      await openPlace({ kind: 'file', file: file.file, line: file.line }, from)
     }
-    // A press on the header's inbox count opens the area's inbox as a file's page, landing on its first unread line
-    // (unreadLine). Reading it marks nothing read: the pane writes no inbox, the session's `teamrig inbox read` does.
+    // A press on an inbox count (the header's, a Team tab card's) opens the area's inbox as a file's page, landing on
+    // its first unread line (unreadLine). Reading it marks nothing read: the pane writes no inbox, the session's `teamrig inbox read` does.
     const openInbox = async (press: InboxPress, from: string) => {
       const file = inboxFile(press.area)
       const found = await readFilePage(file)
-      await go($, current => pushed(leavingList(current, from), { kind: 'file', file, line: unreadLine(found, press.unread) }))
+      await openPlace({ kind: 'file', file, line: unreadLine(found, press.unread) }, from)
     }
     // A press on a conversation in the Log view's list opens its page, read now, at its end: the newest lines are
     // last. Back shows the list, read again, from its top.
