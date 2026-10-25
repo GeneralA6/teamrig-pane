@@ -2,7 +2,7 @@
 // of the fullscreen UI. `mine` shows the session's area: a status bar of its tasks (status-bar.ts),
 // then its tasks in sections (rows.ts): Verifying, Working on, Up next, Waiting (its waiting tasks, then
 // those asked of another session) and Done today (the team zone's day, as the bar counts it), each task a row with a
-// dim meta line (meta.ts), and its unread inbox lines; `all` shows every owner's active tasks. A press on a task row opens its card in
+// dim meta line (meta.ts); `all` shows every owner's active tasks. A press on a task row opens its card in
 // place of the meta line (card.ts): its status and note, plan, the ask quoted where its refs still point, who
 // asked, the tasks planned first, its goals' roadmap items, evidence and links. A press on a task id in a card opens
 // that task's page (page.ts), the card with the body to itself, under back and forward (b, f) and a trail of the
@@ -874,7 +874,7 @@ export const register: Register = on => {
       const detail = await detailOf(task)
       await update($, expanded, current => ({ ...current, [id]: detail }))
     }
-    // A press on the switch's buttons, or the header's inbox count. The Tasks button shows the list, from a page too,
+    // A press on the switch's buttons. The Tasks button shows the list, from a page too,
     // scrolled back to where the page was opened from; the Log button shows the sessions, from a session's page too;
     // the Team button reads the team tree at once. Every button closes a search, which the views share: one typed in
     // one view is never found shown in another.
@@ -913,8 +913,8 @@ export const register: Register = on => {
       await readFilePage(file.file)
       await openPlace({ kind: 'file', file: file.file, line: file.line }, from)
     }
-    // A press on an inbox count opens that inbox: the area's own (the header's) in the Inbox view, another area's (a
-    // Team tab card's) as a file's page, landing on its first unread line (unreadLine). Reading it marks nothing read:
+    // A press on a Team tab card's inbox count opens that inbox: the session's own in the Inbox view, another area's as
+    // a file's page, landing on its first unread line (unreadLine). Reading it marks nothing read:
     // the pane writes no inbox, the session's `teamrig inbox read` does.
     const openInbox = async (press: InboxPress, from: string) => {
       if (press.area === snap.area) {
@@ -1094,8 +1094,8 @@ export const register: Register = on => {
       )
     }
     // A Button holds strings and Texts alone, so an open card (its links, its ids) draws under the task's Button, not
-    // in it. A page's title is no press: its card is always open. An element drawn as parts (the header, its inbox
-    // count a press; a Team tab leader, its fold mark and id) is a column Box of them and its open card's, under its key.
+    // in it. A page's title is no press: its card is always open. An element drawn as parts (a Team tab leader, its
+    // fold mark and id presses) is a column Box of them and its open card's, under its key.
     const drawBlock = (drawn: Drawn) => {
       if (drawn.parts !== undefined)
         return (

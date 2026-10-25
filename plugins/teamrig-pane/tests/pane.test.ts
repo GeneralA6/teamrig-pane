@@ -228,7 +228,7 @@ test('docks the session area: its tasks, flags and unread inbox', async ($, on) 
   expect(opened).toEqual(['teamrig-pane'])
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  expect(await pane.find({ text: /inbox 2 unread/ })).toBeDefined()
+  expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox (2)' })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
   expect(await pane.find({ text: /p2 · due Wed 10-14 · new · asked by owner/ })).toBeDefined()
   expect(await pane.find({ text: /Rotate the local URI/ })).toBeUndefined()
@@ -428,7 +428,7 @@ test('lines teamrig skips are counted as teamrig counts them, and every task and
   expect(await pane.find({ text: /^WARN events\.jsonl: 1 unreadable line\(s\), 1 line\(s\) from a newer teamrig, 1 event\(s\) naming no task$/ })).toBeDefined()
   expect(await pane.find({ text: /Ship the task pane v2/ })).toBeDefined()
   expect(await pane.find({ text: /Second task/ })).toBeDefined()
-  expect(await pane.find({ text: /^2 active · inbox/ })).toBeDefined()
+  expect(await pane.find({ text: /^2 active/ })).toBeDefined()
 })
 
 test('missing register, marks and inbox files draw an empty register with no problem, and fill in as they appear', async ($, on) => {
@@ -443,13 +443,13 @@ test('missing register, marks and inbox files draw an empty register with no pro
   disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
   await clock.advance(3_000)
   expect(await pane.find({ text: /Nothing active\./ })).toBeDefined()
-  expect(await pane.find({ text: /inbox 0 unread/ })).toBeDefined()
+  expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox' })
 
   disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' })])
   disk.write(INBOX, ['line one', 'line two'])
   await clock.advance(3_000)
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
-  expect(await pane.find({ text: /inbox 1 unread/ })).toBeDefined()
+  expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox (1)' })
 
   disk.remove(EVENTS)
   await clock.advance(3_000)
@@ -2164,7 +2164,7 @@ test('back, forward and the trail step through the places; the list keeps the he
   await pane.press({ key: 'crumb:1' })
   expect(await pane.find({ type: 'Text', text: /^○ T50  Load the feed$/ })).toBeDefined()
 
-  // The Tasks crumb: the list, its bar, the header's inbox count and T52's card as they were, back dim and forward a press away.
+  // The Tasks crumb: the list, its bar and T52's card as they were, back dim and forward a press away.
   await pane.press({ key: 'crumb:0' })
   drawn = await pane.drawn()
   expect(buttonKeys(drawn)).toEqual([
@@ -2183,7 +2183,6 @@ test('back, forward and the trail step through the places; the list keeps the he
     'crumb:2',
     'bar:not-started',
     'count:not-started',
-    gotoKey(drawn, 'inbox'),
     'next:T52',
     gotoKey(drawn, 'T50'),
     fileKey(drawn),
@@ -2370,16 +2369,14 @@ test("the Inbox view's Find field draws the lines its words name, by sender or w
   expect(await drawsLine(pane, /^2 unread · 1 read in the last 24 hours$/)).toBe(true)
 })
 
-test("the header's inbox count opens the Inbox view; reading it marks nothing read", async ($, on) => {
+test("the switch's Inbox button alone counts the unread lines and opens the view, the header no count of its own; reading it marks nothing read", async ($, on) => {
   const { clock, pane } = await startOnInbox($, on)
   let drawn = await pane.drawn()
-  const presses = buttonKeys(drawn).filter(key => key.startsWith('goto:inbox:'))
-  expect(presses).toHaveLength(1)
-  const [toInbox] = presses
-  if (toInbox === undefined) throw new Error('no press on the inbox count')
-  expect(childrenOf(keyedNode(drawn, toInbox))).toMatchObject([{ type: 'Text', props: { underline: true, color: 'warning' }, children: ['inbox 2 unread'] }])
+  expect(buttonKeys(drawn).filter(key => key.startsWith('goto:inbox:'))).toEqual([])
+  expect(await pane.find({ text: /inbox 2 unread/ })).toBeUndefined()
+  expect(keyedProps(drawn, 'inbox')).toMatchObject({ label: 'Inbox (2)', variant: 'secondary' })
 
-  await pane.press({ key: toInbox })
+  await pane.press({ key: 'inbox' })
   drawn = await pane.drawn()
   expect(keyedProps(drawn, 'inbox')).toMatchObject({ variant: 'primary' })
   expect(await drawsLine(pane, /^2 unread · 1 read in the last 24 hours$/)).toBe(true)
@@ -2387,7 +2384,7 @@ test("the header's inbox count opens the Inbox view; reading it marks nothing re
   // Back on the tasks after a poll, the two lines are still unread: the pane writes no mark.
   await pane.press({ key: 'tasks' })
   await clock.advance(POLL_MS)
-  expect(await pane.find({ text: /inbox 2 unread/ })).toBeDefined()
+  expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox (2)' })
 })
 
 test('the dock always draws the Find field, s moving the focus into it; each change draws the matches, Enter opens the one match or moves to the first of more, back returns, clear or an empty field closes the search', async ($, on) => {
