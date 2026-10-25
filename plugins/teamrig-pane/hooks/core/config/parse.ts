@@ -1,10 +1,11 @@
 // Copied from teamrig's src/config/parse.ts by scripts/sync-core.ts: change it there, then run the sync.
 import { deployTargetsOf } from '../coordinator/targets.ts';
 import { isRecord, type JsonRecord } from '../core/guards.ts';
-import { NAME_PATTERN, NAME_RULE } from '../core/ids.ts';
+import { isReservedName, NAME_PATTERN, NAME_RULE, RESERVED_NAMES } from '../core/ids.ts';
 import { isMinuteInSpan, utcMinuteOf } from '../core/time.ts';
 import { TimeZone } from '../core/zone.ts';
-import { FOLLOWUP_STATUSES, isTaskStatus, LEGACY_WAITING_HINT, LEGACY_WAITING_STATUS, SESSION_NAME, TASK_STATUSES, type TaskStatus } from '../register/model.ts';
+import { FOLLOWUP_STATUSES, isTaskStatus, LEGACY_WAITING_HINT, LEGACY_WAITING_STATUS, REVIEW_STATUSES, SESSION_NAME, TASK_STATUSES, type TaskStatus } from '../register/model.ts';
+import { KEEP_RULE_PATTERN } from '../permissions/allow-rules.ts';
 import { PREFIX_PATTERN } from '../readonly-shell/rules.ts';
 import { CORE_RULE_KEYS, isCoreRuleKey } from '../rules/keys.ts';
 import {
@@ -27,11 +28,13 @@ import {
   DEFAULT_LOOPS,
   DEFAULT_MESSAGES,
   DEFAULT_HEADROOM,
+  DEFAULT_IDLE,
   DEFAULT_OPEN,
   DEFAULT_OWNER_GATES,
   DEFAULT_COMMIT_GUARD,
   DEFAULT_SECRET_GUARD,
   DEFAULT_PACKAGE_GUARD,
+  DEFAULT_PERMISSIONS,
   DEFAULT_PROMPTS,
   DEFAULT_PUSH_GUARD,
   DEFAULT_READONLY_SHELL,
@@ -47,7 +50,7 @@ import {
   HEAVY_TTL_MARGIN_MINUTES,
 } from './defaults.ts';
 import { isEffort, isModel } from './launch.ts';
-import { CONFIG_LIMITS, RULE_CONFLICT_LIMITS } from './limits.ts';
+import { BUDGET_ACCOUNT_MAX_LENGTH, CONFIG_LIMITS, RULE_CONFLICT_LIMITS } from './limits.ts';
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
 import {
   AD_HOC_RUNNERS,
@@ -66,13 +69,18 @@ import {
   isHiringPolicy,
   isOverAction,
   isHookAsks,
+  isIdleMode,
+  isOtherAreaListing,
   isPushToProtected,
   isSecretReads,
   isSkipHooks,
   isTerminalChoice,
+  isReviewMode,
   isVerifyGate,
   isWeekday,
   HOOK_ASKS,
+  IDLE_MODES,
+  OTHER_AREA_LISTINGS,
   OVER_ACTIONS,
   PUSH_TO_PROTECTED,
   SECRET_READS,
@@ -80,6 +88,8 @@ import {
   TERMINALS,
   type ContextFilesConfig,
   type ExecConfig,
+  type OtherAreaListing,
+  REVIEW_MODES,
   VERIFY_GATES,
   WEEKDAYS,
   type PackageGuardConfig,
@@ -100,8 +110,10 @@ import {
   type KitConfig,
   type LaunchConfig,
   type HeadroomConfig,
+  type IdleConfig,
   type OpenConfig,
   type PathsConfig,
+  type PermissionsConfig,
   type PushToProtected,
   type HookAsks,
   type QuietHours,
@@ -144,11 +156,18 @@ const GITHUB_LOGIN = /^[a-z0-9][a-z0-9-]{0,38}$/i;
 const BRANCH_NAME: Check<string> = (name) => (/^[^\s~^:?*[\\]+$/.test(name) ? undefined : 'not a valid branch name');
 
 /**
- * An `exec.path` folder: absolute from a drive or the root (`C:/tools`, `/usr/bin`), never against the cwd, and with no
- * `;` or `:` past the drive, so joining the list into one PATH cannot split a folder or add one.
+ * A path absolute from a drive or the root (`C:/tools`, `C:\tools`, `/usr/bin`, `\srv\app`, `\\host\share`) on any
+ * host, as Windows' `isAbsolute` takes it, without `node:path`: the read entry parses the config where Node's
+ * built-ins are missing.
+ */
+const ABSOLUTE_PATH = /^(?:[A-Za-z]:)?[\\/]/;
+
+/**
+ * An `exec.path` folder: absolute ({@link ABSOLUTE_PATH}), never against the cwd, and with no `;` or `:` past the
+ * drive, so joining the list into one PATH cannot split a folder or add one.
  */
 const EXEC_DIRECTORY: Check<string> = (folder) => {
-  if (!/^(?:[A-Za-z]:[\\/]|\/)/.test(folder)) {
+  if (!ABSOLUTE_PATH.test(folder)) {
     return 'expected an absolute folder, such as C:/tools or /usr/bin';
   }
   return /^(?:[A-Za-z]:)?[^;:]*$/.test(folder) ? undefined : 'expected no ; or : past the drive';
@@ -165,11 +184,16 @@ const isFrontmatterKey: Check<string> = (key) => (/^[A-Za-z0-9_-]+$/.test(key) ?
 const isTrailerKey: Check<string> = (key) =>
   /^[A-Za-z][A-Za-z0-9-]{0,39}$/.test(key) ? undefined : 'expected a trailer key: a letter, then at most 39 letters, digits or -';
 
-const isDisplayName: Check<string> = (name) => (NAME_PATTERN.test(name) ? undefined : `expected a name: ${NAME_RULE}`);
+const isDisplayName: Check<string> = (name) => {
+  if (!NAME_PATTERN.test(name)) {
+    return `expected a name: ${NAME_RULE}`;
+  }
+  return isReservedName(name) ? `expected a name Claude Code does not keep for itself (${RESERVED_NAMES.join(', ')}): a message to one never reaches a session` : undefined;
+};
 
 /**
- * `names`: only sessions on the team, and each name unique and never another session's id, so a
- * command given a name finds exactly one session.
+ * `names`: only sessions on the team, each name unique, never another session's id and never one Claude Code reserves,
+ * so a command or a message given a name finds exactly one session.
  */
 function readNames(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): Record<string, string> {
   const names: Record<string, string> = {};
@@ -264,9 +288,13 @@ function readLeads(read: ConfigReader, raw: JsonRecord, sessions: readonly strin
   return Object.fromEntries(leads);
 }
 
+/** A folder named in full, on one line: a relative one would turn on whichever folder a command runs in. */
+const isAbsoluteFolder: Check<string> = (text) => (/[\r\n]/.test(text) || !ABSOLUTE_PATH.test(text) ? 'expected an absolute folder path on one line' : undefined);
+
 /**
- * `launch`: a model and an effort for sessions on the team. A wrong field is reported and left out,
- * so the session starts on Claude Code's own choice (or, for the lead, the lead's default) for it.
+ * `launch`: a model, an effort and a project folder for sessions on the team. A wrong field is reported and
+ * left out, so the session starts on Claude Code's own choice (or, for the lead, the lead's default) for it,
+ * and in the team's folder.
  */
 function readLaunch(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): Record<string, LaunchConfig> {
   const launch: Record<string, LaunchConfig> = {};
@@ -282,14 +310,20 @@ function readLaunch(read: ConfigReader, raw: JsonRecord, sessions: readonly stri
     }
     const model = read.optionalString(entry, 'model', path, isModel);
     const effort = read.optionalString(entry, 'effort', path, isEffort);
-    launch[id] = { ...(model === undefined ? {} : { model }), ...(isEffortLevel(effort) ? { effort } : {}) };
+    const project = read.optionalString(entry, 'project', path, isAbsoluteFolder);
+    launch[id] = {
+      ...(model === undefined ? {} : { model }),
+      ...(isEffortLevel(effort) ? { effort } : {}),
+      ...(project === undefined ? {} : { project }),
+    };
   }
   return launch;
 }
 
 /**
- * `team`: the team's id and its parent's, both ids. Only the shape is checked here; whether the id
- * matches the team's folder and the parent exists is the tree's to judge, as it sees every team.
+ * `team`: the team's id and its parent's, both ids, and its project folder. Only the shape is checked here;
+ * whether the id matches the team's folder and the parent exists is the tree's to judge, as it sees every team,
+ * and whether the project folder exists is `doctor`'s.
  */
 function readTeam(read: ConfigReader, raw: JsonRecord): TeamLink | undefined {
   const value = raw['team'];
@@ -299,14 +333,16 @@ function readTeam(read: ConfigReader, raw: JsonRecord): TeamLink | undefined {
   }
   const id = read.requiredString(section, 'id', 'team', isSessionName);
   const parent = read.optionalString(section, 'parent', 'team', isSessionName);
+  const project = read.optionalString(section, 'project', 'team', isAbsoluteFolder);
   if (id === '') {
     return undefined;
   }
+  const where = project === undefined ? {} : { project };
   if (parent === id) {
     read.report('team.parent', 'is the team itself; a root team has no parent');
-    return { id };
+    return { id, ...where };
   }
-  return parent === undefined ? { id } : { id, parent };
+  return { id, ...(parent === undefined ? {} : { parent }), ...where };
 }
 
 /** Validates a migrated config object against the current format. */
@@ -426,10 +462,11 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
     pickerGuard: { enabled: read.boolean(pickerGuard, 'enabled', 'pickerGuard', false) },
     turnLog: parseTurnLog(read, read.section(raw, 'turnLog', '')),
     readonlyShell: parseReadonlyShell(read, read.section(raw, 'readonlyShell', '')),
+    permissions: parsePermissions(read, read.section(raw, 'permissions', '')),
     refresh: parseRefresh(read, read.section(raw, 'refresh', '')),
     hiring: parseHiring(read, read.section(raw, 'hiring', '')),
     burst: parseBurst(read, read.section(raw, 'burst', '')),
-    open: parseOpen(read, read.section(raw, 'open', '')),
+    open: parseOpen(read, read.section(raw, 'open', ''), sessions),
     statusLine: parseStatusLine(read, read.section(raw, 'statusLine', '')),
     launch,
     paths: parsePaths(read, read.section(raw, 'paths', '')),
@@ -738,6 +775,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
   if (targetPct + reservePct > 100) {
     read.report(`${path}.reservePct`, `with targetPct it passes 100% of the week (${targetPct} + ${reservePct})`);
   }
+  const account = read.optionalString(raw, 'account', path, shortLine(BUDGET_ACCOUNT_MAX_LENGTH));
   const weeklyLimitW = read.optionalInteger(raw, 'weeklyLimitW', path, CONFIG_LIMITS.weeklyLimitW);
   const extraWPerUsd = read.optionalInteger(raw, 'extraWPerUsd', path, CONFIG_LIMITS.extraWPerUsd);
   const reset = parseBudgetReset(read, raw);
@@ -750,6 +788,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
   const statusSnapshotDir = read.optionalString(raw, 'statusSnapshotDir', path);
   return {
     enabled: read.boolean(raw, 'enabled', path, defaults.enabled),
+    ...(account === undefined ? {} : { account }),
     ...(weeklyLimitW === undefined ? {} : { weeklyLimitW }),
     subagentWeight: read.number(raw, 'subagentWeight', path, defaults.subagentWeight, CONFIG_LIMITS.subagentWeight),
     ...(extraWPerUsd === undefined ? {} : { extraWPerUsd }),
@@ -887,6 +926,7 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
   }
   const goalPattern = read.optionalString(raw, 'goalPattern', path, isValidRegex);
   const verifyGate = read.string(raw, 'verifyGate', path, defaults.verifyGate, oneOf(VERIFY_GATES));
+  const reviewMode = read.string(review, 'mode', `${path}.review`, defaults.review.mode, oneOf(REVIEW_MODES));
   const register: RegisterConfig = {
     ownerSource: read.string(raw, 'ownerSource', path, defaults.ownerSource, isSessionName),
     priorities: priorities.length === 0 ? defaults.priorities : priorities,
@@ -909,7 +949,7 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
       'requireFollowupsOn',
       path,
       defaults.requireFollowupsOn,
-      (value, itemPath) => parseFollowupStatus(read, value, itemPath),
+      (value, itemPath) => parseStatusAmong(read, value, itemPath, FOLLOWUP_STATUSES),
       CONFIG_LIMITS.requireFollowupsOn.maxItems,
     ),
     autoArchive: read.boolean(raw, 'autoArchive', path, defaults.autoArchive),
@@ -922,6 +962,8 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
       notPickedUpAfterHours: read.integer(check, 'notPickedUpAfterHours', `${path}.check`, defaults.check.notPickedUpAfterHours, { min: 1 }),
       prioritySkipAfterHours: read.integer(check, 'prioritySkipAfterHours', `${path}.check`, defaults.check.prioritySkipAfterHours, { min: 1 }),
       maxSelfMadePerDay: read.integer(check, 'maxSelfMadePerDay', `${path}.check`, defaults.check.maxSelfMadePerDay, CONFIG_LIMITS.maxSelfMadePerDay),
+      goalProgressDays: read.integer(check, 'goalProgressDays', `${path}.check`, defaults.check.goalProgressDays, CONFIG_LIMITS.goalProgressDays),
+      overSizeMultiple: read.number(check, 'overSizeMultiple', `${path}.check`, defaults.check.overSizeMultiple, CONFIG_LIMITS.overSizeMultiple),
       weekLengthDays: read.integer(check, 'weekLengthDays', `${path}.check`, defaults.check.weekLengthDays, { min: 1, max: 31 }),
       stopgapFiles: read.stringList(
         check,
@@ -933,6 +975,16 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
       ),
     },
     review: {
+      mode: isReviewMode(reviewMode) ? reviewMode : defaults.review.mode,
+      requireOn: read.list(
+        review,
+        'requireOn',
+        `${path}.review`,
+        defaults.review.requireOn,
+        (value, itemPath) => parseStatusAmong(read, value, itemPath, REVIEW_STATUSES),
+        CONFIG_LIMITS.reviewRequireOn.maxItems,
+      ),
+      criticalOwners: read.stringList(review, 'criticalOwners', `${path}.review`, defaults.review.criticalOwners, isSessionName, CONFIG_LIMITS.criticalOwners.maxItems),
       hintPattern: read.string(review, 'hintPattern', `${path}.review`, defaults.review.hintPattern, isValidRegex),
     },
   };
@@ -962,12 +1014,12 @@ function parseStatus(read: ConfigReader, value: unknown, path: string): TaskStat
   return undefined;
 }
 
-/** A status that may need `--followups`: one of FOLLOWUP_STATUSES. */
-function parseFollowupStatus(read: ConfigReader, value: unknown, path: string): TaskStatus | undefined {
-  if (typeof value === 'string' && FOLLOWUP_STATUSES.some((status) => status === value)) {
+/** A status a key accepts only some of, such as the statuses `--followups` may be given with. */
+function parseStatusAmong(read: ConfigReader, value: unknown, path: string, allowed: readonly TaskStatus[]): TaskStatus | undefined {
+  if (typeof value === 'string' && allowed.some((status) => status === value)) {
     return parseStatus(read, value, path);
   }
-  read.report(path, `expected one of ${FOLLOWUP_STATUSES.join(', ')}, got ${describe(value)}`);
+  read.report(path, `expected one of ${allowed.join(', ')}, got ${describe(value)}`);
   return undefined;
 }
 
@@ -1007,14 +1059,41 @@ function parseSkills(read: ConfigReader, raw: JsonRecord): SkillsConfig {
       shortLine(CONFIG_LIMITS.forbidFrontmatter.maxLength, isFrontmatterKey),
       CONFIG_LIMITS.forbidFrontmatter.maxItems,
     ),
+    otherAreas: parseOtherAreas(read, raw, path),
   };
 }
 
-function parseOpen(read: ConfigReader, raw: JsonRecord): OpenConfig {
+function parseOtherAreas(read: ConfigReader, raw: JsonRecord, path: string): OtherAreaListing {
+  const listing = read.string(raw, 'otherAreas', path, DEFAULT_SKILLS.otherAreas, (value) =>
+    isOtherAreaListing(value) ? undefined : `expected one of ${OTHER_AREA_LISTINGS.join(', ')}`,
+  );
+  return isOtherAreaListing(listing) ? listing : DEFAULT_SKILLS.otherAreas;
+}
+
+function parseOpen(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): OpenConfig {
   const terminal = read.string(raw, 'terminal', 'open', DEFAULT_OPEN.terminal, (value) =>
     isTerminalChoice(value) ? undefined : `expected one of ${TERMINALS.join(', ')}`,
   );
-  return { terminal: isTerminalChoice(terminal) ? terminal : DEFAULT_OPEN.terminal, headroom: parseHeadroom(read, read.section(raw, 'headroom', 'open')) };
+  return {
+    terminal: isTerminalChoice(terminal) ? terminal : DEFAULT_OPEN.terminal,
+    headroom: parseHeadroom(read, read.section(raw, 'headroom', 'open')),
+    idle: parseIdle(read, read.section(raw, 'idle', 'open'), sessions),
+  };
+}
+
+/** `open.idle`: whether the idle pass runs, and the sessions it keeps open; one not on the team is reported and left out. */
+function parseIdle(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): IdleConfig {
+  const path = 'open.idle';
+  const mode = read.string(raw, 'mode', path, DEFAULT_IDLE.mode, (value) => (isIdleMode(value) ? undefined : `expected one of ${IDLE_MODES.join(', ')}`));
+  const keepOpen = read.list(raw, 'keepOpen', path, DEFAULT_IDLE.keepOpen, (value, itemPath) => {
+    const id = read.stringItem(value, itemPath, isSessionName);
+    if (id !== undefined && sessions.length > 0 && !sessions.includes(id)) {
+      read.report(itemPath, `${describe(id)} is not one of the sessions`);
+      return undefined;
+    }
+    return id;
+  });
+  return { mode: isIdleMode(mode) ? mode : DEFAULT_IDLE.mode, keepOpen };
 }
 
 /** `open.headroom`: the room a new session needs on the host. */
@@ -1098,6 +1177,14 @@ function parseReadonlyShell(read: ConfigReader, raw: JsonRecord): ReadonlyShellC
   };
 }
 
+const isKeepRule: Check<string> = (value) =>
+  KEEP_RULE_PATTERN.test(value) ? undefined : 'expected a tool, or a tool and a command with at most a trailing " *" or ":*": no other *, path, URL or parenthesis';
+
+function parsePermissions(read: ConfigReader, raw: JsonRecord): PermissionsConfig {
+  const { maxItems, maxLength } = CONFIG_LIMITS.keepAllow;
+  return { keepAllow: read.stringList(raw, 'keepAllow', 'permissions', DEFAULT_PERMISSIONS.keepAllow, shortLine(maxLength, isKeepRule), maxItems) };
+}
+
 function parseCommits(read: ConfigReader, raw: JsonRecord): CommitsConfig {
   const path = 'commits';
   const defaults = DEFAULT_COMMITS;
@@ -1130,6 +1217,8 @@ const HOLD_AFTER_ACTIVITY_MINUTES = { min: 0, max: 60 } as const;
 const COUNTDOWN_SECONDS = { min: 0, max: 120 } as const;
 /** 0 turns the stop of Claude Code's compaction off. */
 const COMPACT_CEILING_TOKENS = { min: 0, max: 10_000_000 } as const;
+/** 0 turns the cap off; a megabyte is far past any context window. */
+const HANDOVER_MAX_BYTES = { min: 0, max: 1_000_000 } as const;
 /** A program and its arguments. */
 const END_COMMAND_MAX_ITEMS = 16;
 
@@ -1148,6 +1237,7 @@ function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
     holdAfterActivityMinutes: read.integer(raw, 'holdAfterActivityMinutes', path, defaults.holdAfterActivityMinutes, HOLD_AFTER_ACTIVITY_MINUTES),
     countdownSeconds: read.integer(raw, 'countdownSeconds', path, defaults.countdownSeconds, COUNTDOWN_SECONDS),
     compactCeilingTokens: read.integer(raw, 'compactCeilingTokens', path, defaults.compactCeilingTokens, COMPACT_CEILING_TOKENS),
+    handoverMaxBytes: read.integer(raw, 'handoverMaxBytes', path, defaults.handoverMaxBytes, HANDOVER_MAX_BYTES),
     endCommand: read.stringList(raw, 'endCommand', path, defaults.endCommand, undefined, END_COMMAND_MAX_ITEMS),
     ...(handoverDir === undefined ? {} : { handoverDir }),
   };

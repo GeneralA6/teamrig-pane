@@ -12,6 +12,7 @@ import type {
   DecisionsConfig,
   GithubConfig,
   HeadroomConfig,
+  IdleConfig,
   ExecConfig,
   HiringConfig,
   LaunchConfig,
@@ -20,6 +21,7 @@ import type {
   LoopsConfig,
   OpenConfig,
   PackageGuardConfig,
+  PermissionsConfig,
   PromptsConfig,
   SecretGuardConfig,
   PushGuardConfig,
@@ -77,16 +79,23 @@ export const DEFAULT_REGISTER: RegisterConfig = {
   /**
    * maxSelfMadePerDay, measured on a working team (10-15 to 10-18): on a day a session added tasks for itself, it added
    * 3 at the median and 9 at the 90th percentile; the two days past 10 (36 and 19) were the run that raised the question.
+   * goalProgressDays: a working day that moves no planned task is the drift to catch the next morning.
+   * overSizeMultiple: the old register flagged a task whose cost passed twice its estimate (T327).
    */
   check: {
     staleAfterHours: 72,
     notPickedUpAfterHours: 24,
     prioritySkipAfterHours: 24,
     maxSelfMadePerDay: 10,
+    goalProgressDays: 1,
+    overSizeMultiple: 2,
     weekLengthDays: 7,
     stopgapFiles: ['CLAUDE.md', '.claude/rules'],
   },
   review: {
+    mode: 'refuse',
+    requireOn: ['verifying', 'done'],
+    criticalOwners: [],
     hintPattern: String.raw`\b(fix|bug|broken?|regress\w*|incident|fail\w*|crash\w*|leak\w*|wrong|missed)\b`,
   },
 };
@@ -97,6 +106,7 @@ export const DEFAULT_SKILLS: SkillsConfig = {
   maxPerArea: 8,
   maxVerifiedAgeDays: 30,
   forbidFrontmatter: ['allowed-tools'],
+  otherAreas: 'name-only',
 };
 
 /**
@@ -134,6 +144,40 @@ export const DEFAULT_SECRET_GUARD: SecretGuardConfig = { secretReads: 'deny', pa
 
 /** Off, and trusting no prefix, until a team opts in. */
 export const DEFAULT_READONLY_SHELL: ReadonlyShellConfig = { enabled: false, allowPrefixes: [] };
+
+/**
+ * Read-only commands outside Claude Code's own read-only set whose arguments can neither run a program nor write
+ * (the general part of security's keep-list, T1037 10-23), kept in both shells; PowerShell's own cmdlets in
+ * PowerShell only. A team's own list replaces this one, so one that adds its tools' read-only commands repeats these.
+ */
+const KEPT_SHELL_COMMANDS = [
+  'kubectl get',
+  'kubectl describe',
+  'kubectl logs',
+  'kubectl top',
+  'kubectl rollout status',
+  'kubectl version',
+  'kubectl config current-context',
+  'npm ls',
+  'npm view',
+  'gh pr view',
+  'gh pr list',
+  'gh pr checks',
+  'gh run list',
+  'gh run view',
+  'tasklist',
+  'netstat',
+  'sleep',
+];
+const KEPT_CMDLETS = ['Test-Path', 'Get-Date', 'Get-Process'];
+
+export const DEFAULT_PERMISSIONS: PermissionsConfig = {
+  keepAllow: [
+    ...KEPT_SHELL_COMMANDS.flatMap((command) => [`Bash(${command} *)`, `PowerShell(${command} *)`]),
+    ...KEPT_CMDLETS.map((cmdlet) => `PowerShell(${cmdlet} *)`),
+    'WebSearch',
+  ],
+};
 
 /** Tests: a test folder, `*.test.*` and `*.spec.*` files, and pytest's `test_*.py`. `warn` only adds to a push the guard already asks about. */
 export const DEFAULT_COMMITS: CommitsConfig = {
@@ -200,7 +244,8 @@ export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {
  * The user types /clear for the fresh start (`autoRestart` off): an automatic /clear wiped the screen while the
  * user was still reading the last reply, still had its question to answer, or was away. While a handover is
  * pending, the compaction at 167k waits up to 185k: 18k of room to finish the step and write it, and 15k under the
- * window for a large tool result.
+ * window for a large tool result. A handover over 20 KB is refused: on 10-24 most were 4 to 8 KB, and one appended
+ * to section by section (29 of them) reached 88 KB, which its every fresh start read whole.
  */
 export const DEFAULT_REFRESH: RefreshConfig = {
   enabled: true,
@@ -213,6 +258,7 @@ export const DEFAULT_REFRESH: RefreshConfig = {
   holdAfterActivityMinutes: 5,
   countdownSeconds: 20,
   compactCeilingTokens: 185_000,
+  handoverMaxBytes: 20_000,
   endCommand: [],
 };
 
@@ -223,7 +269,10 @@ export const DEFAULT_REFRESH: RefreshConfig = {
  */
 export const DEFAULT_HEADROOM: HeadroomConfig = { sessionMb: 1200, commitMaxPct: 92, closeIdleMinutes: 60 };
 
-export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto', headroom: DEFAULT_HEADROOM };
+/** No idle pass runs until the team turns it on, and then it keeps open only the sessions its roles name. */
+export const DEFAULT_IDLE: IdleConfig = { mode: 'off', keepOpen: [] };
+
+export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto', headroom: DEFAULT_HEADROOM, idle: DEFAULT_IDLE };
 
 /** The status line shows the session's folder, its branch and the command that resumes it, unless the team turns them off. */
 export const DEFAULT_STATUS_LINE: StatusLineConfig = { folder: true, branch: true, resume: true };
@@ -288,4 +337,4 @@ export const DEFAULT_HIRING: HiringConfig = {
  * sets `launch.<lead id>.model` to `best` or a full model id to change it. The other sessions default to
  * Claude Code's own.
  */
-export const DEFAULT_LEAD_LAUNCH: Required<LaunchConfig> = { model: 'opus', effort: 'xhigh' };
+export const DEFAULT_LEAD_LAUNCH: Required<Pick<LaunchConfig, 'model' | 'effort'>> = { model: 'opus', effort: 'xhigh' };

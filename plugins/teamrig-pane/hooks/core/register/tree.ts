@@ -4,19 +4,30 @@ import type { TimeZone } from '../core/zone.ts';
 import { taskNumber, type Task } from './fold.ts';
 import { ACTIVE_STATUSES } from './model.ts';
 import { isFinished, isReady, waitContext, type PersonWait, type PersonWaitKind, type WaitContext } from './waits.ts';
+import { currentWeek } from './week.ts';
 
 /**
  * The dependency tree of one register, from the links its tasks already have: a task needs the tasks it is planned
  * after (`after`) and the tasks it waits on (`--waits task:`), and is needed by every active task that names it so.
- * A need is finished once its task is done or dropped, or retired from the read (waits.ts). Read side only, with no
- * `node:` import: `show --tree`, `list`, `check`, `start`, the meeting agenda, the plan, the live-tasks note and the
- * status pane read it, and the register's write policy refuses a link that would close a loop with {@link needPath}.
+ * A need is finished once its task is done or dropped, or retired from every register (waits.ts); a need another
+ * register of the team tree holds is read there ({@link TasksElsewhere}, one numbering across the tree). Read side
+ * only, with no `node:` import: `show --tree`, `list`, `check`, `start`, the meeting agenda, the plan, the live-tasks
+ * note and the status pane read it, and the register's write policy refuses a link that would close a loop with
+ * {@link needPath}.
  */
 
 /** What a task needs first: the tasks it is planned after, then the tasks it waits on, each once. */
 export function needsOf(task: Pick<Task, 'after' | 'waits'>): string[] {
   const waitedOn = task.waits.flatMap((reason) => (reason.kind === 'task' ? [reason.id] : []));
   return [...new Set([...task.after, ...waitedOn])];
+}
+
+/**
+ * True when an active task of `tasks` needs an id they lack ({@link needsOf}), which another register of the team tree
+ * may hold; a read with none has no need to read the tree's other registers.
+ */
+export function needsElsewhere(tasks: ReadonlyMap<string, Pick<Task, 'status' | 'after' | 'waits'>>): boolean {
+  return [...tasks.values()].some((task) => ACTIVE_STATUSES.includes(task.status) && needsOf(task).some((id) => !tasks.has(id)));
 }
 
 /**
@@ -48,25 +59,86 @@ export function loopFix(id: string, other: string, owner: string, byWait: boolea
   return `make the step ${id} needs from ${other} its own task: ${command}`;
 }
 
-/** A task's place in plan order: its priority, its deadline in ms (undefined: none) and its id. */
+/** The best of the active tasks that need a task: the first by number of the best priority, and how many need it. */
+export interface Unblocks {
+  readonly first: string;
+  readonly priority: number;
+  readonly count: number;
+}
+
+/**
+ * A task's place in plan order: its priority, its deadline in ms (undefined: none) and its id; a tree's place
+ * ({@link TaskTree.placeOf}) adds the rest of {@link PLAN_KEYS}. A place built without a tree leaves those out, so
+ * they tie and it falls back to priority, deadline and age.
+ */
 export interface PlanPlace {
   readonly id: string;
   readonly priority: number;
   readonly at: number | undefined;
+  /** Pinned to the top of its owner's list by one of the owner's leaders. */
+  readonly pinned?: boolean;
+  /** In progress. */
+  readonly started?: boolean;
+  /** The best needer; undefined when no active task needs it. */
+  readonly unblocks?: Unblocks | undefined;
+  /** Tagged with the week plan in force. */
+  readonly inWeek?: boolean;
+  /** Its size in percent of the weekly limit; null when not sized. */
+  readonly size?: number | null;
 }
 
-/** Plan order: priority, then deadline (undated last), then id. */
+/**
+ * The keys of plan order, in order: the first one on which two tasks differ puts one ahead. No hand-set score, each
+ * key a field the task has: `pinned` (a task the owner's leader pinned, above every other key); `priority` (p1 first); `started` (an in-progress task stays on top within its
+ * priority); `due` (effective due, the earliest first, undated last); `unblocks` (the best priority among the
+ * active tasks that need it, then the most of them; none last); `week` (in the week plan in force first); `size`
+ * (the smallest first, unsized last); `age` (the lowest number first).
+ */
+export const PLAN_KEYS = ['pinned', 'priority', 'started', 'due', 'unblocks', 'week', 'size', 'age'] as const;
+
+/** One of {@link PLAN_KEYS}. */
+export type PlanKey = (typeof PLAN_KEYS)[number];
+
+const BY_KEY: Readonly<Record<PlanKey, (a: PlanPlace, b: PlanPlace) => number>> = {
+  pinned: (a, b) => trueFirst(a.pinned, b.pinned),
+  priority: (a, b) => a.priority - b.priority,
+  started: (a, b) => trueFirst(a.started, b.started),
+  due: (a, b) => lowFirst(a.at, b.at),
+  unblocks: (a, b) => lowFirst(a.unblocks?.priority, b.unblocks?.priority) || (b.unblocks?.count ?? 0) - (a.unblocks?.count ?? 0),
+  week: (a, b) => trueFirst(a.inWeek, b.inWeek),
+  size: (a, b) => lowFirst(a.size ?? undefined, b.size ?? undefined),
+  age: (a, b) => taskNumber(a.id) - taskNumber(b.id),
+};
+
+/** The first of {@link PLAN_KEYS} on which the two places differ; undefined when they tie on every one. */
+export function decidingKey(a: PlanPlace, b: PlanPlace): PlanKey | undefined {
+  return PLAN_KEYS.find((key) => BY_KEY[key](a, b) !== 0);
+}
+
+/** Plan order: by the first of {@link PLAN_KEYS} on which the places differ. */
 export function planOrder(a: PlanPlace, b: PlanPlace): number {
-  const dueA = a.at ?? Number.POSITIVE_INFINITY;
-  const dueB = b.at ?? Number.POSITIVE_INFINITY;
-  return a.priority - b.priority || (dueA === dueB ? 0 : dueA < dueB ? -1 : 1) || taskNumber(a.id) - taskNumber(b.id);
+  const key = decidingKey(a, b);
+  return key === undefined ? 0 : BY_KEY[key](a, b);
+}
+
+/** The lower number first, a missing one last. */
+function lowFirst(a: number | undefined, b: number | undefined): number {
+  const x = a ?? Number.POSITIVE_INFINITY;
+  const y = b ?? Number.POSITIVE_INFINITY;
+  return x === y ? 0 : x < y ? -1 : 1;
+}
+
+/** A true flag first. */
+function trueFirst(a: boolean | undefined, b: boolean | undefined): number {
+  return Number(b === true) - Number(a === true);
 }
 
 /**
  * The fields of a task the tree reads. A reader that keeps rows of its own (a status pane) builds a tree from them as
- * from teamrig's folded tasks, and gets its own rows back from it.
+ * from teamrig's folded tasks, and gets its own rows back from it; a row without `week`, `size` or `pin` counts as
+ * untagged, unsized and unpinned.
  */
-export type TreeTask = Pick<Task, 'id' | 'status' | 'owner' | 'priority' | 'due' | 'after' | 'waits'>;
+export type TreeTask = Pick<Task, 'id' | 'status' | 'owner' | 'priority' | 'due' | 'after' | 'waits'> & Partial<Pick<Task, 'week' | 'size' | 'pin'>>;
 
 /** The date a task works to: its own due, or an earlier one of a task that needs it. */
 export interface EffectiveDue {
@@ -81,11 +153,53 @@ export interface EffectiveDue {
 /**
  * Who moves first so a task can finish, on which task: the owner's work (`work`), the lead's or the owner's
  * decision or approval, or the owner again once a time passed (`time`, with `at`). `behind` is an in-progress task
- * of the same session with a higher priority than the move's task, which it works first.
+ * of the same session with a higher priority than the move's task, which it works first. `elsewhere`: the move's
+ * task needs `need`, an unfinished task of another register of the team tree, so `who`, its owner on `team`, moves.
  */
 export type NextMove<T extends TreeTask = Task> =
   | { readonly kind: 'work' | PersonWaitKind; readonly who: string; readonly task: T; readonly behind: T | undefined }
-  | { readonly kind: 'time'; readonly who: string; readonly task: T; readonly at: string; readonly behind: T | undefined };
+  | { readonly kind: 'time'; readonly who: string; readonly task: T; readonly at: string; readonly behind: T | undefined }
+  | { readonly kind: 'elsewhere'; readonly who: string; readonly team: string; readonly need: Task; readonly task: T; readonly behind: undefined };
+
+/** A task another register of the team tree holds (one numbering across the tree, T1139), with that register's team. */
+export interface TaskElsewhere {
+  readonly team: string;
+  readonly task: Task;
+}
+
+/** The tasks of a team tree's other registers by id, as one register's read asks them for an id it lacks. */
+export type TasksElsewhere = ReadonlyMap<string, TaskElsewhere>;
+
+/** What a register outside a team tree reads elsewhere: nothing. */
+export const NO_TASKS_ELSEWHERE: TasksElsewhere = new Map();
+
+/** One register's tasks and the tasks it reads elsewhere: what a {@link TaskTree} of a team tree is built from. */
+export interface TreeRead {
+  readonly tasks: ReadonlyMap<string, Task>;
+  readonly elsewhere: TasksElsewhere;
+}
+
+/**
+ * The team tree as team `holder` reads it, from a read of team `reader`'s register (its `own` tasks and what it read
+ * `elsewhere`): the holder's tasks, and every other register's, the reader's own among them, as the holder's
+ * elsewhere; so another team's task is judged as that team's sessions judge it. The reader's own task wins an id
+ * another register holds too, which only a register numbered before its tree can have.
+ */
+export function readAs(holder: string, reader: string, own: Iterable<Task>, elsewhere: TasksElsewhere): TreeRead {
+  const tasks = new Map<string, Task>();
+  const others = new Map<string, TaskElsewhere>();
+  for (const task of own) {
+    others.set(task.id, { team: reader, task });
+  }
+  for (const [id, away] of elsewhere) {
+    if (away.team === holder) {
+      tasks.set(id, away.task);
+    } else if (!others.has(id)) {
+      others.set(id, away);
+    }
+  }
+  return { tasks, elsewhere: others };
+}
 
 /** Another session's active task that waits on a session: on its unfinished tasks, or on its decision or approval. */
 export interface WaitingOnYou<T extends TreeTask = Task> {
@@ -105,15 +219,31 @@ export class TaskTree<T extends TreeTask = Task> {
   readonly context: WaitContext;
   /** The team's zone: a stored due day is a day of it, and rows show times in it. */
   readonly zone: TimeZone;
+  /** The week plan in force, whose tasks plan order puts first after priority, due and need; null: none. */
+  readonly week: string | null;
   private readonly tasks: ReadonlyMap<string, T>;
+  /** The tasks of the team tree's other registers, for a need this read lacks. */
+  private readonly elsewhere: TasksElsewhere;
   /** Per id, the active tasks that need it, by number. */
   private readonly needers: ReadonlyMap<string, readonly T[]>;
   private readonly dues = new Map<string, EffectiveDue | undefined>();
 
-  constructor(tasks: ReadonlyMap<string, T>, now: Date, zone: TimeZone) {
+  /**
+   * `week` defaults to the newest week tag of `tasks` started by `now`; a register read passes the one it knows.
+   * `elsewhere` holds the tasks of the team tree's other registers, which a need the read lacks is read from.
+   */
+  constructor(
+    tasks: ReadonlyMap<string, T>,
+    now: Date,
+    zone: TimeZone,
+    week: string | null = currentWeek(tasks.values(), now, zone),
+    elsewhere: TasksElsewhere = NO_TASKS_ELSEWHERE,
+  ) {
     this.tasks = tasks;
+    this.elsewhere = elsewhere;
     this.zone = zone;
-    this.context = waitContext(tasks, now, zone);
+    this.week = week;
+    this.context = waitContext(tasks, now, zone, elsewhere);
     const needers = new Map<string, T[]>();
     for (const task of [...tasks.values()].filter(isActive).sort((a, b) => taskNumber(a.id) - taskNumber(b.id))) {
       for (const id of needsOf(task)) {
@@ -128,7 +258,15 @@ export class TaskTree<T extends TreeTask = Task> {
     return this.tasks.get(id);
   }
 
-  /** The ids the task needs first ({@link needsOf}); a need may be missing from the read: retired, so finished. */
+  /** The task another register of the team tree holds under an id the read lacks; undefined when the read has it or none does. */
+  elsewhereOf(id: string): TaskElsewhere | undefined {
+    return this.tasks.has(id) ? undefined : this.elsewhere.get(id);
+  }
+
+  /**
+   * The ids the task needs first ({@link needsOf}); a need may be missing from the read: another register of the team
+   * tree holds it, or it was retired, so finished.
+   */
   needs(id: string): string[] {
     const task = this.tasks.get(id);
     return task === undefined ? [] : needsOf(task);
@@ -137,6 +275,17 @@ export class TaskTree<T extends TreeTask = Task> {
   /** The active tasks that need it, by number. */
   neededBy(id: string): readonly T[] {
     return this.needers.get(id) ?? [];
+  }
+
+  /**
+   * The best of the active tasks that need an active task ({@link Unblocks}); undefined for a finished task, one the
+   * read lacks, or one nothing active needs.
+   */
+  unblocks(id: string): Unblocks | undefined {
+    const needers = this.isActiveId(id) ? this.neededBy(id) : [];
+    const best = Math.min(...needers.map((needer) => needer.priority));
+    const first = needers.find((needer) => needer.priority === best);
+    return first === undefined ? undefined : { first: first.id, priority: best, count: needers.length };
   }
 
   /**
@@ -175,27 +324,37 @@ export class TaskTree<T extends TreeTask = Task> {
   }
 
   /**
-   * The task's place in plan order on its effective due, for sorting rows of several registers together, each
-   * placed by its own register's tree ({@link planOrder}).
+   * The task's place in plan order on its effective due, what it unblocks and this tree's week, for sorting rows of
+   * several registers together, each placed by its own register's tree ({@link planOrder}).
    */
   placeOf(task: TreeTask): PlanPlace {
-    return { id: task.id, priority: task.priority, at: this.dueTime(task) };
+    return {
+      id: task.id,
+      pinned: task.pin !== undefined && task.pin !== null,
+      priority: task.priority,
+      at: this.dueTime(task),
+      started: task.status === 'in-progress',
+      unblocks: this.unblocks(task.id),
+      inWeek: this.week !== null && task.week === this.week,
+      size: task.size ?? null,
+    };
   }
 
-  /** Plan order on effective dues: priority, then effective due (undated last), then id. */
+  /** Plan order ({@link PLAN_KEYS}) on effective dues, what each task unblocks and this tree's week. */
   byPlanOrder(a: TreeTask, b: TreeTask): number {
     return planOrder(this.placeOf(a), this.placeOf(b));
   }
 
-  /** The tasks in plan order on effective dues. */
+  /** The tasks in plan order ({@link byPlanOrder}). */
   inPlanOrder<U extends TreeTask>(tasks: Iterable<U>): U[] {
     return [...tasks].sort((a, b) => this.byPlanOrder(a, b));
   }
 
   /**
    * The first move toward finishing the task: down its unfinished needs in plan order to one that needs nothing
-   * unfinished, whose pending decision or approval (the lead's or the owner's) comes first, then a time still to
-   * come, else its owner's work. Undefined for a finished task, or when every unfinished need runs into a loop.
+   * unfinished in this read, whose unfinished need another register of the team tree holds comes first (its owner
+   * there moves), then its pending decision or approval (the lead's or the owner's), then a time still to come, else
+   * its owner's work. Undefined for a finished task, or when every unfinished need runs into a loop.
    */
   nextMove(id: string): NextMove<T> | undefined {
     return this.isActiveId(id) ? this.moveFrom(id, new Set()) : undefined;
@@ -257,6 +416,13 @@ export class TaskTree<T extends TreeTask = Task> {
     });
   }
 
+  /** The task's first unfinished need, in {@link needsOf} order, that this read lacks and another register holds. */
+  private unfinishedElsewhere(task: T): TaskElsewhere | undefined {
+    return needsOf(task)
+      .flatMap((id) => this.elsewhereOf(id) ?? [])
+      .find((away) => !isFinished(away.task.id, this.context));
+  }
+
   private moveFrom(id: string, seen: Set<string>): NextMove<T> | undefined {
     const task = this.tasks.get(id);
     if (task === undefined) {
@@ -272,6 +438,10 @@ export class TaskTree<T extends TreeTask = Task> {
         }
       }
       return undefined;
+    }
+    const away = this.unfinishedElsewhere(task);
+    if (away !== undefined) {
+      return { kind: 'elsewhere', who: away.task.owner, team: away.team, need: away.task, task, behind: undefined };
     }
     const pending = task.waits.filter((reason) => !isReady(reason, this.context));
     const person = pending.find((reason): reason is PersonWait => reason.kind === 'decision' || reason.kind === 'approval');
