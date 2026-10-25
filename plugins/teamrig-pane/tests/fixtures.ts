@@ -20,6 +20,20 @@ export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work'> = {
 export const JERUSALEM = zoneNamed('Asia/Jerusalem')
 
 /**
+ * An inbox file (hooks/inbox.ts) read up to INBOX_UNREAD_FROM: on NOW, a read line past the last 24 hours, a read line
+ * and a line with no sender inside them, an unread line of the day before and an unread line of the last hour.
+ */
+export const INBOX_LINES: readonly string[] = [
+  '- 2026-10-12 09:00 lead: read a day ago',
+  '- 2026-10-13 10:00 docs: read today',
+  '- 2026-10-13 12:30 a note with no sender',
+  '- 2026-10-12 11:00 qa: unread since yesterday',
+  '- 2026-10-13 13:00 lead: ship T772: the Inbox view',
+]
+/** The index of INBOX_LINES' first line past the read mark. */
+export const INBOX_UNREAD_FROM = 3
+
+/**
  * The tree of `tasks` at `now`, for a team whose config sets `notPickedUpAfterHours` (teamrig's default when unset)
  * and the zone named `timeZone` (UTC unless given), with `leads` (none read unless given).
  */
