@@ -97,6 +97,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | `t` | The Tasks view |
 | `d` | The Changes view |
 | `g` | The Log view: each conversation of the team's sessions, titled by its task (see [The Log view](#the-log-view)) |
+| `e` | The Team tab: the tree of teams the session's team is in, each lead over the sessions it leads; a press on a row opens or closes what lies under it |
 | `m` | Tasks: this session's area (`mine`) |
 | `a` | Tasks: every owner (`all`) |
 | `o` | mine: only the tasks done today (the status bar's `done today`); again shows every task |

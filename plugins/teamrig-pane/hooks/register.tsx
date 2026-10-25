@@ -16,9 +16,11 @@
 // row, under it in every state and width (but a project teamrig is not set up for, where the setup shows alone)
 // and the whole strip, flips the body between the tasks, the Changes view (the
 // files changed in the git repos the session works in and their lines, changes.ts, counted as Δn on
-// the switch and in the tab title) and the Log view: each team session's prompts and replies of the hours teamrig
+// the switch and in the tab title), the Log view: each team session's prompts and replies of the hours teamrig
 // keeps them (the team config's turnLog.keepHours) from the turn logs it writes (turn-log.ts), a press on a session
-// opening its page at its newest lines, back (b) returning to the list. The band above the prompt shows the session's
+// opening its page at its newest lines, back (b) returning to the list, and the Team tab: the tree of teams the
+// session's team is in, each team's lead over the sessions it leads and its retired ones (team.ts, team-source.ts), a
+// press on a row opening or closing what lies under it. The band above the prompt shows the session's
 // name and the task it works on now
 // (banner.ts), a press opening its card, whether the pane is open, minimized or never drawn. Reads
 // files and runs git (status, diff, grep; no model calls); /teamrig-pane steers it.
@@ -45,6 +47,7 @@ import type {
   TaskDetail,
   TaskRow,
   TeamSettings,
+  TeamView,
   ViewMode,
 } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
@@ -72,6 +75,8 @@ import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 import { LiveDiffs, NO_DIFFS } from './diff'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { logListBlocks, logPageBlocks } from './log-rows'
+import { LiveTeam } from './team-source'
+import { teamBlocks, toggledWith } from './team-rows'
 import { SetupWatch } from './setup'
 import { setupBlocks } from './setup-rows'
 import {
@@ -211,6 +216,14 @@ const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, fals
 /** Where the docked body's window is to stand (body-scroll.ts), kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when BodyScroll or ScrollTarget changes shape. */
 const SCROLL_SHAPE = 'scroll-v1'
 const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, AT_TOP, { shape: SCROLL_SHAPE })
+/** The Team tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
+const TEAM_SHAPE = 'team-v1'
+const TEAM_READING: TeamView = { kind: 'reading' }
+const NO_TEAM_TREE: TeamView = { kind: 'no-team' }
+const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, TEAM_READING, { shape: TEAM_SHAPE })
+const NOTHING_TOGGLED: readonly string[] = []
+/** The Team tab's nodes the person opened or closed against their default (team.ts teamRows), by key: a press flips one. */
+const teamToggled = atom({ plugin: 'teamrig-pane', key: 'teamToggled' } as const, NOTHING_TOGGLED)
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -393,6 +406,8 @@ export const register: Register = on => {
   let diffing: LiveDiffs | null = null
   /** Reads the Log view's list or page again while it shows; set when the session starts. */
   let logging: LiveLog | null = null
+  /** Reads the Team tab's tree again while it shows; set when the session starts, null with no team. */
+  let teaming: LiveTeam | null = null
   /** Looks for the register again while the project is not set up for teamrig; set when the session starts in one. */
   let watch: SetupWatch | null = null
   /** The tab title last asked for: `Tasks · Δn` (changes-rows.ts paneTitle). */
@@ -415,6 +430,7 @@ export const register: Register = on => {
     live?.stop()
     tracked?.stop()
     logging?.stop()
+    teaming?.stop()
     watch?.stop()
     // A filter is a look for the moment, never kept: a new session, or a hot reload, lists every task again.
     await update($, barFilter, () => null)
@@ -447,13 +463,20 @@ export const register: Register = on => {
       list: path => unlessMissing(() => $.fs.list(path), () => $.fs.exists(path), null),
       read: path => $.fs.read(path),
     }
+    // The folders right under a folder: the kit home's teams, for a project teamrig is not set up for and for the Team
+    // tab. A missing folder lists none (source.ts unlessMissing).
+    const folders = async (path: string): Promise<string[]> => {
+      const entries = await unlessMissing(() => $.fs.list(path), () => $.fs.exists(path), null)
+      return entries === null ? [] : entries.filter(entry => entry.kind === 'dir').map(entry => entry.name)
+    }
     /**
-     * Reads the register `places` names, in place of any read before: its tasks, a task's refs and goals, and the
-     * Log view's turn logs. Places with a problem show it in place of the tasks.
+     * Reads the register `places` names, in place of any read before: its tasks, a task's refs and goals, the Log
+     * view's turn logs and the Team tab's team folders. Places with a problem show it in place of the tasks.
      */
     const bind = async (places: Exclude<Places, { kind: 'unset' }>): Promise<void> => {
       live?.stop()
       logging?.stop()
+      teaming?.stop()
       const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } =
         places.kind === 'found' ? { paths: registerPaths(places.dirs), settings: places.settings } : { missing: places.problem }
       team = places.kind === 'found' && places.team !== null ? { files, paths: places.team } : null
@@ -506,9 +529,23 @@ export const register: Register = on => {
         await update($, logList, () => (team === null ? NO_TEAM_LOG : NO_CONFIG_LOG))
         await update($, logPage, () => AT_LOG_LIST)
       }
+      const teamLive =
+        team === null
+          ? null
+          : new LiveTeam(files, team.paths, {
+              folders,
+              tasks: async () => (await read($, snapshot)).tasks,
+              isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
+              publish: async tree => {
+                await update($, teamTree, () => tree)
+              },
+            })
+      teaming = teamLive
+      if (teamLive === null) await update($, teamTree, () => NO_TEAM_TREE)
       await started.refresh()
       started.startTimers((ms, fn) => $.clock.every(ms, fn))
       logLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
+      teamLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
     }
     sizer = new PaneSizer({
       load: () => $.store.get(SIZE_KEY),
@@ -551,11 +588,6 @@ export const register: Register = on => {
       knownSeed(seed, kept),
     )
     tracked = changesLive
-    // The kit home's teams, for a project teamrig is not set up for: a missing folder lists none (source.ts unlessMissing).
-    const folders = async (path: string): Promise<string[]> => {
-      const entries = await unlessMissing(() => $.fs.list(path), () => $.fs.exists(path), null)
-      return entries === null ? [] : entries.filter(entry => entry.kind === 'dir').map(entry => entry.name)
-    }
     const findHere = () => findPlaces({ env, files, folders, home: home ?? null, cwd: e.cwd, machineZone })
     const places = await findHere()
     if (places.kind === 'unset') {
@@ -566,8 +598,10 @@ export const register: Register = on => {
       details = null
       refFiles = null
       logging = null
+      teaming = null
       await update($, logList, () => NO_TEAM_LOG)
       await update($, logPage, () => AT_LOG_LIST)
+      await update($, teamTree, () => NO_TEAM_TREE)
       const watching = new SetupWatch(
         {
           find: findHere,
@@ -778,7 +812,9 @@ export const register: Register = on => {
               ? await tasksBlocks()
               : current === 'changes'
                 ? changesBlocks(changed, isGitMissing(missing), await read($, diffs))
-                : logShown === null
+                : current === 'team'
+                  ? teamBlocks(await read($, teamTree), await read($, teamToggled), clockOf(snap).zone)
+                  : logShown === null
                   ? logListBlocks(await read($, logList), clockOf(snap), snap)
                   : logPageBlocks(logShown, clockOf(snap), await read($, logList), snap)
         const blocks = [...requirementBlocks(missing), ...viewBlocks]
@@ -909,12 +945,20 @@ export const register: Register = on => {
       )
     }
     // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
-    // conversation's Log page (`reads`), or, inline, a Changes file's diff (`expands`), else words alone.
+    // conversation's Log page (`reads`), opens or closes a Team tab node (`folds`), or, inline, a Changes file's diff
+    // (`expands`), else words alone.
     const headOf = (drawn: Drawn) => {
       const id = drawn.toggle
       const opens = drawn.opens
       const reads = drawn.reads
+      const folds = drawn.folds
       const expands = drawn.expands
+      if (folds !== undefined)
+        return (
+          <Button key={drawn.key} plain onPress={() => void update($, teamToggled, toggled => toggledWith(toggled, folds))}>
+            {drawText(drawn.spans, drawn.wrap)}
+          </Button>
+        )
       if (reads !== undefined)
         return (
           <Button key={drawn.key} plain onPress={() => void openLog(reads)}>
@@ -1067,17 +1111,18 @@ export const register: Register = on => {
     /** Words as a header item. */
     const worded = (node: JSX.Element, text: string): HeaderItem => ({ node, cells: cells(text) })
 
-    // The switch: under the title in every state but setup, so another view is always one press (or t / d / g) away, its
-    // buttons wrapping under each other in a dock too narrow for both. Minimized, it is the whole
-    // pane, one row, and a press on either button opens the pane in full on that view.
+    // The switch: under the title in every state but setup, so another view is always one press (or t / d / g / e) away,
+    // its buttons wrapping under each other in a dock too narrow for all of them. Minimized, it is the whole
+    // pane, one row, and a press on any button opens the pane in full on that view.
     // The Tasks button shows the list, from a page too, scrolled back to where the page was opened from; the Log
-    // button shows the sessions, from a session's page too.
+    // button shows the sessions, from a session's page too; the Team button reads the team tree at once.
     const switchTo = async (target: PaneView) => {
       await update($, view, () => target)
       await sizer?.set('open')
       if (target === 'tasks') await go($, current => reset(current, true))
       if (target === 'changes') await tracked?.refresh()
       if (target === 'log') await logging?.close()
+      if (target === 'team') await teaming?.refresh()
     }
     const changesWords = changesLabel(changed)
     const switchItems = [
@@ -1100,6 +1145,11 @@ export const register: Register = on => {
         plain: false,
         hotkey: 'g',
       }),
+      pressed(<Button key="team" label="Team" hotkey="e" variant={current === 'team' ? 'primary' : 'secondary'} onPress={() => void switchTo('team')} />, {
+        label: 'Team',
+        plain: false,
+        hotkey: 'e',
+      }),
       ...(isMinimized
         ? [
             worded(
@@ -1117,7 +1167,7 @@ export const register: Register = on => {
       return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>
     }
     // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
-    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, s, m, a, h) answers. The minimized strip
+    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, e, s, m, a, h) answers. The minimized strip
     // above keeps its switch, so a press on it still opens the pane, onto the setup.
     if (setupShown !== null) return drawPane(titleRow === null ? [] : [titleRow])
 

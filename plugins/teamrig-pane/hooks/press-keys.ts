@@ -41,9 +41,12 @@ export function pieceKey(piece: PressPiece, from: string, partKey: string, i: nu
   }
 }
 
-/** True when an element's head is a press: one that opens its task's card or page, a session's Log page, or a file's diff. */
+/**
+ * True when an element's head is a press: one that opens its task's card or page, a session's Log page, a file's diff,
+ * or opens or closes a Team tab node.
+ */
 export function headPresses(drawn: Drawn): boolean {
-  return drawn.toggle !== null || drawn.opens !== undefined || drawn.reads !== undefined || drawn.expands !== undefined
+  return drawn.toggle !== null || drawn.opens !== undefined || drawn.reads !== undefined || drawn.folds !== undefined || drawn.expands !== undefined
 }
 
 /** A card part's presses' keys, in the order drawn: a row press's own, a line's pieces' but its words. */
