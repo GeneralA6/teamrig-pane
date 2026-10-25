@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { INBOX_WINDOW_HOURS, inboxItemOf, inboxItems, inboxKey, inboxShown } from '../hooks/inbox'
-import { NOW } from './fixtures'
+import { INBOX_WINDOW_HOURS, inboxDrawn, inboxItemOf, inboxItems, inboxKey, inboxShown } from '../hooks/inbox'
+import { INBOX_LINES, INBOX_UNREAD_FROM, NOW } from './fixtures'
 
 const HOUR = 3_600_000
 
@@ -54,5 +54,12 @@ describe('inbox', () => {
     expect(inboxShown(items, NOW).length).toBe(2)
     expect(inboxShown(items, Date.UTC(2026, 9, 14, 9, 0)).length).toBe(2)
     expect(inboxShown(items, Date.UTC(2026, 9, 14, 9, 0) + HOUR).map(item => item.key)).toEqual(['inbox:1'])
+  })
+
+  test('the view draws the lines still shown the last written first, and leaves the items it was given as they were', () => {
+    const items = inboxItems(INBOX_LINES, INBOX_UNREAD_FROM, NOW)
+    expect(inboxDrawn(items, NOW).map(item => item.key)).toEqual(['inbox:4', 'inbox:3', 'inbox:2', 'inbox:1'])
+    expect(inboxDrawn(items, NOW + 24 * HOUR).map(item => item.key)).toEqual(['inbox:4', 'inbox:3'])
+    expect(items.map(item => item.key)).toEqual(['inbox:1', 'inbox:2', 'inbox:3', 'inbox:4'])
   })
 })

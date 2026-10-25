@@ -45,3 +45,8 @@ export function inboxShown(items: readonly InboxItem[], now: number): InboxItem[
   const since = now - INBOX_WINDOW_HOURS * HOUR_MS
   return items.filter(item => item.unread || item.at >= since)
 }
+
+/** The items the view draws at `now`, the last written first: those still shown (inboxShown), the file's order reversed. */
+export function inboxDrawn(items: readonly InboxItem[], now: number): InboxItem[] {
+  return inboxShown(items, now).reverse()
+}

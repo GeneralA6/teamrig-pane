@@ -79,7 +79,8 @@ export const SEPARATOR: Span = { text: ' · ', dim: true }
 export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', waiting: '■', done: '✓', dropped: '✗' }
 export const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', verifying: 'success', waiting: 'error', done: 'success' }
 
-const NO_AREA = `No area for this session yet: /rename the tab to its session's id or name, run \`inbox read --session <id>\`, or /${COMMAND} <session> to pin one.`
+/** What the Tasks and Inbox views show while the session has no area: how to give it one. */
+export const NO_AREA = `No area for this session yet: /rename the tab to its session's id or name, run \`inbox read --session <id>\`, or /${COMMAND} <session> to pin one.`
 
 /** A block of one row, its key the block's. */
 export function single(key: string, spans: Span[], hang?: Span): Block {
