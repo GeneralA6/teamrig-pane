@@ -69,7 +69,9 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   a click on a file opens its diff under it, `+` lines green and `-` lines red.
 - **Log:** each session's prompts and replies of the last 24 h, from the turn log teamrig writes, so a `/clear` or a
   compaction never takes away what a tab showed: the team's sessions, the newest change first, each with its newest
-  prompt; a press opens one, its lines oldest first, kept current as it writes, and `b` goes back to the list.
+  prompt; a press opens one, its lines oldest first, kept current as it writes, each split by who spoke (owner,
+  Claude, another session, a subagent, the harness's dim notices) with its markdown drawn, and `b` goes back to the
+  list.
   Press the switch, or `t`, `d` and `g` while the pane holds the keyboard.
 
 ## How it reads teamrig

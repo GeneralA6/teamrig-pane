@@ -337,9 +337,13 @@ folder it could not read, or no session in the window.
 
 A press on a session (a click, or Enter on it) opens its page under a `back` button (`b`): a head with the session and
 how many lines it shows, then its lines oldest first, so the newest is at the end, where the page opens. Each prompt and
-reply has a head line (`prompt · 20:05 IDT`, `reply · 20:06 IDT`, a time of an earlier day with its day) over its text, a long
-reply wrapped under its own indent; teamrig keeps a text's last 64,000 characters, and a cut one says `cut, its end
-kept`. A `/clear` is a dim rule, `── 20:07 IDT · context cleared (/clear) ──`. The page holds the newest 256 KiB of text and
+reply is split by who spoke, each part a head line over its words: `owner · 20:05 IDT` for the words typed at the tab,
+`Claude · 20:06 IDT` for a reply, `message from <session>` for another session's message and `subagent report` for a
+subagent's (a time of an earlier day with its day). The harness's own words in a prompt, a background command's or a
+monitor's notice and a hook's reminder, are dim lines led by their time, without the tags, ids and file paths around
+them. Markdown is drawn, never shown as its marks: bold, code and links, headings, bullet and numbered items wrapped
+under their words, quotes and code blocks behind a dim bar, rules and tables. teamrig keeps a text's last 64,000
+characters, and a cut one says `cut, its end kept`. A `/clear` is a dim rule, `── 20:07 IDT · context cleared (/clear) ──`. The page holds the newest 256 KiB of text and
 says when it left older lines out; a file it could not read is named in a `Not all read` line, and the rest still
 shows.
 
