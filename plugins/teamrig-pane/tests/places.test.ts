@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { findPlaces, foldersUp, type Places, type PlacesEnv, type PlacesInput, type TeamFiles } from '../hooks/places'
+import { findPlaces, foldersUp, teamIds, teamStateDir, type Places, type PlacesEnv, type PlacesInput, type TeamFiles } from '../hooks/places'
 import { TEAM_SETTINGS } from './fixtures'
+import { configOf } from './team-fixtures'
 
 const KIT = 'C:/Homes/a/.teamrig'
 const SETTINGS = `${KIT}/pane.json`
@@ -15,7 +16,7 @@ const ALL_DIRS_ENV = { TEAMRIG_PANE_TASKS_DIR: 'D:/t', TEAMRIG_PANE_INBOX_DIR: '
  * The files naming the web team's sessions: its config and, in its state folder, its rename log. With no config file
  * teamrig refuses the team and writes no turn log, so it has none.
  */
-const WEB_FILES: TeamFiles = { team: 'web', dir: `${KIT}/teams/web`, config: CONFIG, renames: `${STATE}/renames.jsonl`, turnLog: null }
+const WEB_FILES: TeamFiles = { team: 'web', dir: `${KIT}/teams/web`, teamsDir: `${KIT}/teams`, config: CONFIG, renames: `${STATE}/renames.jsonl`, turnLog: null }
 /** The web team's files with a config file: its turn log, kept the config's turnLog.keepHours, teamrig's 24 by default. */
 const WEB_LOGGED: TeamFiles = { ...WEB_FILES, turnLog: { dir: `${STATE}/turn-log`, keepHours: 24 } }
 /** The web team's folders where teamrig keeps them with no config file. */
@@ -178,7 +179,7 @@ describe('places', () => {
     expect(found).toEqual({
       kind: 'found',
       dirs: { tasksDir: `${KIT}/teams/ops/state`, inboxDir: `${KIT}/teams/ops/state/inbox` },
-      team: { team: 'ops', dir: `${KIT}/teams/ops`, config: `${KIT}/teams/ops/config.json`, renames: `${KIT}/teams/ops/state/renames.jsonl`, turnLog: null },
+      team: { team: 'ops', dir: `${KIT}/teams/ops`, teamsDir: `${KIT}/teams`, config: `${KIT}/teams/ops/config.json`, renames: `${KIT}/teams/ops/state/renames.jsonl`, turnLog: null },
       settings: TEAM_SETTINGS,
       goalsDoc: null,
     })
@@ -325,5 +326,18 @@ describe('places', () => {
     expect(foldersUp('C:')).toEqual(['C:'])
     const { found } = await places({}, { '/.teamrig.json': json({ team: 'web' }) }, { cwd: '/srv/app' })
     expect(found).toEqual(TEAM_FOUND)
+  })
+
+  test("a team's state folder: its config's paths.state, a relative one under the team's folder, else state there", () => {
+    const home = `${KIT}/teams/web`
+    const withState = (state: string) => configOf({ team: { id: 'web' }, sessions: ['lead'], roles: { lead: 'lead' }, paths: { state } })
+    expect(teamStateDir(home, null)).toBe(STATE)
+    expect(teamStateDir(home, configOf({ team: { id: 'web' }, sessions: ['lead'], roles: { lead: 'lead' } }))).toBe(STATE)
+    expect(teamStateDir(home, withState('kept\\here'))).toBe(`${home}/kept/here`)
+    expect(teamStateDir(home, withState('D:\\kept'))).toBe('D:/kept')
+  })
+
+  test('the folder names that name a team, sorted; the rest left out', () => {
+    expect(teamIds(['web', 'Notes', '.git', 'api', 'a-1', '1st'])).toEqual(['a-1', 'api', 'web'])
   })
 })
