@@ -124,7 +124,7 @@ export function skippedText(paths: RegisterPaths, register: RegisterSnapshot, ma
 }
 
 /** One file's parsed content, refreshed when its stamp moves; a missing file reads as `empty`. */
-class WatchedFile<T> {
+export class WatchedFile<T> {
   private stampKey: string | null = null
   private value: T
   private readonly files: Files

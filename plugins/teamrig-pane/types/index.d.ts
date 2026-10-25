@@ -219,9 +219,20 @@ export type RequirementProblem =
 
 /**
  * What the pane's body shows, picked with the switch over it: the register's tasks, the session's git changes
- * (hooks/changes.ts), or the team sessions' prompts and replies (hooks/turn-log.ts).
+ * (hooks/changes.ts), the team sessions' prompts and replies (hooks/turn-log.ts), or the team tree (hooks/team.ts).
  */
-export type PaneView = 'tasks' | 'changes' | 'log'
+export type PaneView = 'tasks' | 'changes' | 'log' | 'team'
+
+/**
+ * The Team tab's tree (hooks/team-source.ts): the tree of teams that holds the pane's team (hooks/team.ts), its root
+ * null when the team's config is missing or teamrig refuses it; or that it is not read yet, that the pane found no
+ * team, or why the team folders could not be read.
+ */
+export type TeamView =
+  | { readonly kind: 'tree'; readonly root: import('../hooks/team').TeamTreeNode | null }
+  | { readonly kind: 'reading' }
+  | { readonly kind: 'no-team' }
+  | { readonly kind: 'failed'; readonly reason: string }
 
 /** What a turn log line records: a prompt the person sent, a reply the session showed, or a clear or compaction of its context. */
 export type TurnKind = 'prompt' | 'reply' | 'clear'
@@ -359,7 +370,7 @@ export type BodyScroll = { readonly seq: number; readonly to: ScrollTarget }
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page, the focus ring's landings, the setup and the body's window are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page, the focus ring's landings, the setup, the body's window and the team tree are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE, TEAM_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -391,6 +402,10 @@ declare module 'claude-code' {
       setup: Shaped<SetupView | null>
       /** Where the docked body's window is to stand: the last step that moved it (hooks/body-scroll.ts). */
       bodyScroll: Shaped<BodyScroll>
+      /** The team tree the Team tab shows (hooks/team-source.ts), as last read. */
+      teamTree: Shaped<TeamView>
+      /** The Team tab's nodes the person opened or closed against their default (hooks/team.ts teamRows), by key. */
+      teamToggled: readonly string[]
     }
   }
 }

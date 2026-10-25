@@ -54,9 +54,10 @@ export type Row = {
  * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press (a repo's files in
  * the Changes view are its header's card too, each a press of its own: changes-rows.ts); `opens` names
  * the task a press on it opens the page of (a search result, search-rows.ts); `reads` names the conversation a press
- * on it opens the Log page of (log-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.
+ * on it opens the Log page of (log-rows.ts); `folds` names the Team tab's node a press on it opens or closes
+ * (team-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.
  */
-export type Block = { key: string; rows: Row[]; toggle?: string; opens?: string; reads?: LogRead; card?: Row[]; opensSection?: boolean }
+export type Block = { key: string; rows: Row[]; toggle?: string; opens?: string; reads?: LogRead; folds?: string; card?: Row[]; opensSection?: boolean }
 
 export const NOTHING_EXPANDED: ExpandedTasks = {}
 /** Between a task's id and its title. */
