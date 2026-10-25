@@ -93,6 +93,9 @@ export type TeamTreeNode =
   | (NodeBase & { readonly kind: 'session'; readonly session: SessionFacts })
   | (NodeBase & { readonly kind: 'closed'; readonly team: string })
 
+/** A session's node, the kind of node the tab's search finds (team-search.ts). */
+export type SessionNode = Extract<TeamTreeNode, { kind: 'session' }>
+
 /** A team's own read, with its roster over every session ever on it: the config's sessions, then the retired ones. */
 type TeamPart = { readonly read: TeamRead; readonly roster: Roster; readonly closed: readonly RetireRecord[] }
 
@@ -196,4 +199,18 @@ export function teamRows(root: TeamTreeNode | null, toggled: ReadonlySet<string>
   }
   if (root !== null) visit(root, 0)
   return rows
+}
+
+/**
+ * The rows a search draws (team-search.ts), depth first: each node `shown` holds the key of, and every node over one,
+ * so a match shows under its team and its leaders whatever is open. A node is open over the rows drawn under it, and
+ * has nothing under it when none is.
+ */
+export function foundRows(root: TeamTreeNode | null, shown: ReadonlySet<string>): TeamRow[] {
+  const visit = (node: TeamTreeNode, depth: number): TeamRow[] => {
+    const below = node.children.flatMap(child => visit(child, depth + 1))
+    if (below.length > 0) return [{ node, depth, open: true }, ...below]
+    return shown.has(node.key) ? [{ node, depth, open: null }] : []
+  }
+  return root === null ? [] : visit(root, 0)
 }

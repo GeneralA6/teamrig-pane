@@ -4,15 +4,17 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TeamView } from '../types'
 import { TimeZone } from '../hooks/core/read/index'
-import type { Block } from '../hooks/rows'
-import { cardKey, teamBlocks, toggledWith } from '../hooks/team-rows'
+import { SEPARATOR, type Block } from '../hooks/rows'
+import { TEAM_NOTHING_FOUND, TEAM_SEARCH_HINT, cardKey, openedWith, teamBlocks, toggledWith } from '../hooks/team-rows'
+import { searchTeam } from '../hooks/team-search'
 import { HOUR, JERUSALEM, NOW } from './fixtures'
 import { ACME, TOOLS, configOf, hire, treeOf } from './team-fixtures'
 
 const UTC = TimeZone.UTC
 /** Each block as its key and its rows' words. */
 const words = (blocks: Block[]): [string, string[]][] => blocks.map(block => [block.key, block.rows.map(row => row.spans.map(span => span.text).join(''))])
-const TREE: TeamView = { kind: 'tree', root: treeOf([ACME, TOOLS], 'acme') }
+const ROOT = treeOf([ACME, TOOLS], 'acme')
+const TREE: TeamView = { kind: 'tree', root: ROOT }
 
 function blockOf(blocks: Block[], key: string): Block {
   const block = blocks.find(found => found.key === key)
@@ -125,9 +127,78 @@ describe('teamBlocks', () => {
   })
 })
 
+describe('teamBlocks with a search', () => {
+  const searched = (query: string, toggled: readonly string[] = []) => teamBlocks(TREE, toggled, UTC, { query, hits: searchTeam(ROOT, query) })
+
+  test('the count, then each session it names under its team and leaders, whatever is toggled, its matched words underlined', () => {
+    const blocks = searched('api', ['team:acme', 'session:acme/web'])
+    expect(words(blocks)).toEqual([
+      ['team-search-count', ['1 session matches']],
+      ['team:acme', ['▾ acme · 5 active · 1 closed']],
+      ['session:acme/lead', ['  ▾ ● lead  acme-lead · lead · leads 2']],
+      ['session:acme/web', ['    ▾ ● web  acme-web · leads 2']],
+      ['team-search:session:acme/api', ['        ● api  acme-backend · formerly acme-api']],
+    ])
+    const api = blockOf(blocks, 'team-search:session:acme/api').rows[0]?.spans ?? []
+    expect(api.filter(span => span.underline === true)).toEqual([
+      { text: 'api', bold: true, underline: true },
+      { text: 'api', dim: true, underline: true },
+    ])
+    expect(api.slice(-2)).toEqual([
+      { text: 'formerly acme-', dim: true },
+      { text: 'api', dim: true, underline: true },
+    ])
+    const web = blockOf(blocks, 'session:acme/web').rows[0]?.spans ?? []
+    expect(web.some(span => span.underline === true)).toBe(false)
+  })
+
+  test('its name and role words underlined where they matched; a query no one session holds every word of names none', () => {
+    expect(searched('reviewer backend').map(block => block.key)).toEqual(['team-search-none'])
+    const ops = blockOf(searched('reviewer'), 'team-search:session:acme/ops').rows[0]?.spans ?? []
+    expect(ops.filter(span => span.underline === true)).toEqual([{ text: 'reviewer', dim: true, underline: true }])
+    expect(ops.slice(5, 8)).toEqual([SEPARATOR, { text: 'security ', dim: true }, { text: 'reviewer', dim: true, underline: true }])
+    const named = blockOf(searched('backend'), 'team-search:session:acme/api').rows[0]?.spans ?? []
+    expect(named.filter(span => span.underline === true)).toEqual([{ text: 'backend', dim: false, underline: true }])
+  })
+
+  test('a session found by its hire scope shows the scope on a dim line under its row, its words underlined', () => {
+    const ops = blockOf(searched('again'), 'team-search:session:acme/ops')
+    expect(ops.rows.map(row => row.key)).toEqual(['team-search:session:acme/ops', 'team-search-scope:session:acme/ops'])
+    expect(ops.rows[1]?.spans).toEqual([
+      { text: '      ' },
+      { text: 'scope ', dim: true },
+      { text: 'ops ', dim: true },
+      { text: 'again', dim: true, underline: true },
+    ])
+    expect(blockOf(searched('reviewer'), 'team-search:session:acme/ops').rows).toHaveLength(1)
+  })
+
+  test("a retired session shows in its open closed group; each session's row is one press that opens its card, which follows it", () => {
+    expect(searched('tester').map(block => block.key)).toEqual(['team-search-count', 'team:acme', 'closed:acme', 'team-search:session:acme/qa'])
+    const blocks = searched('lead', [cardKey('session:acme/web')])
+    expect(blocks.map(block => block.folds)).toEqual([undefined, undefined, cardKey('session:acme/lead'), cardKey('session:acme/web'), undefined, cardKey('session:tools/boss')])
+    expect(blocks.some(block => block.rows.some(row => row.spans.some(span => span.toggles !== undefined)))).toBe(false)
+    expect(blockOf(blocks, 'team-search:session:acme/web').card?.[0]?.key).toBe('team-card:acme/web:role')
+    expect(blocks[0]?.rows[0]?.spans[0]?.text).toBe('3 sessions match')
+  })
+
+  test('the hint for a query with no word, the nothing line for one that names no session, the notes before a tree', () => {
+    expect(words(searched(' '))).toEqual([['team-search-hint', [TEAM_SEARCH_HINT]]])
+    expect(words(searched('nobody'))).toEqual([['team-search-none', [TEAM_NOTHING_FOUND]]])
+    expect(words(teamBlocks({ kind: 'reading' }, [], UTC, { query: 'api', hits: [] }))).toEqual([['team:note', ['Reading the team…']]])
+  })
+})
+
 describe('toggledWith', () => {
   test('a press adds a key not toggled and takes back one that is', () => {
     expect(toggledWith([], 'team:acme')).toEqual(['team:acme'])
     expect(toggledWith(['closed:acme', 'team:acme'], 'team:acme')).toEqual(['closed:acme'])
+  })
+})
+
+describe('openedWith', () => {
+  test('adds a key not toggled, and keeps one that is', () => {
+    expect(openedWith([], cardKey('session:acme/api'))).toEqual([cardKey('session:acme/api')])
+    expect(openedWith(['team:acme', cardKey('session:acme/api')], cardKey('session:acme/api'))).toEqual(['team:acme', cardKey('session:acme/api')])
   })
 })

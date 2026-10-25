@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { sessionKey, teamRows, teamTree, type SessionFacts, type TeamRead, type TeamRow, type TeamTreeNode } from '../hooks/team'
+import { foundRows, sessionKey, teamRows, teamTree, type SessionFacts, type TeamRead, type TeamRow, type TeamTreeNode } from '../hooks/team'
 import { ACME, OTHER, TOOLS, configOf, treeOf } from './team-fixtures'
 
 /** One line per row: indented by depth, ▾ open, ▸ closed, · nothing under it, then the node. */
@@ -135,5 +135,31 @@ describe('teamRows', () => {
 
   test('a toggle on a node with nothing under it changes nothing', () => {
     expect(teamRows(treeOf([ACME], 'acme'), new Set(['session:acme/api']))).toEqual(teamRows(treeOf([ACME], 'acme'), NONE))
+  })
+})
+
+describe('foundRows', () => {
+  test('a shown session under its team and leaders, each open over the rows drawn under it, whatever is toggled', () => {
+    const root = treeOf([ACME, TOOLS], 'acme')
+    expect(outline(foundRows(root, new Set([sessionKey('acme', 'api')])))).toEqual(['▾ team acme', '  ▾ lead', '    ▾ web', '      · api'])
+    expect(outline(foundRows(root, new Set([sessionKey('acme', 'qa'), sessionKey('tools', 'dev')])))).toEqual([
+      '▾ team acme',
+      '  ▾ closed',
+      '    · qa',
+      '  ▾ team tools',
+      '    ▾ boss',
+      '      · dev',
+    ])
+  })
+
+  test('a shown leader with none of its sessions shown has nothing under it; one with some, only those', () => {
+    const root = treeOf([ACME, TOOLS], 'acme')
+    const shown = new Set([sessionKey('acme', 'lead'), sessionKey('acme', 'web'), sessionKey('tools', 'boss')])
+    expect(outline(foundRows(root, shown))).toEqual(['▾ team acme', '  ▾ lead', '    · web', '  ▾ team tools', '    · boss'])
+  })
+
+  test('nothing shown, or no tree: no rows', () => {
+    expect(foundRows(treeOf([ACME], 'acme'), NONE)).toEqual([])
+    expect(foundRows(null, new Set([sessionKey('acme', 'api')]))).toEqual([])
   })
 })
