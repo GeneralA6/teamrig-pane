@@ -2,7 +2,8 @@
 import { parseDeadline, showStored, storedText } from '../core/time.ts';
 import type { TimeZone } from '../core/zone.ts';
 import { cardLines } from './card.ts';
-import { PROBLEM_KINDS, type RegisterEvent } from './events.ts';
+import type { ItemType, RegisterEvent } from './events.ts';
+import { itemTypeOf } from './item-types.ts';
 import type { ApprovalAnswer, Task } from './fold.ts';
 import { ACTIVE_STATUSES, GITHUB_SOURCE, priorityText, type TaskStatus } from './model.ts';
 import { reviewLines, reviewPartNames } from './review.ts';
@@ -21,6 +22,8 @@ export interface ListFilter {
   /** A week plan's start day; null selects tasks in no week plan. */
   readonly week?: string | null;
   readonly goal?: string;
+  /** The item types to show; a task with no type counts as a task. */
+  readonly types?: readonly ItemType[];
 }
 
 /** A size as printed: percent of the weekly limit, at most two decimals (`1.5%`). */
@@ -61,7 +64,8 @@ export function selectTasks(tasks: Iterable<Task>, filter: ListFilter, tree: Tas
         (filter.priorities === undefined || filter.priorities.includes(task.priority)) &&
         (dueBefore === undefined || (due !== undefined && due < dueBefore)) &&
         (filter.week === undefined || task.week === filter.week) &&
-        (filter.goal === undefined || task.goals.includes(filter.goal))
+        (filter.goal === undefined || task.goals.includes(filter.goal)) &&
+        (filter.types === undefined || filter.types.includes(itemTypeOf(task)))
       );
     })
     .sort((a, b) => tree.byPlanOrder(a, b));
@@ -73,14 +77,15 @@ export function taskLabel(task: Task, team?: string): string {
 }
 
 /**
- * The fields every task row starts with: `T12 in-progress`, `p2`, `problem` or `critical` for a problem task,
+ * The fields every task row starts with: `T12 in-progress`, `p2`, its type past a plain task (`bug`, `critical bug`),
  * `owner alpha`, then `due 01-15` and `after T5,T6` (its plan dependency) when it has them. The due is the effective
  * one of `tree`, in its zone: an earlier due of a task that needs it names that task (`due 01-10 (from T194)`).
  */
 function rowHead(task: Task, team: string | undefined, tree: TaskTree): string[] {
-  const kind = task.kind !== null && PROBLEM_KINDS.includes(task.kind) ? [task.kind] : [];
+  const type = itemTypeOf(task);
+  const typed = type === 'task' ? [] : [task.critical ? `critical ${type}` : type];
   const pinned = task.pin === null ? [] : ['pinned'];
-  const parts = [`${taskLabel(task, team)} ${task.status}`, priorityText(task.priority), ...pinned, ...kind, `owner ${task.owner}`];
+  const parts = [`${taskLabel(task, team)} ${task.status}`, priorityText(task.priority), ...pinned, ...typed, `owner ${task.owner}`];
   const inherited = tree.effectiveDue(task.id);
   if (inherited !== undefined && inherited.from !== null) {
     parts.push(`due ${showStored(inherited.due, tree.zone)} (from ${inherited.from})`);
@@ -298,7 +303,8 @@ export function formatEvent(event: RegisterEvent, zone: TimeZone): string {
         task.goals.length === 0 ? undefined : `goals=${task.goals.join(',')}`,
         task.after.length === 0 ? undefined : `after=${task.after.join(',')}`,
         task.size === null ? undefined : `size=${sizeText(task.size)}`,
-        task.kind === null ? undefined : `kind=${task.kind}`,
+        task.type === null ? undefined : `type=${task.type}`,
+        task.critical ? 'critical=true' : undefined,
       ]
         .filter((part) => part !== undefined)
         .join(' ');
@@ -465,8 +471,20 @@ export function formatWaitingOnYou(entry: WaitingOnYou, titleChars: number, tree
  * `T5 is yours (p2, due 2030-01-10): Show the signup errors`.
  */
 export function assignedNotice(task: Pick<Task, 'id' | 'priority' | 'due' | 'title'>, zone: TimeZone): string {
-  const due = task.due === null ? '' : `, due ${storedText(task.due, zone)}`;
-  return `${task.id} is yours (${priorityText(task.priority)}${due}): ${task.title}`;
+  return `${task.id} is yours (${priorityAndDue(task, zone)}): ${task.title}`;
+}
+
+/**
+ * The copy line a team's lead gets, under the asker's `<team>/<id>`, when a session of another team asks one of its
+ * sessions for work (T1141), so the lead, who sets its team's work order, can reorder or reassign it:
+ * `T5 went to front (p2): Show the signup errors; reorder or reassign it: teamrig update T5 --priority|--after|--owner`.
+ */
+export function askedNotice(task: Pick<Task, 'id' | 'owner' | 'priority' | 'due' | 'title'>, zone: TimeZone): string {
+  return `${task.id} went to ${task.owner} (${priorityAndDue(task, zone)}): ${task.title}; reorder or reassign it: teamrig update ${task.id} --priority|--after|--owner`;
+}
+
+function priorityAndDue(task: Pick<Task, 'priority' | 'due'>, zone: TimeZone): string {
+  return `${priorityText(task.priority)}${task.due === null ? '' : `, due ${storedText(task.due, zone)}`}`;
 }
 
 /**
@@ -481,8 +499,8 @@ export function approvalNotice(task: Pick<Task, 'id'>, answer: ApprovalAnswer): 
 }
 
 /**
- * The inbox line a parent team's lead gets when a task it handed `team` ends (T509), the task named `<team>/<id>`: a
- * done one with its evidence, a dropped one with its note, `web/T1 done: Ship login | evidence: PR #12 merged`.
+ * The inbox line a session of another team gets when a task it asked of `team` ends (T509, T1141), the task named
+ * `<team>/<id>`: a done one with its evidence, a dropped one with its note, `web/T1 done: Ship login | evidence: PR #12 merged`.
  */
 export function endedNotice(task: Pick<Task, 'id' | 'status' | 'title' | 'note' | 'evidence'>, team: string): string {
   const [label, why] = task.status === 'done' ? ['evidence', task.evidence] : ['note', task.note];
