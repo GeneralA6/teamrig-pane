@@ -67,9 +67,10 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.
 - **Changes:** the files changed in each git repo the session works in, each with its lines added and removed;
   a click on a file opens its diff under it, `+` lines green and `-` lines red.
-- **Log:** each session's prompts and replies of the last 24 h, from the turn log teamrig writes, so a `/clear` or a
-  compaction never takes away what a tab showed: the team's sessions, the newest change first, each with its newest
-  prompt; a press opens one, its lines oldest first, kept current as it writes, each split by who spoke (owner,
+- **Log:** each conversation of the team's sessions in the last 24 h, from the turn log teamrig writes, so a `/clear`
+  or a compaction never takes away what a tab showed: the newest first, each titled by the task its session worked
+  while it ran (else by how it opened) over its session, its times and its count of lines; a press opens one, its
+  lines oldest first, kept current as it writes, each split by who spoke (owner,
   Claude, another session, a subagent, the harness's dim notices) with its markdown drawn, and `b` goes back to the
   list.
   Press the switch, or `t`, `d` and `g` while the pane holds the keyboard.

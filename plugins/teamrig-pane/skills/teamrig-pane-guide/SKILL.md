@@ -96,7 +96,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | --- | --- |
 | `t` | The Tasks view |
 | `d` | The Changes view |
-| `g` | The Log view: each team session's prompts and replies (see [The Log view](#the-log-view)) |
+| `g` | The Log view: each conversation of the team's sessions, titled by its task (see [The Log view](#the-log-view)) |
 | `m` | Tasks: this session's area (`mine`) |
 | `a` | Tasks: every owner (`all`) |
 | `o` | mine: only the tasks done today (the status bar's `done today`); again shows every task |
@@ -110,7 +110,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
 | A click on the header's `inbox n unread` | In the dock: opens the area's inbox as a file's page, at its first unread line; it marks nothing read |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
-| `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a session's Log page, back to the sessions |
+| `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's Log page, back to the list |
 | `f` | Forward to the place back left, while there is one |
 | `s` | In the dock: puts the cursor in the Find field, always shown under the switch, that searches the tasks the pane holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
 | `h` | In the dock: `archive`, the Archive page of this week's finished tasks (see [Archive](#archive)) |
@@ -480,15 +480,19 @@ A count git can't give is left out, with no warning, and git never runs in a fol
 
 ## The Log view
 
-`g`, or Log on the switch, lists the team's sessions that wrote a prompt or a reply in the hours teamrig keeps their
-turn log (the team config's `turnLog.keepHours`, 24 by default), the one whose log changed last first: each its id,
-when its log last changed, and its newest prompt in two lines at most. It reads the turn log teamrig writes for every
-session of the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`), so a `/clear` or a compaction never takes
-away what a tab showed. With no team, a team with no config file (teamrig writes no turn log for one), no turn log yet
-(teamrig writes none while the team's `turnLog.enabled` is off) or a folder it cannot read, the view says which.
+`g`, or Log on the switch, lists each conversation of the team's sessions that wrote a prompt or a reply in the hours
+teamrig keeps their turn log (the team config's `turnLog.keepHours`, 24 by default), the one with the newest line first.
+A conversation is what one session said from a `/clear` to its next one; a compaction keeps it. Each is titled by the
+tasks its session worked while it ran (a task it owns whose status or details it changed, from the register), each
+id bold before its title, else by how it opened (the owner's first words, else Claude's first reply, dim) in two lines
+at most; under the title, its session, the times of its first and last lines and its count of lines. It reads the turn
+log teamrig writes for every session of the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`), so a `/clear`
+or a compaction never takes away what a tab showed. With no team, a team with no config file (teamrig writes no turn
+log for one), no turn log yet (teamrig writes none while the team's `turnLog.enabled` is off) or a folder it cannot
+read, the view says which.
 
-A press on a session (a click, or Enter on it) opens its page under `back` (`b`): its lines oldest first, the newest at
-the end where the page opens. Each prompt and reply is split by who spoke, each part a head line over its words:
+A press on a conversation (a click, or Enter on it) opens its page under `back` (`b`): its title, then its lines oldest
+first, the newest at the end where the page opens. Each prompt and reply is split by who spoke, each part a head line over its words:
 `owner · 20:05 IDT` (the words typed at the tab), `Claude` (a reply), `message from <session>` and `subagent report`.
 The harness's notices and reminders in a prompt are dim lines led by their time, without their tags and ids, and
 markdown is drawn as styles (bold, code, links, headings, items, quotes, code blocks, rules, tables), never as its
