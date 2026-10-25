@@ -3,7 +3,7 @@
 // and the register put together by teamrig's own read entry (hooks/core/read), so the pane shows what
 // teamrig's commands show, on a register never rotated and on a rotated one alike.
 // File access goes through `Files`, which register.tsx backs with $.fs and tests with a fake.
-import type { AreaSource, Snapshot, TaskRow, TeamLeads, TeamSettings } from '../types'
+import type { AreaSource, Snapshot, TaskRow, TeamLeads, TeamSettings, WorkMark } from '../types'
 import {
   assemble,
   indexMarks,
@@ -34,6 +34,9 @@ import { teamLeads } from './leads'
 import { rowOf } from './log'
 import type { TeamFiles } from './places'
 import { isActive } from './view'
+import { workMarks } from './work'
+
+const HOUR_MS = 3_600_000
 
 export type FileStamp = { mtimeMs: number; size: number }
 
@@ -260,6 +263,8 @@ export class TaskRegisterSource {
    * register's history, on a register never rotated as on a rotated one (whose working set keeps those days whole).
    */
   private tasks: TaskRow[] = []
+  /** The sessions' work on their own tasks over the turn log's kept hours, as the events last folded (work.ts). */
+  private work: readonly WorkMark[] = []
   private inbox: WatchedFile<string[]> | null = null
   private lastArea: string | null = null
   private readonly files: Files
@@ -268,6 +273,8 @@ export class TaskRegisterSource {
   private readonly settings: TeamSettings
   /** The team's session names, for the area's name; null when the pane found no team. */
   private readonly names: TeamNames | null
+  /** The hours the team keeps its turn log, the work marks' window; null with no team or no team config, which have none. */
+  private readonly keepHours: number | null
 
   constructor(files: Files, paths: RegisterPaths, settings: TeamSettings, team: TeamFiles | null) {
     this.files = files
@@ -276,6 +283,7 @@ export class TaskRegisterSource {
     this.register = new LayoutRegister(files, paths.events)
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
     this.names = team === null ? null : new TeamNames(files, team)
+    this.keepHours = team?.turnLog?.keepHours ?? null
   }
 
   /** A new snapshot when anything it draws from changed since the last poll (or `force`), else null. */
@@ -286,6 +294,9 @@ export class TaskRegisterSource {
         .map(task => rowOf(task))
         .filter(task => isActive(task) || isHeldFinished(task, now))
         .sort((a, b) => taskNumber(a.id) - taskNumber(b.id))
+      // The working set keeps each live and recently finished task's whole history, so its events cover the window;
+      // a task a compaction retired that is touched again marks nothing, its create no longer read.
+      this.work = this.keepHours === null ? [] : workMarks(this.register.current.read.events, now - this.keepHours * HOUR_MS)
     }
     const marksChanged = await this.marks.refresh()
     const { byArea, areaBySession } = indexMarks(this.marks.current.marks)
@@ -308,6 +319,7 @@ export class TaskRegisterSource {
       team: this.names?.team ?? null,
       areaName: area === null ? null : (this.names?.nameOf(area) ?? null),
       leads: this.names?.leads ?? null,
+      work: this.work,
       unreadInbox: area !== null && this.inbox && mark !== undefined ? unreadOf(area, this.inbox.current, mark, lineHash).lines.length : null,
       problem: skippedText(this.paths, this.register.current, this.marks.current),
       ...this.settings,

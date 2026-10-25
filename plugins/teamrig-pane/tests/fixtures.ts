@@ -13,8 +13,8 @@ export const NOT_PICKED_UP_HOURS = DEFAULT_REGISTER.check.notPickedUpAfterHours
 
 /** What a team whose config sets neither the hours nor a zone reads with, on a machine whose zone is UTC. */
 export const TEAM_SETTINGS: TeamSettings = { notPickedUpAfterHours: NOT_PICKED_UP_HOURS, timeZone: TimeZone.UTC.name }
-/** A snapshot's team fields when the pane found no team: no team name, no session name and no leads. */
-export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads'> = { team: null, areaName: null, leads: null }
+/** A snapshot's team fields when the pane found no team: no team name, no session name, no leads and no work marks. */
+export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work'> = { team: null, areaName: null, leads: null, work: [] }
 
 /** A team zone ahead of UTC, three hours on NOW (Israel's summer time, `IDT`): what a UTC clock cannot tell apart. */
 export const JERUSALEM = zoneNamed('Asia/Jerusalem')

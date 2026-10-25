@@ -74,6 +74,12 @@ export type TeamLeads = {
   leaderOf: Readonly<Record<string, string>>
 }
 
+/**
+ * A register event a task's owner wrote on its own task (hooks/work.ts): the session, the task, and when (ms), what
+ * the Log view titles a conversation by.
+ */
+export type WorkMark = { readonly session: string; readonly task: string; readonly at: number }
+
 /** Everything a drawing needs, rebuilt when a register file changes. */
 export type Snapshot = {
   /** The tasks a drawing can show: the active ones and those finished within HELD_DAYS of the fold (hooks/done.ts isHeldFinished). */
@@ -93,6 +99,12 @@ export type Snapshot = {
    * (hooks/source.ts). Null with no team or no config file teamrig reads.
    */
   leads: TeamLeads | null
+  /**
+   * Each session's events on its own tasks over the hours the team keeps its turn log (`turnLog.keepHours`), oldest
+   * first (hooks/work.ts): the Log view titles each conversation by the tasks its session worked in it. Re-read with
+   * the tasks when the register moves; empty with no team or no team config, which have no turn log.
+   */
+  work: readonly WorkMark[]
   /** Unread lines in `<inbox>/<area>.md`, past its read mark as teamrig finds it; null when the area never ran `inbox read`. */
   unreadInbox: number | null
   /** What the pane could not read: a failed load (the last good tasks stay drawn), or the lines teamrig's reader skipped. */
