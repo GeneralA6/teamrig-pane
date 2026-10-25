@@ -11,6 +11,7 @@ import type { FindField, Nav, RingLandings, RingStop } from '../types'
 import { currentPlace } from './nav'
 import { SEARCH_VIEW } from './search-rows'
 import { isResultOf } from './search-view'
+import { TEAM_SEARCH_VIEW } from './team-search'
 
 /** The Find field's key in its first round; each later round's is `find:<round>`. */
 export const FIND = 'find'
@@ -48,7 +49,7 @@ export function isFieldKey(key: string): boolean {
 function stopOf(element: string | undefined): RingStop {
   if (element === undefined) return 'other'
   if (isFieldKey(element)) return 'field'
-  return isResultOf(SEARCH_VIEW, element) ? 'result' : 'other'
+  return isResultOf(SEARCH_VIEW, element) || isResultOf(TEAM_SEARCH_VIEW, element) ? 'result' : 'other'
 }
 
 /** The landings once the ring landed on the element keyed `element`; absent for one of the engine's own stops. */
