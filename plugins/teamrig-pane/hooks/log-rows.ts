@@ -1,14 +1,18 @@
 // The Log view as blocks of rows (rows.ts). The list: each team session with a turn log file of the hours teamrig
 // keeps it (turn-log.ts), the newest change first, its id bold and when its log last changed, over its newest
 // prompt's first line; a press on a session opens its page. The page: the session's lines of those hours, oldest
-// first (the view opens it at its end), each prompt and reply a head (what it is, when, whether teamrig cut it) over
-// its text, one block per paragraph as a file page splits them (file-page.ts), so the window draws only the
-// paragraphs in sight; a clear or compaction of the context is one dim rule. teamrig writes UTC times; each prints on
-// the team's clock, zone-marked (zone.ts). Pure.
+// first (the view opens it at its end). Each prompt and reply is split by who spoke (turn-text.ts): the owner's
+// words, Claude's reply, another session's message and a subagent's report each a head (who, when, whether teamrig
+// cut it) over its words with their markdown drawn as styles (markdown.ts); a harness notice dim lines led by its
+// time. One block per paragraph, as a file page splits them (file-page.ts), so the window draws only the paragraphs
+// in sight; a clear or compaction of the context is one dim rule. teamrig writes UTC times; each prints on the team's
+// clock, zone-marked (zone.ts). Pure.
 import type { LogList, LogPage, LogSession, TurnEntry } from '../types'
-import { paragraphs, type Paragraph } from './file-page'
+import { paragraphs } from './file-page'
+import { markdownParagraphs, type MarkParagraph } from './markdown'
 import { SEPARATOR, single, type Block, type Row, type Span } from './rows'
 import { LOG_PAGE_CHARS } from './turn-log'
+import { turnParts, type Speaker, type TurnPart } from './turn-text'
 import { dayOf, type Clock } from './zone'
 
 const LIST = 'log'
@@ -70,31 +74,61 @@ export function logListBlocks(list: LogList, clock: Clock): Block[] {
   }
 }
 
-/** A paragraph's lines, each wrapping under its own indent. */
-function lineRows(key: string, paragraph: Paragraph): Row[] {
-  return paragraph.lines.map((text, i): Row => {
-    const indent = text.slice(0, text.length - text.trimStart().length)
-    return { key: `${key}:line:${paragraph.first + i}`, spans: [{ text }], hang: indent === '' ? undefined : { text: indent } }
-  })
+/** A paragraph's lines as rows under `key`, each keyed by its line's number in its part. */
+function lineRows(key: string, paragraph: MarkParagraph): Row[] {
+  return paragraph.lines.map((line): Row => ({ key: `${key}:line:${line.at}`, spans: line.spans, hang: line.hang, ...(line.rule ? { rule: true } : {}) }))
 }
 
-/** What an entry's head calls it. */
-const KIND_WORDS: Readonly<Record<'prompt' | 'reply', Span>> = {
-  prompt: { text: 'prompt', bold: true, color: 'suggestion' },
-  reply: { text: 'reply', bold: true, color: 'claude' },
+/** A speaker with a head of its own: everyone but the harness, whose notices are dim lines. */
+type Voice = Exclude<Speaker, { kind: 'system' }>
+
+/** What a part's head calls who spoke it. */
+function voiceSpan(voice: Voice): Span {
+  switch (voice.kind) {
+    case 'owner':
+      return { text: 'owner', bold: true, color: 'suggestion' }
+    case 'claude':
+      return { text: 'Claude', bold: true, color: 'claude' }
+    case 'session':
+      return { text: `message from ${voice.name}`, bold: true, color: 'warning' }
+    case 'subagent':
+      return { text: 'subagent report', bold: true, color: 'subtle' }
+  }
 }
 
-/** One entry's blocks under `key`: a clear's rule, or a prompt's or reply's head with its first paragraph, then its other paragraphs. */
-function entryBlocks(entry: TurnEntry, key: string, clock: Clock): Block[] {
-  const when = timeWords(entry.at, clock)
-  if (entry.kind === 'clear') return [note(key, `── ${when} · ${entry.text} ──`)]
-  const cut: Span[] = entry.isCut ? [SEPARATOR, { text: 'cut, its end kept', dim: true }] : []
-  const head: Row = { key, spans: [KIND_WORDS[entry.kind], SEPARATOR, { text: when, dim: true }, ...cut] }
-  const [first, ...rest] = paragraphs(entry.text)
+/** Who heads an entry with no words. */
+const SILENT: Readonly<Record<'prompt' | 'reply', Voice>> = { prompt: { kind: 'owner' }, reply: { kind: 'claude' } }
+
+/** A harness notice's blocks under `key`, a paragraph a block: dim lines, `head` (its time, whether it was cut) leading the first. */
+function noticeBlocks(text: string, key: string, head: Span[]): Block[] {
+  return paragraphs(text).map((paragraph, p): Block => ({
+    key: p === 0 ? key : `${key}:para:${paragraph.first}`,
+    rows: paragraph.lines.map((line, i): Row => ({
+      key: `${key}:line:${paragraph.first + i}`,
+      spans: [...(p === 0 && i === 0 ? [...head, SEPARATOR] : []), { text: line, dim: true }],
+    })),
+  }))
+}
+
+/** A part's blocks under `key`: a notice's dim lines, or a head (who spoke, `head`) over its first paragraph, then its others. */
+function partBlocks(part: TurnPart, key: string, head: Span[]): Block[] {
+  const speaker = part.speaker
+  if (speaker.kind === 'system') return noticeBlocks(part.text, key, head)
+  const [first, ...rest] = markdownParagraphs(part.text)
   return [
-    { key, rows: [head, ...(first === undefined ? [] : lineRows(key, first))] },
+    { key, rows: [{ key, spans: [voiceSpan(speaker), SEPARATOR, ...head] }, ...(first === undefined ? [] : lineRows(key, first))] },
     ...rest.map((paragraph): Block => ({ key: `${key}:para:${paragraph.first}`, rows: lineRows(key, paragraph) })),
   ]
+}
+
+/** One entry's blocks under `key`: a clear's rule, or each part of a prompt or reply, its time in each head and the cut mark in the first. */
+function entryBlocks(entry: TurnEntry, key: string, clock: Clock): Block[] {
+  const when: Span = { text: timeWords(entry.at, clock), dim: true }
+  if (entry.kind === 'clear') return [note(key, `── ${when.text} · ${entry.text} ──`)]
+  const cut: Span[] = entry.isCut ? [SEPARATOR, { text: 'cut, its end kept', dim: true }] : []
+  const parts = turnParts(entry.kind, entry.text)
+  if (parts.length === 0) return [single(key, [voiceSpan(SILENT[entry.kind]), SEPARATOR, when, ...cut])]
+  return parts.flatMap((part, i) => (i === 0 ? partBlocks(part, key, [when, ...cut]) : partBlocks(part, `${key}:part:${i}`, [when])))
 }
 
 /** Each entry's key: its time and kind, with a count where two share them, so a key holds while older lines leave the window. */
