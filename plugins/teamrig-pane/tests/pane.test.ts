@@ -1734,6 +1734,62 @@ test("a session's card counts its unread inbox lines, and a press on the count o
   expect(screen).toContain(` ${inbox} · line 3`)
 })
 
+test("the Team tab's Find field draws the sessions it names under their leaders; Enter on one opens its card, and back from a page the card opens shows the tasks list", async ($, on) => {
+  const { disk } = await startWithTeam(on)
+  disk.write(`${TEAMS}/acme/state/inbox-marks.jsonl`, [markLine('api', 1, S2, NOW, 'line one')])
+  disk.write(`${TEAMS}/acme/state/inbox/api.md`, ['line one', '', 'line two', 'line three'])
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  await pane.press({ key: 'team' })
+  expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ placeholder: 'id, name, role, scope…', value: '' })
+  await pane.input({ key: 'find', text: 'api', kind: 'change' })
+  // The count, then api under its team and the leaders over it; the sessions and teams it leads nowhere near are not drawn.
+  expect(await drawsLine(pane, /^1 session matches$/)).toBe(true)
+  expect(await drawsLine(pane, /● api  acme-api$/)).toBe(true)
+  expect(await drawsLine(pane, /● web  acme-web\b/)).toBe(true)
+  expect(await drawsLine(pane, /● ui  acme-ui\b/)).toBe(false)
+  expect(await drawsLine(pane, /\btools\b/)).toBe(false)
+  expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ submitLabel: 'open' })
+
+  // Enter on the one match opens its card, and Enter again leaves it open.
+  await pane.input({ key: 'find', text: 'api' })
+  expect(await drawsLine(pane, /│ Led by {7}web, then lead$/)).toBe(true)
+  await pane.input({ key: 'find', text: 'api' })
+  expect(await drawsLine(pane, /│ Led by {7}web, then lead$/)).toBe(true)
+
+  // The card's inbox count opens that inbox in the Tasks view; back shows the tasks list, never the Team tab's search
+  // drawn as one of tasks.
+  const toInbox = buttonKeys(await pane.drawn()).find(key => key.startsWith('goto:inbox:'))
+  if (toInbox === undefined) throw new Error("no press on api's inbox count")
+  await pane.press({ key: toInbox })
+  expect(screenOf(await pane.drawn())).toContain(' inbox/api.md')
+  await pane.press({ key: 'back' })
+  expect(await drawsLine(pane, /match/)).toBe(false)
+  expect(screenOf(await pane.drawn())).not.toContain(' inbox/api.md')
+  expect(buttonKeys(await pane.drawn())).toContain('mine')
+})
+
+test("the Team tab and the Tasks view share one search: a switch between them closes it, so neither draws the other's", async ($, on) => {
+  await startWithTeam(on)
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  await pane.press({ key: 'team' })
+  await pane.input({ key: 'find', text: 'api', kind: 'change' })
+  expect(await drawsLine(pane, /^1 session matches$/)).toBe(true)
+  await pane.press({ key: 'tasks' })
+  expect(await drawsLine(pane, /match/)).toBe(false)
+  // The closed search draws the field in a new round, empty, so the engine drops what was typed in it.
+  expect(drawnField(await pane.drawn())).toEqual({ key: 'find:1', value: '' })
+
+  await pane.input({ key: 'find:1', text: 'route', kind: 'change' })
+  expect(await drawsLine(pane, /^1 task matches$/)).toBe(true)
+  await pane.press({ key: 'team' })
+  expect(await drawsLine(pane, /match/)).toBe(false)
+  expect(await drawsLine(pane, /^▾ tools · 1 active · 0 closed$/)).toBe(true)
+})
+
 test('the Team tab reads no team folder while another view shows, and reads what moved when it shows again', async ($, on) => {
   const { clock, disk } = await startWithTeam(on)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })

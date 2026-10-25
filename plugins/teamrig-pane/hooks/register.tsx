@@ -77,7 +77,8 @@ import { LiveDiffs, NO_DIFFS } from './diff'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { logListBlocks, logPageBlocks } from './log-rows'
 import { LiveTeam } from './team-source'
-import { teamBlocks, toggledWith } from './team-rows'
+import { cardKey, openedWith, teamBlocks, toggledWith } from './team-rows'
+import { searchTeam, TEAM_SEARCH_VIEW, type SessionHit } from './team-search'
 import { SetupWatch } from './setup'
 import { setupBlocks } from './setup-rows'
 import {
@@ -751,17 +752,19 @@ export const register: Register = on => {
     let snap = EMPTY_SNAPSHOT
     let shown: ViewMode = 'mine'
     let open: ExpandedTasks = NOTHING_EXPANDED
-    /** Where the tasks view is; the list in the Changes view and inline, where a page never shows. */
+    /** Where the tasks view is, or the Team tab's search; the list in the Changes and Log views and inline, where a page never shows. */
     let at: Nav = AT_LIST
     /** What the file pages the places name read, drawn with the tasks view docked. */
     let files: FilePages = NO_FILES
-    /** The Find field's round (find-field.ts), drawn in the tasks view docked. */
+    /** The Find field's round (find-field.ts), drawn in the tasks view and the Team tab docked. */
     let field: FindField = FIRST_FIELD
     let landings: RingLandings = NO_LANDINGS
     /** Where the docked body's window is to stand, the last step that moved it; at the top inline. */
     let scroll: BodyScroll = AT_TOP
     /** The tasks the search shown matched, read once for its body, the Find field's Enter and the line under it; none off a search. */
     let found: SearchResults = NO_RESULTS
+    /** The sessions the Team tab's search shown names (team-search.ts), read once for its body, Enter and the line under the field; none off it. */
+    let teamFound: readonly SessionHit[] = []
     /** The session whose Log page shows; null for the list or another view. */
     let logSession: string | null = null
     /** What a project teamrig is not set up for shows (setup.ts), alone, in every view; null once a register is found. */
@@ -782,13 +785,17 @@ export const register: Register = on => {
         open = await read($, expanded)
         const missing = await read($, requirements)
         if (!inline) scroll = await read($, bodyScroll)
-        if (current === 'tasks' && !inline) {
+        // The Tasks view and the Team tab draw the Find field, and their searches are one place: the switch between them
+        // closes it (switchTo).
+        if ((current === 'tasks' || current === 'team') && !inline) {
           at = await read($, nav)
-          files = await read($, filePages)
           field = await read($, findField)
+          if (current === 'tasks') files = await read($, filePages)
         }
         const place = currentPlace(at)
-        if (place.kind === 'search') found = searchTasks(snap.tasks, place.query, treeOf(snap))
+        const team = current === 'team' ? await read($, teamTree) : TEAM_READING
+        if (place.kind === 'search' && current === 'tasks') found = searchTasks(snap.tasks, place.query, treeOf(snap))
+        if (place.kind === 'search' && team.kind === 'tree') teamFound = searchTeam(team.root, place.query)
         // A project teamrig is not set up for has no tasks, changes or log to show: its setup takes every view,
         // whatever place it is at.
         setupShown = await read($, setup)
@@ -819,7 +826,7 @@ export const register: Register = on => {
               : current === 'changes'
                 ? changesBlocks(changed, isGitMissing(missing), await read($, diffs))
                 : current === 'team'
-                  ? teamBlocks(await read($, teamTree), await read($, teamToggled), clockOf(snap).zone)
+                  ? teamBlocks(team, await read($, teamToggled), clockOf(snap).zone, place.kind === 'search' ? { query: place.query, hits: teamFound } : null)
                   : logShown === null
                   ? logListBlocks(await read($, logList), clockOf(snap), snap)
                   : logPageBlocks(logShown, clockOf(snap), await read($, logList), snap)
@@ -846,12 +853,12 @@ export const register: Register = on => {
       await update($, expanded, current => ({ ...current, [id]: detail }))
     }
     // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Team tab session's
-    // card, the header's inbox count) shows the Tasks view at it; from the Tasks view's list, the list remembers
-    // `from`, the element the press was in, to scroll back to.
+    // card, the header's inbox count) shows the Tasks view at it, over its list: back shows the list, never the Team
+    // tab's search; from the Tasks view's list, the list remembers `from`, the element the press was in, to scroll back to.
     const openPlace = async (place: Place, from: string) => {
       const shown = await read($, view)
       if (shown !== 'tasks') await update($, view, () => 'tasks')
-      await go($, current => pushed(shown === 'tasks' ? leavingList(current, from) : current, place))
+      await go($, current => pushed(shown === 'tasks' ? leavingList(current, from) : reset(current, true), place))
     }
     // A press on a task id opens its page, read as a card's is.
     const openPage = async (id: string, from: string) => {
@@ -903,6 +910,16 @@ export const register: Register = on => {
       }
       await openPage(top.id, fieldKey(field))
       await focusOn($, 'back')
+    }
+    // Enter in the Find field on the Team tab: with one match it opens that session's card too (openedWith, never
+    // closing it), and either way moves the ring onto the first match drawn, where Enter opens or closes its card.
+    const submitTeam = async (query: string) => {
+      const tree = await read($, teamTree)
+      const top = tree.kind === 'tree' ? searchTeam(tree.root, query) : []
+      const first = top[0]
+      if (first === undefined) return
+      if (top.length === 1) await update($, teamToggled, toggled => openedWith(toggled, cardKey(first.row.key)))
+      await focusOn($, resultKey(TEAM_SEARCH_VIEW, first.row.key))
     }
 
     const spanComponents = { Text, Link }
@@ -1137,11 +1154,12 @@ export const register: Register = on => {
     // its buttons wrapping under each other in a dock too narrow for all of them. Minimized, it is the whole
     // pane, one row, and a press on any button opens the pane in full on that view.
     // The Tasks button shows the list, from a page too, scrolled back to where the page was opened from; the Log
-    // button shows the sessions, from a session's page too; the Team button reads the team tree at once.
+    // button shows the sessions, from a session's page too; the Team button reads the team tree at once. The Tasks and
+    // Team buttons close a search, which their views share: one typed in one view is never found shown in the other.
     const switchTo = async (target: PaneView) => {
       await update($, view, () => target)
       await sizer?.set('open')
-      if (target === 'tasks') await go($, current => reset(current, true))
+      if (target === 'tasks' || target === 'team') await go($, current => reset(current, true))
       if (target === 'changes') await tracked?.refresh()
       if (target === 'log') await logging?.close()
       if (target === 'team') await teaming?.refresh()
@@ -1231,29 +1249,32 @@ export const register: Register = on => {
         }),
       )
 
-    // The Find field, under the switch in the dock whatever it shows: the first change opens a search (a place, so back
-    // from a result's page returns to it), each change shows the results for its words, Enter opens the one match's page
-    // or moves the ring onto the first of more, and an empty field or clear closes the search. It is drawn under its
+    // The Find field, under the switch in the dock in the Tasks view whatever it shows, and on the Team tab: the first
+    // change opens a search (a place, so back from a result's page returns to it), each change shows the results for its
+    // words, Enter opens the one match's page (on the Team tab its card) or moves the ring onto the first of more, and
+    // an empty field or clear closes the search. It is drawn under its
     // round's key, holding what the round started with (find-field.ts): the query of the search shown, else nothing;
     // never the person's typing, which the engine would drop on each redraw. `s: Find` before it moves the focus ring
     // into it, and clear moves it back in; the field never takes the focus by itself, as it would then hold every key
     // the pane's hotkeys answer. Esc hands the keys back and leaves the results drawn.
+    const isTeam = current === 'team'
+    const matches = isTeam ? teamFound.length : matchCount(found)
     const findRow = inline
       ? null
       : drawFindRow(components, {
           key: fieldKey(field),
-          placeholder: 'id, title, owner, note…',
+          placeholder: isTeam ? 'id, name, role, scope…' : 'id, title, owner, note…',
           text: field.text,
-          submitLabel: submitWords(matchCount(found)),
+          submitLabel: submitWords(matches),
           onFind: () => void focusFind($),
           onInput: value => void go($, current => searched(current, value), 'typing'),
-          onSubmit: value => void submit(value),
+          onSubmit: value => void (isTeam ? submitTeam(value) : submit(value)),
           onClear: place.kind === 'search' ? () => void clearSearch($) : null,
         })
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
     // hotkeys or to Claude's prompt, and the key or the click that moves them, wrapped in a narrow dock.
     const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo, place.kind === 'search')
-    const keysLines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, matchCount(found)) }] }, columns).map(line =>
+    const keysLines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, matches) }] }, columns).map(line =>
       line.map(span => span.text).join(''),
     )
     const keysLine = inline ? null : drawKeysLine(components, keys, keysLines.join('\n'))
@@ -1278,7 +1299,20 @@ export const register: Register = on => {
             ),
             rows: (titleRow?.rows ?? 0) + switchRow.rows + (findRow === null ? 0 : 1) + (keysLine === null ? 0 : keysLines.length) + modes.rows,
           }
-        : {
+        : isTeam
+          ? {
+              // The Team tab draws the Find row and its line under the switch too; it has no modes.
+              node: (
+                <Box key="controls" flexDirection="column">
+                  {titleRow?.node}
+                  {switchRow.node}
+                  {findRow}
+                  {keysLine}
+                </Box>
+              ),
+              rows: (titleRow?.rows ?? 0) + switchRow.rows + (findRow === null ? 0 : 1) + (keysLine === null ? 0 : keysLines.length),
+            }
+          : {
             node: (
               <Box key="controls" flexDirection="column">
                 {titleRow?.node}

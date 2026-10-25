@@ -51,6 +51,9 @@ describe('where the keys go', () => {
     expect(onField).toEqual({ count: 1, on: 'field' })
     expect(landedOn(onField, 'search:T50')).toEqual({ count: 2, on: 'result' })
     expect(landedOn(onField, 'search-count')).toEqual({ count: 2, on: 'other' })
+    // The Team tab's search draws its results under a view key of its own.
+    expect(landedOn(onField, 'team-search:session:acme/api')).toEqual({ count: 2, on: 'result' })
+    expect(landedOn(onField, 'team-search-count')).toEqual({ count: 2, on: 'other' })
     expect(landedOn(onField, 'mine')).toEqual({ count: 2, on: 'other' })
     // One of the engine's own stops.
     expect(landedOn(onField, undefined)).toEqual({ count: 2, on: 'other' })
