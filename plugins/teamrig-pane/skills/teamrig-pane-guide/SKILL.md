@@ -110,7 +110,6 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
-| A click on the header's `inbox n unread` | In the dock: opens the Inbox view; it marks nothing read |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
 | A click on the banner's `open in pane` | Opens the pane, minimized or never opened too, at the current task's page; back shows the list at its row |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's Log page, back to the list |
@@ -189,10 +188,9 @@ of these, the pane says:
 No area for this session yet: /rename the tab to its session's id or name, run `inbox read --session <id>`, or /teamrig-pane <session> to pin one.
 ```
 
-**mine** shows its status bar (below), then a header counting the area's active tasks and unread inbox lines,
-`3 active · inbox 2 unread`, then its tasks in sections, each in teamrig's plan order (priority, then the date it
-works to, undated last, then id: its own due, or an earlier one of an active task that needs it) under a bold
-heading with its count; an empty section is left out:
+**mine** shows its status bar (below), then a header counting the area's active tasks, `3 active`, then its tasks
+in sections, each in teamrig's plan order (priority, then the date it works to, undated last, then id: its own due,
+or an earlier one of an active task that needs it) under a bold heading with its count; an empty section is left out:
 
 1. `Verifying`: the change landed, its proof is still to come; these lead, because closing them comes first;
 2. `Working on`: in progress;
@@ -204,11 +202,9 @@ heading with its count; an empty section is left out:
 
 A heading's count is the status bar's count for its section, the tasks past a cap included.
 
-The header names the area only for a pin (`web (pinned) · 3 active · inbox 2 unread`); the session's own area
-goes unnamed, as the title line above names the session. `inbox n unread` counts the lines in the area's inbox past its last
-`teamrig inbox read`; it is missing when the area never ran one. In the dock a click on it opens the Inbox view
-(see [The Inbox view](#the-inbox-view)). Reading it there marks nothing read: the pane never writes an inbox, so the
-count drops only when the session runs `teamrig inbox read`.
+The header names the area only for a pin (`web (pinned) · 3 active`); the session's own area goes unnamed, as the
+title line above names the session. The area's unread inbox lines are counted on the switch's Inbox button (see
+[The Inbox view](#the-inbox-view)).
 
 **all** shows every owner's active tasks, grouped by owner, each heading with its counts
 (`api · 4 active · 1 waiting · 1 verifying`, a count with none left out), the verifying tasks first

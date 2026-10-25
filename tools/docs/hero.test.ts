@@ -183,7 +183,7 @@ describe('renderHero', () => {
     assert.deepEqual(
       paneRows.map((row) => row.text),
       [
-        '3 active · inbox 1 unread',
+        '3 active',
         'Working on (1)',
         '◐ T12  Signup form',
         '       p1 · in progress since 11:55',
@@ -284,11 +284,8 @@ describe('renderHero', () => {
     assert.equal(Number(taskText('09:40')?.attributes.get('x')), PANE_X + PANE_COLUMNS * PANE_CHAR);
   });
 
-  it("heads the list with the session's active count and its unread inbox, naming no area, and each section with its name and count", () => {
-    assert.deepEqual(spansIn(taskText('3 active · inbox 1 unread')), [
-      ['3 active · ', PALETTE.muted, false],
-      ['inbox 1 unread', PALETTE.amber, false],
-    ]);
+  it("heads the list with the session's active count alone, naming no area and no inbox, and each section with its name and count", () => {
+    assert.deepEqual(spansIn(taskText('3 active')), [['3 active', PALETTE.muted, false]]);
     assert.equal(texts('window').filter((words) => words === AREA).length, 1, 'only the tab names the area');
     for (const [name, count] of [['Working on', 1], ['Up next', 1], ['Waiting', 2], ['Done today', 1]] as const) {
       assert.deepEqual(spansIn(taskText(`${name} (${count})`)), [

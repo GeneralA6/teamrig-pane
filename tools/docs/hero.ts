@@ -84,8 +84,6 @@ export interface Section {
 
 /** The session's area, which its tab names; the pane's header leaves the session's own area unnamed. */
 export const AREA = 'web';
-/** The inbox lines the session has not read. */
-export const UNREAD = 1;
 /**
  * The session's sections, in the pane's order. Verifying, which would lead them with its heading in green, has no task
  * here, and the pane draws an empty section not at all. Waiting holds the session's own waiting task, then the one it
@@ -279,7 +277,7 @@ function switchRow(shown: 'tasks' | 'changes'): string[] {
  */
 function tasksView(): string[] {
   const active = SECTIONS.flatMap((section) => section.tasks).filter((task) => task.owner === undefined).length;
-  const out = [...switchRow('tasks'), ...ruled(PANE_X, HEADER_Y, [span(`${active} active · `, C.muted), span(`inbox ${UNREAD} unread`, C.amber)])];
+  const out = [...switchRow('tasks'), ...ruled(PANE_X, HEADER_Y, [span(`${active} active`, C.muted)])];
   let y = HEADER_Y;
   const heading = (name: string, count: number): void => {
     y += LINE + 2 * BLANK;

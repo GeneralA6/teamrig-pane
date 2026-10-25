@@ -22,8 +22,8 @@ bar at its right shows where it stands while the body holds more than the window
 its buttons, whose header would take over half its rows, scrolls as one.
 
 - **mine**: the session's area, under its status bar (Status bar, below) and a header counting its
-  active tasks and unread inbox lines (`3 active · inbox 1 unread`; a pin names the area first,
-  `web (pinned) · 3 active · …`). Its tasks follow in sections, each in teamrig's plan order (priority,
+  active tasks (`3 active`; a pin names the area first, `web (pinned) · 3 active`; the switch's Inbox
+  button counts the unread inbox lines). Its tasks follow in sections, each in teamrig's plan order (priority,
   then the date it works to with undated last, then id: its own due, or an earlier one of an active task
   that needs it) under a bold heading with its count, an empty one left out:
   `Verifying` (the nearest to done, so closing them comes first), `Working on`, `Up next`, `Waiting`
@@ -126,9 +126,6 @@ line under its own indent). A ref that names a line (`board.md:6`) opens the pag
 looks for the file where it looks for the lines a card quotes: an inbox in the inbox folder, `~/` under the home
 folder, a relative path in the session's folder and each folder above it, then in the team's folder. A file it does
 not find lists each path it looked at; one over 256 KiB, or not text, says why it is not shown.
-
-In the dock, a click on the header's `inbox 2 unread` opens the Inbox view (see Inbox, below). Reading it there marks
-nothing read: the pane never writes an inbox, so the count drops only when the session runs `teamrig inbox read`.
 
 In the Tasks view, the Inbox view, the Changes view, over the Log view's list and on the Team tab (see Changes, Log,
 Inbox and Team, below), the dock shows a Find field under its switch; `s` or a click

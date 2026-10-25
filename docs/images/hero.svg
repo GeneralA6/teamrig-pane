@@ -45,8 +45,8 @@ text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helveti
 <text x="633.5" y="90" class="mono btn" text-anchor="middle"><tspan fill="#e6edf3" font-weight="600">Tasks</tspan></text>
 <rect x="670.5" y="72.5" width="106" height="26" rx="6" fill="none" stroke="#30363d" data-button="changes"/>
 <text x="723.5" y="90" class="mono btn" text-anchor="middle"><tspan fill="#8b949e">Changes Δ3</tspan></text>
-<text x="604" y="128" class="mono pane" textLength="210.0" lengthAdjust="spacingAndGlyphs"><tspan fill="#8b949e">3 active · </tspan><tspan fill="#d29922">inbox 1 unread</tspan></text>
-<path d="M822.0 123.5H924" stroke="#30363d"/>
+<text x="604" y="128" class="mono pane" textLength="67.2" lengthAdjust="spacingAndGlyphs"><tspan fill="#8b949e">3 active</tspan></text>
+<path d="M679.2 123.5H924" stroke="#30363d"/>
 <text x="604" y="148" class="mono pane"><tspan fill="#e6edf3" font-weight="600">Working on</tspan><tspan fill="#8b949e"> (1)</tspan></text>
 <g data-glyph="in-progress" transform="translate(608.2 161)"><circle r="4.5" fill="none" stroke="#d29922" stroke-width="1.5"/><path d="M0 -4.5a4.5 4.5 0 0 0 0 9z" fill="#d29922"/></g>
 <text x="620.8" y="166" class="mono pane"><tspan fill="#e6edf3" font-weight="600">T12</tspan></text>
