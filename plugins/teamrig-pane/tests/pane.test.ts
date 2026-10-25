@@ -1556,8 +1556,8 @@ test('a press on a session opens its page: its lines oldest first, under back, k
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'back'])
   expect(await pane.find({ text: /^lead · / })).toBeUndefined()
   expect(await drawnLines(pane)).toContain('last 2 h · 3 lines, the newest last')
-  const lines = async () => (await drawnLines(pane)).filter(line => /^(prompt|reply) · |^── |^Ship|^Next/.test(line))
-  expect(await lines()).toEqual(['prompt · 13:20 UTC', 'Ship the log view', 'reply · 13:21 UTC', 'Shipped it', '── 13:22 UTC · context cleared (/clear) ──'])
+  const lines = async () => (await drawnLines(pane)).filter(line => /^(owner|Claude) · |^── |^Ship|^Next/.test(line))
+  expect(await lines()).toEqual(['owner · 13:20 UTC', 'Ship the log view', 'Claude · 13:21 UTC', 'Shipped it', '── 13:22 UTC · context cleared (/clear) ──'])
 
   disk.write(`${WEB_LOG}/api/2026-10-13T13.jsonl`, [
     turnLine(40, 'prompt', 'Ship the log view'),

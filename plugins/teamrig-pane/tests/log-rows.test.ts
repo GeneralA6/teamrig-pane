@@ -66,7 +66,7 @@ describe('logListBlocks', () => {
 })
 
 describe('logPageBlocks', () => {
-  test("heads the page with the session and its count, then each prompt and reply's head over its text, a paragraph a block", () => {
+  test("heads the page with the session and its count, then each prompt's and reply's speaker over its text, a paragraph a block", () => {
     const blocks = logPageBlocks(
       page([
         entry('2026-10-18T23:10:00Z', 'prompt', 'ship T587'),
@@ -77,14 +77,48 @@ describe('logPageBlocks', () => {
     )
     expect(words(blocks)).toEqual([
       ['log-page', ['lead', 'last 24 h · 3 lines, the newest last']],
-      ['log-page:2026-10-18T23:10:00Z:prompt', ['prompt · Sun 10-18 23:10 UTC', 'ship T587']],
-      ['log-page:2026-10-19T20:01:00Z:reply', ['reply · 20:01 UTC · cut, its end kept', 'Done:', '  - reader']],
+      ['log-page:2026-10-18T23:10:00Z:prompt', ['owner · Sun 10-18 23:10 UTC', 'ship T587']],
+      ['log-page:2026-10-19T20:01:00Z:reply', ['Claude · 20:01 UTC · cut, its end kept', 'Done:', '  • reader']],
       ['log-page:2026-10-19T20:01:00Z:reply:para:4', ['Next: tests']],
       ['log-page:2026-10-19T20:02:00Z:clear', ['── 20:02 UTC · context cleared (/clear) ──']],
     ])
-    // A wrapped line keeps its indent; each line's key names its entry and its line.
-    expect(blocks[2]?.rows[2]).toEqual({ key: 'log-page:2026-10-19T20:01:00Z:reply:line:2', spans: [{ text: '  - reader' }], hang: { text: '  ' } })
-    expect(blocks[1]?.rows[0]?.spans[0]).toEqual({ text: 'prompt', bold: true, color: 'suggestion' })
+    // An item's bullet is drawn and its wrapped lines start under its words; each line's key names its entry and its line.
+    expect(blocks[2]?.rows[2]).toEqual({ key: 'log-page:2026-10-19T20:01:00Z:reply:line:2', spans: [{ text: '  • ' }, { text: 'reader' }], hang: { text: '    ' } })
+    expect(blocks[1]?.rows[0]?.spans[0]).toEqual({ text: 'owner', bold: true, color: 'suggestion' })
+    expect(blocks[2]?.rows[0]?.spans[0]).toEqual({ text: 'Claude', bold: true, color: 'claude' })
+  })
+
+  test("splits a prompt by who spoke: a harness notice is dim lines led by its time, each other voice a head over its words, the cut mark on the first part", () => {
+    const text = [
+      '<task-notification>',
+      '<task-id>b1</task-id>',
+      '<summary>Background command "tests" completed</summary>',
+      '</task-notification>',
+      'ship it',
+      '<cross-session-message from="s-9" from-name="teamrig">merge T855 now</cross-session-message>',
+      '<system-reminder>Stop hook blocking error from command "SessionStart:clear": read your handover',
+      '',
+      'then carry on</system-reminder>',
+      '<agent-message>',
+      '[Subagent hand-back] the report',
+      '  found 2',
+      '</agent-message>',
+    ].join('\n')
+    const blocks = logPageBlocks(page([entry('2026-10-19T20:01:00Z', 'prompt', text, true)]), UTC)
+    const key = 'log-page:2026-10-19T20:01:00Z:prompt'
+    expect(words(blocks).slice(1)).toEqual([
+      [key, ['20:01 UTC · cut, its end kept · Background command "tests" completed']],
+      [`${key}:part:1`, ['owner · 20:01 UTC', 'ship it']],
+      [`${key}:part:2`, ['message from teamrig · 20:01 UTC', 'merge T855 now']],
+      [`${key}:part:3`, ['20:01 UTC · Stop hook "SessionStart:clear": read your handover']],
+      [`${key}:part:3:para:3`, ['then carry on']],
+      [`${key}:part:4`, ['subagent report · 20:01 UTC', 'found 2']],
+    ])
+    expect(blocks[1]?.rows[0]?.spans.at(0)).toEqual({ text: '20:01 UTC', dim: true })
+    expect(blocks[1]?.rows[0]?.spans.at(-1)).toEqual({ text: 'Background command "tests" completed', dim: true })
+    expect(blocks[5]?.rows[0]).toEqual({ key: `${key}:part:3:line:3`, spans: [{ text: 'then carry on', dim: true }] })
+    expect(blocks[3]?.rows[0]?.spans[0]).toEqual({ text: 'message from teamrig', bold: true, color: 'warning' })
+    expect(blocks[6]?.rows[0]?.spans[0]).toEqual({ text: 'subagent report', bold: true, color: 'subtle' })
   })
 
   test('two lines of one time and kind keep keys of their own; an empty text is its head alone; an unreadable time shows as written', () => {
@@ -93,9 +127,9 @@ describe('logPageBlocks', () => {
       UTC,
     )
     expect(words(blocks).slice(1)).toEqual([
-      ['log-page:2026-10-19T20:01:00Z:reply', ['reply · 20:01 UTC', 'a']],
-      ['log-page:2026-10-19T20:01:00Z:reply:1', ['reply · 20:01 UTC']],
-      ['log-page:soon:prompt', ['prompt · soon', 'b']],
+      ['log-page:2026-10-19T20:01:00Z:reply', ['Claude · 20:01 UTC', 'a']],
+      ['log-page:2026-10-19T20:01:00Z:reply:1', ['Claude · 20:01 UTC']],
+      ['log-page:soon:prompt', ['owner · soon', 'b']],
     ])
   })
 
@@ -106,8 +140,8 @@ describe('logPageBlocks', () => {
     )
     // 23:10 UTC on 10-18 is 02:10 IDT on 10-19, the zone's day of NOW, so it shows its time alone.
     expect(words(blocks).slice(1)).toEqual([
-      ['log-page:2026-10-18T20:00:00Z:prompt', ['prompt · Sun 10-18 23:00 IDT', 'a']],
-      ['log-page:2026-10-18T23:10:00Z:reply', ['reply · 02:10 IDT', 'b']],
+      ['log-page:2026-10-18T20:00:00Z:prompt', ['owner · Sun 10-18 23:00 IDT', 'a']],
+      ['log-page:2026-10-18T23:10:00Z:reply', ['Claude · 02:10 IDT', 'b']],
     ])
     const list = logListBlocks({ kind: 'sessions', hours: 24, sessions: [{ id: 'lead', changedAt: Date.parse('2026-10-19T20:05:00Z'), lastPrompt: null }] }, JERUSALEM)
     expect(words(list)[1]?.[1][0]).toBe('lead · 23:05 IDT')
