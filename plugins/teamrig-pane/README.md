@@ -38,7 +38,7 @@ its buttons, whose header would take over half its rows, scrolls as one.
 A task is two lines: its status mark, bold id and title (cut at two lines, whole while its card is open), then a dim meta line under
 the title. The mark is its status as `teamrig list` names it: `○` open, `◐` in progress, `◑` verifying,
 `■` waiting, `✓` done, `✗` dropped. The meta line reads `p2 · due Sat 10-17 · in progress since 11:55 IDT`:
-its priority, the date it works to (its own due, or an earlier one of an active task that needs it,
+its priority, `bug` or `critical bug` for a bug, the date it works to (its own due, or an earlier one of an active task that needs it,
 which it names: `due Wed 10-14 (from T7)`; `verify by` while verifying), since when it stands at its status
 and why, whom it holds up, then what needs a look. A verifying task's change has landed and waits for what proves it works: its
 note says what that is (`verifying since 09:10 IDT: tests pass on main`). A waiting task waits on a
@@ -88,6 +88,7 @@ the value column, and shows only when it has a value:
 - **Lead:** the lead its owner answers to, from the team's config: the sub-lead that lists it, else the
   lead (for the lead's own tasks too); none when the pane read no team config;
 - **Priority:** its number;
+- **Type:** `bug` or `critical bug`; none for a task;
 - **Due:** the date it works to, `late 2d` in red once past it, a date taken from a task that needs it
   naming that task (`Wed 10-14 (from T7)`); **Verify by** while it is verifying;
 - **Planned:** the week plan it is in, against the team's week: `this week`, `next week`,

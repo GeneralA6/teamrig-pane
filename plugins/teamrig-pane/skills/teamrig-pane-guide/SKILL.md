@@ -221,7 +221,8 @@ A task is two lines, its title and a dim meta line under it:
 | --- | --- |
 | `○` `◐` `◑` `■` `✓` `✗` | open, in-progress, verifying, waiting, done, dropped (as `teamrig list` names them) |
 | `T12`, the title | The id, bold, and the title, cut at two lines; whole while its card is open |
-| `p2` | Its priority |
+| `p2` | Its priority; `p0`, teamrig's own level for work done right now, comes before every other |
+| `bug`, `critical bug` | What the item is past a plain task (`teamrig add --type bug`, `--critical`); a task says nothing |
 | `due Sat 10-17` | The date it works to: its own due, or an earlier one of an active task that needs it, which it names (`due Wed 10-14 (from T7)`); `verify by` while verifying |
 | `in progress since 11:55 IDT` | Since when it stands at its status (a time today, else a day, on the team's clock); a verifying task's note follows, what will prove it |
 | `waiting since 14:00 IDT: decision owner, on T5 ready; the copy first` | In red: what a waiting task waits for (a decision, an approval, a task or a time, as `teamrig list` words it), a cleared one `ready`, then its note. An old `blocked` line reads as waiting, with only its note |
@@ -301,6 +302,7 @@ value:
 | `Owner` | The session that owns it, on every card |
 | `Lead` | The lead its owner answers to, from the team's config: the sub-lead that lists it, else the lead (for the lead's own tasks too); none when the pane read no team config |
 | `Priority` | Its priority, a number |
+| `Type` | `bug` or `critical bug`; none for a task |
 | `Due` | The date it works to, `late 2d` in red once past it, a date taken from a task that needs it naming that task (`Wed 10-14 (from T7)`); `Verify by` while it is verifying |
 | `Planned` | The week plan it is in, against the team's week: `this week`, `next week`, `week of Mon 10-26`, or `not in a week plan` |
 | `After` | The tasks planned before it (`--after`), each with its status |
