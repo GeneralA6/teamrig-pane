@@ -128,6 +128,11 @@ describe('card', () => {
     expect(rowNamed(cardOf(tasks, 'T3'), 'type')).toBe(NO_ROW)
   })
 
+  test("a p0 task's card reads Priority 0, teamrig's level for work done right now", async () => {
+    const tasks = rowsOf([createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', priority: 0 })])
+    expect(textOf(rowNamed(cardOf(tasks, 'T1'), 'priority'))).toBe(labelled('Priority', '0'))
+  })
+
   test('a Reference part keeps its words around the file it names, a T-id in them its own span; the same file at another line once', async () => {
     const ref = 'owner, see (notes/api/t26.md#plan) for T5; notes/api/t26.md:40; notes/api/t26.md:52; in the meeting'
     const tasks = rowsOf([

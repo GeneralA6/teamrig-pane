@@ -20,7 +20,7 @@ export type TaskRow = {
   /** What the task is and why, in plain words (`teamrig add --description`, a GitHub issue's body); null for a task written before teamrig kept one. */
   description: string | null
   owner: string
-  /** 1 is the most urgent; drawn `p1` in a list, `Priority 1` on a card. */
+  /** 0 is the most urgent (teamrig's own level for work done right now); drawn `p0` in a list, `Priority 0` on a card. */
   priority: number
   /** What the item is (`teamrig add --type`); null when no one set it, which reads as a task. */
   type: 'task' | 'bug' | null
