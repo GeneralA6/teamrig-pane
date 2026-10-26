@@ -4,7 +4,7 @@ import { LABEL_CELLS } from '../hooks/card'
 import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
-import { rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
+import { ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
 import { barCounts } from '../hooks/status-bar'
@@ -171,6 +171,15 @@ describe('log', () => {
     expect(STATUS_CONTRACT_MATCHES).toBe(true)
     const statuses: readonly TaskStatus[] = TASK_STATUSES
     expect(Object.keys(GLYPH).sort()).toEqual([...statuses].sort())
+  })
+
+  test("the item types the plugin contract spells out are teamrig's, and a row carries its type and critical mark", async () => {
+    expect(ITEM_TYPE_CONTRACT_MATCHES).toBe(true)
+    const [bug, task] = rowsOf([
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, taskKeys: { type: 'bug', critical: true } }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW }),
+    ])
+    expect([bug?.type, bug?.critical, task?.type, task?.critical]).toEqual(['bug', true, null, false])
   })
 
   test('each status glyph is a one-cell text symbol, never an emoji, and verifying is the green half of working', async () => {

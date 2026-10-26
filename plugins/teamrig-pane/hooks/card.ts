@@ -4,9 +4,9 @@
 // written before teamrig kept one shows the ask quoted from its ref (details.ts) instead. Status: since when, who
 // set it when that is known, then why a waiting task waits. Note: the newest status note. Proof: what proves a
 // verifying task. Owner: the session that owns it, on every card. Lead: the lead its owner answers to (leads.ts),
-// when the team's config is read. Priority, Due (Verify by while verifying; a date
-// taken from a task that needs it names that task; late in red) and Planned (its week plan against the team's week:
-// this week, next week, the week of a day, or none), each on its own row. After: the tasks planned first, with their
+// when the team's config is read. Priority, Type (a bug or a critical bug; none for a task), Due (Verify by while
+// verifying; a date taken from a task that needs it names that task; late in red) and Planned (its week plan against
+// the team's week: this week, next week, the week of a day, or none), each on its own row. After: the tasks planned first, with their
 // status. Needed by: each active task of another owner that needs it, with its owner and due, the earliest due first.
 // Goal: each goal's roadmap item. Origin: who asked (or the GitHub issue it came from), who wrote it and when, as a
 // tracker's Created row. Reference: where the ask is written, each file by its
@@ -22,7 +22,7 @@ import { fileLabel, refParts } from './details'
 import { idSpans } from './ids'
 import { leadOf } from './leads'
 import { issueOf, taskLinks } from './links'
-import { dueWords, lateWords, neededByLines, STATUS_WORDS, storedDayWords, waitingWords, whenWords, type PaneTree } from './meta'
+import { dueWords, lateWords, neededByLines, STATUS_WORDS, storedDayWords, typeWords, waitingWords, whenWords, type PaneTree } from './meta'
 import { refSegments } from './ref-file'
 import type { Row, Span } from './rows'
 import { weekAfter, weekOf, type Clock } from './zone'
@@ -46,6 +46,7 @@ export type CardField =
   | 'owner'
   | 'lead'
   | 'priority'
+  | 'type'
   | 'due'
   | 'planned'
   | 'after'
@@ -212,6 +213,7 @@ export function cardRows(
     ...field('owner', 'Owner', [[{ text: task.owner }]]),
     ...field('lead', 'Lead', textLines(leadOf(task.owner, tree.leads))),
     ...field('priority', 'Priority', [[{ text: String(task.priority) }]]),
+    ...field('type', 'Type', textLines(typeWords(task))),
     ...field('due', task.status === 'verifying' ? 'Verify by' : 'Due', dueLines(task, tree)),
     ...field('planned', 'Planned', plannedLines(task, context)),
     ...field('after', 'After', afterLines(task, context)),

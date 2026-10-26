@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow, WaitRow } from '../types'
 import { TimeZone, readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { ageWords, clockWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, STATUS_WORDS, storedDayWords, waitingWords, whenWords } from '../hooks/meta'
+import { ageWords, clockWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, STATUS_WORDS, storedDayWords, typeWords, waitingWords, whenWords } from '../hooks/meta'
 import { HOUR, JERUSALEM, NOT_PICKED_UP_HOURS, NOW, clockAt, createLine, iso, statusLine, treeAt, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
@@ -205,6 +205,25 @@ describe('meta line', () => {
     )
     expect(textOf(task, 'po')).toEqual(['p2', 'due Mon 10-12', 'in progress since 12:00 UTC', 'late 14h'])
     expect(metaParts(task, AT_NOW, 'po').map(part => part.color)).toEqual([undefined, undefined, undefined, 'error'])
+  })
+
+  test('a bug says so after its priority, a critical one critical bug; a task, or one no one typed, says nothing', async () => {
+    const bug = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', taskKeys: { type: 'bug' } }))
+    expect(textOf(bug, 'po')).toEqual(['p3', 'bug'])
+    const critical = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', due: '2026-10-15', taskKeys: { type: 'bug', critical: true } }))
+    expect(textOf(critical, 'po')).toEqual(['p3', 'critical bug', 'due Thu 10-15'])
+    const task = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', taskKeys: { type: 'task' } }))
+    expect(typeWords(task)).toBe(null)
+    expect(textOf(task, 'po')).toEqual(['p3'])
+    const untyped = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po' }))
+    expect([untyped.type, typeWords(untyped)]).toEqual([null, null])
+  })
+
+  test("a line from before item types reads its kind as teamrig does: critical a critical bug, problem a bug", async () => {
+    const critical = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', taskKeys: { kind: 'critical' } }))
+    expect(typeWords(critical)).toBe('critical bug')
+    const problem = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', taskKeys: { kind: 'problem' } }))
+    expect(typeWords(problem)).toBe('bug')
   })
 
   test('waiting: since when and why, in red; one waiting since an earlier day names the day', async () => {
