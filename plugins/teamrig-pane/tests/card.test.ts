@@ -114,6 +114,20 @@ describe('card', () => {
     expect(rowNamed(rows, 'reference:1').spans[1]).toEqual({ text: 'docs/x.md', file: { file: 'docs/x.md', line: 9 } })
   })
 
+  test("a bug's card names its type after the priority, a critical one critical bug; a task's card has no Type row", async () => {
+    const tasks = rowsOf([
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', taskKeys: { type: 'bug' } }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', taskKeys: { type: 'bug', critical: true } }),
+      createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', taskKeys: { type: 'task' } }),
+    ])
+    const bug = cardOf(tasks, 'T1')
+    const keys = bug.map(row => row.key.replace('waiting-card:T1:', ''))
+    expect(keys[keys.indexOf('priority') + 1]).toBe('type')
+    expect(textOf(rowNamed(bug, 'type'))).toBe(labelled('Type', 'bug'))
+    expect(textOf(rowNamed(cardOf(tasks, 'T2'), 'type'))).toBe(labelled('Type', 'critical bug'))
+    expect(rowNamed(cardOf(tasks, 'T3'), 'type')).toBe(NO_ROW)
+  })
+
   test('a Reference part keeps its words around the file it names, a T-id in them its own span; the same file at another line once', async () => {
     const ref = 'owner, see (notes/api/t26.md#plan) for T5; notes/api/t26.md:40; notes/api/t26.md:52; in the meeting'
     const tasks = rowsOf([

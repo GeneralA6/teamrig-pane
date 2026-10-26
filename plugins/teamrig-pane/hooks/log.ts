@@ -13,6 +13,8 @@ type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 export const STATUS_CONTRACT_MATCHES: Same<TaskStatus, ReadStatus> = true
 // The same for what a waiting task waits for.
 export const WAIT_CONTRACT_MATCHES: Same<WaitRow, WaitReason> = true
+// The same for an item's type (a task or a bug).
+export const ITEM_TYPE_CONTRACT_MATCHES: Same<TaskRow['type'], Task['type']> = true
 
 /** A task as the pane draws it. */
 export function rowOf(task: Task): TaskRow {
@@ -22,6 +24,8 @@ export function rowOf(task: Task): TaskRow {
     description: task.description,
     owner: task.owner,
     priority: task.priority,
+    type: task.type,
+    critical: task.critical,
     due: task.due,
     status: task.status,
     note: task.note,

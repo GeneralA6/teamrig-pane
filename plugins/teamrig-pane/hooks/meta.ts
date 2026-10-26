@@ -1,11 +1,11 @@
-// The dim line under a task's title (rows.ts), in plain words: its priority, when it is due (teamrig's effective
-// due: an earlier date of a task that needs it, naming that task), how long it has stood at its status and what
-// holds it (a waiting task's reasons, an open one's unfinished `after`), whom it holds up (the active tasks of other
-// sessions that need it), then what needs a look (late, new, not picked up). An open task's card (card.ts) shows it
-// in place of this line, in the same words. Every time is on the team zone's clock, zone-marked (`11:55 IDT`), and
-// every day is the zone's, as teamrig prints them (zone.ts); "today" is the zone's day of the snapshot's clock. Pure:
-// the words change with the clock and the other tasks' statuses, so view.ts's sameView compares them to know when a
-// poll must redraw.
+// The dim line under a task's title (rows.ts), in plain words: its priority, its type past a plain task (a bug), when
+// it is due (teamrig's effective due: an earlier date of a task that needs it, naming that task), how long it has
+// stood at its status and what holds it (a waiting task's reasons, an open one's unfinished `after`), whom it holds up
+// (the active tasks of other sessions that need it), then what needs a look (late, new, not picked up). An open task's
+// card (card.ts) shows it in place of this line, in the same words. Every time is on the team zone's clock, zone-marked
+// (`11:55 IDT`), and every day is the zone's, as teamrig prints them (zone.ts); "today" is the zone's day of the
+// snapshot's clock. Pure: the words change with the clock and the other tasks' statuses, so view.ts's sameView compares
+// them to know when a poll must redraw.
 import type { ThemeKey } from 'claude-code'
 import type { TaskRow, TaskStatus, TeamLeads } from '../types'
 import { ACTIVE_STATUSES, priorityText, TaskTree, TimeZone, unfinishedAfter, waitText, type EffectiveDue, type WaitContext } from './core/read/index'
@@ -205,13 +205,22 @@ export function ageWords(ms: number): string {
 }
 
 /**
+ * `bug` or `critical bug`: what the item is past a plain task, as teamrig's rows say it (register/views.ts rowHead);
+ * null for a task, and for one no one typed, which reads as a task.
+ */
+export function typeWords(task: Pick<TaskRow, 'type' | 'critical'>): string | null {
+  if (task.type === null || task.type === 'task') return null
+  return task.critical ? `critical ${task.type}` : task.type
+}
+
+/**
  * The meta line's parts, in order: `on <owner>` when `viewer` (the area whose list it is) does not own it, the
- * priority, `due …` (`verify by …` while verifying; `(from T7)` on a date taken from T7), `<status> since …` with
- * why a waiting task waits or what proves a verifying one, `after T5` while a task not yet started has one
- * unfinished, `needed by T7 (beta)` while a task of another owner needs it (neededByWords), then the flags: `late 1d`,
- * `new` (to its owner), `not picked up 2d`, and `asked by <who>` on a task not yet started that someone else
- * asked for. `tree` (treeOf) holds the clock and marks the ready reasons. `viewer` null (the all view)
- * names no owner.
+ * priority, the type past a plain task (typeWords), `due …` (`verify by …` while verifying; `(from T7)` on a date
+ * taken from T7), `<status> since …` with why a waiting task waits or what proves a verifying one, `after T5` while a
+ * task not yet started has one unfinished, `needed by T7 (beta)` while a task of another owner needs it
+ * (neededByWords), then the flags: `late 1d`, `new` (to its owner), `not picked up 2d`, and `asked by <who>` on a task
+ * not yet started that someone else asked for. `tree` (treeOf) holds the clock and marks the ready reasons. `viewer`
+ * null (the all view) names no owner.
  */
 export function metaParts(task: TaskRow, tree: PaneTree, viewer: string | null): Span[] {
   const context = tree.context
@@ -220,6 +229,8 @@ export function metaParts(task: TaskRow, tree: PaneTree, viewer: string | null):
   const parts: Span[] = []
   if (others) parts.push({ text: `on ${task.owner}` })
   parts.push({ text: priorityText(task.priority) })
+  const type = typeWords(task)
+  if (type !== null) parts.push({ text: type })
   const due = dueLabel(task, tree)
   if (due !== null) parts.push({ text: due })
   if (SAYS_SINCE.has(task.status)) {
