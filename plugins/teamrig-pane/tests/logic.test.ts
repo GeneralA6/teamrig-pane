@@ -7,6 +7,7 @@ import { indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/cor
 import { ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
+import { metaText } from '../hooks/meta'
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
@@ -214,6 +215,16 @@ describe('view', () => {
     expect(view.upNext.map(t => t.id)).toEqual(['T2', 'T4', 'T3', 'T1'])
     expect(view.waiting.map(t => t.id)).toEqual(['T5'])
     expect([view.verifying, view.working, view.doneToday]).toEqual([[], [], []])
+  })
+
+  test("a p0 task, teamrig's level for work done right now, folds, reads p0 and leads its section", async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, source: 'po', priority: 1 }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW, source: 'po', priority: 0 }),
+    )
+    const tree = treeAt(tasks, NOW)
+    expect(tasks.map(t => metaText(t, tree))).toEqual(['p1', 'p0'])
+    expect(areaView(tasks, 'po', tree).upNext.map(t => t.id)).toEqual(['T2', 'T1'])
   })
 
   test('plan order reads the effective due: an undated task a dated one needs comes before a later-dated one', async () => {
