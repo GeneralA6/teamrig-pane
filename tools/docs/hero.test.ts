@@ -4,7 +4,9 @@ import { contrast, mix } from './colour.ts';
 import {
   AREA,
   CAPTIONS,
+  CHANGE_COLUMNS,
   CHANGED,
+  DIFF_HINT,
   DONE_TODAY,
   HERO_CLOCK,
   HERO_STEPS,
@@ -69,44 +71,58 @@ const MARKS = new Map([
 ]);
 const STATUS_COLORS = new Map<string, string>(Object.entries(STATUS_COLOR));
 
-/** Something drawn in the Tasks view, set in the pane's columns: a text, or a status mark as the pane's character. */
+/** Something drawn in a view of the pane, set in the pane's columns: a text, or a status mark as the pane's character. */
 interface Cell {
   readonly y: number;
   readonly column: number;
   readonly text: string;
 }
 
-/**
- * Every text of the Tasks view at the column it starts in (an end-anchored one ending at its x) on its baseline, and
- * every status mark at the column it is centred on, on the baseline of its row. The switch's labels are left out: they
- * sit centred on their buttons, not on the pane's grid.
- */
-const cells: Cell[] = places
-  .filter((place) => inPart(place, 'tasks'))
-  .flatMap(({ element }): Cell[] => {
-    const status = element.attributes.get('data-glyph');
-    if (status !== undefined) {
-      const [, x = '', y = ''] = /^translate\(([\d.]+) ([\d.]+)\)$/.exec(element.attributes.get('transform') ?? '') ?? [];
-      return [{ y: Number(y) + 5, column: (Number(x) - PANE_X) / PANE_CHAR - 0.5, text: MARKS.get(status) ?? '?' }];
-    }
-    const anchor = element.attributes.get('text-anchor');
-    if (element.name !== 'text' || anchor === 'middle') return [];
-    const text = textOf(element);
-    return [{ y: number(element, 'y'), column: (number(element, 'x') - PANE_X) / PANE_CHAR - (anchor === 'end' ? text.length : 0), text }];
-  });
+/** A row of a view of the pane as the terminal draws it, on its baseline. */
+interface PaneRow {
+  readonly y: number;
+  readonly text: string;
+}
 
-/** The Tasks view as the terminal's rows, top to bottom: each cell's characters in their columns, spaces between. */
-const paneRows: { readonly y: number; readonly text: string }[] = [...new Set(cells.map((cell) => cell.y))]
-  .sort((a, b) => a - b)
-  .map((y) => {
-    const chars: string[] = [];
-    for (const cell of cells.filter((each) => each.y === y)) {
-      [...cell.text].forEach((char, i) => {
-        chars[Math.round(cell.column) + i] = char;
-      });
-    }
-    return { y, text: Array.from({ length: chars.length }, (_, i) => chars[i] ?? ' ').join('') };
-  });
+/**
+ * Every text of a view (`tasks` or `changes`) at the column it starts in (an end-anchored one ending at its x) on its
+ * baseline, and every status mark at the column it is centred on, on the baseline of its row. The switch's labels are
+ * left out: they sit centred on their buttons, not on the pane's grid.
+ */
+function cellsIn(part: string): Cell[] {
+  return places
+    .filter((place) => inPart(place, part))
+    .flatMap(({ element }): Cell[] => {
+      const status = element.attributes.get('data-glyph');
+      if (status !== undefined) {
+        const [, x = '', y = ''] = /^translate\(([\d.]+) ([\d.]+)\)$/.exec(element.attributes.get('transform') ?? '') ?? [];
+        return [{ y: Number(y) + 5, column: (Number(x) - PANE_X) / PANE_CHAR - 0.5, text: MARKS.get(status) ?? '?' }];
+      }
+      const anchor = element.attributes.get('text-anchor');
+      if (element.name !== 'text' || anchor === 'middle') return [];
+      const text = textOf(element);
+      return [{ y: number(element, 'y'), column: (number(element, 'x') - PANE_X) / PANE_CHAR - (anchor === 'end' ? text.length : 0), text }];
+    });
+}
+
+/** A view as the terminal's rows, top to bottom: each cell's characters in their columns, spaces between. */
+function rowsOf(drawn: readonly Cell[]): PaneRow[] {
+  return [...new Set(drawn.map((cell) => cell.y))]
+    .sort((a, b) => a - b)
+    .map((y) => {
+      const chars: string[] = [];
+      for (const cell of drawn.filter((each) => each.y === y)) {
+        [...cell.text].forEach((char, i) => {
+          chars[Math.round(cell.column) + i] = char;
+        });
+      }
+      return { y, text: Array.from({ length: chars.length }, (_, i) => chars[i] ?? ' ').join('') };
+    });
+}
+
+const cells = cellsIn('tasks');
+/** The Tasks view as the terminal's rows. */
+const paneRows = rowsOf(cells);
 
 describe('renderHero', () => {
   it('draws the same bytes every time, as well-formed XML', () => {
@@ -309,29 +325,39 @@ describe('renderHero', () => {
     }
   });
 
-  it('flips to Changes: the switch counts the files, a ruled repo header, and git codes coloured as the pane colours them', () => {
-    assert.deepEqual(texts('changes').slice(0, 3), ['Tasks', `Changes ${CHANGED.length}`, `${REPO.name} · ${REPO.branch} · ${CHANGED.length} changed`]);
+  it('flips to Changes: the switch counts the files, a ruled repo header, the hint, and what changed in words coloured as the pane colours them', () => {
+    assert.deepEqual(texts('changes').slice(0, 4), ['Tasks', `Changes ${CHANGED.length}`, `${REPO.name} · branch ${REPO.branch} · ${CHANGED.length} files`, DIFF_HINT]);
     const fillOf = (words: string): string | undefined => {
       const text = places.find((place) => inPart(place, 'changes') && place.element.name === 'text' && textOf(place.element) === words);
       const first = (text?.element.children ?? []).find((node): node is XmlElement => typeof node !== 'string');
       return first?.attributes.get('fill');
     };
     assert.deepEqual(
-      ['A', 'M', '??'].map(fillOf),
-      [PALETTE.green, PALETTE.amber, PALETTE.muted],
+      [DIFF_HINT, 'added', 'changed', 'new'].map(fillOf),
+      [PALETTE.muted, PALETTE.green, PALETTE.amber, PALETTE.muted],
     );
     for (const file of CHANGED) assert.ok(texts('changes').some((text) => text.startsWith(`${file.path} +${file.added}`)), file.path);
     const cover = places.find((place) => inPart(place, 'changes') && place.element.name === 'rect');
     assert.equal(cover?.element.attributes.get('fill'), PALETTE.panel);
   });
 
-  it("ends each file with its lines, added in green and removed in red as the pane colours them", () => {
+  it("sets each file's row as the pane draws it: its word in a column of its own, so the paths line up, within the pane's columns", () => {
+    const rows = rowsOf(cellsIn('changes')).map((row) => row.text);
+    assert.deepEqual(rows.slice(2), [
+      'added    src/signup.ts +42 (staged)',
+      'changed  src/routes.ts +18 -3',
+      'new      signup.md +9 (not in git yet)',
+    ]);
+    assert.ok(rows.slice(2).every((row) => row.length <= PANE_COLUMNS && row.slice(CHANGE_COLUMNS - 1, CHANGE_COLUMNS) === ' '), rows.join('\n'));
+  });
+
+  it("ends each file with its lines, added in green and removed in red as the pane colours them, then what the pane adds, dim", () => {
     const spansOf = (path: string): (readonly [string, string | undefined])[] => {
       const text = places.find((place) => inPart(place, 'changes') && place.element.name === 'text' && textOf(place.element).startsWith(path));
       return (text?.element.children ?? []).filter((node): node is XmlElement => typeof node !== 'string').map((node): readonly [string, string | undefined] => [textOf(node), node.attributes.get('fill')]);
     };
-    assert.deepEqual(spansOf('src/signup.ts'), [['src/signup.ts', PALETTE.fg], [' +18', PALETTE.green], [' -3', PALETTE.red]]);
-    assert.deepEqual(spansOf('docs/signup.md'), [['docs/signup.md', PALETTE.fg], [' +12', PALETTE.green]]);
+    assert.deepEqual(spansOf('src/routes.ts'), [['src/routes.ts', PALETTE.fg], [' +18', PALETTE.green], [' -3', PALETTE.red]]);
+    assert.deepEqual(spansOf('signup.md'), [['signup.md', PALETTE.fg], [' +9', PALETTE.green], [' (not in git yet)', PALETTE.muted]]);
   });
 
   it('fills the button of the view it shows', () => {

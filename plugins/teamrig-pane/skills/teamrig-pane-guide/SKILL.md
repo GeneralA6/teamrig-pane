@@ -475,10 +475,13 @@ the page by its week (`Done 10-12`). Above the prompt no page shows, so there is
 session works in: the repo of the session's folder and the repo of each file it or one of its agents writes
 (Edit, Write, NotebookEdit; a file a shell command changes adds no repo). Until one is found, the view says
 `No git repo yet` and why. A worktree is its own repo; once its folder is removed it leaves the view. Each repo has a header
-(`<folder> · <branch> · 3 changed`, or `clean`; the branch is left out when the folder bears its name, as a
-worktree's often does), then each file with git's two-letter code (`M `, ` M`, `??`), its path from the repo
-root, its lines added and removed (`+12 -3`; `+0 -0` for none, `binary` for a binary file; an untracked folder
-sums its files) and a rename's source (`← old.ts`). Files written outside any repo come last.
+(`<folder> · branch <branch> · 3 files`, `1 file` or `clean`; `no branch` while detached; the branch is left out
+when the folder bears its name, as a worktree's often does), the first repo with a diff to open led by a dim
+`click a file for its diff`. Each file's row says in words what git's two-letter code means: `changed`, `added`,
+`deleted`, `renamed`, `copied` (green when staged, yellow when in the work tree alone), `new` (dim, not in git yet)
+or `conflict` (red); then its path from the repo root, its lines added and removed (`+12 -3`; `+0 -0` for none,
+`binary` for a binary file; an untracked folder sums its files), a rename's source (`← old.ts`) and, dim,
+`(staged)`, `(staged, changed since)` or `(not in git yet)`. Files written outside any repo come last.
 
 A click on a file's row, or Enter on it, opens its diff under it and a second one closes it: each hunk's `@@` line
 dim, `+` lines green, `-` lines red, the lines around them plain. It is git's diff of the file against the last

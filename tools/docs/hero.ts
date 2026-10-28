@@ -97,13 +97,22 @@ export const SECTIONS: readonly Section[] = [
 ];
 export const DONE_TODAY: readonly DoneTask[] = [{ id: 'T11', title: 'Signup API', at: '09:40' }];
 
-/** The Changes view: the session's repo, its branch, and git's two-letter code and path for each changed file. */
+/** Where a file's change is, which colours its word as the pane does: staged green, in the work tree yellow, a new file dim. */
+export type ChangeTone = 'staged' | 'tree' | 'new';
+/**
+ * The Changes view: the session's repo and its branch, then for each changed file what git's code says in words, its
+ * path, its lines and what the pane adds after them; each row fits the pane's width, as the pane wraps a longer one.
+ */
 export const REPO = { name: 'web', branch: 'signup' } as const;
-export const CHANGED: readonly { readonly code: string; readonly path: string; readonly added: number; readonly removed: number }[] = [
-  { code: 'A ', path: 'src/signup.test.ts', added: 42, removed: 0 },
-  { code: ' M', path: 'src/signup.ts', added: 18, removed: 3 },
-  { code: '??', path: 'docs/signup.md', added: 12, removed: 0 },
+export const CHANGED: readonly { readonly word: string; readonly tone: ChangeTone; readonly path: string; readonly added: number; readonly removed: number; readonly after: string | null }[] = [
+  { word: 'added', tone: 'staged', path: 'src/signup.ts', added: 42, removed: 0, after: 'staged' },
+  { word: 'changed', tone: 'tree', path: 'src/routes.ts', added: 18, removed: 3, after: null },
+  { word: 'new', tone: 'new', path: 'signup.md', added: 9, removed: 0, after: 'not in git yet' },
 ];
+/** The cells a file's row gives its word, so the paths line up (hooks/changes-rows.ts CHANGE_COLUMNS). */
+export const CHANGE_COLUMNS = 9;
+/** The dim line over the files (hooks/changes-rows.ts DIFF_HINT). */
+export const DIFF_HINT = 'click a file for its diff';
 
 export const CAPTIONS = { tasks: "Your tasks: what's next, what's waiting, what's done", changes: 'One press on Changes: the files changed in your repo' } as const;
 
@@ -294,21 +303,23 @@ function tasksView(): string[] {
   return out;
 }
 
-/** The pane's Changes view, drawn opaque over the tasks: the repo's header, then each file's git code, path and lines. */
+/** The colour of a file's word, as the pane colours it. */
+const TONE_COLOUR: Readonly<Record<ChangeTone, string>> = { staged: C.green, tree: C.amber, new: C.muted };
+
+/** The pane's Changes view, drawn opaque over the tasks: the repo's header, the hint, then each file's word, path, lines and what follows them. */
 function changesView(): string[] {
   const out = [
     `<rect x="586" y="62" width="356" height="340" fill="${C.panel}"/>`,
     ...switchRow('changes'),
-    ...ruled(PANE_X, HEADER_Y, [span(REPO.name, C.fg, { bold: true }), span(` · ${REPO.branch}`, C.muted), span(` · ${CHANGED.length} changed`, C.muted)]),
+    ...ruled(PANE_X, HEADER_Y, [span(REPO.name, C.fg, { bold: true }), span(` · branch ${REPO.branch}`, C.muted), span(` · ${CHANGED.length} files`, C.muted)]),
+    line(PANE_X, 160, 'pane', [span(DIFF_HINT, C.muted)]),
   ];
-  CHANGED.forEach(({ code, path, added, removed }, i) => {
-    const y = 160 + i * ROW;
-    const [index = ' ', tree = ' '] = code;
-    if (code === '??') out.push(line(PANE_X, y, 'pane', [span('??', C.muted)]));
-    if (code !== '??' && index !== ' ') out.push(line(PANE_X, y, 'pane', [span(index, C.green)]));
-    if (code !== '??' && tree !== ' ') out.push(line(PANE_X + PANE_CHAR, y, 'pane', [span(tree, C.amber)]));
+  CHANGED.forEach(({ word, tone, path, added, removed, after }, i) => {
+    const y = 160 + (i + 1) * ROW;
+    out.push(line(PANE_X, y, 'pane', [span(word, TONE_COLOUR[tone])]));
     const lines = [...(added > 0 ? [span(` +${added}`, C.green)] : []), ...(removed > 0 ? [span(` -${removed}`, C.red)] : [])];
-    out.push(line(PANE_X + 3 * PANE_CHAR, y, 'pane', [span(path, C.fg), ...lines]));
+    const said = after === null ? [] : [span(` (${after})`, C.muted)];
+    out.push(line(column(CHANGE_COLUMNS), y, 'pane', [span(path, C.fg), ...lines, ...said]));
   });
   return out;
 }

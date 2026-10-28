@@ -20,7 +20,18 @@ import {
   type ChangesPorts,
   type GitRun,
 } from '../hooks/changes'
-import { CHANGES_NOTHING_FOUND, CHANGES_SEARCH_HINT, changesBlocks, changesLabel, DIFF_LINE_ROWS, diffRows, lineSpans, paneTitle } from '../hooks/changes-rows'
+import {
+  CHANGES_NOTHING_FOUND,
+  CHANGES_SEARCH_HINT,
+  changesBlocks,
+  changesLabel,
+  changeWords,
+  DIFF_HINT,
+  DIFF_LINE_ROWS,
+  diffRows,
+  lineSpans,
+  paneTitle,
+} from '../hooks/changes-rows'
 import { searchChanges } from '../hooks/changes-search'
 import type { Block } from '../hooks/rows'
 
@@ -509,9 +520,37 @@ describe('changes rows', () => {
   test('a worktree whose folder bears its branch name names it once', () => {
     const root = 'C:/work/t300-guide'
     const blocks = changesBlocks({ repos: [repo({ root, branch: 't300-guide', files: { items: [change(' M', 'a.ts')], more: 0 } })], outside: [], isRead: true })
-    expect(textOf(blocks, `repo:${root}`)).toBe('t300-guide · 1 changed')
+    expect(textOf(blocks, `repo:${root}`)).toBe('t300-guide · 1 file')
     const other = changesBlocks({ repos: [repo({ root, branch: 'main' })], outside: [], isRead: true })
-    expect(textOf(other, `repo:${root}`)).toBe('t300-guide · main · clean')
+    expect(textOf(other, `repo:${root}`)).toBe('t300-guide · branch main · clean')
+  })
+
+  test("git's two-letter code in words: where the change is, staged green and in the work tree yellow, a new file dim, a conflict red", () => {
+    expect(changeWords(' M')).toEqual({ word: { text: 'changed', color: 'warning' }, after: null })
+    expect(changeWords(' D')).toEqual({ word: { text: 'deleted', color: 'warning' }, after: null })
+    expect(changeWords(' T')).toEqual({ word: { text: 'changed', color: 'warning' }, after: null })
+    expect(changeWords('A ')).toEqual({ word: { text: 'added', color: 'success' }, after: 'staged' })
+    expect(changeWords('R ')).toEqual({ word: { text: 'renamed', color: 'success' }, after: 'staged' })
+    expect(changeWords('C ')).toEqual({ word: { text: 'copied', color: 'success' }, after: 'staged' })
+    expect(changeWords('MM')).toEqual({ word: { text: 'changed', color: 'success' }, after: 'staged, changed since' })
+    expect(changeWords('AD')).toEqual({ word: { text: 'added', color: 'success' }, after: 'staged, deleted since' })
+    expect(changeWords('??')).toEqual({ word: { text: 'new', dim: true }, after: 'not in git yet' })
+    for (const code of ['UU', 'AU', 'UD', 'DU', 'UA', 'AA', 'DD']) expect(changeWords(code)).toEqual({ word: { text: 'conflict', color: 'error' }, after: null })
+  })
+
+  test('a header counts one file as one, and names a detached repo as on no branch', () => {
+    const one = changesBlocks({ repos: [repo({ files: { items: [change(' M', 'a.ts')], more: 0 } })], outside: [], isRead: true })
+    expect(textOf(one, `repo:${REPO}`)).toBe('repo · branch main · 1 file')
+    const detached = changesBlocks({ repos: [repo({ branch: null })], outside: [], isRead: true })
+    expect(textOf(detached, `repo:${REPO}`)).toBe('repo · no branch · clean')
+  })
+
+  test('what changed fills one column, so the paths line up, and a wrapped path goes on under the path', () => {
+    const files = [change(' M', 'a.ts'), change('UU', 'b.ts'), change('??', 'c.md')]
+    const card = changesBlocks({ repos: [repo({ files: { items: files, more: 0 } })], outside: [], isRead: true })[0]?.card ?? []
+    const rows = card.filter(row => row.key !== `${REPO}:hint`)
+    expect(rows.map(row => row.spans[0]?.text)).toEqual(['changed  ', 'conflict ', 'new      '])
+    expect(rows.map(row => row.hang)).toEqual([{ text: '         ' }, { text: '         ' }, { text: '         ' }])
   })
 
   test("each repo under a ruled header: a detached one, one git can't read, one cut short; then the files outside git", () => {
@@ -532,17 +571,28 @@ describe('changes rows', () => {
       ['outside', true],
       ['outside-files', false],
     ])
-    expect(textOf(blocks, `repo:${REPO}`)).toBe('repo · detached · 4 changed')
-    expect(textOf(blocks, `${REPO}:new.ts`)).toBe('R  new.ts +3 -1 ← old.ts')
-    expect(textOf(blocks, `${REPO}:t/`)).toBe('?? t/')
+    expect(textOf(blocks, `repo:${REPO}`)).toBe('repo · no branch · 4 files')
+    expect(textOf(blocks, `${REPO}:new.ts`)).toBe('renamed  new.ts +3 -1 ← old.ts (staged)')
+    expect(textOf(blocks, `${REPO}:t/`)).toBe('new      t/ (not in git yet)')
     expect(textOf(blocks, `${REPO}:more`)).toBe('… 2 more')
     expect(textOf(blocks, `${REPO}:partial`)).toMatch(/4 MiB/)
     expect(textOf(blocks, 'repo:C:/work/gone')).toBe('gone')
     expect(textOf(blocks, 'problem:C:/work/gone')).toBe('WARN fatal: bad object HEAD')
-    expect(textOf(blocks, 'repo:C:/work/clean')).toBe('clean · main · clean')
+    expect(textOf(blocks, 'repo:C:/work/clean')).toBe('clean · branch main · clean')
     expect(textOf(blocks, 'outside')).toBe('── written outside git (1)')
-    // The files are the header's card, so no blank line parts them from it.
-    expect(blocks[0]?.card?.map(row => row.key)).toEqual([`${REPO}:new.ts`, `${REPO}:t/`, `${REPO}:more`, `${REPO}:partial`])
+    // The files are the header's card, so no blank line parts them from it, led by the hint as the first repo with a diff to open.
+    expect(blocks[0]?.card?.map(row => row.key)).toEqual([`${REPO}:hint`, `${REPO}:new.ts`, `${REPO}:t/`, `${REPO}:more`, `${REPO}:partial`])
+    expect(blocks[0]?.card?.[0]?.spans).toEqual([{ text: DIFF_HINT, dim: true }])
+  })
+
+  test('the hint leads only the first repo with a diff to open: not one with an untracked folder alone, nor a later one', () => {
+    const folderOnly = repo({ root: 'C:/work/folder', files: { items: [change('??', 't/')], more: 0 } })
+    const first = repo({ root: 'C:/work/first', files: { items: [change(' M', 'a.ts')], more: 0 } })
+    const second = repo({ root: 'C:/work/second', files: { items: [change(' M', 'b.ts')], more: 0 } })
+    const blocks = changesBlocks({ repos: [folderOnly, first, second], outside: [], isRead: true })
+    const hinted = blocks.filter(block => block.card?.some(row => row.key.endsWith(':hint')) === true).map(block => block.key)
+    expect(hinted).toEqual(['repo:C:/work/first'])
+    expect(changesBlocks({ repos: [folderOnly], outside: [], isRead: true }).flatMap(block => block.card ?? []).map(row => row.key)).toEqual(['C:/work/folder:t/'])
   })
 
   test("a file's row opens its diff, an untracked folder's none; an open diff's lines sit under its row in the card", () => {
@@ -559,6 +609,7 @@ describe('changes rows', () => {
     const blocks = changesBlocks(changes, false, diffs)
     expect(blocks).toHaveLength(1)
     expect(blocks[0]?.card?.map(row => [row.key, row.expands ?? null])).toEqual([
+      [`${REPO}:hint`, null],
       [key, key],
       [`diff:${key}:0`, null],
       [`diff:${key}:1`, null],
@@ -568,7 +619,8 @@ describe('changes rows', () => {
       [`${REPO}:t/`, null],
       [`${REPO}:b.md`, `${REPO}:b.md`],
     ])
-    expect(blocks[0]?.card?.slice(1, 6).map(row => row.spans)).toEqual([
+    // An open diff's lines sit indented less than the path, so a narrow dock keeps room for them.
+    expect(blocks[0]?.card?.slice(2, 7).map(row => row.spans)).toEqual([
       [{ text: '   ' }, { text: '@@ -1 +1 @@', dim: true }],
       [{ text: '   ' }, { text: '-old', color: 'error' }],
       [{ text: '   ' }, { text: '+new', color: 'success' }],
@@ -576,9 +628,9 @@ describe('changes rows', () => {
       [{ text: '   ' }, { text: '… 3 more lines', dim: true }],
     ])
     // A diff line wraps under its text, past its marker, and stops at DIFF_LINE_ROWS screen lines.
-    expect(blocks[0]?.card?.[2]).toMatchObject({ hang: { text: '    ' }, maxLines: DIFF_LINE_ROWS })
+    expect(blocks[0]?.card?.[3]).toMatchObject({ hang: { text: '    ' }, maxLines: DIFF_LINE_ROWS })
     // Closed, the file's row stands alone.
-    expect(changesBlocks(changes).at(0)?.card?.map(row => row.key)).toEqual([key, `${REPO}:t/`, `${REPO}:b.md`])
+    expect(changesBlocks(changes).at(0)?.card?.map(row => row.key)).toEqual([`${REPO}:hint`, key, `${REPO}:t/`, `${REPO}:b.md`])
   })
 
   test('an open diff while git reads it, when git fails, with no line changed, and cut short', () => {
@@ -609,8 +661,8 @@ describe('changes rows', () => {
     const hooks = searched('hooks')
     expect(words(hooks)).toEqual([
       ['changes-search-count', ['2 files match']],
-      [`changes-search:${REPO}:hooks/a.ts`, [' M hooks/a.ts +4 -1', '   repo · pane-v2']],
-      [`changes-search:${REPO}:hooks/new.ts`, ['R  hooks/new.ts ← hooks/old.ts', '   repo · pane-v2']],
+      [`changes-search:${REPO}:hooks/a.ts`, ['changed  hooks/a.ts +4 -1', '         repo · branch pane-v2']],
+      [`changes-search:${REPO}:hooks/new.ts`, ['renamed  hooks/new.ts ← hooks/old.ts (staged)', '         repo · branch pane-v2']],
     ])
     // A result opens its file's diff, keyed as the list's row opens it, the words that matched underlined.
     expect(hooks[1]?.expands).toBe(`${REPO}:hooks/a.ts`)
@@ -621,11 +673,11 @@ describe('changes rows', () => {
 
     // An untracked folder has no diff to open; a file outside git says where it is; a detached repo says so.
     const tests = searched('tests')
-    expect(words(tests).slice(1)).toEqual([[`changes-search:${REPO}:tests/`, ['?? tests/', '   repo · pane-v2']]])
+    expect(words(tests).slice(1)).toEqual([[`changes-search:${REPO}:tests/`, ['new      tests/ (not in git yet)', '         repo · branch pane-v2']]])
     expect(tests[1]?.expands).toBeUndefined()
     expect(words(searched('n.md')).slice(1)).toEqual([['changes-search:outside:C:/n.md', ['C:/n.md', '   written outside git']]])
     const detached: ChangesSnapshot = { ...changes, repos: [repo({ branch: null, files: { items: files, more: 0 } })] }
-    expect(words(searchedIn(detached, 'tests')).at(1)).toEqual([`changes-search:${REPO}:tests/`, ['?? tests/', '   repo · detached']])
+    expect(words(searchedIn(detached, 'tests')).at(1)).toEqual([`changes-search:${REPO}:tests/`, ['new      tests/ (not in git yet)', '         repo · no branch']])
 
     // An open diff draws under its result, as its card.
     const opened: OpenDiffs = { [`${REPO}:hooks/a.ts`]: { kind: 'read', lines: [{ kind: 'del', text: 'old' }], more: 0, isCut: false } }
