@@ -5,7 +5,7 @@
 A Claude Code plugin that docks your session's tasks on the right of the conversation, and flips to
 the files you changed with one press. Part of [teamrig](https://github.com/GeneralA6/teamrig).
 
-![Claude Code with teamrig-pane docked beside the conversation: the session's tasks under Working on, Up next, Waiting and Done today, each with a dim line saying why it stands there, then one press on Changes lists the files changed in its repo.](docs/images/hero.svg)
+![Claude Code with teamrig-pane docked beside the conversation: the session's tasks under Working on, Up next, Waiting, Asked of others and Done today, each with a dim line saying why it stands there, then one press on Changes lists the files changed in its repo.](docs/images/hero.svg)
 
 > **Pre-release.** The pane is built on Claude Code's function hooks, an early-access plugin surface
 > that may change between releases. Nothing is stable yet and there is no release.
@@ -50,9 +50,9 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
 
 - **Tasks:** a bar of how your work stands (done today, verifying, working, waiting, not
   started; a click shows one status alone), then your tasks under Verifying, Working on, Up next,
-  Waiting and Done today, each with a dim line saying why it stands there (what a waiting one waits for,
-  what an open one comes after, which other session's task needs it); Waiting also holds what you asked of others.
-  `/teamrig-pane all` shows every owner's tasks, and `/teamrig-pane <session>`
+  Waiting, Asked of others and Done today, each with a dim line saying why it stands there (what a waiting one
+  waits for, what an open one comes after, which other session's task needs it, whose a task you asked for is).
+  `/teamrig-pane all` shows every owner's tasks, your own first, and `/teamrig-pane <session>`
   shows another session's, named by its id or its name.
 - **Details:** click a task, or press Enter on it, to open its card in place of its dim line: its
   description, status, note and proof, its priority, due date and week, the tasks it comes after and

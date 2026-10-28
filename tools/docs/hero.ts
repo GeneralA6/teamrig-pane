@@ -1,7 +1,7 @@
 /**
  * The README's hero: Claude Code in its fullscreen layout, drawn as an animated SVG. Beside the conversation the pane
- * docks the session's tasks in its sections: Working on, Up next, Waiting (the session's own waiting task, then the one
- * it asked of another session) and Done today. A task is its status mark, its id and its title over a dim line of plain
+ * docks the session's tasks in its sections: Working on, Up next, Waiting (the session's own waiting task), Asked of
+ * others (the one it asked of another session) and Done today. A task is its status mark, its id and its title over a dim line of plain
  * words: its priority, its due day, since when it has stood at its status, what it waits on or comes after, and `new`.
  * A task done today is one dim line with the time it closed. Then the switch flips the pane to the files changed in the
  * session's repo, and back. One 14 s CSS loop and no script, so GitHub shows it in an <img>. With motion turned off it
@@ -17,8 +17,8 @@ import { themeStyle } from './theme.ts';
 import { Timeline, type Clock } from './timeline.ts';
 
 const WIDTH = 960;
-const HEIGHT = 456;
-const WINDOW_HEIGHT = 400;
+const HEIGHT = 476;
+const WINDOW_HEIGHT = 420;
 
 /** 14 s a loop; the picture fades out at 13.4 s; the still shows 12.6 s, when the tasks are back. */
 export const HERO_CLOCK: Clock = { loop: 14, end: 13.4, rest: 12.6 };
@@ -50,7 +50,7 @@ interface TaskBase {
   readonly priority: string;
   /** Its due day, as the meta line words it: `Thu 10-22`. */
   readonly due?: string;
-  /** The area that owns it, when the session asked it of another session: the meta line opens `on api`. */
+  /** The area that owns it, when the session asked it of another session: the meta line opens `api's`. */
   readonly owner?: string;
 }
 
@@ -86,19 +86,14 @@ export interface Section {
 export const AREA = 'web';
 /**
  * The session's sections, in the pane's order. Verifying, which would lead them with its heading in green, has no task
- * here, and the pane draws an empty section not at all. Waiting holds the session's own waiting task, then the one it
- * asked of api.
+ * here, and the pane draws an empty section not at all. Waiting holds the session's own waiting task, Asked of others
+ * the one it asked of api.
  */
 export const SECTIONS: readonly Section[] = [
   { name: 'Working on', tasks: [{ id: 'T12', status: 'in-progress', priority: 'p1', title: 'Signup form', since: '11:55' }] },
   { name: 'Up next', tasks: [{ id: 'T14', status: 'open', priority: 'p2', title: 'Form tests', after: 'T12', isNew: true }] },
-  {
-    name: 'Waiting',
-    tasks: [
-      { id: 'T9', status: 'waiting', priority: 'p2', title: 'Email check', since: '10:20', waits: 'on T13' },
-      { id: 'T13', status: 'open', priority: 'p2', title: 'Mail key', owner: 'api', due: 'Thu 10-22' },
-    ],
-  },
+  { name: 'Waiting', tasks: [{ id: 'T9', status: 'waiting', priority: 'p2', title: 'Email check', since: '10:20', waits: 'on T13' }] },
+  { name: 'Asked of others', tasks: [{ id: 'T13', status: 'open', priority: 'p2', title: 'Mail key', owner: 'api', due: 'Thu 10-22' }] },
 ];
 export const DONE_TODAY: readonly DoneTask[] = [{ id: 'T11', title: 'Signup API', at: '09:40' }];
 
@@ -163,7 +158,7 @@ const titleColumn = (id: string): number => MARK_COLUMNS + id.length + TITLE_GAP
  */
 function metaParts(task: PaneTask): Span[] {
   return [
-    ...(task.owner === undefined ? [] : [span(`on ${task.owner}`, C.muted)]),
+    ...(task.owner === undefined ? [] : [span(`${task.owner}'s`, C.muted)]),
     span(task.priority, C.muted),
     ...(task.due === undefined ? [] : [span(`due ${task.due}`, C.muted)]),
     ...statusParts(task),
@@ -302,7 +297,7 @@ function tasksView(): string[] {
 /** The pane's Changes view, drawn opaque over the tasks: the repo's header, then each file's git code, path and lines. */
 function changesView(): string[] {
   const out = [
-    `<rect x="586" y="62" width="356" height="320" fill="${C.panel}"/>`,
+    `<rect x="586" y="62" width="356" height="340" fill="${C.panel}"/>`,
     ...switchRow('changes'),
     ...ruled(PANE_X, HEADER_Y, [span(REPO.name, C.fg, { bold: true }), span(` · ${REPO.branch}`, C.muted), span(` · ${CHANGED.length} changed`, C.muted)]),
   ];
@@ -327,9 +322,9 @@ function conversation(): string[] {
     line(28, 146, 'line', [span('Next, T12: the signup form.', C.fg)]),
     ...[400, 350, 380].map((width, i) => `<rect x="28" y="${162 + i * 16}" width="${width}" height="8" rx="4" fill="${C.faint}" fill-opacity="0.5"/>`),
     line(28, 236, 'line', [span('T9 waits on the mail key; api has T13 for it.', C.fg)]),
-    `<rect x="28.5" y="338.5" width="531" height="45" rx="9" fill="${C.bg}" stroke="${C.border}"/>`,
-    line(44, 367, 'line', [span('>', C.muted)]),
-    `<rect x="62" y="352" width="8" height="18" fill="${C.fg}"/>`,
+    `<rect x="28.5" y="358.5" width="531" height="45" rx="9" fill="${C.bg}" stroke="${C.border}"/>`,
+    line(44, 387, 'line', [span('>', C.muted)]),
+    `<rect x="62" y="372" width="8" height="18" fill="${C.fg}"/>`,
   ];
 }
 
@@ -346,7 +341,7 @@ function claudeWindow(t: Timeline): string[] {
     ...conversation(),
     `</g>`,
     `<g data-part="pane">`,
-    `<rect x="584.5" y="60.5" width="359" height="323" rx="10" fill="${C.panel}" stroke="${C.border}"/>`,
+    `<rect x="584.5" y="60.5" width="359" height="343" rx="10" fill="${C.panel}" stroke="${C.border}"/>`,
     `<g class="${t.show(HERO_STEPS.tasks)}" data-part="tasks">`,
     ...tasksView(),
     `</g>`,
@@ -361,7 +356,7 @@ function claudeWindow(t: Timeline): string[] {
 /** The caption under the window, in the reader's theme: the tasks, the Changes view, then the tasks again. */
 function captions(t: Timeline): string[] {
   const caption = (words: string, from: number, to?: number): string =>
-    `<text x="${WIDTH / 2}" y="438" text-anchor="middle" class="cap ${t.show(from, to === undefined ? {} : { to })}" data-part="caption">${escapeXml(words)}</text>`;
+    `<text x="${WIDTH / 2}" y="458" text-anchor="middle" class="cap ${t.show(from, to === undefined ? {} : { to })}" data-part="caption">${escapeXml(words)}</text>`;
   return [
     caption(CAPTIONS.tasks, HERO_STEPS.tasks, HERO_STEPS.changes - 0.3),
     caption(CAPTIONS.changes, HERO_STEPS.changes, HERO_STEPS.back),
