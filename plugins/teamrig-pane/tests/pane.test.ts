@@ -1398,8 +1398,8 @@ test("the Changes view lists each repo's changed files with their lines, counted
   // read lands while the mount draws, so the next drawing is the one to look at.
   await clock.settle()
   await pane.redraw(PANE_PROPS)
-  expect(titles).toEqual(['Tasks', 'Tasks · Δ3'])
-  expect(buttonLabel(await pane.drawn(), 'changes')).toBe('Changes Δ3')
+  expect(titles).toEqual(['Tasks', 'Tasks · 3 changed'])
+  expect(buttonLabel(await pane.drawn(), 'changes')).toBe('Changes 3')
   await pane.press({ key: 'changes' })
   expect(await pane.find({ text: /work · pane-v2 · 3 changed/ })).toBeDefined()
   expect(await pane.find({ text: / M hooks\/a\.ts \+4 -1/ })).toBeDefined()
@@ -1522,7 +1522,7 @@ test('a file the session writes adds its repo on the next poll; a failed write a
   expect(await pane.find({ text: /written outside git \(1\)/ })).toBeDefined()
   expect(await pane.find({ text: /\/notes\/plan\.md/ })).toBeDefined()
   expect(await pane.find({ text: /bad\.ts/ })).toBeUndefined()
-  expect(titles.at(-1)).toBe('Tasks · Δ2')
+  expect(titles.at(-1)).toBe('Tasks · 2 changed')
 
   // A shell call (a commit, say) is read on the next poll; with nothing new, the poll runs no git.
   const statusRuns = () => runs.filter(run => run === 'status /repo').length
@@ -1534,7 +1534,7 @@ test('a file the session writes adds its repo on the next poll; a failed write a
   await clock.advance(3_000)
   expect(statusRuns()).toBe(before + 1)
   expect(await pane.find({ text: /repo · main · clean/ })).toBeDefined()
-  expect(titles.at(-1)).toBe('Tasks · Δ1')
+  expect(titles.at(-1)).toBe('Tasks · 1 changed')
 })
 
 test('a worktree removed while the session works leaves the Changes view, with no warning and no git run in it', async ($, on) => {

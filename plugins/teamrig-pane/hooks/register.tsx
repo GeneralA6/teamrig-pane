@@ -15,8 +15,8 @@
 // session (size.ts). A title line leads every docked view: the session's name, area and team (session-title.ts). A switch
 // row, under it in every state and width (but a project teamrig is not set up for, where the setup shows alone)
 // and the whole strip, flips the body between the tasks, the Changes view (the
-// files changed in the git repos the session works in and their lines, changes.ts, counted as Δn on
-// the switch and in the tab title), the Log view: each team session's prompts and replies of the hours teamrig
+// files changed in the git repos the session works in and their lines, changes.ts, counted on the switch,
+// `Changes 3`, and in the tab title), the Log view: each team session's prompts and replies of the hours teamrig
 // keeps them (the team config's turnLog.keepHours) from the turn logs it writes (turn-log.ts), a press on a session
 // opening its page at its newest lines, back (b) returning to the list, the Inbox view: the session's inbox lines of
 // the last 24 hours and its unread ones, newest first, with a search of its own (inbox-rows.ts, inbox-search.ts), a
@@ -421,7 +421,7 @@ export const register: Register = on => {
   let teaming: LiveTeam | null = null
   /** Looks for the register again while the project is not set up for teamrig; set when the session starts in one. */
   let watch: SetupWatch | null = null
-  /** The tab title last asked for: `Tasks · Δn` (changes-rows.ts paneTitle). */
+  /** The tab title last asked for: `Tasks · 3 changed` (changes-rows.ts paneTitle). */
   let title = paneTitle(EMPTY_CHANGES)
   /**
    * What a task's refs and goals point at, for its card or its page. A failed read still opens it, its refs named

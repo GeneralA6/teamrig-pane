@@ -309,7 +309,7 @@ describe('renderHero', () => {
   });
 
   it('flips to Changes: the switch counts the files, a ruled repo header, and git codes coloured as the pane colours them', () => {
-    assert.deepEqual(texts('changes').slice(0, 3), ['Tasks', `Changes Δ${CHANGED.length}`, `${REPO.name} · ${REPO.branch} · ${CHANGED.length} changed`]);
+    assert.deepEqual(texts('changes').slice(0, 3), ['Tasks', `Changes ${CHANGED.length}`, `${REPO.name} · ${REPO.branch} · ${CHANGED.length} changed`]);
     const fillOf = (words: string): string | undefined => {
       const text = places.find((place) => inPart(place, 'changes') && place.element.name === 'text' && textOf(place.element) === words);
       const first = (text?.element.children ?? []).find((node): node is XmlElement => typeof node !== 'string');

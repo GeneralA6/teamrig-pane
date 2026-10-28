@@ -131,7 +131,7 @@ status, note, proof, priority and due under it; a second click closes it. Its `o
 pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
 band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
-Minimized, the pane is one row: the `[Tasks] [Changes Δn] [Log] [Inbox (n)] [Team]` switch and a `minimized` mark. A
+Minimized, the pane is one row: the `[Tasks] [Changes n] [Log] [Inbox (n)] [Team]` switch and a `minimized` mark. A
 click on any of its buttons, `t`, `d`, `g`, `u` or `e`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
 session.
 
@@ -458,7 +458,7 @@ the page by its week (`Done 10-12`). Above the prompt no page shows, so there is
 
 ## The Changes view
 
-`[Tasks] [Changes Δ3]` sits under the title line in every state, and is the whole minimized strip. Changes lists the files changed in each git repo the
+`[Tasks] [Changes 3]` sits under the title line in every state, and is the whole minimized strip. Changes lists the files changed in each git repo the
 session works in: the repo of the session's folder and the repo of each file it or one of its agents writes
 (Edit, Write, NotebookEdit; a file a shell command changes adds no repo). Until one is found, the view says
 `No git repo yet` and why. A worktree is its own repo; once its folder is removed it leaves the view. Each repo has a header
@@ -479,8 +479,9 @@ each as its row does, over its repo and branch, the matched words underlined; a 
 Enter with one match opens its diff, with more moves the cursor onto the first match that has a diff; switching views
 closes the search.
 
-`Δn` counts the listed files, on the button and in the pane's tab title (`Tasks · Δ3`, shown while more than one
-pane is open). The view cannot open Claude Code's own `/diff` pane: the diff under a file is the pane's own.
+The number after Changes counts the listed files, on the button (`Changes 3`) and in the pane's tab title
+(`Tasks · 3 changed`, shown while more than one pane is open). The view cannot open Claude Code's own `/diff` pane:
+the diff under a file is the pane's own.
 
 Each repo costs one `git --no-optional-locks status --porcelain=v1 -b -z` (it takes no index lock, so it never
 blocks a commit), and while it has changed files one `git diff HEAD --numstat -z` and up to two
