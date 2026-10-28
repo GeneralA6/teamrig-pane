@@ -3,6 +3,7 @@ import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiF
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
 import { BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
+import { barKeys, KEY_GROUPS } from '../hooks/keys-page'
 import { POLL_MS } from '../hooks/live'
 import { openKey } from '../hooks/press-keys'
 import { cells } from '../hooks/width'
@@ -823,7 +824,7 @@ test('a project set up while the pane shows the steps lists its tasks at the nex
   await clock.advance(POLL_MS)
   // With a team found, the switch, Find and the mode buttons are back.
   const labels = await buttonLabels(pane)
-  for (const label of ['Tasks', 'Log', 'Find', 'mine', 'all', 'archive ›']) expect(labels).toContain(label)
+  for (const label of ['Tasks', 'Log', 'Find', 'mine', 'all', 'archive ›', 'keys']) expect(labels).toContain(label)
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /Ship the team register/ })).toBeDefined()
   expect(await pane.find({ text: SETUP_HEAD })).toBeUndefined()
@@ -1025,20 +1026,20 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   expect(countType(await pane.drawn(), 'Box')).toBe(10)
 })
 
-test('the mode row draws its groups (the modes, the archive page, close cards) a dim · between two on a row, none at a wrap', async ($, on) => {
+test('the mode row draws its groups (the modes, the archive page, close cards, keys) a dim · between two on a row, none at a wrap', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   await pane.press({ key: 'all' })
-  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive']])
+  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive', '·', 'keys']])
   expect(await pane.find({ type: 'Text', text: /^·$/ })).toMatchObject({ props: { dimColor: true } })
 
   await pane.press({ key: 'security:T2' })
-  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive', '·', 'close-cards']])
+  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive', '·', 'close-cards', '·', 'keys']])
   // `[ mine ] [ all ] · [ archive › ]` takes 32 of the 48 columns: `· [ close cards ]` would run 2 past them, so close
-  // cards starts the next row, with no `·` before it.
+  // cards starts the next row, with no `·` before it, and `· k: keys` follows it there.
   await pane.redraw(PANE_PROPS)
-  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive'], ['close-cards']])
+  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive'], ['close-cards', '·', 'keys']])
 })
 
 test('an open card draws each address its ref, note, proof and evidence hold as one Link, the issue a GitHub task came from first', async ($, on) => {
@@ -1118,7 +1119,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^WARN the pane could not draw: .*state store unavailable/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'find-key', 'mine', 'all', 'archive'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'find-key', 'mine', 'all', 'archive', 'keys'])
 
   isStateDown = false
   await pane.redraw(PANE_PROPS)
@@ -2163,6 +2164,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     'mine',
     'all',
     'archive',
+    'keys',
     'back',
     'crumb:0',
     gotoKey(drawn, 'T58'),
@@ -2180,7 +2182,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     ' Team',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all · archive ›',
+    ' mine all · archive › · keys',
     '',
     ' ‹ back  forward ›',
     ' Tasks › T50 › T58',
@@ -2239,6 +2241,7 @@ test('back, forward and the trail step through the places; the list keeps the he
     'all',
     'archive',
     'close-cards',
+    'keys',
     'forward',
     'crumb:1',
     'crumb:2',
@@ -2310,7 +2313,7 @@ test("a reference file in an open card opens as a page: its name, where it was r
     ' Team',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all · archive ›',
+    ' mine all · archive › · keys',
     '',
     ' ‹ back  forward ›',
     ' Tasks › x.md',
@@ -2476,7 +2479,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
     ' Team',
     ' Find  clear',
     ' Keys go to Claude · click the field to search',
-    ' mine all · archive ›',
+    ' mine all · archive › · keys',
     '',
     ' 2 tasks match',
     '',
@@ -2708,7 +2711,7 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
     ' Team',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all · archive ›',
+    ' mine all · archive › · keys',
     '',
     ' ‹ back  forward ›',
     ' Tasks › Archive 10-12',
@@ -2752,4 +2755,81 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   // Inline, where no page shows, there is no archive.
   await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
   expect(buttonKeys(await pane.drawn())).not.toContain('archive')
+})
+
+/** The hotkeys of a drawing's buttons, in drawing order. */
+function hotkeysOf(node: unknown): string[] {
+  const props = propsOf(node)
+  const own = typeOf(node) === 'Button' && props !== null && 'hotkey' in props && typeof props.hotkey === 'string' ? [props.hotkey] : []
+  return [...own, ...childrenOf(node).flatMap(hotkeysOf)]
+}
+
+test('keys (k) opens the Keys page, every key the pane answers in a grid at the body width under Tasks › Keys; back returns; inline there is none', async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, CHAIN)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  expect(keyedProps(await pane.drawn(), 'keys')).toMatchObject({ label: 'keys', hotkey: 'k', plain: true })
+
+  await pane.press({ key: 'keys' })
+  expect(screenOf(await pane.drawn())).toEqual([
+    ' po',
+    ' Tasks Changes Log Inbox (2)',
+    ' Team',
+    ' Find',
+    ' Keys go to Claude · click the field to search',
+    ' mine all · archive › · keys',
+    '',
+    ' ‹ back  forward ›',
+    ' Tasks › Keys',
+    ` ${'─'.repeat(PANE_PROPS.bodyColumns - 2)}`,
+    '',
+    ` ${'t  Tasks'.padEnd(16)}${'d  Changes'.padEnd(16)}g  Log`,
+    ` ${'u  Inbox'.padEnd(16)}e  Team`,
+    '',
+    ` ${'s  Find'.padEnd(16)}${'m  mine'.padEnd(16)}a  all`,
+    ` ${'h  archive'.padEnd(16)}${'c  close cards'.padEnd(16)}k  keys`,
+    '',
+    ` ${'b  back'.padEnd(16)}${'f  forward'.padEnd(16)}p  week before`,
+    ' l  week after',
+    '',
+    ' o v w i n  only that status; again shows all',
+    '',
+    ' ctrl+x tab, or a click: keys to the pane',
+    ' Esc: keys back to Claude',
+    ' ctrl+x x, or ✕: minimize the pane',
+  ])
+
+  // Pressed again it stays; back returns to the list, the Keys page a step ahead.
+  await pane.press({ key: 'keys' })
+  await pane.press({ key: 'back' })
+  const drawn = await pane.drawn()
+  expect(buttonKeys(drawn)).toContain('next:T52')
+  expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › Keys'])
+
+  await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
+  expect(buttonKeys(await pane.drawn())).not.toContain('keys')
+})
+
+test("the Keys page names every key a button of the pane answers, and each key it names but the status bar's is drawn", async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, [
+    ...CHAIN,
+    createLine('T7', { owner: 'po', by: 'po', at: NOW - 120 * HOUR, title: 'Fix the loader' }),
+    statusLine('T7', 'po', NOW - 2 * HOUR, 'done', 'fed the loader'),
+    createLine('T9', { owner: 'po', by: 'po', at: NOW - 120 * HOUR, title: 'Feed the pages' }),
+    statusLine('T9', 'po', NOW - 96 * HOUR, 'dropped', 'folded into the feed'),
+  ])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  const seen = new Set(hotkeysOf(await pane.drawn()))
+  // A card open (close cards), the Archive page (back, prev), the week before (next), the list again (forward), then
+  // each other view.
+  for (const key of ['next:T52', 'archive', 'prev', 'back', 'changes', 'log', 'inbox', 'team']) {
+    await pane.press({ key })
+    for (const hotkey of hotkeysOf(await pane.drawn())) seen.add(hotkey)
+  }
+  const named = KEY_GROUPS.flatMap(group => group.entries.map(entry => entry.key))
+  expect([...seen].filter(key => !named.includes(key) && !barKeys().split(' ').includes(key))).toEqual([])
+  expect(named.filter(key => !seen.has(key))).toEqual([])
 })

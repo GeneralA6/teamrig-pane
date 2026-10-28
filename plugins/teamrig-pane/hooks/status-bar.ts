@@ -27,7 +27,7 @@ type BarLook = {
   block: string
   /** Its segment's color and its glyph's, the rows' (rows.ts GLYPH_COLOR); none draws them dim. */
   color: ThemeKey | undefined
-  /** The key that filters to it, one free of the pane's others (t, d, m, a, c). */
+  /** The key that filters to it, one free of the pane's others (keys-page.ts KEY_GROUPS, its test holding them apart). */
   hotkey: string
   /** What the list says when it is filtered to the status and none is left. */
   none: string

@@ -99,6 +99,7 @@ import {
   forward,
   fromList,
   isPage,
+  KEYS_PAGE,
   landing,
   leavingList,
   leftSearch,
@@ -116,6 +117,7 @@ import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
 import { clockOf, machineZoneOf, weekOf } from './zone'
 import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
+import { KEYS_HOTKEY, KEYS_LABEL, keysBlocks } from './keys-page'
 import { pageBlocks } from './page'
 import { matchCount, NO_RESULTS, searchTasks, topResult, type SearchResults } from './task-search'
 import { SEARCH_VIEW, searchBlocks } from './search-rows'
@@ -836,7 +838,9 @@ export const register: Register = on => {
                 ? doneBlocks(snap, shown, place.week)
                 : place.kind === 'file'
                   ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
-                  : paneBlocks(snap, shown, open, bar?.filter ?? null)
+                  : place.kind === 'keys'
+                    ? keysBlocks(columns)
+                    : paneBlocks(snap, shown, open, bar?.filter ?? null)
         // Inline, the Log view shows its list alone: a page opens in the dock.
         const logShown = setupShown === null && current === 'log' && !inline ? await read($, logPage) : null
         logSession = logShown?.session ?? null
@@ -1283,12 +1287,12 @@ export const register: Register = on => {
       return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>
     }
     // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
-    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, u, e, s, m, a, h) answers. The minimized strip
+    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, u, e, s, m, a, h, k) answers. The minimized strip
     // above keeps its switch, so a press on it still opens the pane, onto the setup.
     if (setupShown !== null) return drawPane(titleRow === null ? [] : [titleRow])
 
     // The mode row in groups, a dim `·` between them (drawGrouped): the modes the list switches between, the pages
-    // a press opens, then what acts on the cards open.
+    // a press opens, what acts on the cards open, then the Keys page.
     const modeButtons = [
       pressed(<Button label="mine" hotkey="m" variant={shown === 'mine' ? 'primary' : 'secondary'} onPress={() => void showMode($, 'mine')} />, {
         label: 'mine',
@@ -1328,6 +1332,17 @@ export const register: Register = on => {
             ),
           ]
         : []
+    // `k: keys` opens the Keys page (keys-page.ts), every key the pane answers, drawn plain with its key as the
+    // status bar's counts are; in the dock alone, as the archive.
+    const keysButtons = inline
+      ? []
+      : [
+          pressed(<Button key="keys" label={KEYS_LABEL} plain hotkey={KEYS_HOTKEY} onPress={() => void go($, current => pushed(current, KEYS_PAGE))} />, {
+            label: KEYS_LABEL,
+            plain: true,
+            hotkey: KEYS_HOTKEY,
+          }),
+        ]
 
     // The Find field, under the switch in the dock in the Tasks view whatever it shows, in the Inbox, Team and Changes
     // views and over the Log view's list: the first change opens a search (a place, so back from a result's page
@@ -1380,7 +1395,7 @@ export const register: Register = on => {
     // move the ring off it as the person types (the first key opens a search, which hides close cards), and the next keys
     // would press the pane's hotkeys or reach the prompt.
     // The Find row is one row, as drawFindRow draws it.
-    const modes = drawGrouped('modes', [modeButtons, pageButtons, cardButtons], 1)
+    const modes = drawGrouped('modes', [modeButtons, pageButtons, cardButtons, keysButtons], 1)
     const controls: HeaderPart =
       current === 'tasks'
         ? {

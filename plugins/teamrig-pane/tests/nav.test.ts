@@ -11,6 +11,7 @@ import {
   forward,
   fromList,
   isPage,
+  KEYS_PAGE,
   landing,
   leavingList,
   leftSearch,
@@ -191,6 +192,17 @@ describe('nav', () => {
     expect(pushed(older, done('2026-10-05'))).toBe(older)
     expect([placeLabel(done('2026-10-05')), ...trailWords(onPage)]).toEqual(['Archive 10-05', 'list', 'done', '[T4]'])
     expect([...placeIds(onPage)]).toEqual(['T4'])
+  })
+
+  test('the Keys page is one page: it opens at its top, the same pushed again changes nothing, its crumb is Keys, back returns', async () => {
+    const opened = pushed(through('T52'), KEYS_PAGE)
+    expect(currentPlace(opened)).toEqual({ kind: 'keys' })
+    expect(pushed(opened, KEYS_PAGE)).toBe(opened)
+    expect(landing(through('T52'), opened)).toEqual({ kind: 'top' })
+    expect(isPage(KEYS_PAGE)).toBe(true)
+    expect([placeLabel(KEYS_PAGE), ...trailWords(opened)]).toEqual(['Keys', 'list', 'T52', '[keys]'])
+    expect(currentPlace(back(opened))).toEqual(page('T52'))
+    expect([...placeIds(opened)]).toEqual(['T52'])
   })
 
   test('the search places name no page', async () => {
