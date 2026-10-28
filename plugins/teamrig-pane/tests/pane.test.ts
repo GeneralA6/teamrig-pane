@@ -823,7 +823,7 @@ test('a project set up while the pane shows the steps lists its tasks at the nex
   await clock.advance(POLL_MS)
   // With a team found, the switch, Find and the mode buttons are back.
   const labels = await buttonLabels(pane)
-  for (const label of ['Tasks', 'Log', 'Find', 'mine', 'all', 'archive']) expect(labels).toContain(label)
+  for (const label of ['Tasks', 'Log', 'Find', 'mine', 'all', 'archive ›']) expect(labels).toContain(label)
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /Ship the team register/ })).toBeDefined()
   expect(await pane.find({ text: SETUP_HEAD })).toBeUndefined()
@@ -999,12 +999,12 @@ test("an open card shows its priority as a number, never the team config's name 
   expect(await pane.find({ text: /correctness/ })).toBeUndefined()
 })
 
-test('an open waiting card says since when it waits, its note on a row of its own; collapse (c) closes every card', async ($, on) => {
+test('an open waiting card says since when it waits, its note on a row of its own; close cards (c) closes every card', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   await pane.press({ key: 'all' })
-  expect(await pane.find({ text: /collapse/ })).toBeUndefined()
+  expect(await pane.find({ text: /close cards/ })).toBeUndefined()
   expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeDefined()
 
   await pane.press({ key: 'security:T2' })
@@ -1015,14 +1015,30 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   // header, the body's row, its window); the switch and the mode buttons are packed in code (pack.ts), each a column
   // Box of one row Box here.
   expect(countType(await pane.drawn(), 'Box')).toBe(14)
-  const collapse = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'collapse')
-  expect(collapse?.props).toMatchObject({ hotkey: 'c' })
+  const closeCards = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'close cards')
+  expect(closeCards?.props).toMatchObject({ hotkey: 'c' })
 
-  await pane.press({ key: 'collapse' })
+  await pane.press({ key: 'close-cards' })
   expect(await pane.find({ text: /│ (Status|From)/ })).toBeUndefined()
   expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeDefined()
-  expect(await pane.find({ text: /collapse/ })).toBeUndefined()
+  expect(await pane.find({ text: /close cards/ })).toBeUndefined()
   expect(countType(await pane.drawn(), 'Box')).toBe(10)
+})
+
+test('the mode row draws its groups (the modes, the archive page, close cards) a dim · between two on a row, none at a wrap', async ($, on) => {
+  await start(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  await pane.press({ key: 'all' })
+  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive']])
+  expect(await pane.find({ type: 'Text', text: /^·$/ })).toMatchObject({ props: { dimColor: true } })
+
+  await pane.press({ key: 'security:T2' })
+  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive', '·', 'close-cards']])
+  // `[ mine ] [ all ] · [ archive › ]` takes 32 of the 48 columns: `· [ close cards ]` would run 2 past them, so close
+  // cards starts the next row, with no `·` before it.
+  await pane.redraw(PANE_PROPS)
+  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive'], ['close-cards']])
 })
 
 test('an open card draws each address its ref, note, proof and evidence hold as one Link, the issue a GitHub task came from first', async ($, on) => {
@@ -1062,7 +1078,7 @@ test('after a hot reload, open cards kept under another tag read as none open, a
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
-  expect(await pane.find({ text: /│ Status|could not draw|collapse/ })).toBeUndefined()
+  expect(await pane.find({ text: /│ Status|could not draw|close cards/ })).toBeUndefined()
   expect(await pane.find({ text: /p2 · due Wed 10-14 · new · asked by owner/ })).toBeDefined()
   isOldValueStored = false
   await pane.press({ key: 'next:T1' })
@@ -2135,7 +2151,7 @@ test("a task id in an open card opens that task's page: its title and card alone
 
   await pane.press({ key: toT50 })
   drawn = await pane.drawn()
-  // No status bar and no collapse on a page: the bar counts the list, and the page holds no card to collapse. Its card
+  // No status bar and no close cards on a page: the bar counts the list, and the page holds no card to close. Its card
   // names T58, planned first, T52, of another owner, which needs it, and the file it references.
   expect(buttonKeys(drawn)).toEqual([
     'tasks',
@@ -2164,7 +2180,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     ' Team',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all archive',
+    ' mine all · archive ›',
     '',
     ' ‹ back  forward ›',
     ' Tasks › T50 › T58',
@@ -2222,7 +2238,7 @@ test('back, forward and the trail step through the places; the list keeps the he
     'mine',
     'all',
     'archive',
-    'collapse',
+    'close-cards',
     'forward',
     'crumb:1',
     'crumb:2',
@@ -2294,7 +2310,7 @@ test("a reference file in an open card opens as a page: its name, where it was r
     ' Team',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all archive',
+    ' mine all · archive ›',
     '',
     ' ‹ back  forward ›',
     ' Tasks › x.md',
@@ -2460,7 +2476,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
     ' Team',
     ' Find  clear',
     ' Keys go to Claude · click the field to search',
-    ' mine all archive',
+    ' mine all · archive ›',
     '',
     ' 2 tasks match',
     '',
@@ -2544,14 +2560,14 @@ test('the Find field keeps its index among the focusable elements on the list, w
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   const indexes = [fieldIndex(await pane.drawn())]
-  // A card open shows collapse; the first key typed opens a search, which hides it and shows clear.
+  // A card open shows close cards; the first key typed opens a search, which hides it and shows clear.
   await pane.press({ key: 'next:T52' })
   let drawn = await pane.drawn()
-  expect(buttonKeys(drawn)).toContain('collapse')
+  expect(buttonKeys(drawn)).toContain('close-cards')
   indexes.push(fieldIndex(drawn))
   await pane.input({ key: 'find', text: 'e', kind: 'change' })
   drawn = await pane.drawn()
-  expect(buttonKeys(drawn)).not.toContain('collapse')
+  expect(buttonKeys(drawn)).not.toContain('close-cards')
   expect(buttonKeys(drawn)).toContain('clear')
   indexes.push(fieldIndex(drawn))
   // Enter on words one task matches opens its page.
@@ -2677,7 +2693,7 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  expect(keyedProps(await pane.drawn(), 'archive')).toMatchObject({ label: 'archive', hotkey: 'h', variant: 'secondary' })
+  expect(keyedProps(await pane.drawn(), 'archive')).toMatchObject({ label: 'archive ›', hotkey: 'h', variant: 'secondary' })
 
   await pane.press({ key: 'archive' })
   let drawn = await pane.drawn()
@@ -2692,7 +2708,7 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
     ' Team',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all archive',
+    ' mine all · archive ›',
     '',
     ' ‹ back  forward ›',
     ' Tasks › Archive 10-12',

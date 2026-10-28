@@ -61,7 +61,7 @@ teamrig binds by its Claude Code title (`/rename web`) gets the same mark, so th
 again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
 and lists the team's sessions. In the pane, `m` and `a` switch views, and `o`, `v`, `w`, `i` and `n`
 show one status's tasks alone (Status bar, below); on a task's page `b` and `f` go back and forward, and
-in the dock the Find field (`s`) searches the tasks and `archive` (`h`) lists the finished ones a week at a time
+in the dock the Find field (`s`) searches the tasks and `archive ›` (`h`) lists the finished ones a week at a time
 (below).
 
 In the side dock the tasks sit a blank line apart, each wrapped title and meta line starting under the
@@ -148,7 +148,8 @@ the field), and `Keys go to Claude` while Claude's prompt has them (a click on t
 query kept). A Claude dialog, such as a permission prompt, takes the keys, clicks and wheel scroll from the pane
 until it is answered: that is Claude Code's rule, not the pane's.
 
-`archive` (`h`, in the dock's mine and all row) opens the Archive page on this week, a week starting
+`archive ›` (`h`, in the dock's mode row after `mine` and `all` and a dim `·`, its `›` saying a press opens a page)
+opens the Archive page on this week, a week starting
 Monday 00:00 on the team's clock: the view's tasks closed done or dropped, a dim line a day, newest first, each task on one
 dim line with when it closed (in `all`, its owner too), at most 50 with a dim line counting the rest. Its
 head names whose tasks and how many were done and dropped. `‹ prev` (`p`) and `next ›` (`l`) step a

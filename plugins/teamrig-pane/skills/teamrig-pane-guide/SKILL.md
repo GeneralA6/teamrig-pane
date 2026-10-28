@@ -106,7 +106,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | `w` | mine: only the tasks in progress (`working`); again shows every task |
 | `i` | mine: only the waiting tasks; again shows every task |
 | `n` | mine: only the open tasks (`not started`); again shows every task |
-| `c` | Closes every open card (shown while one is open) |
+| `c` | `close cards`: closes every open card (shown while one is open, after a dim `·` on the mode row) |
 | Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
@@ -115,7 +115,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's Log page, back to the list |
 | `f` | Forward to the place back left, while there is one |
 | `s` | In the dock's Tasks, Inbox, Changes and Team views and on the Log view's list: puts the cursor in the Find field under the switch, which searches what the view holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
-| `h` | In the dock: `archive`, the Archive page of this week's finished tasks (see [Archive](#archive)) |
+| `h` | In the dock: `archive ›`, the Archive page of this week's finished tasks (see [Archive](#archive)) |
 | `p` | On the Archive page: the week before, while the pane holds it |
 | `l` | On the Archive page: the week after, up to this week |
 | `✕`, or `ctrl+x x` | Minimizes the pane to a one-row strip; it never closes |
@@ -425,7 +425,7 @@ pressed while the cursor is on one of its buttons.
 
 ### Archive
 
-`archive` (`h`), in the dock's mine and all row, opens the Archive page on this week (a week starts Monday 00:00
+`archive ›` (`h`), in the dock's mode row after mine and all and a dim `·`, opens the Archive page on this week (a week starts Monday 00:00
 on the team's clock and is named by that Monday, as the register's week fields are): the view's tasks closed done or dropped, a day at a time, newest first, each
 on one dim line with when it closed:
 
