@@ -141,6 +141,8 @@ const FORWARD_LABEL = 'forward ›'
 /** The Archive page's steps to the week before and the week after the one it shows. */
 const PREV_LABEL = '‹ prev'
 const NEXT_LABEL = 'next ›'
+/** The mode row's button to the Archive page, its `›` saying it opens a page. */
+const ARCHIVE_LABEL = 'archive ›'
 /** What the close hook answers the person's close with: the engine logs it as why the pane stayed. */
 const MINIMIZED = `minimized to its strip: a press on it, or /${COMMAND}, opens it again`
 /** How long one git run may take before it is killed and the repo shows the failure. */
@@ -1213,7 +1215,7 @@ export const register: Register = on => {
       rows: packed.length,
     })
     const drawPacked = (key: string, items: readonly HeaderItem[], gap: number) => drawRows(key, packRows(items, item => item.cells, columns, gap), gap)
-    // A row of groups (the switch and the minimized mark) draws a
+    // A row of groups (the switch and the minimized mark, the modes, the pages they open and the card control) draws a
     // dim `·` between two groups that share a row, never at a row's end (pack.ts packGroups), keyed `<key>:sep:<group>`.
     const separator = (key: string) => (group: number): HeaderItem => ({
       node: (
@@ -1285,7 +1287,9 @@ export const register: Register = on => {
     // above keeps its switch, so a press on it still opens the pane, onto the setup.
     if (setupShown !== null) return drawPane(titleRow === null ? [] : [titleRow])
 
-    const buttons = [
+    // The mode row in groups, a dim `·` between them (drawGrouped): the modes the list switches between, the pages
+    // a press opens, then what acts on the cards open.
+    const modeButtons = [
       pressed(<Button label="mine" hotkey="m" variant={shown === 'mine' ? 'primary' : 'secondary'} onPress={() => void showMode($, 'mine')} />, {
         label: 'mine',
         plain: false,
@@ -1298,30 +1302,32 @@ export const register: Register = on => {
       }),
     ]
     const place = currentPlace(at)
-    // The archive opens the Archive page (done-rows.ts) at the week of now, in the dock alone, where a page can show:
-    // inline, the places are never read.
-    if (!inline)
-      buttons.push(
-        pressed(
-          <Button
-            key="archive"
-            label="archive"
-            hotkey="h"
-            variant={place.kind === 'done' ? 'primary' : 'secondary'}
-            onPress={() => void go($, current => doneAt(current, weekOf(snap.now, clockOf(snap).zone)))}
-          />,
-          { label: 'archive', plain: false, hotkey: 'h' },
-        ),
-      )
-    // A page shows no list, so no card in it to collapse.
-    if (Object.keys(open).length > 0 && place.kind === 'list')
-      buttons.push(
-        pressed(<Button label="collapse" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />, {
-          label: 'collapse',
-          plain: false,
-          hotkey: 'c',
-        }),
-      )
+    // The archive opens the Archive page (done-rows.ts) at the week of now, its `›` saying it opens a page and is no
+    // mode, in the dock alone, where a page can show: inline, the places are never read.
+    const pageButtons = inline
+      ? []
+      : [
+          pressed(
+            <Button
+              key="archive"
+              label={ARCHIVE_LABEL}
+              hotkey="h"
+              variant={place.kind === 'done' ? 'primary' : 'secondary'}
+              onPress={() => void go($, current => doneAt(current, weekOf(snap.now, clockOf(snap).zone)))}
+            />,
+            { label: ARCHIVE_LABEL, plain: false, hotkey: 'h' },
+          ),
+        ]
+    // A page shows no list, so no card in it to close.
+    const cardButtons =
+      Object.keys(open).length > 0 && place.kind === 'list'
+        ? [
+            pressed(
+              <Button key="close-cards" label="close cards" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />,
+              { label: 'close cards', plain: false, hotkey: 'c' },
+            ),
+          ]
+        : []
 
     // The Find field, under the switch in the dock in the Tasks view whatever it shows, in the Inbox, Team and Changes
     // views and over the Log view's list: the first change opens a search (a place, so back from a result's page
@@ -1369,12 +1375,12 @@ export const register: Register = on => {
     )
     const keysLine = inline ? null : drawKeysLine(components, keys, keysLines.join('\n'))
     // In the tasks view the Find row and its line sit right under the switch, then the mode buttons, in the same block.
-    // The field comes before every element that shows or hides with the place (collapse, clear, a page's steps): the
+    // The field comes before every element that shows or hides with the place (close cards, clear, a page's steps): the
     // engine keeps the focus ring at an index among the pane's elements, so one shown or hidden before the field would
-    // move the ring off it as the person types (the first key opens a search, which hides collapse), and the next keys
+    // move the ring off it as the person types (the first key opens a search, which hides close cards), and the next keys
     // would press the pane's hotkeys or reach the prompt.
     // The Find row is one row, as drawFindRow draws it.
-    const modes = drawPacked('modes', buttons, 1)
+    const modes = drawGrouped('modes', [modeButtons, pageButtons, cardButtons], 1)
     const controls: HeaderPart =
       current === 'tasks'
         ? {
