@@ -64,7 +64,7 @@ import { DEFAULT_REGISTER, TimeZone } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { diffKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
-import { buttonCells, packRows, type ButtonLook } from './pack'
+import { buttonCells, packGroups, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
 import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, type FrameSlot, type Placed, type View } from './frame'
 import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
@@ -1200,21 +1200,31 @@ export const register: Register = on => {
     // The header's rows that wrap (the switch, the mode buttons, a page's trail, the Archive week's steps) are packed in
     // code (pack.ts), each a column Box under its key of one row Box a row, keyed `<key>:<row>`: the rows drawn are the
     // rows counted, so the body's window can take the rows the header leaves (T860).
-    const drawPacked = (key: string, items: readonly HeaderItem[], gap: number): HeaderPart => {
-      const packed = packRows(items, item => item.cells, columns, gap)
-      return {
-        node: (
-          <Box key={key} flexDirection="column">
-            {packed.map((row, i) => (
-              <Box key={`${key}:${i}`} flexDirection="row" columnGap={gap}>
-                {row.map(item => item.node)}
-              </Box>
-            ))}
-          </Box>
-        ),
-        rows: packed.length,
-      }
-    }
+    const drawRows = (key: string, packed: readonly (readonly HeaderItem[])[], gap: number): HeaderPart => ({
+      node: (
+        <Box key={key} flexDirection="column">
+          {packed.map((row, i) => (
+            <Box key={`${key}:${i}`} flexDirection="row" columnGap={gap}>
+              {row.map(item => item.node)}
+            </Box>
+          ))}
+        </Box>
+      ),
+      rows: packed.length,
+    })
+    const drawPacked = (key: string, items: readonly HeaderItem[], gap: number) => drawRows(key, packRows(items, item => item.cells, columns, gap), gap)
+    // A row of groups (the switch and the minimized mark) draws a
+    // dim `·` between two groups that share a row, never at a row's end (pack.ts packGroups), keyed `<key>:sep:<group>`.
+    const separator = (key: string) => (group: number): HeaderItem => ({
+      node: (
+        <Text key={`${key}:sep:${group}`} dimColor>
+          ·
+        </Text>
+      ),
+      cells: 1,
+    })
+    const drawGrouped = (key: string, groups: readonly (readonly HeaderItem[])[], gap: number) =>
+      drawRows(key, packGroups(groups, item => item.cells, columns, gap, separator(key)), gap)
     /** A Button as a header item, its cells counted from how it looks. */
     const pressed = (node: JSX.Element, look: ButtonLook): HeaderItem => ({ node, cells: buttonCells(look) })
     /** Words as a header item. */
@@ -1256,18 +1266,16 @@ export const register: Register = on => {
         plain: false,
         hotkey: 'e',
       }),
-      ...(isMinimized
-        ? [
-            worded(
-              <Text key="hint" dimColor wrap="truncate-end">
-                minimized
-              </Text>,
-              'minimized',
-            ),
-          ]
-        : []),
     ]
-    const switchRow = drawPacked('switch', switchItems, 1)
+    // Minimized, a dim mark after the switch says how to open the pane in full again, a group of its own.
+    const minimizedWords = 'minimized, press a view'
+    const minimizedMark = worded(
+      <Text key="hint" dimColor wrap="truncate-end">
+        {minimizedWords}
+      </Text>,
+      minimizedWords,
+    )
+    const switchRow = drawGrouped('switch', isMinimized ? [switchItems, [minimizedMark]] : [switchItems], 1)
     if (isMinimized && body.length === 0) {
       drawnWithoutWindow()
       return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>

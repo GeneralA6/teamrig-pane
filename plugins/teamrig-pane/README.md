@@ -218,7 +218,8 @@ empty prompt.
 The close mark (`✕`, or `ctrl+x x`) minimizes the pane to a one-row strip instead of closing it, so a
 stray click never loses it. The close is refused (a `ui.close` veto), so the pane also keeps its place
 among the panes the person opened: a later open needs 110 columns, not the 144 an unasked open needs.
-The strip is the view switch (below), its Inbox button counting the unread lines, and a `minimized` mark. To open it
+The strip is the view switch (below), its Inbox button counting the unread lines, then a dim `· minimized, press a view` (on a row of
+its own, with no `·`, in a dock too narrow for both). To open it
 in full again, click any of its buttons, which opens the pane on that view, press `t`, `d`, `g`, `u` or `e` while the
 pane holds the keyboard
 (`ctrl+x tab` or a click on it), or run `/teamrig-pane`. The size is kept in `$.store` (`paneSize`, one
