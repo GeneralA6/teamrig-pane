@@ -30,20 +30,52 @@ export function buttonCells(button: ButtonLook): number {
  * cells wide; in order, none dropped, and no row empty.
  */
 export function packRows<T>(items: readonly T[], widthOf: (item: T) => number, columns: number, gap: number): T[][] {
+  return packGroups([items], widthOf, columns, gap, null)
+}
+
+/**
+ * `groups` packed as packRows packs their items, the item `separator` makes for a group (by its index) between it
+ * and the group before it where the two share a row: a group's items wrap as any do, and a row never starts or ends
+ * on a separator, which goes with the group after it, so a group that does not fit beside it starts the next row
+ * alone. A null `separator` puts none.
+ */
+export function packGroups<T>(
+  groups: readonly (readonly T[])[],
+  widthOf: (item: T) => number,
+  columns: number,
+  gap: number,
+  separator: ((group: number) => T) | null,
+): T[][] {
   const width = Math.max(1, columns)
   const rows: T[][] = []
   let row: T[] = []
   let used = 0
-  for (const item of items) {
-    const cellsOf = widthOf(item)
-    if (row.length > 0 && used + gap + cellsOf > width) {
-      rows.push(row)
-      row = []
-      used = 0
-    }
+  const fits = (cellsOf: number) => row.length === 0 || used + gap + cellsOf <= width
+  const add = (item: T, cellsOf: number) => {
     used += row.length > 0 ? gap + cellsOf : cellsOf
     row.push(item)
   }
+  const wrap = () => {
+    rows.push(row)
+    row = []
+    used = 0
+  }
+  groups.forEach((group, index) =>
+    group.forEach((item, i) => {
+      const cellsOf = widthOf(item)
+      const mark = separator !== null && i === 0 && row.length > 0 ? separator(index) : null
+      if (mark !== null) {
+        const markCells = widthOf(mark)
+        if (fits(markCells + gap + cellsOf)) {
+          add(mark, markCells)
+          add(item, cellsOf)
+          return
+        }
+      }
+      if (mark !== null || !fits(cellsOf)) wrap()
+      add(item, cellsOf)
+    }),
+  )
   if (row.length > 0) rows.push(row)
   return rows
 }

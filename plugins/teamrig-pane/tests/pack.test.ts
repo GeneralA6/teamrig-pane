@@ -1,6 +1,7 @@
 // The header's rows packed in code: a Button's cells as the engine draws it, and the flex wrap's rows.
 import { describe, expect, test } from 'claude-code/testing'
-import { buttonCells, packRows } from '../hooks/pack'
+import { buttonCells, packGroups, packRows } from '../hooks/pack'
+import { cells } from '../hooks/width'
 
 /** Packs plain widths, answering each row as its widths. */
 function packed(widths: readonly number[], columns: number, gap: number): number[][] {
@@ -48,5 +49,39 @@ describe('pack', () => {
     const rows = packRows(buttons, buttonCells, 22, 1)
     expect(rows.map(row => row.map(button => button.key))).toEqual([['tasks', 'changes'], ['log']])
     expect(rows[0]?.[0]).toBe(buttons[0])
+  })
+})
+
+describe('pack groups', () => {
+  /** Packs groups of words, a `·` between two groups on a row, answering each row as its words. */
+  const grouped = (groups: readonly (readonly string[])[], columns: number) => packGroups(groups, cells, columns, 1, () => '·')
+
+  test('two groups on one row have the separator between them, the gap on each side', () => {
+    expect(grouped([['mine', 'all'], ['archive']], 20)).toEqual([['mine', 'all', '·', 'archive']])
+  })
+
+  test('a group that does not fit beside the separator starts the next row, with no separator at either end', () => {
+    // `mine all · archive` is 18 cells.
+    expect(grouped([['mine', 'all'], ['archive']], 17)).toEqual([['mine', 'all'], ['archive']])
+    expect(grouped([['mine'], ['all'], ['archive']], 10)).toEqual([['mine', '·', 'all'], ['archive']])
+  })
+
+  test("a group's own items wrap as packRows wraps them, with no separator inside a group", () => {
+    expect(grouped([['aaaa', 'bbbb', 'cccc'], ['dd']], 9)).toEqual([['aaaa', 'bbbb'], ['cccc', '·', 'dd']])
+  })
+
+  test('an empty group takes no separator, and a separator is made for the group it leads', () => {
+    expect(grouped([['a'], [], ['b']], 20)).toEqual([['a', '·', 'b']])
+    expect(grouped([[], ['a']], 20)).toEqual([['a']])
+    const made: number[] = []
+    packGroups([['a'], ['b'], ['c']], cells, 20, 1, group => {
+      made.push(group)
+      return '·'
+    })
+    expect(made).toEqual([1, 2])
+  })
+
+  test('a null separator packs the groups as one run of items', () => {
+    expect(packGroups([['aaa'], ['bbb'], ['ccc']], cells, 7, 1, null)).toEqual([['aaa', 'bbb'], ['ccc']])
   })
 })
