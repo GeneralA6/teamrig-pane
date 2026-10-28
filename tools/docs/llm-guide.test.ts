@@ -95,16 +95,18 @@ describe('the pane guide documents the command', () => {
 });
 
 describe('the pane guide documents the keys', () => {
-  it("lists each hotkey of the pane, the status bar's counts' too, and no letter it does not bind", () => {
+  it("lists each hotkey of the pane, the status bar's counts' and the Keys page's too, and no letter it does not bind", () => {
     const register = read(`${PLUGIN}/hooks/register.tsx`);
     const fixed = Array.from(register.matchAll(/hotkey="([a-z])"/g), (match) => match[1] ?? '');
     const counts = Array.from(read(`${PLUGIN}/hooks/status-bar.ts`).matchAll(/hotkey: '([a-z])'/g), (match) => match[1] ?? '');
+    const keysPage = captured('keys-page.ts', /export const KEYS_HOTKEY = '([a-z])'/);
     // A key two views bind, each in its own view (b: back on a task page and on a Log page), is one row.
-    const bound = [...new Set([...fixed, ...counts])].sort();
+    const bound = [...new Set([...fixed, ...counts, keysPage])].sort();
     const documented = rowsStarting(skill, /^`[a-z]`$/).map((cell) => cell.slice(1, -1)).sort();
     assert.ok(fixed.length > 0, 'register.tsx binds hotkeys');
     assert.ok(counts.length > 0, 'status-bar.ts gives each count a key');
     assert.ok(register.includes('hotkey={piece.hotkey}'), "register.tsx binds the counts' keys");
+    assert.ok(register.includes('hotkey={KEYS_HOTKEY}'), "register.tsx binds the Keys page's key");
     assert.deepEqual(documented, bound);
   });
 });
