@@ -7,7 +7,7 @@
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, ExpandedTasks, LogRead, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
-import { cardRows } from './card'
+import { listCardRows } from './card'
 import { COMMAND } from './command'
 import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
 import { BAR_LOOK, type BarCounts } from './status-bar'
@@ -132,7 +132,7 @@ function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, tree
   const indent = indentOf(task)
   const key = taskKey(section, task.id)
   const title = titleRow(key, task, detail === undefined ? TITLE_LINES : undefined)
-  if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: cardRows(section, task, detail, tree) }
+  if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: listCardRows(section, task, detail, tree) }
   const meta: Row = { key: `${section}-meta:${task.id}`, spans: [indent, ...metaSpans(task, tree, viewer)], hang: indent, maxLines: META_LINES }
   return { key, toggle: task.id, rows: [title, meta] }
 }
@@ -152,7 +152,7 @@ function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: PaneTree): Bloc
     end: { text: whenWords(task.statusAt, tree.context), dim: true },
     maxLines: detail === undefined ? 1 : undefined,
   }
-  if (detail !== undefined) return { key, toggle: task.id, rows: [row], card: cardRows('done', task, detail, tree) }
+  if (detail !== undefined) return { key, toggle: task.id, rows: [row], card: listCardRows('done', task, detail, tree) }
   return { key, toggle: task.id, rows: [row] }
 }
 
