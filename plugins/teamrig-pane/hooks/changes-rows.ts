@@ -1,9 +1,10 @@
-// The Changes view as blocks of rows (rows.ts): per repo a ruled header (its folder, its branch unless
+// The Changes view as blocks of rows (rows.ts): per repo a ruled header (its folder, `branch <name>` unless
 // the folder bears its name, and how many files changed; only the folder while git can't read it),
-// its files under it as its card, each row git's two-letter code, the path and its lines added and
-// removed (`binary` for a binary file); then the files written outside any repo. Each file's row is a
-// press of its own that opens its diff (diff.ts) under it, `+` lines green and `-` red, each cut at
-// DIFF_LINE_ROWS screen lines; an untracked folder has no diff to open. The switch's badge and the tab
+// its files under it as its card, each row what git's two-letter code says in words (`changed`, `renamed`, `new`…,
+// a staged change marked `(staged)`), the path and its lines added and removed (`binary` for a binary file), the
+// first repo with a diff to open led by a dim line that says a press opens one; then the files written outside any
+// repo. Each file's row is a press of its own that opens its diff (diff.ts) under it, `+` lines green and `-` red,
+// each cut at DIFF_LINE_ROWS screen lines; an untracked folder has no diff to open. The switch's badge and the tab
 // title count the same files. While the Find field holds a query, the view draws its search (changes-search.ts) on
 // the shared search view (search-view.ts) instead: the count, then each file it names as its row draws it, over its
 // repo and branch, the words that matched underlined; a press on one opens its diff under it.
@@ -15,10 +16,18 @@ import { heading, single, type Block, type Row, type Span } from './rows'
 import { marksOf, type Mark } from './search'
 import { markedSpans, searchViewBlocks, type Noun } from './search-view'
 
-/** Where a wrapped path goes on: under the path, past the code; where a diff's lines start too. */
-const UNDER_PATH: Span = { text: '   ' }
+/** The cells a file's row gives what changed, the longest word (`conflict`) and a space, so the paths line up. */
+const CHANGE_COLUMNS = 'conflict '.length
+/** Where a wrapped path goes on: under the path, past what changed; where a result's place goes too. */
+const UNDER_PATH: Span = { text: ' '.repeat(CHANGE_COLUMNS) }
+/** Where an open diff's lines start, under its file's row: indented less than the path, so a narrow dock keeps room for them. */
+const UNDER_ROW: Span = { text: '   ' }
 /** Where a wrapped diff line goes on: under its text, past its marker. */
-const UNDER_DIFF_TEXT: Span = { text: `${UNDER_PATH.text} ` }
+const UNDER_DIFF_TEXT: Span = { text: `${UNDER_ROW.text} ` }
+/** The dim line over the first repo's files with a diff to open. */
+export const DIFF_HINT = 'click a file for its diff'
+/** A detached repo's branch, or one git did not name. */
+const NO_BRANCH = 'no branch'
 /** The most screen lines one diff line wraps onto, the last ending in `…`: a minified line would fill the pane. */
 export const DIFF_LINE_ROWS = 3
 /** What an empty Find field shows on the Changes view. */
@@ -46,14 +55,41 @@ export function paneTitle(changes: ChangesSnapshot): string {
   return count > 0 ? `Tasks · ${count} changed` : 'Tasks'
 }
 
-/** The code's index letter in green (staged), its work-tree letter in yellow; `??` (untracked) dim. */
-function codeSpans(code: string): Span[] {
-  if (code === '??') return [{ text: '??', dim: true }]
+/** What a letter of git's code says changed: `M` and `T` (its type) changed, `A` added, `D` deleted, `R` renamed, `C` copied. */
+function letterWord(letter: string): string {
+  switch (letter) {
+    case 'A':
+      return 'added'
+    case 'D':
+      return 'deleted'
+    case 'R':
+      return 'renamed'
+    case 'C':
+      return 'copied'
+    default:
+      return 'changed'
+  }
+}
+
+/** True for the codes git gives a file a merge left in conflict: either side `U`, or both added or both deleted. */
+function isConflict(code: string): boolean {
+  return code.includes('U') || code === 'AA' || code === 'DD'
+}
+
+/** What a file's code says in words, and what it adds after the file: where the change is, and the second change made since it was staged. */
+type ChangeWords = { word: Span; after: string | null }
+
+/**
+ * Git's two-letter code (`XY`: the index's letter, then the work tree's) in words: an untracked file `new` (dim), not
+ * in git yet; a conflict `conflict` in red; a staged change its word in green, `staged`, and what changed in the work
+ * tree since; a change in the work tree alone its word in yellow.
+ */
+export function changeWords(code: string): ChangeWords {
+  if (code === '??') return { word: { text: 'new', dim: true }, after: 'not in git yet' }
+  if (isConflict(code)) return { word: { text: 'conflict', color: 'error' }, after: null }
   const [index = ' ', tree = ' '] = code
-  return [
-    index === ' ' ? { text: ' ' } : { text: index, color: 'success' },
-    tree === ' ' ? { text: ' ' } : { text: tree, color: 'warning' },
-  ]
+  if (index === ' ') return { word: { text: letterWord(tree), color: 'warning' }, after: null }
+  return { word: { text: letterWord(index), color: 'success' }, after: tree === ' ' ? 'staged' : `staged, ${letterWord(tree)} since` }
 }
 
 /** A file's changed lines: `+12` added in green, `-3` removed in red, `+0 -0` dim when neither (a mode change, an empty file); nothing while uncounted. */
@@ -71,10 +107,12 @@ function ledSpans(lead: string, text: string, marks: readonly Mark[], style: Omi
   return markedSpans(`${lead}${text}`, marks.map(mark => ({ start: mark.start + lead.length, end: mark.end + lead.length })), style)
 }
 
-/** A file's code, path, lines and the path it was renamed from, the `marks` in its paths underlined. */
+/** What changed in a file (changeWords) in its column, its path, lines, the path it was renamed from and what changeWords adds, the `marks` in its paths underlined. */
 function fileSpans(file: FileChange, marks: FileMarks = UNMARKED): Span[] {
+  const { word, after } = changeWords(file.code)
   const from = file.from === null ? [] : ledSpans(' ← ', file.from, marks.from, { dim: true })
-  return [...codeSpans(file.code), ...ledSpans(' ', file.path, marks.path, {}), ...lineSpans(file.lines), ...from]
+  const said: Span[] = after === null ? [] : [{ text: ` (${after})`, dim: true }]
+  return [{ ...word, text: word.text.padEnd(CHANGE_COLUMNS) }, ...markedSpans(file.path, marks.path, {}), ...lineSpans(file.lines), ...from, ...said]
 }
 
 /** A file's row, a press that opens its diff (keyed as the row is), unless it has none (diffKeyOf): git diffs no folder against nothing. */
@@ -106,7 +144,7 @@ function moreWords(more: number, isCut: boolean): string | null {
 
 /** An open diff's rows, under its file's (`key`): `Reading the diff…` while git reads it, why git could not, or its lines and how many more it has. */
 export function diffRows(key: string, diff: FileDiff): Row[] {
-  const note = (spans: Span[]): Row[] => [{ key: `diff:${key}`, spans: [UNDER_PATH, ...spans], hang: UNDER_PATH }]
+  const note = (spans: Span[]): Row[] => [{ key: `diff:${key}`, spans: [UNDER_ROW, ...spans], hang: UNDER_ROW }]
   switch (diff.kind) {
     case 'reading':
       return note([{ text: 'Reading the diff…', dim: true }])
@@ -116,32 +154,42 @@ export function diffRows(key: string, diff: FileDiff): Row[] {
       const more = moreWords(diff.more, diff.isCut)
       if (diff.lines.length === 0 && more === null) return note([{ text: 'No line changed: a mode change, a rename or an empty file.', dim: true }])
       const rows = diff.lines.map(
-        (line, i): Row => ({ key: `diff:${key}:${i}`, spans: [UNDER_PATH, diffLineSpan(line)], hang: UNDER_DIFF_TEXT, maxLines: DIFF_LINE_ROWS }),
+        (line, i): Row => ({ key: `diff:${key}:${i}`, spans: [UNDER_ROW, diffLineSpan(line)], hang: UNDER_DIFF_TEXT, maxLines: DIFF_LINE_ROWS }),
       )
-      return more === null ? rows : [...rows, { key: `diff:${key}:more`, spans: [UNDER_PATH, { text: more, dim: true }] }]
+      return more === null ? rows : [...rows, { key: `diff:${key}:more`, spans: [UNDER_ROW, { text: more, dim: true }] }]
     }
   }
 }
 
-/** A read repo's branch and count, ` · main · 3 changed`; the branch left out when the folder bears its name, as a worktree's does. */
+/** A read repo's branch and count, ` · branch main · 3 files`; the branch left out when the folder bears its name, as a worktree's does. */
 function repoState(repo: RepoChanges, name: string): Span[] {
   const count = repo.files.items.length + repo.files.more
-  const branch: Span[] = repo.branch === name ? [] : [{ text: ` · ${repo.branch ?? 'detached'}`, dim: true }]
-  return [...branch, { text: count > 0 ? ` · ${count} changed` : ' · clean', dim: true }]
+  const branch: Span[] = repo.branch === name ? [] : [{ text: ` · ${repo.branch === null ? NO_BRANCH : `branch ${repo.branch}`}`, dim: true }]
+  return [...branch, { text: count > 0 ? ` · ${count} ${count === 1 ? FILE_NOUN.one : FILE_NOUN.many}` : ' · clean', dim: true }]
 }
 
-function repoBlocks(repo: RepoChanges, index: number, diffs: OpenDiffs): Block[] {
+/** True when a repo lists a file whose row opens a diff (diffKeyOf): an untracked folder alone opens none. */
+function hasDiffs(repo: RepoChanges): boolean {
+  return repo.problem === null && repo.files.items.some(file => diffKeyOf({ kind: 'repo', repo, file }) !== null)
+}
+
+/** A repo's ruled header and its files as its card, led by DIFF_HINT when `isHinted`. */
+function repoBlocks(repo: RepoChanges, index: number, diffs: OpenDiffs, isHinted: boolean): Block[] {
   const name = repoName(repo.root)
   // Git did not read a repo with a problem: it has no branch or files to show, only why.
   const header: Span[] = [{ text: name, bold: true }, ...(repo.problem === null ? repoState(repo, name) : [])]
   // The first repo sits under the buttons, already a gap away.
   const head: Block = { key: `repo:${repo.root}`, opensSection: index > 0, rows: [{ key: `repo:${repo.root}`, spans: header, rule: true }] }
   if (repo.problem !== null) return [head, single(`problem:${repo.root}`, [{ text: `WARN ${repo.problem}`, color: 'warning' }], { text: '  ' })]
-  const rows = repo.files.items.flatMap(file => {
-    const row = fileRow(repo, file)
-    const diff = row.expands === undefined ? undefined : diffs[row.expands]
-    return diff === undefined ? [row] : [row, ...diffRows(row.key, diff)]
-  })
+  const hint: Row[] = isHinted ? [{ key: `${repo.root}:hint`, spans: [{ text: DIFF_HINT, dim: true }] }] : []
+  const rows = [
+    ...hint,
+    ...repo.files.items.flatMap(file => {
+      const row = fileRow(repo, file)
+      const diff = row.expands === undefined ? undefined : diffs[row.expands]
+      return diff === undefined ? [row] : [row, ...diffRows(row.key, diff)]
+    }),
+  ]
   if (repo.files.more > 0) rows.push({ key: `${repo.root}:more`, spans: [{ text: `… ${repo.files.more} more`, dim: true }] })
   if (repo.isPartial) rows.push({ key: `${repo.root}:partial`, spans: [{ text: "… git's list ran past 4 MiB and stops short", dim: true }] })
   // The files are the header's card, drawn under it outside any press, so each file's row is a press of its own.
@@ -153,7 +201,8 @@ function whereSpans(hit: ChangeHit): Span[] {
   const { row } = hit
   if (row.kind === 'outside') return [{ text: 'written outside git', dim: true }]
   const name = repoName(row.repo.root)
-  const branch = row.repo.branch === name ? [] : ledSpans(' · ', row.repo.branch ?? 'detached', row.repo.branch === null ? [] : marksOf(hit, 'branch'), { dim: true })
+  const branch =
+    row.repo.branch === name ? [] : row.repo.branch === null ? [{ text: ` · ${NO_BRANCH}`, dim: true }] : ledSpans(' · branch ', row.repo.branch, marksOf(hit, 'branch'), { dim: true })
   return [...markedSpans(name, marksOf(hit, 'repo'), { dim: true }), ...branch]
 }
 
@@ -162,9 +211,11 @@ function resultBlock(hit: ChangeHit, diffs: OpenDiffs): Block {
   const { row } = hit
   const key = changesResultKey(row)
   const spans = row.kind === 'repo' ? fileSpans(row.file, { path: marksOf(hit, 'path'), from: marksOf(hit, 'from') }) : markedSpans(row.path, marksOf(hit, 'path'), {})
+  // Where it is sits under the path: past what changed in a repo's file, under an outside file's path that has none.
+  const under = row.kind === 'repo' ? UNDER_PATH : UNDER_ROW
   const rows: Row[] = [
-    { key, spans, hang: UNDER_PATH },
-    { key: `${key}:where`, spans: [UNDER_PATH, ...whereSpans(hit)], hang: UNDER_PATH },
+    { key, spans, hang: under },
+    { key: `${key}:where`, spans: [under, ...whereSpans(hit)], hang: under },
   ]
   const expands = diffKeyOf(row)
   if (expands === null) return { key, rows }
@@ -191,7 +242,9 @@ export function changesBlocks(changes: ChangesSnapshot, isGitMissing = false, di
   if (search !== null) return foundBlocks(search, diffs)
   if (changes.repos.length === 0 && changes.outside.length === 0)
     return [single('no-repo', [{ text: 'No git repo yet: the session folder is in none, and no file the session or its agents edited (Edit, Write) is in one.' }])]
-  const blocks = changes.repos.flatMap((repo, i) => repoBlocks(repo, i, diffs))
+  // The hint shows once, over the first files a press opens a diff of.
+  const hinted = changes.repos.findIndex(hasDiffs)
+  const blocks = changes.repos.flatMap((repo, i) => repoBlocks(repo, i, diffs, i === hinted))
   if (changes.outside.length === 0) return blocks
   const outside = heading('outside', [{ text: `written outside git (${changes.outside.length})`, dim: true }])
   const rows: Row[] = changes.outside.map(path => ({ key: `outside:${path}`, spans: [{ text: path }], hang: { text: '  ' } }))

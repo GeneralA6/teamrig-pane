@@ -289,13 +289,17 @@ and the repo of each file the session or one of its agents writes (Edit, Write, 
 shell command changes adds no repo). Until one is found it says why: `No git repo yet: the session folder
 is in none, and no file the session or its agents edited (Edit, Write) is in one.` A worktree is its own repo
 (`git rev-parse --show-toplevel`, asked once a folder), and leaves the list once its folder is removed:
-git never runs in a folder that is gone. Each repo gets a ruled header (`mods-pane-v2 · pane-v2 · 3
-changed`, or `clean`; the branch is left out when the folder bears its name, as a worktree's often does),
-then its files: git's two-letter code (the staged letter green, the unstaged one yellow, `??` untracked
-dim), the path from the repo root, its lines (`+12` added in green, `-3` removed in red; `+0 -0` or
-`binary` dim; an untracked folder sums its files) and a rename's source (`← old.ts`). The first 200
-files a repo are listed and the rest counted; a repo git can't read shows only its folder in the header
-and git's first error line under it. Files written outside any repo come last, the newest 20. When git can't be
+git never runs in a folder that is gone. Each repo gets a ruled header (`mods-pane-v2 · branch pane-v2 ·
+3 files`, `1 file`, or `clean`; `no branch` while detached; the branch is left out when the folder bears its
+name, as a worktree's often does), then its files, the first repo with a diff to open led by a dim
+`click a file for its diff`. Each file's row says what git's two-letter code means, in a column of its own so
+the paths line up: `changed`, `added`, `deleted`, `renamed` or `copied`, green when the change is staged and
+yellow when it is in the work tree alone, `new` dim for a file not in git yet, `conflict` red for one a merge
+left in conflict. Then the path from the repo root, its lines (`+12` added in green, `-3` removed in red;
+`+0 -0` or `binary` dim; an untracked folder sums its files), a rename's source (`← old.ts`), and dim, where
+the change is: `(staged)`, `(staged, changed since)` when the work tree changed it again, or `(not in git
+yet)`. A row too long for the dock goes on under its path. The first 200 files a repo are listed and the
+rest counted; a repo git can't read shows only its folder in the header and git's first error line under it. Files written outside any repo come last, the newest 20. When git can't be
 started at all (`git --version`, run once a session), a `WARN` line above the view says so, and the view lists
 nothing rather than wait on git.
 

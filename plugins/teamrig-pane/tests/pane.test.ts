@@ -1458,10 +1458,14 @@ test("the Changes view lists each repo's changed files with their lines, counted
   expect(titles).toEqual(['Tasks', 'Tasks · 3 changed'])
   expect(buttonLabel(await pane.drawn(), 'changes')).toBe('Changes 3')
   await pane.press({ key: 'changes' })
-  expect(await pane.find({ text: /work · pane-v2 · 3 changed/ })).toBeDefined()
-  expect(await pane.find({ text: / M hooks\/a\.ts \+4 -1/ })).toBeDefined()
-  expect(await pane.find({ text: /R  hooks\/new\.ts \+2 -2 ← hooks\/old\.ts/ })).toBeDefined()
-  expect(await pane.find({ text: /\?\? tests\/ \+9/ })).toBeDefined()
+  expect(await pane.find({ text: /work · branch pane-v2 · 3 files/ })).toBeDefined()
+  expect(await pane.find({ text: /changed {2}hooks\/a\.ts \+4 -1/ })).toBeDefined()
+  // Too long for the dock's 50 columns, the rename's row goes on under its path.
+  expect(await drawsLine(pane, /^renamed {2}hooks\/new\.ts \+2 -2 ← hooks\/old\.ts$/)).toBe(true)
+  expect(await drawsLine(pane, /^\(staged\)$/)).toBe(true)
+  expect(await pane.find({ text: /new {6}tests\/ \+9 \(not in git yet\)/ })).toBeDefined()
+  // Only the first repo with a diff to open says a press opens one.
+  expect(await pane.find({ text: 'click a file for its diff' })).toBeDefined()
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
 
   await pane.press({ key: 'tasks' })
@@ -1483,9 +1487,9 @@ test("the Changes view's Find field draws the files it names; Enter on one opens
   await pane.input({ key: 'find', text: 'hooks', kind: 'change' })
   // The count, then the two files it names over their repo and branch; the list's repo header is not drawn.
   expect(await drawsLine(pane, /^2 files match$/)).toBe(true)
-  expect(await drawsLine(pane, /^R {2}hooks\/new\.ts \+2 -2 ← hooks\/old\.ts$/)).toBe(true)
-  expect(await drawsLine(pane, /^work · pane-v2$/)).toBe(true)
-  expect(await drawsLine(pane, /3 changed/)).toBe(false)
+  expect(await drawsLine(pane, /^renamed {2}hooks\/new\.ts \+2 -2 ← hooks\/old\.ts \(staged\)$/)).toBe(true)
+  expect(await drawsLine(pane, /^work · branch pane-v2$/)).toBe(true)
+  expect(await drawsLine(pane, /3 files/)).toBe(false)
   expect(await results()).toEqual(['changes-search:/work:hooks/a.ts', 'changes-search:/work:hooks/new.ts'])
   expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ submitLabel: 'to the results' })
   // Enter on more matches opens no diff.
@@ -1510,14 +1514,14 @@ test("the Changes view's Find field draws the files it names; Enter on one opens
 
   // An untracked folder is found, with no diff to open.
   await pane.input({ key: 'find', text: 'tests', kind: 'change' })
-  expect(await drawsLine(pane, /^\?\? tests\/ \+9$/)).toBe(true)
+  expect(await drawsLine(pane, /^new {6}tests\/ \+9 \(not in git yet\)$/)).toBe(true)
   expect(await results()).toEqual([])
 
   // Another view and back to Changes: the list, the search gone.
   await pane.press({ key: 'tasks' })
   await pane.press({ key: 'changes' })
   expect(await drawsLine(pane, /match/)).toBe(false)
-  expect(await pane.find({ text: /work · pane-v2 · 3 changed/ })).toBeDefined()
+  expect(await pane.find({ text: /work · branch pane-v2 · 3 files/ })).toBeDefined()
 })
 
 test('a press on a Changes file opens its diff under it, kept current as the file changes, and a second press closes it', async ($, on) => {
@@ -1575,7 +1579,7 @@ test('a file the session writes adds its repo on the next poll; a failed write a
   await $.tool.call({ tool: 'Edit', file_path: '/repo/src/a.ts', old_string: 'a', new_string: 'b' })
   await $.tool.call({ tool: 'Write', file_path: '/notes/plan.md', content: 'x' })
   await clock.advance(3_000)
-  expect(await pane.find({ text: /repo · main · 1 changed/ })).toBeDefined()
+  expect(await pane.find({ text: /repo · branch main · 1 file/ })).toBeDefined()
   expect(await pane.find({ text: /written outside git \(1\)/ })).toBeDefined()
   expect(await pane.find({ text: /\/notes\/plan\.md/ })).toBeDefined()
   expect(await pane.find({ text: /bad\.ts/ })).toBeUndefined()
@@ -1590,7 +1594,7 @@ test('a file the session writes adds its repo on the next poll; a failed write a
   await $.tool.call({ tool: 'Bash', command: 'git commit -am x' })
   await clock.advance(3_000)
   expect(statusRuns()).toBe(before + 1)
-  expect(await pane.find({ text: /repo · main · clean/ })).toBeDefined()
+  expect(await pane.find({ text: /repo · branch main · clean/ })).toBeDefined()
   expect(titles.at(-1)).toBe('Tasks · 1 changed')
 })
 
@@ -1600,14 +1604,14 @@ test('a worktree removed while the session works leaves the Changes view, with n
   await clock.settle()
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   await pane.press({ key: 'changes' })
-  expect(await pane.find({ text: /work · pane-v2 · 3 changed/ })).toBeDefined()
+  expect(await pane.find({ text: /work · branch pane-v2 · 3 files/ })).toBeDefined()
 
   for (const path of ['/work/.git', '/work/.keep']) disk.remove(path)
   const before = runs.length
   await clock.advance(60_000)
   expect(runs.length).toBe(before)
   expect(await pane.find({ text: /No git repo yet/ })).toBeDefined()
-  expect(await pane.find({ text: /WARN|detached/ })).toBeUndefined()
+  expect(await pane.find({ text: /WARN|no branch/ })).toBeUndefined()
   expect(titles.at(-1)).toBe('Tasks')
 })
 
@@ -1633,7 +1637,7 @@ test('after a hot reload that reads the drawn changes as an older shape, the rep
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   await pane.press({ key: 'changes' })
 
-  expect(await pane.find({ text: /repo · main · 1 changed/ })).toBeDefined()
+  expect(await pane.find({ text: /repo · branch main · 1 file/ })).toBeDefined()
   expect(await pane.find({ text: /No git repo yet/ })).toBeUndefined()
 })
 
