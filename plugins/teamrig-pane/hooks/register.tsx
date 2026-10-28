@@ -1407,18 +1407,27 @@ export const register: Register = on => {
     // The status bar leads the tasks: its segments in one row as wide as the body, its counts under it.
     // A press on a segment or a count (or the count's key) filters the list to that status, a second
     // press on the same one clears it, and one on another switches to it.
-    // A count's Button draws its key before it (`o: `), which the bar counts in its widths (status-bar.ts drawnText).
+    // A count's Button draws its key before it (`o: `), then its glyph in the color its rows wear it in, which the bar
+    // counts in its widths (status-bar.ts drawnText): one Text holding both, as a plain Button holds only strings and Text.
     const filterTo = (status: BarStatus) => void update($, barFilter, current => (current === status ? null : status))
     const drawPiece = (piece: BarPiece) => {
       const status = piece.status
       if (status === null) return styled(piece, piece.key)
+      const text =
+        piece.mark === null ? (
+          styled(piece)
+        ) : (
+          <Text>
+            {styled(piece.mark, 'mark')} {styled(piece, 'text')}
+          </Text>
+        )
       return piece.hotkey === null ? (
         <Button key={piece.key} plain onPress={() => filterTo(status)}>
-          {styled(piece)}
+          {text}
         </Button>
       ) : (
         <Button key={piece.key} plain hotkey={piece.hotkey} onPress={() => filterTo(status)}>
-          {styled(piece)}
+          {text}
         </Button>
       )
     }

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { BarStatus, Snapshot, TaskRow } from '../types'
+import type { BarStatus, Snapshot, TaskRow, TaskStatus } from '../types'
 import { TimeZone, readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { NOTHING_EXPANDED, paneBlocks, type Block } from '../hooks/rows'
+import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, paneBlocks, type Block } from '../hooks/rows'
 import { BAR_LOOK, BAR_STATUSES, barCells, barCounts, drawnText, filterText, inlineBarRows, statusBar, type BarCounts, type BarPiece } from '../hooks/status-bar'
 import { statusLines } from '../hooks/view'
 import { cells } from '../hooks/width'
@@ -191,9 +191,9 @@ describe('status bar lines', () => {
     const bar = statusBar(snapshotOf(tasks, 'po'), null, 12)
     expect(bar?.lines.length).toBe(4)
     expect(bar?.lines[0]).toEqual([
-      { key: 'bar:done-today', text: '███', color: 'success', dim: false, bold: false, status: 'done-today', hotkey: null },
-      { key: 'bar:verifying', text: '▓▓▓▓▓▓', color: 'success', dim: false, bold: false, status: 'verifying', hotkey: null },
-      { key: 'bar:not-started', text: '░░░', color: undefined, dim: true, bold: false, status: 'not-started', hotkey: null },
+      { key: 'bar:done-today', text: '███', color: 'success', dim: false, bold: false, status: 'done-today', hotkey: null, mark: null },
+      { key: 'bar:verifying', text: '▓▓▓▓▓▓', color: 'success', dim: false, bold: false, status: 'verifying', hotkey: null, mark: null },
+      { key: 'bar:not-started', text: '░░░', color: undefined, dim: true, bold: false, status: 'not-started', hotkey: null, mark: null },
     ])
     expect(bar?.lines.slice(1).map(textOf)).toEqual(['1 done today', '2 verifying', '1 not started'])
     expect(statusBar(snapshotOf(tasks, 'po'), null, 48)?.lines.map(textOf)).toEqual([
@@ -204,31 +204,45 @@ describe('status bar lines', () => {
   })
 
   test('the counts wrap at the width, a dim separator only between two on a line, each line inside the bar\'s width', async () => {
-    const bar = statusBar(snapshotOf(tasks, 'po'), null, 34)
-    expect(bar?.lines.slice(1).map(drawnOf)).toEqual(['o: 1 done today · v: 2 verifying', 'n: 1 not started'])
-    expect(bar?.lines[1]?.[1]).toEqual({ key: 'sep:count:verifying', text: ' · ', dim: true, status: null, hotkey: null })
-    expect(bar?.lines.every(line => cells(drawnOf(line)) <= 34)).toBe(true)
+    const bar = statusBar(snapshotOf(tasks, 'po'), null, 36)
+    expect(bar?.lines.slice(1).map(drawnOf)).toEqual(['o: ✓ 1 done today · v: ◑ 2 verifying', 'n: ○ 1 not started'])
+    expect(bar?.lines[1]?.[1]).toEqual({ key: 'sep:count:verifying', text: ' · ', dim: true, status: null, hotkey: null, mark: null })
+    expect(bar?.lines.every(line => cells(drawnOf(line)) <= 36)).toBe(true)
     expect(cells(textOf(statusBar(snapshotOf(tasks, 'po'), null, 0)?.lines[0]))).toBe(1)
   })
 
-  test("the counts wrap by their drawn width, each count's key included, so no line runs past the bar", async () => {
-    // The text alone is 42 cells, drawn 51: a line counted by its text overflowed in 42 to 50 columns, and the row
+  test("the counts wrap by their drawn width, each count's key and glyph included, so no line runs past the bar", async () => {
+    // The text alone is 42 cells, drawn 57: a line counted by its text overflowed in 42 to 56 columns, and the row
     // squeezed its separators to one cell each, their dots wrapping onto a line of their own.
     expect(cells(textOf(statusBar(snapshotOf(tasks, 'po'), null, 80)?.lines[1]))).toBe(42)
-    expect(statusBar(snapshotOf(tasks, 'po'), null, 51)?.lines.slice(1).map(drawnOf)).toEqual(['o: 1 done today · v: 2 verifying · n: 1 not started'])
-    expect(statusBar(snapshotOf(tasks, 'po'), null, 50)?.lines.slice(1).map(drawnOf)).toEqual(['o: 1 done today · v: 2 verifying', 'n: 1 not started'])
-    // From 16, the widest count's own cells (`n: 1 not started`): a narrower line holds it alone, as wide as it is.
-    for (let width = 16; width <= 60; width++) {
+    expect(statusBar(snapshotOf(tasks, 'po'), null, 57)?.lines.slice(1).map(drawnOf)).toEqual(['o: ✓ 1 done today · v: ◑ 2 verifying · n: ○ 1 not started'])
+    expect(statusBar(snapshotOf(tasks, 'po'), null, 56)?.lines.slice(1).map(drawnOf)).toEqual(['o: ✓ 1 done today · v: ◑ 2 verifying', 'n: ○ 1 not started'])
+    // From 18, the widest count's own cells (`n: ○ 1 not started`): a narrower line holds it alone, as wide as it is.
+    for (let width = 18; width <= 60; width++) {
       const lines = statusBar(snapshotOf(tasks, 'po'), null, width)?.lines ?? []
       expect(lines.every(line => cells(drawnOf(line)) <= width)).toBe(true)
     }
   })
 
-  test("a count draws behind its key, a colon and a space; a segment, a separator or the filter's line as its text", async () => {
+  test("a count draws behind its key, a colon and a space, then its glyph; a segment, a separator or the filter's line as its text", async () => {
     const bar = statusBar(snapshotOf(tasks, 'po'), 'verifying', 80)
-    expect(bar?.lines[1]?.map(drawnText)).toEqual(['o: 1 done today', ' · ', 'v: 2 verifying', ' · ', 'n: 1 not started'])
+    expect(bar?.lines[1]?.map(drawnText)).toEqual(['o: ✓ 1 done today', ' · ', 'v: ◑ 2 verifying', ' · ', 'n: ○ 1 not started'])
     expect(bar?.lines[0]?.map(drawnText)).toEqual(bar?.lines[0]?.map(piece => piece.text))
     expect(bar?.lines[2]?.map(drawnText)).toEqual([filterText('verifying')])
+  })
+
+  test("each count wears the glyph its section's rows wear, in their color, so the counts are the glyphs' legend", async () => {
+    const section: Record<BarStatus, TaskStatus> = { 'done-today': 'done', verifying: 'verifying', working: 'in-progress', waiting: 'waiting', 'not-started': 'open' }
+    for (const status of BAR_STATUSES) {
+      expect(BAR_LOOK[status].glyph).toBe(GLYPH[section[status]])
+      expect(BAR_LOOK[status].color).toBe(GLYPH_COLOR[section[status]])
+    }
+    const marks = statusBar(snapshotOf(tasks, 'po'), null, 80)?.lines[1]?.map(piece => piece.mark)
+    expect(marks).toEqual([{ text: '✓', color: 'success' }, null, { text: '◑', color: 'success' }, null, { text: '○', dim: true }])
+  })
+
+  test('in a dock too narrow for a count with its glyph, that count goes without it, its words still naming the status', async () => {
+    expect(statusBar(snapshotOf(tasks, 'po'), null, 17)?.lines.slice(1).map(drawnOf)).toEqual(['o: ✓ 1 done today', 'v: ◑ 2 verifying', 'n: 1 not started'])
   })
 
   test('no bar with no area, before the first read, or with no task to show', async () => {
@@ -282,7 +296,7 @@ describe('status bar filter', () => {
     ])
     expect(bar?.lines[1]?.find(piece => piece.key === 'count:verifying')).toMatchObject({ bold: true, dim: false })
     expect(bar?.lines[1]?.find(piece => piece.key === 'count:done-today')).toMatchObject({ bold: false, dim: true })
-    expect(bar?.lines[2]).toEqual([{ key: 'filter', text: filterText('verifying'), dim: true, status: null, hotkey: null }])
+    expect(bar?.lines[2]).toEqual([{ key: 'filter', text: filterText('verifying'), dim: true, status: null, hotkey: null, mark: null }])
     expect(filterText('verifying')).toBe('showing verifying only, click again for all')
   })
 
