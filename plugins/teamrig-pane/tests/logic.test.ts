@@ -6,7 +6,7 @@ import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
 import { ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
-import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
+import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
 import { metaText } from '../hooks/meta'
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
@@ -741,6 +741,16 @@ describe('rows', () => {
     expect(rowAt(blocks, 'owner:security')?.spans).toEqual([{ text: 'security', bold: true }, { text: ' · 1 active · 1 waiting', dim: true }])
     expect(rowAt(blocks, 'owner:etl')?.spans[0]?.color).toBe('claude')
     expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => b.opensSection)).toEqual([false, true])
+  })
+
+  test('with nothing of its own active, the list says what it still holds: the tasks it asked of others', async () => {
+    const asked = [createLine('T1', { owner: 'security', by: 'po', at: NOW, source: 'po' })]
+    expect(textAt(paneBlocks(snapshotOf(fold(...asked), 'po'), 'mine'), 'none-active')).toBe('Nothing of yours is active. 1 task you asked of others is below.')
+    const two = fold(...asked, createLine('T2', { owner: 'etl', by: 'po', at: NOW, source: 'po' }))
+    expect(textAt(paneBlocks(snapshotOf(two, 'po'), 'mine'), 'none-active')).toBe('Nothing of yours is active. 2 tasks you asked of others are below.')
+    expect(textAt(paneBlocks({ ...snapshotOf(two, 'po'), areaSource: 'pinned' }, 'mine'), 'none-active')).toBe("Nothing of po's is active. 2 tasks it asked of others are below.")
+    expect(textAt(paneBlocks(snapshotOf([], 'po'), 'mine'), 'none-active')).toBe('Nothing active.')
+    expect([noneActiveText(0, null), noneActiveText(0, 'etl')]).toEqual(['Nothing active.', 'Nothing active.'])
   })
 
   test('open, a verifying task\'s card draws its proof green', async () => {
