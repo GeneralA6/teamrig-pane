@@ -326,9 +326,9 @@ export type LogPage = {
 /**
  * A place the tasks view shows (hooks/nav.ts): the list, remembering the key of the element a page was opened from
  * (null when none) so a return scrolls back to it, a task's page by its id, or a search (hooks/search.ts) by its
- * query, the words its Find field holds ('' before any is typed), the Done page (hooks/done-rows.ts) by its week,
- * the `YYYY-MM-DD` Monday it shows, or a reference file's page (hooks/file-page.ts) by the file as its ref writes it
- * and the line it lands on.
+ * query, the words its Find field holds ('' before any is typed), the Archive page (hooks/done-rows.ts) by its week,
+ * the `YYYY-MM-DD` Monday it shows, a reference file's page (hooks/file-page.ts) by the file as its ref writes it
+ * and the line it lands on, or the Keys page (hooks/keys-page.ts), one page.
  */
 export type Place =
   | { readonly kind: 'list'; readonly row: string | null }
@@ -336,6 +336,7 @@ export type Place =
   | { readonly kind: 'search'; readonly query: string }
   | { readonly kind: 'done'; readonly week: string }
   | { readonly kind: 'file'; readonly file: string; readonly line: number | null }
+  | { readonly kind: 'keys' }
 
 /** The places the person went through, oldest first (at most hooks/nav.ts NAV_PLACES), and the index of the one shown. */
 export type Nav = { readonly places: readonly Place[]; readonly at: number }

@@ -61,8 +61,9 @@ teamrig binds by its Claude Code title (`/rename web`) gets the same mark, so th
 again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
 and lists the team's sessions. In the pane, `m` and `a` switch views, and `o`, `v`, `w`, `i` and `n`
 show one status's tasks alone (Status bar, below); on a task's page `b` and `f` go back and forward, and
-in the dock the Find field (`s`) searches the tasks and `archive ›` (`h`) lists the finished ones a week at a time
-(below).
+in the dock the Find field (`s`) searches the tasks, `archive ›` (`h`) lists the finished ones a week at a time
+(below), and `k: keys` (`k`), at the end of the mode row, opens the Keys page: every key the pane answers, on one
+page, back returning to where it was opened from.
 
 In the side dock the tasks sit a blank line apart, each wrapped title and meta line starting under the
 title, and a blank line and a bold heading open each section (each owner in `all`).

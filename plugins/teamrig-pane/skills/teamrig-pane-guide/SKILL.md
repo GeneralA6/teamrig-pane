@@ -90,7 +90,9 @@ variables or the settings file), the word is taken as the session id, and a word
 
 Keys work while the pane holds the keyboard: press `ctrl+x tab`, or click the pane. In the dock, the line under the
 Find field says where they go now (see [Find](#find)). A Claude dialog, such as a permission prompt, takes the
-keys, clicks and wheel scroll from the pane until it is answered: Claude Code's rule, not the pane's.
+keys, clicks and wheel scroll from the pane until it is answered: Claude Code's rule, not the pane's. In the dock,
+`k: keys` at the end of the Tasks view's mode row opens the Keys page (`Tasks › Keys`), which lists these keys in
+groups (the views, the list's own, a page's steps, the status bar's) and how the keys come to the pane; back returns.
 
 | Key | What it does |
 | --- | --- |
@@ -107,6 +109,7 @@ keys, clicks and wheel scroll from the pane until it is answered: Claude Code's 
 | `i` | mine: only the waiting tasks; again shows every task |
 | `n` | mine: only the open tasks (`not started`); again shows every task |
 | `c` | `close cards`: closes every open card (shown while one is open, after a dim `·` on the mode row) |
+| `k` | In the dock: `k: keys`, the last of the mode row, opens the Keys page, every key in this table on one page |
 | Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |

@@ -8,7 +8,8 @@
 // its week: a step to an older or newer week changes the week of the page shown, never adds a place, so back
 // returns to where the page was opened from. A press on a file a card's Reference row names (ref-file.ts) opens that
 // file's page (file-page.ts), a place holding the file as the ref writes it and the line it points at: it opens at
-// that line, or its top for none. Ids, queries, weeks and file names only, at most NAV_PLACES places, the oldest
+// that line, or its top for none. The Keys page (keys-page.ts) is one place, whatever it was opened from. Ids,
+// queries, weeks and file names only, at most NAV_PLACES places, the oldest
 // dropped first: what a page shows is read from the snapshot each time it draws (page.ts), and only the pages a place
 // names keep the details, and the files, read for them. Pure: register.tsx keeps it in $.state and draws it.
 import type { Nav, Place } from '../types'
@@ -22,12 +23,15 @@ const LIST: Place = { kind: 'list', row: null }
 /** The list alone: where the tasks view starts. */
 export const AT_LIST: Nav = { places: [LIST], at: 0 }
 
+/** The Keys page: every key the pane answers. */
+export const KEYS_PAGE: Place = { kind: 'keys' }
+
 /** The place shown: the list when `nav` points at none. */
 export function currentPlace(nav: Nav): Place {
   return nav.places[nav.at] ?? LIST
 }
 
-/** One place: the list whichever row it remembers, a task's page by its id, a search by its query, the Archive page by its week, a file's page by its file and line. */
+/** One place: the list whichever row it remembers, a task's page by its id, a search by its query, the Archive page by its week, a file's page by its file and line, the Keys page. */
 function samePlace(a: Place, b: Place): boolean {
   switch (a.kind) {
     case 'list':
@@ -40,12 +44,14 @@ function samePlace(a: Place, b: Place): boolean {
       return b.kind === 'done' && a.week === b.week
     case 'file':
       return b.kind === 'file' && a.file === b.file && a.line === b.line
+    case 'keys':
+      return b.kind === 'keys'
   }
 }
 
-/** Whether `place` is a page, drawn under back, forward and the trail: a task's, the Archive's or a file's. */
+/** Whether `place` is a page, drawn under back, forward and the trail: a task's, the Archive's, a file's or the Keys page. */
 export function isPage(place: Place): boolean {
-  return place.kind === 'task' || place.kind === 'done' || place.kind === 'file'
+  return place.kind === 'task' || place.kind === 'done' || place.kind === 'file' || place.kind === 'keys'
 }
 
 /** `nav` showing `place` next, past the one shown: the places ahead dropped, the oldest past NAV_PLACES too. The place shown already changes nothing. */
@@ -167,6 +173,7 @@ export function landing(before: Nav, next: Nav): Landing | null {
   switch (to.kind) {
     case 'task':
     case 'done':
+    case 'keys':
       return { kind: 'top' }
     case 'file':
       return to.line === null ? { kind: 'top' } : { kind: 'line', file: to.file, line: to.line }
@@ -179,7 +186,7 @@ export function landing(before: Nav, next: Nav): Landing | null {
 
 /**
  * A crumb's words: `Tasks` for the list, a page's task id, `Search` with its query in quotes, `Archive 10-12` with its
- * week's Monday, a file's name.
+ * week's Monday, a file's name, `Keys`.
  */
 export function placeLabel(place: Place): string {
   switch (place.kind) {
@@ -193,6 +200,8 @@ export function placeLabel(place: Place): string {
       return `Archive ${place.week.slice(5)}`
     case 'file':
       return place.file.split(/[\\/]/).at(-1) ?? place.file
+    case 'keys':
+      return 'Keys'
   }
 }
 
