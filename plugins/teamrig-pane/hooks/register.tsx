@@ -1013,8 +1013,9 @@ export const register: Register = on => {
      * A card's lines with no press as one Text; a line with one as a row of its pieces, each id a press that opens
      * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, an inbox count
      * one that opens the inbox's, keyed `goto:inbox:`, each Team tab key one that opens or closes it in its span's
-     * style, keyed `team:`, then where it is drawn (`from`, the card's element); a Changes file's row one press that
-     * opens or closes its diff, keyed `diff:`, then where it is drawn and the row.
+     * style, keyed `team:`, each session of a tab tied to none one that ties the tab to it as `/teamrig-pane
+     * <session>` does, keyed `pin:`, then where it is drawn (`from`, the card's element); a Changes file's row one
+     * press that opens or closes its diff, keyed `diff:`, then where it is drawn and the row.
      */
     const drawPart = (part: CardPart, wrap: Drawn['wrap'], from: string) => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
@@ -1053,6 +1054,14 @@ export const register: Register = on => {
                 return (
                   <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void update($, teamToggled, toggled => toggledWith(toggled, key))}>
                     {styled(piece.span)}
+                  </Button>
+                )
+              }
+              case 'pin': {
+                const id = piece.pins
+                return (
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void live?.pin(id)}>
+                    {drawPress(piece.span, 'pin')}
                   </Button>
                 )
               }

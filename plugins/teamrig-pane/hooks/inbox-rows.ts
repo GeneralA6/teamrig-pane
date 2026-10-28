@@ -7,7 +7,7 @@
 import type { InboxItem, Snapshot } from '../types'
 import { INBOX_WINDOW_HOURS, inboxDrawn } from './inbox'
 import { INBOX_SEARCH_VIEW, type InboxHit, type InboxSearchedField } from './inbox-search'
-import { NO_AREA, SEPARATOR, single, type Block, type Span } from './rows'
+import { noSessionBlock, SEPARATOR, single, type Block, type Span } from './rows'
 import { marksOf, type Mark } from './search'
 import { markedSpans, resultKey, searchViewBlocks, type Noun } from './search-view'
 import { clockOf, momentWords, type Clock } from './zone'
@@ -28,8 +28,8 @@ const LINE_NOUN: Noun = { one: 'line', many: 'lines' }
 /** The Find field's query on the Inbox view and the lines it names (inbox-search.ts searchInbox), the last written first. */
 export type InboxSearch = { query: string; hits: readonly InboxHit[] }
 
-/** What the view draws from: the session's area, its inbox lines and the clock they print on. */
-export type InboxSource = Pick<Snapshot, 'area' | 'inbox' | 'now' | 'timeZone'>
+/** What the view draws from: the session's area (with no area, its team's sessions), its inbox lines and the clock they print on. */
+export type InboxSource = Pick<Snapshot, 'area' | 'team' | 'leads' | 'inbox' | 'now' | 'timeZone'>
 
 /** Where a search's words matched in each of a line's fields. */
 type Marks = (field: InboxSearchedField) => readonly Mark[]
@@ -74,7 +74,7 @@ function foundBlocks(search: InboxSearch, clock: Clock): Block[] {
  * show; while `search` holds the Find field's query, the search's body instead.
  */
 export function inboxBlocks(snap: InboxSource, search: InboxSearch | null = null): Block[] {
-  if (snap.area === null) return [note('no-area', NO_AREA)]
+  if (snap.area === null) return [noSessionBlock(`${VIEW}:no-area`, snap)]
   const clock = clockOf(snap)
   if (search !== null) return foundBlocks(search, clock)
   const items = inboxDrawn(snap.inbox, snap.now)

@@ -9,6 +9,7 @@ import type { ThemeKey } from 'claude-code'
 import type { BarStatus, ExpandedTasks, LogRead, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
 import { listCardRows } from './card'
 import { COMMAND } from './command'
+import { teamSessions } from './leads'
 import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
 import { BAR_LOOK } from './status-bar'
 import { areaView, ownerGroups, statusLines } from './view'
@@ -21,8 +22,9 @@ import { cells } from './width'
  * With `file` the text names a file a card's Reference row lists (ref-file.ts), which a press on opens as a page too
  * (file-page.ts); never split. With `inbox` the text is an unread count (a Team tab card's), which a press
  * on opens: the session's own in the Inbox view, another area's as a file's page at its first unread line; never split. With `toggles` the text is a press that opens or closes that Team tab key
- * (team-rows.ts): a leader's fold mark its node, its id its card; never split. `underline` marks the words a search
- * matched (search-view.ts).
+ * (team-rows.ts): a leader's fold mark its node, its id its card; never split. With `pins` the text is a session's id
+ * a press on ties the tab to, as `/teamrig-pane <session>` does (a tab tied to no session, noSessionBlock); never split.
+ * `underline` marks the words a search matched (search-view.ts).
  */
 export type Span = {
   text: string
@@ -35,6 +37,7 @@ export type Span = {
   file?: RefFile
   inbox?: InboxPress
   toggles?: string
+  pins?: string
 }
 
 /** What an unread count's press opens: the area whose inbox it is, and how many of its newest lines are unread. */
@@ -90,8 +93,26 @@ export const SEPARATOR: Span = { text: ' · ', dim: true }
 export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', waiting: '■', done: '✓', dropped: '✗' }
 export const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', verifying: 'success', waiting: 'error', done: 'success' }
 
-/** What the Tasks and Inbox views show while the session has no area: how to give it one. */
-export const NO_AREA = `No area for this session yet: /rename the tab to its session's id or name, run \`inbox read --session <id>\`, or /${COMMAND} <session> to pin one.`
+/** Between two of the sessions a tab tied to none lists. */
+const SESSION_GAP: Span = { text: '   ' }
+
+/**
+ * What the Tasks and Inbox views show while the tab is tied to no session (it has no area): the team's sessions, each
+ * a press that ties the tab to it as `/teamrig-pane <session>` does; with no team config read, that command alone.
+ */
+export function noSessionBlock(key: string, snap: Pick<Snapshot, 'team' | 'leads'>): Block {
+  const team = snap.team === null ? '' : ` of team ${snap.team}`
+  if (snap.leads === null) return single(key, [{ text: `This tab is not tied to a session${team} yet: /${COMMAND} <session> ties it to one.`, dim: true }])
+  const sessions = teamSessions(snap.leads).flatMap((id, i): Span[] => (i === 0 ? [{ text: id, pins: id }] : [SESSION_GAP, { text: id, pins: id }]))
+  return {
+    key,
+    rows: [
+      { key, spans: [{ text: `This tab is not tied to a session${team} yet. Press the one this tab is:`, dim: true }] },
+      { key: `${key}:sessions`, spans: sessions },
+      { key: `${key}:command`, spans: [{ text: `(or /${COMMAND} <session>)`, dim: true }] },
+    ],
+  }
+}
 
 /** A block of one row, its key the block's. */
 export function single(key: string, spans: Span[], hang?: Span): Block {
@@ -232,7 +253,7 @@ export function noneActiveText(asked: number, pinned: string | null): string {
  * of others (its asks still active, which the bar counts as waiting too) and Done today, each heading its count.
  */
 function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null): Block[] {
-  if (snap.area === null) return [single('no-area', [{ text: NO_AREA, dim: true }])]
+  if (snap.area === null) return [noSessionBlock('no-area', snap)]
   const tree = treeOf(snap)
   const view = areaView(snap.tasks, snap.area, tree)
   // The session's own area goes unnamed, as the title above names the session (session-title.ts); a pin names the area it shows.

@@ -1,5 +1,6 @@
 // Who leads whom, for the card's Lead row (card.ts): teamrig's lead tree (core config/lead-tree.ts, T781) read once per
-// config change into plain data the pane's state can hold (source.ts), and the lead a task's owner answers to.
+// config change into plain data the pane's state can hold (source.ts), the lead a task's owner answers to, and the
+// team's sessions a tab tied to none lists (rows.ts noSessionBlock).
 import type { TeamLeads } from '../types'
 import { LeadTree, type KitConfig } from './core/read/index'
 
@@ -12,6 +13,11 @@ export function teamLeads(config: Pick<KitConfig, 'sessions' | 'roles' | 'leads'
     if (leader !== undefined) leaderOf[id] = leader
   }
   return { lead: tree.lead, leaderOf }
+}
+
+/** The team's sessions: its lead first, then the others in the config's order. */
+export function teamSessions(leads: TeamLeads): string[] {
+  return [leads.lead, ...Object.keys(leads.leaderOf)]
 }
 
 /**

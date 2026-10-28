@@ -56,6 +56,8 @@ right edge.
 The area is taken from the session's newest `teamrig inbox read --session <id>` (its mark in
 `inbox-marks.jsonl` names the Claude Code session), or pinned with `/teamrig-pane <session>`. A tab
 teamrig binds by its Claude Code title (`/rename web`) gets the same mark, so the pane follows it too.
+A tab with none of these says `This tab is not tied to a session of team web yet. Press the one this
+tab is:` over the team's sessions, each a press that pins the tab to it.
 
 `/teamrig-pane [mine | all | auto | <session>]` opens the pane, switches the view, follows the inbox read
 again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
@@ -478,7 +480,7 @@ plugin's own work per draw at 100, 500 and 2,000 tasks fell from 11, 53 and 212 
 `$.state` outlives a hot reload, so the snapshot is kept under a shape tag (`SNAPSHOT_SHAPE` in
 `hooks/register.tsx`): bump it whenever the `Snapshot` or `TaskRow` type changes, and a reloaded pane
 reads what the older code wrote as not yet read, drawing `Reading the register…` until its first poll
-(at most 3 s), instead of rows with fields missing or a `No area` line it has not looked for yet. The
+(at most 3 s), instead of rows with fields missing or a `not tied to a session` line it has not looked for yet. The
 drawn changes are kept the same way (`CHANGES_SHAPE`), the open diffs too (`DIFFS_SHAPE`, bumped when
 `FileDiff` or `DiffLine` changes), and the repos and files found apart from them
 under a shape of their own (`KNOWN_SHAPE`, bumped only when `KnownChanges` changes), so a bump of

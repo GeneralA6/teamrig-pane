@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { Snapshot, TaskRow, TaskStatus } from '../types'
+import type { Snapshot, TaskRow, TaskStatus, TeamLeads } from '../types'
 import { CLOSE_TEXT, LABEL_CELLS } from '../hooks/card'
 import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
 import { ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
-import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
+import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, noSessionBlock, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
 import { metaText } from '../hooks/meta'
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
@@ -511,6 +511,31 @@ describe('rows', () => {
     // Two keys side by side stay two presses; inline, a row's presses are words and its first row folds.
     expect(piecesOf([mark, { ...mark, toggles: 'api' }])).toHaveLength(2)
     expect(inlineLayout([leader], 6)[0]?.folds).toBe('web')
+  })
+
+  test("a tab tied to no session lists its team's sessions, the lead first, docked each a press of its own; with no team config read, the command alone", () => {
+    const leads: TeamLeads = { lead: 'lead', leaderOf: { api: 'lead', etl: 'lead' } }
+    const block = noSessionBlock('no-area', { team: 'web', leads })
+    expect(block.rows.map(row => row.spans.map(span => span.text).join(''))).toEqual([
+      'This tab is not tied to a session of team web yet. Press the one this tab is:',
+      'lead   api   etl',
+      '(or /teamrig-pane <session>)',
+    ])
+    expect(block.rows[1]?.spans.flatMap(span => (span.pins === undefined ? [] : [[span.text, span.pins]]))).toEqual([
+      ['lead', 'lead'],
+      ['api', 'api'],
+      ['etl', 'etl'],
+    ])
+    const [drawn] = dockLayout([block], 40)
+    expect(drawn?.parts?.map(part => part.kind)).toEqual(['text', 'line', 'text'])
+    const line = drawn?.parts?.[1]
+    expect(line?.kind === 'line' ? line.pieces.map(piece => piece.kind) : []).toEqual(['pin', 'words', 'pin', 'words', 'pin'])
+    // The Tasks view draws it in place of the area's tasks.
+    const snap: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, team: 'web', leads, ...TEAM_SETTINGS, now: NOW }
+    expect(paneBlocks(snap, 'mine')).toEqual([block])
+    const lone = (team: string | null) => noSessionBlock('no-area', { team, leads: null }).rows.map(row => row.spans.map(span => span.text).join(''))
+    expect(lone('web')).toEqual(['This tab is not tied to a session of team web yet: /teamrig-pane <session> ties it to one.'])
+    expect(lone(null)).toEqual(['This tab is not tied to a session yet: /teamrig-pane <session> ties it to one.'])
   })
 
   test("the more line names how many the cap cut and the key of the status bar's filter that lists them all", async () => {

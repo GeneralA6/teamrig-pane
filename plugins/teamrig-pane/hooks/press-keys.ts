@@ -4,7 +4,7 @@
 import type { Place, Placed, View } from './frame'
 import type { CardPart, Drawn, Piece } from './layout'
 
-/** A piece of a card's line that is a press: a task id, a reference file, an inbox count, a Team tab key. */
+/** A piece of a card's line that is a press: a task id, a reference file, an inbox count, a Team tab key, a session to tie the tab to. */
 export type PressPiece = Exclude<Piece, { kind: 'words' }>
 
 /** A press, by its key, and the body rows it stands in. */
@@ -27,7 +27,8 @@ export function diffKey(from: string, partKey: string): string {
 
 /**
  * A press in a card's line: a task id `goto:<id>:`, a reference file `goto:file:`, an inbox count `goto:inbox:`, a
- * Team tab key `team:<key>:`, then where it is drawn, the line, and the piece's place in it.
+ * Team tab key `team:<key>:`, a session to tie the tab to `pin:<id>:`, then where it is drawn, the line, and the
+ * piece's place in it.
  */
 export function pieceKey(piece: PressPiece, from: string, partKey: string, i: number): string {
   const at = `${from}:${partKey}:${i}`
@@ -40,6 +41,8 @@ export function pieceKey(piece: PressPiece, from: string, partKey: string, i: nu
       return `goto:inbox:${at}`
     case 'toggle':
       return `team:${piece.toggles}:${at}`
+    case 'pin':
+      return `pin:${piece.pins}:${at}`
   }
 }
 

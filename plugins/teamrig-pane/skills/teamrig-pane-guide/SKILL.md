@@ -186,11 +186,17 @@ The area is the teamrig session the pane shows as "mine". It comes from a pin (`
 the newest `teamrig inbox read --session <id>` run in this Claude Code session (teamrig records which Claude
 Code session read). teamrig's prompt hook records the same when it binds a tab by its Claude Code title: a tab
 renamed to a session's id or name (`/rename web`) binds at its next prompt, and the pane follows it. With none
-of these, the pane says:
+of these, the Tasks and Inbox views list the team's sessions, the lead first, each a press that pins the tab to it
+as `/teamrig-pane <session>` does:
 
 ```text
-No area for this session yet: /rename the tab to its session's id or name, run `inbox read --session <id>`, or /teamrig-pane <session> to pin one.
+This tab is not tied to a session of team web yet. Press the one this tab is:
+lead   api   etl   security
+(or /teamrig-pane <session>)
 ```
+
+With no team config the pane can read, it names the command alone: `This tab is not tied to a session yet:
+/teamrig-pane <session> ties it to one.`
 
 **mine** shows its status bar (below), then a header counting the area's active tasks, `3 active`, then its tasks
 in sections, each in teamrig's plan order (priority, then the date it works to, undated last, then id: its own due,

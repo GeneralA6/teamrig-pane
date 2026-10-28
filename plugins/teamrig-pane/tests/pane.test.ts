@@ -443,7 +443,7 @@ test('missing register, marks and inbox files draw an empty register with no pro
   for (const path of [EVENTS, MARKS, INBOX]) disk.remove(path)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  expect(await pane.find({ text: /No area for this session yet/ })).toBeDefined()
+  expect(await pane.find({ text: /^This tab is not tied to a session/ })).toBeDefined()
   expect(await pane.find({ text: /\/teamrig-pane/ })).toBeDefined()
   expect(await pane.find({ text: /WARN/ })).toBeUndefined()
 
@@ -791,7 +791,7 @@ test('in a project teamrig is not set up for, the pane shows how to set it up al
   expect(await pane.findAll({ type: 'Input' })).toEqual([])
   expect(await pane.find({ text: /^Keys on the pane/ })).toBeUndefined()
   expect(await pane.find({ text: /^WARN / })).toBeUndefined()
-  expect(await pane.find({ text: /No area/ })).toBeUndefined()
+  expect(await pane.find({ text: /not tied to a session/ })).toBeUndefined()
   expect(disk.reads).toEqual([])
 })
 
@@ -875,6 +875,34 @@ test('/teamrig-pane <session> pins the session an id or a name names; a word nam
   expect(store.get(`pin:${S1}`)).toBe('lead')
   expect(await pane.find({ text: /^lead \(pinned\) · 0 active/ })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: '[web] lead (pinned)' })).toBeDefined()
+})
+
+test("a tab tied to no session lists its team's sessions; a press on one ties the tab to it, as /teamrig-pane <session> does", async ($, on) => {
+  const { disk, store } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  const team = '/Homes/tester/.teamrig/teams/web'
+  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write(`${team}/config.json`, [JSON.stringify({ sessions: ['lead', 'api'] })])
+  disk.write(`${team}/state/events.jsonl`, [createLine('T7', { owner: 'api', by: 'lead', at: NOW - HOUR, title: 'Ship the api' })])
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  expect(await drawsLine(pane, /^This tab is not tied to a session of team web yet\. Press the one this tab is:$/)).toBe(true)
+  expect(await drawsLine(pane, /^lead {3}api$/)).toBe(true)
+  expect(await drawsLine(pane, /^\(or \/teamrig-pane <session>\)$/)).toBe(true)
+  const presses = buttonKeys(await pane.drawn()).filter(key => key.startsWith('pin:'))
+  expect(presses.map(key => key.split(':')[1])).toEqual(['lead', 'api'])
+  // The Inbox view, which needs a session too, lists them the same.
+  await pane.press({ key: 'inbox' })
+  expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('pin:')).map(key => key.split(':')[1])).toEqual(['lead', 'api'])
+  await pane.press({ key: 'tasks' })
+
+  const api = presses[1]
+  if (api === undefined) throw new Error('no press on api')
+  await pane.press({ key: api })
+  expect(store.get(`pin:${S1}`)).toBe('api')
+  expect(await pane.find({ text: /^api \(pinned\) · 1 active/ })).toBeDefined()
+  expect(await pane.find({ text: /Ship the api/ })).toBeDefined()
+  expect(buttonKeys(await pane.drawn()).some(key => key.startsWith('pin:'))).toBe(false)
 })
 
 test('a title line leads the docked tasks, Changes and Log views: the session as its tab title names it, [web] api; inline, none', async ($, on) => {

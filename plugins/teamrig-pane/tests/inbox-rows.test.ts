@@ -4,11 +4,11 @@ import { describe, expect, test } from 'claude-code/testing'
 import { inboxItems } from '../hooks/inbox'
 import { INBOX_EMPTY, INBOX_NOTHING_FOUND, INBOX_SEARCH_HINT, countLine, inboxBlocks, type InboxSource } from '../hooks/inbox-rows'
 import { searchInbox } from '../hooks/inbox-search'
-import { NO_AREA, SEPARATOR, type Block } from '../hooks/rows'
+import { SEPARATOR, type Block } from '../hooks/rows'
 import { HOUR, INBOX_LINES, INBOX_UNREAD_FROM, NOW } from './fixtures'
 
 /** The inbox of INBOX_LINES at NOW, on a team whose clock is Israel's (`IDT`, three hours ahead of UTC). */
-const SOURCE: InboxSource = { area: 'po', inbox: inboxItems(INBOX_LINES, INBOX_UNREAD_FROM, NOW), now: NOW, timeZone: 'Asia/Jerusalem' }
+const SOURCE: InboxSource = { area: 'po', team: null, leads: null, inbox: inboxItems(INBOX_LINES, INBOX_UNREAD_FROM, NOW), now: NOW, timeZone: 'Asia/Jerusalem' }
 /** Each block as its key and its rows' words. */
 const words = (blocks: Block[]): [string, string[]][] => blocks.map(block => [block.key, block.rows.map(row => row.spans.map(span => span.text).join(''))])
 
@@ -41,8 +41,15 @@ describe('inboxBlocks', () => {
     expect(countLine(read)).toBe('2 read in the last 24 hours')
   })
 
-  test('a dim line says why no line shows: no area for the session, or none of the last 24 hours and none unread', () => {
-    expect(words(inboxBlocks({ ...SOURCE, area: null }))).toEqual([['inbox:no-area', [NO_AREA]]])
+  test("with the tab tied to no session, its team's sessions to press, else the command", () => {
+    const leads = { lead: 'lead', leaderOf: { api: 'lead' } }
+    expect(words(inboxBlocks({ ...SOURCE, area: null, team: 'web', leads }))).toEqual([
+      ['inbox:no-area', ['This tab is not tied to a session of team web yet. Press the one this tab is:', 'lead   api', '(or /teamrig-pane <session>)']],
+    ])
+    expect(words(inboxBlocks({ ...SOURCE, area: null }))).toEqual([['inbox:no-area', ['This tab is not tied to a session yet: /teamrig-pane <session> ties it to one.']]])
+  })
+
+  test('a dim line says why no line shows: none of the last 24 hours and none unread', () => {
     expect(words(inboxBlocks({ ...SOURCE, inbox: [] }))).toEqual([['inbox:none', [INBOX_EMPTY]]])
     const read = inboxItems(INBOX_LINES, null, NOW)
     expect(words(inboxBlocks({ ...SOURCE, inbox: read, now: NOW + 48 * HOUR }))).toEqual([['inbox:none', [INBOX_EMPTY]]])
