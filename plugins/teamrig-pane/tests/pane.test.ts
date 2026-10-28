@@ -1,7 +1,7 @@
 // The plugin through the engine: env, clock, store, session id and fs answered beneath it.
 import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiFocusInput, UiScrollInput } from 'claude-code'
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
-import { BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT } from '../hooks/banner'
+import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
 import { barKeys, KEY_GROUPS } from '../hooks/keys-page'
 import { POLL_MS } from '../hooks/live'
@@ -700,6 +700,11 @@ function keyedProps(node: unknown, key: string): object | null {
   return propsOf(keyedNode(node, key))
 }
 
+/** The key a drawn element's props carry; null for none. */
+function elementKey(props: object | null): unknown {
+  return props !== null && 'key' in props ? props.key : null
+}
+
 /** Each Link a drawn tree holds, depth first: its address and its children, the text it draws. */
 function linksIn(node: unknown): Array<[unknown, unknown[]]> {
   const props = propsOf(node)
@@ -1347,6 +1352,11 @@ test("the band's open button opens the pane, minimized or on another view, at th
   const text = await bannerText(band)
   expect(text).not.toBeNull()
   expect(text?.length ?? 0).toBeLessThanOrEqual(BAND_PROPS.bodyColumns - `[ ${BANNER_OPEN_LABEL} ]`.length - 1)
+  // The button ends the band's row, beside the engine's [-]: the Box around the banner takes the free columns.
+  const row = await band.drawn()
+  expect(childrenOf(row).map(child => elementKey(propsOf(child)))).toEqual([BANNER_FILL_KEY, BANNER_OPEN_KEY])
+  expect(numberProp(keyedProps(row, BANNER_FILL_KEY), 'flexGrow')).toBe(1)
+  expect(buttonKeys(keyedNode(row, BANNER_FILL_KEY))).toEqual([BANNER_KEY])
 
   await band.press({ key: BANNER_OPEN_KEY })
   expect(opened).toEqual(['teamrig-pane'])

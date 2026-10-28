@@ -68,7 +68,7 @@ import { buttonCells, packGroups, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
 import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, type FrameSlot, type Placed, type View } from './frame'
 import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
-import { BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, bannerBlock, currentRowKey, currentTask } from './banner'
+import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, bannerBlock, currentRowKey, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
 import { NOTHING_EXPANDED, paneBlocks, type Block, type InboxPress, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
@@ -1613,8 +1613,9 @@ export const register: Register = on => {
   // The band above the prompt (AbovePrompt): the banner (banner.ts), the task the session works on now, one press that
   // opens its card and a second that closes it, wrapped at the band's width. A survey takes the band, and a session
   // with no area draws none, so a session outside a team gets no band from the pane. The engine scrolls a card
-  // taller than the band and folds the band from its [-] (ctrl+x ctrl+a). Beside a current task, a button opens the
-  // pane at its page (T775). Neither press has a hotkey: a band's hotkey answers a bare key typed in an empty prompt.
+  // taller than the band and folds the band from its [-] (ctrl+x ctrl+a), a mark no mod can hide. With a current task,
+  // a button at the band's right end, beside that [-], opens the pane at its page (T775). Neither press has a hotkey:
+  // a band's hotkey answers a bare key typed in an empty prompt.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const snap = await read($, snapshot)
@@ -1645,9 +1646,12 @@ export const register: Register = on => {
       const row = currentRowKey(current, await read($, mode))
       await go($, () => fromList(row, { kind: 'task', id: current.task.id }))
     }
+    // The banner's Box takes the columns the banner leaves free, so the button ends the row, beside the engine's [-].
     return (
       <Box flexDirection="row" columnGap={1}>
-        {press}
+        <Box key={BANNER_FILL_KEY} flexGrow={1}>
+          {press}
+        </Box>
         <Button key={BANNER_OPEN_KEY} label={BANNER_OPEN_LABEL} variant="secondary" onPress={() => void openInPane()} />
       </Box>
     )
