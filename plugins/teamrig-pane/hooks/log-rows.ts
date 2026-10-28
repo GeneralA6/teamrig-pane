@@ -182,26 +182,34 @@ function entryKeys(entries: readonly TurnEntry[]): string[] {
   })
 }
 
+/** The conversation a page shows, as the list holds it; undefined when the list does not (yet, or any longer). */
+function pageConversation(page: LogPage, list: LogList): LogConversation | undefined {
+  return list.kind === 'conversations' ? list.conversations.find(shown => shown.session === page.session && shown.claude === page.claude) : undefined
+}
+
 /**
- * A conversation's page at the clock: its title as the list draws it, over its session and what it holds (the
- * session's name alone when the list does not hold it), a note for what it leaves out or could not read, then its lines.
+ * The title of the conversation a page shows, as the list draws it, else its session's name bold: the page's own head
+ * and the trail over it (`Log › <title>`) both draw it.
+ */
+export function logPageTitle(page: LogPage, list: LogList, worked: Worked): Span[] {
+  const conversation = pageConversation(page, list)
+  return conversation === undefined ? [{ text: page.session, bold: true }] : titleSpans(conversation, worked)
+}
+
+/**
+ * A conversation's page at the clock: its title (logPageTitle), over its session and what it holds (what alone under
+ * the session's name), a note for what it leaves out or could not read, then its lines.
  */
 export function logPageBlocks(page: LogPage, clock: Clock, list: LogList, worked: Worked): Block[] {
   const count = page.entries.length
   const what = `last ${page.hours} h · ${lineCount(count)}, the newest last`
-  const conversation = list.kind === 'conversations' ? list.conversations.find(shown => shown.session === page.session && shown.claude === page.claude) : undefined
+  const held = pageConversation(page, list) !== undefined
   const title: Block = {
     key: PAGE,
-    rows:
-      conversation === undefined
-        ? [
-            { key: PAGE, spans: [{ text: page.session, bold: true }] },
-            { key: `${PAGE}:what`, spans: [{ text: what, dim: true }] },
-          ]
-        : [
-            { key: PAGE, spans: titleSpans(conversation, worked) },
-            { key: `${PAGE}:what`, spans: [{ text: `${page.session} · ${what}`, dim: true }] },
-          ],
+    rows: [
+      { key: PAGE, spans: logPageTitle(page, list, worked) },
+      { key: `${PAGE}:what`, spans: [{ text: held ? `${page.session} · ${what}` : what, dim: true }] },
+    ],
   }
   const cut = page.isCut ? [note(`${PAGE}:cut`, `Older lines left out: the page holds the newest ${LOG_PAGE_CHARS / 1024} KiB of text.`)] : []
   const problem = page.problem === null ? [] : [single(`${PAGE}:problem`, [{ text: `Not all read: ${page.problem.replace(/\.$/, '')}.`, color: 'warning' }])]
