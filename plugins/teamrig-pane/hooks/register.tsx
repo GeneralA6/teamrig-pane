@@ -79,7 +79,7 @@ import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 import { changesResultKey, diffKeyOf, searchChanges, type ChangeHit } from './changes-search'
 import { LiveDiffs, NO_DIFFS } from './diff'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
-import { logListBlocks, logPageBlocks } from './log-rows'
+import { logListBlocks, logPageBlocks, logPageTitle } from './log-rows'
 import { logResultKey, searchLog, type LogHit } from './log-search'
 import { inboxBlocks } from './inbox-rows'
 import { searchInbox, type InboxHit } from './inbox-search'
@@ -138,6 +138,8 @@ const HEADER_MAX_SHARE = 0.5
 const INLINE_MAX_ROWS = 6
 /** Between two crumbs of a page's trail. */
 const TRAIL_SEPARATOR = ' › '
+/** The Log view's switch button, and the first crumb of a Log page's trail. */
+const LOG_LABEL = 'Log'
 const BACK_LABEL = '‹ back'
 const FORWARD_LABEL = 'forward ›'
 /** The Archive page's steps to the week before and the week after the one it shows. */
@@ -784,8 +786,8 @@ export const register: Register = on => {
     let logFound: readonly LogHit[] = []
     /** The files the Changes view's search shown names (changes-search.ts), read once for its body and the line under the field; none off it. */
     let changesFound: readonly ChangeHit[] = []
-    /** The session whose Log page shows; null for the list or another view. */
-    let logSession: string | null = null
+    /** The title of the conversation whose Log page shows (log-rows.ts logPageTitle); null for the list or another view. */
+    let logTitle: Span[] | null = null
     /** What a project teamrig is not set up for shows (setup.ts), alone, in every view; null once a register is found. */
     let setupShown: SetupView | null = NOT_SETTING_UP
     let body: Drawn[] = []
@@ -843,7 +845,7 @@ export const register: Register = on => {
                     : paneBlocks(snap, shown, open, bar?.filter ?? null)
         // Inline, the Log view shows its list alone: a page opens in the dock.
         const logShown = setupShown === null && current === 'log' && !inline ? await read($, logPage) : null
-        logSession = logShown?.session ?? null
+        logTitle = logShown === null ? null : logPageTitle(logShown, logs, snap)
         const viewBlocks =
           setupShown !== null
             ? setupBlocks(setupShown)
@@ -1257,8 +1259,8 @@ export const register: Register = on => {
         />,
         { label: changesWords, plain: false, hotkey: 'd' },
       ),
-      pressed(<Button key="log" label="Log" hotkey="g" variant={current === 'log' ? 'primary' : 'secondary'} onPress={() => void switchTo('log')} />, {
-        label: 'Log',
+      pressed(<Button key="log" label={LOG_LABEL} hotkey="g" variant={current === 'log' ? 'primary' : 'secondary'} onPress={() => void switchTo('log')} />, {
+        label: LOG_LABEL,
         plain: false,
         hotkey: 'g',
       }),
@@ -1357,7 +1359,7 @@ export const register: Register = on => {
     const isInbox = current === 'inbox'
     const isChanges = current === 'changes'
     // A Log page shows one conversation: the Find field is the list's.
-    const isLogList = current === 'log' && logSession === null
+    const isLogList = current === 'log' && logTitle === null
     // The field in the view shown: what it shows empty, how many results its words match, and what Enter does.
     const find: { placeholder: string; matches: number; submit: ((query: string) => Promise<void>) | null } = isTeam
       ? { placeholder: 'id, name, role, scope…', matches: teamFound.length, submit: submitTeam }
@@ -1579,18 +1581,20 @@ export const register: Register = on => {
             rows: 1 + trailRows.rows + 1,
           }
         : null
-    // A Log page leads with back (b) to the list, then a rule.
+    // A Log page leads with back (b) to the list, then its trail, `Log › <title>`, as a page of the other views says
+    // where it is, cut at its row's end (back is the press to the list), then a rule.
     const logHead: HeaderPart | null =
-      logSession === null
+      logTitle === null
         ? null
         : {
             node: (
               <Box key="log-head" flexDirection="column">
                 <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void closeLog()} />
+                {drawText([{ text: LOG_LABEL }, { text: TRAIL_SEPARATOR, dim: true }, ...logTitle], 'truncate-end', 'log-trail')}
                 <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
               </Box>
             ),
-            rows: 2,
+            rows: 3,
           }
     return drawPane([controls, pageHead, logHead, weekRow, statusRows].filter((part): part is HeaderPart => part !== null))
   })

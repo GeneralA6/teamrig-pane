@@ -5,7 +5,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { LogConversation, LogList, LogPage, TaskRow, TurnEntry } from '../types'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { conversationKey, LOG_SEARCH_HINT, logListBlocks, logPageBlocks } from '../hooks/log-rows'
+import { conversationKey, LOG_SEARCH_HINT, logListBlocks, logPageBlocks, logPageTitle } from '../hooks/log-rows'
 import { searchLog } from '../hooks/log-search'
 import type { Worked } from '../hooks/log-title'
 import type { Block } from '../hooks/rows'
@@ -193,6 +193,15 @@ describe('logPageBlocks', () => {
     expect(words(logPageBlocks(shown, UTC, list, worked))[0]).toEqual(['log-page', ['T855 Pane: a readable Log view', 'lead · last 24 h · 1 line, the newest last']])
     // Another conversation of the session is not this page's.
     expect(words(logPageBlocks({ ...shown, claude: 'c-2' }, UTC, list, worked))[0]).toEqual(['log-page', ['lead', 'last 24 h · 1 line, the newest last']])
+  })
+
+  test("logPageTitle is the page's title as its head draws it, for the trail over the page: the list's, else the session's name bold", () => {
+    const list: LogList = { kind: 'conversations', hours: 24, conversations: [conversation('lead', 'c-1', '2026-10-19T20:00:00Z', '2026-10-19T20:01:00Z')] }
+    const worked: Worked = { tasks: TASKS, work: [{ session: 'lead', task: 'T855', at: at('2026-10-19T20:00:30Z') }] }
+    const shown = page([entry('2026-10-19T20:01:00Z', 'prompt', 'a')])
+    expect(logPageTitle(shown, list, worked)).toEqual([{ text: 'T855', bold: true }, { text: ' Pane: a readable Log view' }])
+    expect(logPageTitle({ ...shown, claude: 'c-2' }, list, worked)).toEqual([{ text: 'lead', bold: true }])
+    expect(logPageTitle(shown, { kind: 'reading' }, worked)).toEqual([{ text: 'lead', bold: true }])
   })
 
   test("splits a prompt by who spoke: a harness notice is dim lines led by its time, each other voice a head over its words, the cut mark on the first part", () => {

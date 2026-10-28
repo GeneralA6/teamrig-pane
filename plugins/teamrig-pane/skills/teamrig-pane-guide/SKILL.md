@@ -521,7 +521,7 @@ matches (`1 conversation matches`) and draws them as the list does, the matched 
 opens its page, with more moves the cursor onto the first; back from the page returns to the results. A page draws no
 field; switching views closes the search.
 
-A press on a conversation (a click, or Enter on it) opens its page under `back` (`b`): its title, then its lines oldest
+A press on a conversation (a click, or Enter on it) opens its page under `back` (`b`) and the trail `Log › <title>`: its title, then its lines oldest
 first, the newest at the end where the page opens. Each prompt and reply is split by who spoke, each part a head line over its words:
 `owner · 20:05 IDT` (the words typed at the tab), `Claude` (a reply), `message from <session>` and `subagent report`.
 The harness's notices and reminders in a prompt are dim lines led by their time, without their tags and ids, and

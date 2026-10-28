@@ -360,8 +360,8 @@ conversations it names (`1 conversation matches`) and draws each as the list doe
 with one match opens its page, with more moves the cursor onto the first; back from the page returns to the results.
 A page draws no field. A switch to another view closes the search.
 
-A press on a conversation (a click, or Enter on it) opens its page under a `back` button (`b`): its title as the list
-draws it, over its session and how many lines it shows, then its lines oldest first, so the newest is at the end, where
+A press on a conversation (a click, or Enter on it) opens its page under a `back` button (`b`) and the trail
+`Log › <title>`, which says where the page is as a task's page does: its title as the list draws it, over its session and how many lines it shows, then its lines oldest first, so the newest is at the end, where
 the page opens. Each prompt and
 reply is split by who spoke, each part a head line over its words: `owner · 20:05 IDT` for the words typed at the tab,
 `Claude · 20:06 IDT` for a reply, `message from <session>` for another session's message and `subagent report` for a

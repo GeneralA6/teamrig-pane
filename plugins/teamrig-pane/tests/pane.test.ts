@@ -1715,6 +1715,9 @@ test('a press on a conversation opens its page: its title, its lines oldest firs
   await pane.press({ key: 'log:conv:api:c-1' })
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'back'])
   expect(await pane.find({ text: /^lead · /m })).toBeUndefined()
+  // Under back, the trail says where the page is, as a task's page does, and its row is cut at its end.
+  expect(await drawnLines(pane)).toContain('Log › Ship the log view')
+  expect(await pane.find({ type: 'Text', text: 'Log › Ship the log view' })).toMatchObject({ props: { wrap: 'truncate-end' } })
   expect(await drawnLines(pane)).toContain('api · last 2 h · 3 lines, the newest last')
   const lines = async () => (await drawnLines(pane)).filter(line => /^(owner|Claude) · |^── |^Ship|^Next/.test(line))
   expect(await lines()).toEqual([
