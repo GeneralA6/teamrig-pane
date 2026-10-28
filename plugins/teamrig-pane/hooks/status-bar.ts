@@ -6,8 +6,8 @@
 // (barStatusOf), so a section's heading and its count name one number. "Today" is the
 // team zone's day of the snapshot's clock, as every day the pane draws is the zone's (zone.ts). A press on a segment or
 // its count, or the count's key, filters the list to that status (rows.ts) and a second press clears
-// it; the filtered segment and count draw bold, a dim line under the counts says so. Pure data:
-// register.tsx draws the pieces and keeps the filter.
+// it; the filtered segment and count draw bold, a dim line under the counts says so. With no filter on, that dim line
+// says a count is a press instead (HINT_TEXT). Pure data: register.tsx draws the pieces and keeps the filter.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, type TimeZone } from './core/read/index'
@@ -52,8 +52,8 @@ export type BarCounts = Readonly<Record<BarStatus, number>>
 export type BarPiece = Span & { key: string; status: BarStatus | null; hotkey: string | null; mark: Span | null }
 
 /**
- * The bar's lines: its segments, the counts wrapped to its width, then the filter's line while one is on, wrapped
- * too. `filter` is the status the list is filtered to, null when it shows all.
+ * The bar's lines: its segments, the counts wrapped to its width, then the filter's line while one is on, else the
+ * hint's, wrapped too. `filter` is the status the list is filtered to, null when it shows all.
  */
 export type StatusBar = { lines: BarPiece[][]; filter: BarStatus | null }
 
@@ -188,6 +188,9 @@ function wrapCounts(words: readonly BarPiece[], columns: number): BarPiece[][] {
   return lines
 }
 
+/** The dim line under the counts while no filter is on: nothing else says a count is a press. */
+export const HINT_TEXT = 'click a count to show only those'
+
 /** The dim line under the counts while the list is filtered to `status`. */
 export function filterText(status: BarStatus): string {
   return `showing ${BAR_LOOK[status].word} only, click again for all`
@@ -231,7 +234,7 @@ export function statusBar(snap: Snapshot, filter: BarStatus | null, width: numbe
     return drawnCells(count) <= columns ? count : { ...count, mark: null }
   })
   const lines = [segments, ...wrapCounts(words, columns)]
-  if (filter !== null) lines.push(...dimLines('filter', filterText(filter), columns))
+  lines.push(...(filter === null ? dimLines('hint', HINT_TEXT, columns) : dimLines('filter', filterText(filter), columns)))
   return { lines, filter }
 }
 
