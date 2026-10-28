@@ -11,6 +11,7 @@
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, type TimeZone } from './core/read/index'
+import { wrapRow } from './layout'
 import type { Span } from './rows'
 import { cells } from './width'
 import { clockOf, dayOf, type Clock } from './zone'
@@ -51,8 +52,8 @@ export type BarCounts = Readonly<Record<BarStatus, number>>
 export type BarPiece = Span & { key: string; status: BarStatus | null; hotkey: string | null; mark: Span | null }
 
 /**
- * The bar's lines: its segments, the counts wrapped to its width, then the filter's line while one is on.
- * `filter` is the status the list is filtered to, null when it shows all.
+ * The bar's lines: its segments, the counts wrapped to its width, then the filter's line while one is on, wrapped
+ * too. `filter` is the status the list is filtered to, null when it shows all.
  */
 export type StatusBar = { lines: BarPiece[][]; filter: BarStatus | null }
 
@@ -193,6 +194,17 @@ export function filterText(status: BarStatus): string {
 }
 
 /**
+ * Dim `text` in lines of `columns` cells, by words (layout.ts wrapRow), keyed `<key>` then `<key>:<n>`: each a row of the
+ * bar, as the window counts them. Drawn whole as one Text, a line wider than the body wrapped on screen to rows the
+ * window never counted.
+ */
+function dimLines(key: string, text: string, columns: number): BarPiece[][] {
+  return wrapRow({ key, spans: [{ text, dim: true }] }, columns).map((spans, i) => [
+    { key: i === 0 ? key : `${key}:${i}`, text: spans.map(span => span.text).join(''), dim: true, status: null, hotkey: null, mark: null },
+  ])
+}
+
+/**
  * The bar over the area's tasks, `width` cells wide (one at least), its counts line skipping the statuses
  * with none but the one `filter` names, which stays, at 0 too, so a press can clear it. The filtered
  * segment and count draw bold, the count not dim. Null with no area, a snapshot not yet read, or no task to
@@ -219,7 +231,7 @@ export function statusBar(snap: Snapshot, filter: BarStatus | null, width: numbe
     return drawnCells(count) <= columns ? count : { ...count, mark: null }
   })
   const lines = [segments, ...wrapCounts(words, columns)]
-  if (filter !== null) lines.push([{ key: 'filter', text: filterText(filter), dim: true, status: null, hotkey: null, mark: null }])
+  if (filter !== null) lines.push(...dimLines('filter', filterText(filter), columns))
   return { lines, filter }
 }
 

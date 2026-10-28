@@ -300,6 +300,21 @@ describe('status bar filter', () => {
     expect(filterText('verifying')).toBe('showing verifying only, click again for all')
   })
 
+  test("the filter's line wraps by words to the bar's width, each line a row of its own, so the window counts what it draws", async () => {
+    // 43 cells as one Text: in 21 columns the screen wrapped it to 3 rows while the window counted 1.
+    expect(statusBar(snap, 'verifying', 21)?.lines.slice(-3)).toEqual([
+      [{ key: 'filter', text: 'showing verifying', dim: true, status: null, hotkey: null, mark: null }],
+      [{ key: 'filter:1', text: 'only, click again for', dim: true, status: null, hotkey: null, mark: null }],
+      [{ key: 'filter:2', text: 'all', dim: true, status: null, hotkey: null, mark: null }],
+    ])
+    for (let width = 12; width <= 60; width++) {
+      const lines = (statusBar(snap, 'verifying', width)?.lines ?? []).filter(line => line.every(piece => piece.key.startsWith('filter')))
+      expect(lines.length).toBeGreaterThan(0)
+      expect(lines.every(line => cells(line.map(drawnText).join('')) <= width)).toBe(true)
+      expect(lines.map(line => line.map(drawnText).join('')).join(' ')).toBe(filterText('verifying'))
+    }
+  })
+
   test('a filter whose status has no task left keeps its count, at 0, so a press can clear it; with no bar, none holds', async () => {
     const bar = statusBar(snap, 'waiting', 80)
     expect(bar?.lines[0]?.map(piece => piece.key)).toEqual(['bar:done-today', 'bar:verifying', 'bar:not-started'])
