@@ -130,7 +130,8 @@ The banner, in the band above the prompt, leads with the session's name, then th
 (`acme-po · ◐ T595  Current-task banner`): its area's task in progress that took its status last, else its
 first open task in plan order after a dim `next`. It follows the register
 as the list does, whether the pane is open, minimized or never drawn. A click opens that task's description,
-status, note, proof, priority and due under it; a second click closes it. Its `open in pane` button opens the
+status, note, proof, priority and due under it; a second click closes it. Its `open in pane` button, at the band's
+right end beside the `[-]`, opens the
 pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
 band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
