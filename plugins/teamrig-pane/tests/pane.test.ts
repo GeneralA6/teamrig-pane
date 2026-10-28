@@ -2485,10 +2485,10 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
     ' 2 tasks match',
     '',
     ' ○ T50  Load the feed',
-    '        on etl',
+    "        etl's",
     '',
     ' ○ T58  Read the source',
-    '        on etl',
+    "        etl's",
   ])
   // The words that matched underlined: `the` in the title, `etl` in the dim line of whose it is.
   expect(childrenOf(keyedNode(drawn, 'search:T50'))).toEqual([
@@ -2501,8 +2501,8 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
         '  Load ',
         { type: 'Text', props: { underline: true }, children: ['the'] },
         ' feed\n       ',
-        { type: 'Text', props: { dimColor: true }, children: ['on '] },
         { type: 'Text', props: { dimColor: true, underline: true }, children: ['etl'] },
+        { type: 'Text', props: { dimColor: true }, children: ["'s"] },
       ],
     },
   ])

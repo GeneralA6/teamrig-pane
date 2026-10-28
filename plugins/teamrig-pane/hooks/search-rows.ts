@@ -39,15 +39,18 @@ function idSpan(hit: TaskHit, style: Omit<Span, 'text'>): Span {
   return hit.isId ? { ...style, text: hit.row.id, underline: true } : { ...style, text: hit.row.id }
 }
 
-/** `on etl · note …matched words…`: whose the task is, then each field not on the title row that a word matched in. */
+/**
+ * `etl's · note: …matched words…`: whose the task is, as the list's meta line says it (meta.ts), then each field not on
+ * the title row that a word matched in.
+ */
 function matchedParts(hit: TaskHit): Span[] {
   const task = hit.row
-  const parts: Span[][] = [[{ text: 'on ', dim: true }, ...markedSpans(task.owner, marksOf(hit, 'owner'), { dim: true })]]
+  const parts: Span[][] = [[...markedSpans(task.owner, marksOf(hit, 'owner'), { dim: true }), { text: "'s", dim: true }]]
   for (const [field, words] of FIELD_WORDS) {
     const text = fieldText(task, field)
     if (text === null || marksOf(hit, field).length === 0) continue
     const shown = excerpt(text, marksOf(hit, field))
-    parts.push([{ text: `${words} `, dim: true }, ...markedSpans(shown.text, shown.marks, { dim: true })])
+    parts.push([{ text: `${words}: `, dim: true }, ...markedSpans(shown.text, shown.marks, { dim: true })])
   }
   return parts.flatMap((part, i) => (i === 0 ? part : [SEPARATOR, ...part]))
 }

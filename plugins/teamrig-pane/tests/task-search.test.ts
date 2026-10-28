@@ -134,12 +134,12 @@ describe('search rows', () => {
       ['search:T50', 'T50'],
       ['search:T7', 'T7'],
     ])
-    expect(rowsIn(blocks)).toEqual(['2 tasks match', '○ T50  [Load] the feed', '       on [etl]', '✓ T7  Fix the [load]er'])
-    expect(rowsIn(blocksFor(SNAP, 'docs/feed'))).toEqual(['1 task matches', '○ T50  Load the feed', '       on etl · ref [docs/feed].md:12'])
+    expect(rowsIn(blocks)).toEqual(['2 tasks match', '○ T50  [Load] the feed', "       [etl]'s", '✓ T7  Fix the [load]er'])
+    expect(rowsIn(blocksFor(SNAP, 'docs/feed'))).toEqual(['1 task matches', '○ T50  Load the feed', "       etl's · ref: [docs/feed].md:12"])
     expect(rowsIn(blocksFor(SNAP, '10-12 g11.4 lead'))).toEqual([
       '1 task matches',
       '○ T52  Draw the pages',
-      '       on po · asked by [lead] · goals [G11.4] · week 2026-[10-12]',
+      "       po's · asked by: [lead] · goals: [G11.4] · week: 2026-[10-12]",
     ])
   })
 
@@ -153,7 +153,7 @@ describe('search rows', () => {
 
   test('the id a word named is underlined, the title row bold on it', async () => {
     const [, block] = blocksFor(SNAP, '52 draw')
-    expect(rowsIn(block === undefined ? [] : [block])).toEqual(['○ [T52]  [Draw] the pages', '       on po'])
+    expect(rowsIn(block === undefined ? [] : [block])).toEqual(['○ [T52]  [Draw] the pages', "       po's"])
     expect(block?.rows[0]?.spans.find(span => span.text === 'T52')).toEqual({ text: 'T52', bold: true, underline: true })
   })
 
@@ -168,7 +168,7 @@ describe('search rows', () => {
       statusLine('T3', 'po', NOW - HOUR, 'in-progress', 'waiting for the second review from the owner'),
     ])
     const [, block] = blocksFor({ ...SNAP, tasks }, 'owner')
-    expect(rowsIn(block === undefined ? [] : [block])).toEqual(['◐ T3  Ship it', '      on po · asked by [owner] · note …ond review from the [owner]'])
+    expect(rowsIn(block === undefined ? [] : [block])).toEqual(['◐ T3  Ship it', "      po's · asked by: [owner] · note: …ond review from the [owner]"])
   })
 
   test(`past the cap the count says how many are shown and asks for another word; nothing matched says so; no word yet shows the hint`, async () => {
