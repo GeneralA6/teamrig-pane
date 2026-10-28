@@ -10,7 +10,7 @@ import type { BarStatus, ExpandedTasks, LogRead, RefFile, Snapshot, TaskRow, Tas
 import { listCardRows } from './card'
 import { COMMAND } from './command'
 import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
-import { BAR_LOOK, type BarCounts } from './status-bar'
+import { BAR_LOOK } from './status-bar'
 import { areaView, ownerGroups, statusLines } from './view'
 import { cells } from './width'
 
@@ -157,7 +157,7 @@ function doneBlock(task: TaskRow, expanded: ExpandedTasks, tree: PaneTree): Bloc
 }
 
 /**
- * The dim line under a section the cap cut `left` of (Waiting past the tasks asked of others, Done today; view.ts):
+ * The dim line under a section the cap cut `left` of (Asked of others, Done today; view.ts):
  * how many, and the key of the status bar's filter, which lists every task the section holds.
  */
 export function moreText(status: BarStatus, left: number): string {
@@ -196,13 +196,11 @@ export function listRowKey(task: TaskRow, mode: ViewMode, status: BarStatus): st
 }
 
 /**
- * The section of the tasks at `status`: its heading with the status bar's count of them (`counts`, view.ts areaView),
- * its blocks, and a dim line naming how many the cap left out (moreText). An empty section draws nothing.
+ * A section of the tasks at `status`: its heading, keyed `key`, with how many it holds (`total`, view.ts areaView), its
+ * blocks, and a dim line naming how many the cap left out (moreText). An empty section draws nothing.
  */
-function section(status: BarStatus, name: Span, counts: BarCounts, blocks: Block[]): Block[] {
-  const total = counts[status]
+function section(status: BarStatus, name: Span, total: number, blocks: Block[], key = SECTION_KEY[status]): Block[] {
   if (total === 0) return []
-  const key = SECTION_KEY[status]
   const left = total - blocks.length
   const rest = left > 0 ? [single(`${key}-more`, [{ text: moreText(status, left), dim: true }])] : []
   return [sectionHeading(key, name, ` (${total})`), ...blocks, ...rest]
@@ -218,8 +216,8 @@ function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expande
 }
 
 /**
- * The area's tasks in sections: Verifying (the ones to close first), Working on, Up next, Waiting (its waiting
- * tasks, then those it asked of others) and Done today, one per status of the status bar, each heading its count.
+ * The area's tasks in sections: Verifying (the ones to close first), Working on, Up next, Waiting (its own), Asked
+ * of others (its asks still active, which the bar counts as waiting too) and Done today, each heading its count.
  */
 function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null): Block[] {
   if (snap.area === null) return [single('no-area', [{ text: NO_AREA, dim: true }])]
@@ -228,8 +226,7 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   // The session's own area goes unnamed, as the title above names the session (session-title.ts); a pin names the area it shows.
   // The unread inbox lines are counted on the switch's Inbox button, not here.
   const header: Span[] = snap.areaSource === 'pinned' ? [{ text: view.area, bold: true }, { text: ' (pinned) · ', dim: true }] : []
-  const waiting = view.waiting.filter(task => task.owner === view.area).length
-  const activeTotal = view.verifying.length + view.working.length + view.upNext.length + waiting
+  const activeTotal = view.verifying.length + view.working.length + view.upNext.length + view.waiting.length
   header.push({ text: `${activeTotal} active`, dim: true })
   const blocks: Block[] = [{ key: 'header', rows: [{ key: 'header', spans: header, rule: true }] }]
   // Filtered from the status bar, the header leads that status's tasks alone.
@@ -237,13 +234,16 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
   const tasks = (status: BarStatus, list: readonly TaskRow[]) => list.map(task => taskBlock(SECTION_KEY[status], task, expanded, tree, view.area))
   const done = view.doneToday.map(task => doneBlock(task, expanded, tree))
+  const { counts } = view
+  // An ask keeps its block key under the waiting status's (listRowKey), as the bar's waiting filter lists it so too.
   return [
     ...blocks,
-    ...section('verifying', { text: 'Verifying', color: 'success' }, view.counts, tasks('verifying', view.verifying)),
-    ...section('working', { text: 'Working on' }, view.counts, tasks('working', view.working)),
-    ...section('not-started', { text: 'Up next' }, view.counts, tasks('not-started', view.upNext)),
-    ...section('waiting', { text: 'Waiting' }, view.counts, tasks('waiting', view.waiting)),
-    ...section('done-today', { text: 'Done today' }, view.counts, done),
+    ...section('verifying', { text: 'Verifying', color: 'success' }, counts.verifying, tasks('verifying', view.verifying)),
+    ...section('working', { text: 'Working on' }, counts.working, tasks('working', view.working)),
+    ...section('not-started', { text: 'Up next' }, counts['not-started'], tasks('not-started', view.upNext)),
+    ...section('waiting', { text: 'Waiting' }, view.waiting.length, tasks('waiting', view.waiting)),
+    ...section('waiting', { text: 'Asked of others' }, view.askedTotal, tasks('waiting', view.asked), 'asked'),
+    ...section('done-today', { text: 'Done today' }, counts['done-today'], done),
   ]
 }
 

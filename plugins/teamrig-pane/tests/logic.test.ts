@@ -203,7 +203,7 @@ describe('log', () => {
 })
 
 describe('view', () => {
-  test('lists each section in plan order: priority, then due (undated last), then id; what it asked of others waits', async () => {
+  test('lists each section in plan order: priority, then due (undated last), then id; what it asked of others sits apart', async () => {
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 3 }),
       createLine('T2', { owner: 'po', by: 'po', at: NOW, priority: 1 }),
@@ -213,8 +213,8 @@ describe('view', () => {
     )
     const view = areaView(tasks, 'po', treeAt(tasks, NOW))
     expect(view.upNext.map(t => t.id)).toEqual(['T2', 'T4', 'T3', 'T1'])
-    expect(view.waiting.map(t => t.id)).toEqual(['T5'])
-    expect([view.verifying, view.working, view.doneToday]).toEqual([[], [], []])
+    expect(view.asked.map(t => t.id)).toEqual(['T5'])
+    expect([view.verifying, view.working, view.waiting, view.doneToday]).toEqual([[], [], [], []])
   })
 
   test("a p0 task, teamrig's level for work done right now, folds, reads p0 and leads its section", async () => {
@@ -238,11 +238,13 @@ describe('view', () => {
     expect(ownerGroups(tasks, tree).map(g => g.active.map(t => t.id))).toEqual([['T3'], ['T2', 'T1']])
   })
 
-  test('waiting holds its own waiting tasks first, then up to 8 it asked of others, counting them all', async () => {
+  test('waiting holds its own waiting tasks; up to 8 it asked of others sit apart, all counted, the bar counting both', async () => {
     const asked = Array.from({ length: 10 }, (_, i) => createLine(`T${i + 10}`, { owner: 'etl', by: 'po', at: NOW }))
     const tasks = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 4 }), statusLine('T1', 'po', NOW, 'waiting', 'needs owner'), ...asked)
     const view = areaView(tasks, 'po', treeAt(tasks, NOW))
-    expect(view.waiting.map(t => t.id)).toEqual(['T1', 'T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17'])
+    expect(view.waiting.map(t => t.id)).toEqual(['T1'])
+    expect(view.asked.map(t => t.id)).toEqual(['T10', 'T11', 'T12', 'T13', 'T14', 'T15', 'T16', 'T17'])
+    expect(view.askedTotal).toBe(10)
     expect(view.counts.waiting).toBe(11)
   })
 
@@ -538,6 +540,7 @@ describe('rows', () => {
       'next:T1',
       'waiting',
       'waiting:T4',
+      'asked',
       'waiting:T6',
       'done',
       'done:T5',
@@ -551,22 +554,26 @@ describe('rows', () => {
     expect(rowAt(blocks, 'working:T2')?.spans[0]).toEqual({ text: '◐', color: 'warning' })
     expect(textAt(blocks, 'working-meta:T2')).toBe('      p3 · in progress since 14:00 UTC')
     expect(textAt(blocks, 'next-meta:T1')).toBe('      p3')
-    expect(textAt(blocks, 'waiting')).toBe('Waiting (2)')
+    // Waiting holds po's own; what po asked of etl sits under a heading of its own, saying whose it is.
+    expect(textAt(blocks, 'waiting')).toBe('Waiting (1)')
     expect(textAt(blocks, 'waiting-meta:T4')).toBe('      p3 · waiting since 14:00 UTC')
-    expect(textAt(blocks, 'waiting-meta:T6')).toBe('      on etl · p3')
+    expect(rowAt(blocks, 'asked')?.spans).toEqual([{ text: 'Asked of others', bold: true }, { text: ' (1)', dim: true }])
+    expect(textAt(blocks, 'waiting-meta:T6')).toBe("      etl's · p3")
     expect(blocks.filter(b => b.rows[0]?.key === b.key && !b.key.includes(':')).every(b => b.key === 'header' || b.opensSection === true)).toBe(true)
   })
 
-  test('waiting and done today say how many they left out and where those show', async () => {
+  test('asked of others and done today say how many they left out and where those show', async () => {
     const asked = Array.from({ length: 10 }, (_, i) => createLine(`T${i + 10}`, { owner: 'etl', by: 'po', at: NOW - HOUR, source: 'po' }))
     const done = Array.from({ length: 8 }, (_, i) => [
       createLine(`T${i + 30}`, { owner: 'po', by: 'po', at: NOW - 2 * HOUR, source: 'po' }),
       statusLine(`T${i + 30}`, 'po', NOW - i * 60_000, 'done'),
     ]).flat()
     const blocks = paneBlocks(snapshotOf(fold(...asked, ...done), 'po'), 'mine')
-    expect(textAt(blocks, 'waiting')).toBe('Waiting (10)')
+    // No own waiting task: no Waiting heading, the asks under theirs.
+    expect(blocks.some(b => b.key === 'waiting')).toBe(false)
+    expect(textAt(blocks, 'asked')).toBe('Asked of others (10)')
     expect(blocks.filter(b => b.key.startsWith('waiting:')).length).toBe(8)
-    expect(textAt(blocks, 'waiting-more')).toBe('2 more asked of others: press i to list them all')
+    expect(textAt(blocks, 'asked-more')).toBe('2 more asked of others: press i to list them all')
     expect(textAt(blocks, 'done')).toBe('Done today (8)')
     expect(blocks.filter(b => b.key.startsWith('done:')).map(b => b.key)).toEqual(['done:T30', 'done:T31', 'done:T32', 'done:T33', 'done:T34', 'done:T35'])
     expect(rowAt(blocks, 'done-more')?.spans).toEqual([{ text: '2 more: press o to list them all', dim: true }])

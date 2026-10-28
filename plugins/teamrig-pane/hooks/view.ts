@@ -25,13 +25,18 @@ export type AreaView = {
   working: TaskRow[]
   /** Open, not yet started. */
   upNext: TaskRow[]
-  /** Its waiting tasks, then up to MAX_ASKED active tasks it asked of other sessions. */
+  /** Its own waiting tasks. */
   waiting: TaskRow[]
+  /** Up to MAX_ASKED active tasks it asked of other sessions, in the order the waiting filter lists them. */
+  asked: TaskRow[]
+  /** How many active tasks it asked of other sessions, those past the cap too. */
+  askedTotal: number
   /** Its tasks done or dropped today, the team zone's day of `now` (status-bar.ts isFinishedOn), at most MAX_FINISHED. */
   doneToday: TaskRow[]
   /**
    * How many tasks each section holds, those past a cap too: the status bar's counts (barCounts) over the same tasks
-   * and clock, so a section's heading names the number its count does.
+   * and clock, so a section's heading names the number its count does; waiting's is the two waiting sections' together
+   * (Waiting, its own, and Asked of others).
    */
   counts: BarCounts
 }
@@ -65,13 +70,15 @@ export function newestFirst(a: TaskRow, b: TaskRow): number {
 export function areaView(tasks: readonly TaskRow[], area: string, tree: TaskTree<TaskRow>): AreaView {
   const lines = (status: BarStatus) => statusLines(tasks, area, tree, status)
   const waiting = lines('waiting')
-  const ownWaiting = waiting.filter(t => t.owner === area).length
+  const asked = waiting.filter(t => t.owner !== area)
   return {
     area,
     verifying: lines('verifying'),
     working: lines('working'),
     upNext: lines('not-started'),
-    waiting: waiting.slice(0, ownWaiting + MAX_ASKED),
+    waiting: waiting.filter(t => t.owner === area),
+    asked: asked.slice(0, MAX_ASKED),
+    askedTotal: asked.length,
     doneToday: lines('done-today').slice(0, MAX_FINISHED),
     counts: barCounts(tasks, area, tree.context),
   }

@@ -389,21 +389,30 @@ describe('status bar and sections', () => {
   )
   const snap = snapshotOf(tasks, 'po')
   const counts = barCounts(tasks, 'po', clockAt(NOW))
-  /** The key of each status's section heading in the mine view. */
-  const HEADING: Readonly<Record<BarStatus, string>> = { 'done-today': 'done', verifying: 'verifying', working: 'working', waiting: 'waiting', 'not-started': 'next' }
+  /** The keys of each status's section headings in the mine view: waiting's two, its own and those asked of others. */
+  const HEADINGS: Readonly<Record<BarStatus, readonly string[]>> = {
+    'done-today': ['done'],
+    verifying: ['verifying'],
+    working: ['working'],
+    waiting: ['waiting', 'asked'],
+    'not-started': ['next'],
+  }
 
-  /** The count a section's heading names, 11 for `Waiting (11)`; null with no heading under `key`. */
+  /** The count a section's heading names, 10 for `Asked of others (10)`; null with no heading under `key`. */
   function headingCount(blocks: readonly Block[], key: string): number | null {
     const text = blocks.find(block => block.key === key)?.rows[0]?.spans.map(span => span.text).join('')
     const count = text === undefined ? undefined : /\((\d+)\)$/.exec(text)?.[1]
     return count === undefined ? null : Number(count)
   }
 
-  test("each section's heading names the count the bar shows for its status, the tasks past a cap included", async () => {
+  test("the headings of each status's sections name the count the bar shows for it, the tasks past a cap included", async () => {
     expect(counts).toEqual(countsOf({ 'done-today': 9, verifying: 1, working: 1, waiting: 11, 'not-started': 1 }))
     expect(textOf(statusBar(snap, null, 200)?.lines[1])).toBe('9 done today · 1 verifying · 1 working · 11 waiting · 1 not started')
     const blocks = paneBlocks(snap, 'mine')
-    expect(BAR_STATUSES.map(status => headingCount(blocks, HEADING[status]))).toEqual(BAR_STATUSES.map(status => counts[status]))
+    const named = (status: BarStatus) => HEADINGS[status].reduce((sum, key) => sum + (headingCount(blocks, key) ?? 0), 0)
+    expect(BAR_STATUSES.map(named)).toEqual(BAR_STATUSES.map(status => counts[status]))
+    // The bar's 11 waiting: po's own waiting task, and the ten it asked of etl, 8 of them listed.
+    expect([headingCount(blocks, 'waiting'), headingCount(blocks, 'asked')]).toEqual([1, 10])
   })
 
   test("each status's filter lists every task its count names", async () => {
