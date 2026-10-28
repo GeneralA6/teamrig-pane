@@ -250,7 +250,8 @@ this order:
 | red `█` | `waiting` | its own, waiting on a decision, an approval, a task or a time, and those it asked of other sessions |
 | dim `░` | `not started` | open |
 
-Under it, a dim line counts them, each behind its key (`o: 1 done today · v: 1 verifying · w: 2 working · i: 1 waiting`),
+Under it, a dim line counts them, each behind its key and the glyph its section's rows wear, in their color
+(`o: ✓ 1 done today · v: ◑ 1 verifying · w: ◐ 2 working · i: ■ 1 waiting`), so the counts are the glyphs' legend,
 leaving out a status with none; where the counts, keys included, are wider than the pane they wrap onto more lines.
 Today is the team's day; tasks closed on an earlier day are left out. Each count is the one its section's heading
 names. The cells are shared by largest

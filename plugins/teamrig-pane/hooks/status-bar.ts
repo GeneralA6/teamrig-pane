@@ -1,6 +1,7 @@
 // The status bar atop the Tasks view (mine): one line of colored blocks as wide as the body, each status
 // of the area's list a segment sized by its share, and under it the counts, dim, each behind its
-// key and wrapped to the bar's width as drawn (drawnText). The statuses are done today, verifying,
+// key and the glyph its section's rows wear (so the counts are the glyphs' legend), wrapped to the bar's width as
+// drawn (drawnText). The statuses are done today, verifying,
 // working, waiting and not started, one per section of the list, each counting the tasks its section holds
 // (barStatusOf), so a section's heading and its count name one number. "Today" is the
 // team zone's day of the snapshot's clock, as every day the pane draws is the zone's (zone.ts). A press on a segment or
@@ -20,9 +21,11 @@ export const BAR_STATUSES: readonly BarStatus[] = ['done-today', 'verifying', 'w
 type BarLook = {
   /** How the counts line names it. */
   word: string
+  /** The glyph the rows of its section wear (rows.ts GLYPH), drawn before its count. */
+  glyph: string
   /** The block its segment is drawn with. */
   block: string
-  /** Its segment's color; none draws it dim. */
+  /** Its segment's color and its glyph's, the rows' (rows.ts GLYPH_COLOR); none draws them dim. */
   color: ThemeKey | undefined
   /** The key that filters to it, one free of the pane's others (t, d, m, a, c). */
   hotkey: string
@@ -31,20 +34,21 @@ type BarLook = {
 }
 
 export const BAR_LOOK: Readonly<Record<BarStatus, BarLook>> = {
-  'done-today': { word: 'done today', block: '█', color: 'success', hotkey: 'o', none: 'Nothing done today.' },
-  verifying: { word: 'verifying', block: '▓', color: 'success', hotkey: 'v', none: 'Nothing to verify.' },
-  working: { word: 'working', block: '█', color: 'warning', hotkey: 'w', none: 'Nothing in progress.' },
-  waiting: { word: 'waiting', block: '█', color: 'error', hotkey: 'i', none: 'Nothing waiting.' },
-  'not-started': { word: 'not started', block: '░', color: undefined, hotkey: 'n', none: 'Nothing left to start.' },
+  'done-today': { word: 'done today', glyph: '✓', block: '█', color: 'success', hotkey: 'o', none: 'Nothing done today.' },
+  verifying: { word: 'verifying', glyph: '◑', block: '▓', color: 'success', hotkey: 'v', none: 'Nothing to verify.' },
+  working: { word: 'working', glyph: '◐', block: '█', color: 'warning', hotkey: 'w', none: 'Nothing in progress.' },
+  waiting: { word: 'waiting', glyph: '■', block: '█', color: 'error', hotkey: 'i', none: 'Nothing waiting.' },
+  'not-started': { word: 'not started', glyph: '○', block: '░', color: undefined, hotkey: 'n', none: 'Nothing left to start.' },
 }
 
 export type BarCounts = Readonly<Record<BarStatus, number>>
 
 /**
  * A run of the bar's text: `status` names the status a press on it filters to, null for a separator or the
- * filter's line; `hotkey` the key that does the same, a count's only.
+ * filter's line; `hotkey` the key that does the same, and `mark` the glyph drawn before its text in its own color,
+ * a count's only.
  */
-export type BarPiece = Span & { key: string; status: BarStatus | null; hotkey: string | null }
+export type BarPiece = Span & { key: string; status: BarStatus | null; hotkey: string | null; mark: Span | null }
 
 /**
  * The bar's lines: its segments, the counts wrapped to its width, then the filter's line while one is on.
@@ -143,10 +147,11 @@ export function barCells(counts: BarCounts, width: number): Record<BarStatus, nu
 
 /**
  * A piece as the terminal draws it: a count behind its key, as the engine draws a plain Button with a hotkey
- * (the key, a colon and a space: `o: 2 done today`), any other piece as its text alone.
+ * (the key, a colon and a space), then its glyph and a space: `o: ✓ 2 done today`; any other piece as its text alone.
  */
 export function drawnText(piece: BarPiece): string {
-  return piece.hotkey === null ? piece.text : `${piece.hotkey}: ${piece.text}`
+  const text = piece.mark === null ? piece.text : `${piece.mark.text} ${piece.text}`
+  return piece.hotkey === null ? text : `${piece.hotkey}: ${text}`
 }
 
 /** The cells a piece takes as drawn (drawnText): what every width the bar lays out is counted in. */
@@ -164,7 +169,7 @@ function wrapCounts(words: readonly BarPiece[], columns: number): BarPiece[][] {
   let line: BarPiece[] = []
   let used = 0
   for (const word of words) {
-    const separator: BarPiece = { key: `sep:${word.key}`, text: SEPARATOR, dim: true, status: null, hotkey: null }
+    const separator: BarPiece = { key: `sep:${word.key}`, text: SEPARATOR, dim: true, status: null, hotkey: null, mark: null }
     const width = drawnCells(word)
     if (line.length > 0 && used + drawnCells(separator) + width > columns) {
       lines.push(line)
@@ -202,15 +207,19 @@ export function statusBar(snap: Snapshot, filter: BarStatus | null, width: numbe
   const segments = BAR_STATUSES.filter(status => widths[status] > 0).map((status): BarPiece => {
     const look = BAR_LOOK[status]
     const text = look.block.repeat(widths[status])
-    return { key: `bar:${status}`, text, color: look.color, dim: look.color === undefined, bold: status === filter, status, hotkey: null }
+    return { key: `bar:${status}`, text, color: look.color, dim: look.color === undefined, bold: status === filter, status, hotkey: null, mark: null }
   })
+  // A count wears its glyph where the whole count, key and glyph included, fits on a line; in a dock narrower, it goes
+  // without, its words still naming the status.
   const words = BAR_STATUSES.filter(status => counts[status] > 0 || status === filter).map((status): BarPiece => {
     const look = BAR_LOOK[status]
     const isFiltered = status === filter
-    return { key: `count:${status}`, text: `${counts[status]} ${look.word}`, dim: !isFiltered, bold: isFiltered, status, hotkey: look.hotkey }
+    const mark: Span = look.color === undefined ? { text: look.glyph, dim: true } : { text: look.glyph, color: look.color }
+    const count: BarPiece = { key: `count:${status}`, text: `${counts[status]} ${look.word}`, dim: !isFiltered, bold: isFiltered, status, hotkey: look.hotkey, mark }
+    return drawnCells(count) <= columns ? count : { ...count, mark: null }
   })
   const lines = [segments, ...wrapCounts(words, columns)]
-  if (filter !== null) lines.push([{ key: 'filter', text: filterText(filter), dim: true, status: null, hotkey: null }])
+  if (filter !== null) lines.push([{ key: 'filter', text: filterText(filter), dim: true, status: null, hotkey: null, mark: null }])
   return { lines, filter }
 }
 

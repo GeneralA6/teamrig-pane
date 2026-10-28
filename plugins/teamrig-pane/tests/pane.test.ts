@@ -305,6 +305,12 @@ test("a press on a status's count or segment filters the list to it, again clear
   const drawn = await pane.drawn()
   expect(keyedProps(drawn, 'count:verifying')).toMatchObject({ hotkey: 'v', plain: true })
   expect(keyedProps(drawn, 'count:not-started')).toMatchObject({ hotkey: 'n', plain: true })
+  // Each count wears its section's glyph before its words, in the color the rows wear it in (status-bar.ts): the first
+  // Text in the count's one Text (a Text keeps no key to find it by).
+  const markOf = (key: string) => childrenOf(childrenOf(keyedNode(drawn, key))[0])[0]
+  expect(propsOf(markOf('count:verifying'))).toMatchObject({ color: 'success' })
+  expect(childrenOf(markOf('count:verifying'))).toEqual(['◑'])
+  expect(propsOf(markOf('count:not-started'))).toMatchObject({ dimColor: true })
   const segment = keyedProps(drawn, 'bar:verifying')
   expect(segment).toMatchObject({ plain: true })
   expect(segment !== null && 'hotkey' in segment).toBe(false)
@@ -314,7 +320,7 @@ test("a press on a status's count or segment filters the list to it, again clear
   expect(await listed()).toEqual([false, true])
   expect(await pane.find({ text: 'showing verifying only, click again for all' })).toBeDefined()
   expect(await pane.find({ text: /Verifying \(/ })).toBeUndefined()
-  expect(await pane.find({ type: 'Text', text: '1 verifying' })).toMatchObject({ props: { bold: true } })
+  expect(await pane.find({ type: 'Text', text: /^1 verifying$/ })).toMatchObject({ props: { bold: true } })
 
   await pane.press({ key: 'bar:not-started' })
   expect(await listed()).toEqual([true, false])
@@ -341,7 +347,7 @@ test('a filter whose status empties keeps its count at 0 and says nothing is lef
 
   disk.write(EVENTS, [...lines, statusLine('T1', 'po', NOW, 'in-progress')])
   await clock.advance(3_000)
-  expect(await pane.find({ type: 'Text', text: '0 waiting' })).toMatchObject({ props: { bold: true } })
+  expect(await pane.find({ type: 'Text', text: /^0 waiting$/ })).toMatchObject({ props: { bold: true } })
   expect(await pane.find({ text: 'Nothing waiting.' })).toBeDefined()
   expect(await pane.find({ text: /Ship the task pane|Check the roll/ })).toBeUndefined()
 
@@ -367,7 +373,7 @@ test('a filter holds across the all and Changes views, and a new session start l
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   await pane.redraw(PANE_PROPS)
   expect(await pane.find({ text: /^showing/ })).toBeUndefined()
-  expect(await pane.find({ type: 'Text', text: '1 not started' })).toMatchObject({ props: { bold: false } })
+  expect(await pane.find({ type: 'Text', text: /^1 not started$/ })).toMatchObject({ props: { bold: false } })
 })
 
 test('picks up a new register event on the next poll', async ($, on) => {

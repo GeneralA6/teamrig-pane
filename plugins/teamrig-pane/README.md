@@ -182,7 +182,8 @@ not started, that is open (dim `░`). Today is the team's day, the one the due 
 or dropped today is done today, one closed on an earlier day is left out. Each count is the one its
 section's heading names. The cells are
 shared by largest remainder, and a status with any task gets at least one. Under the row a dim line
-counts them, each behind its key (`o: 1 done today · v: 1 verifying · w: 2 working`), skipping a
+counts them, each behind its key and the glyph its section's rows wear, in their color
+(`o: ✓ 1 done today · v: ◑ 1 verifying · w: ◐ 2 working`), so the counts are the glyphs' legend, skipping a
 status with none; where the counts, keys included, are wider than the pane they wrap onto more lines.
 An area with none of these tasks draws no bar, and the all view has none.
 
