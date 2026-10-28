@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="960" height="456" viewBox="0 0 960 456" role="img" aria-label="Claude Code in its fullscreen layout. Beside the conversation, teamrig-pane docks the session's tasks in sections, each task over a dim line of plain words. Working on: T12 Signup form (p1, in progress since 11:55). Up next: T14 Form tests (p2, after T12, new). Waiting: T9 Email check (p2, waiting since 10:20: on T13); T13 Mail key (on api, p2, due Thu 10-22). Done today: T11 Signup API, done at 09:40. One press on Changes flips the pane to the 3 files changed in the session's repo, and back.">
-<title>Claude Code in its fullscreen layout. Beside the conversation, teamrig-pane docks the session's tasks in sections, each task over a dim line of plain words. Working on: T12 Signup form (p1, in progress since 11:55). Up next: T14 Form tests (p2, after T12, new). Waiting: T9 Email check (p2, waiting since 10:20: on T13); T13 Mail key (on api, p2, due Thu 10-22). Done today: T11 Signup API, done at 09:40. One press on Changes flips the pane to the 3 files changed in the session's repo, and back.</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="476" viewBox="0 0 960 476" role="img" aria-label="Claude Code in its fullscreen layout. Beside the conversation, teamrig-pane docks the session's tasks in sections, each task over a dim line of plain words. Working on: T12 Signup form (p1, in progress since 11:55). Up next: T14 Form tests (p2, after T12, new). Waiting: T9 Email check (p2, waiting since 10:20: on T13). Asked of others: T13 Mail key (api's, p2, due Thu 10-22). Done today: T11 Signup API, done at 09:40. One press on Changes flips the pane to the 3 files changed in the session's repo, and back.">
+<title>Claude Code in its fullscreen layout. Beside the conversation, teamrig-pane docks the session's tasks in sections, each task over a dim line of plain words. Working on: T12 Signup form (p1, in progress since 11:55). Up next: T14 Form tests (p2, after T12, new). Waiting: T9 Email check (p2, waiting since 10:20: on T13). Asked of others: T13 Mail key (api's, p2, due Thu 10-22). Done today: T11 Signup API, done at 09:40. One press on Changes flips the pane to the 3 files changed in the session's repo, and back.</title>
 <style>
 :root{--fg:#1f2328;--muted:#59636e;--line:#d1d9e0;--tile:#f6f8fa;--bg:#ffffff;--purple:#8250df;--tint:#f0eafb;--amber:#9a6700;--green:#1a7f37}
 @media (prefers-color-scheme:dark){:root{--fg:#e6edf3;--muted:#9198a1;--line:#3d444d;--tile:#151b23;--bg:#0d1117;--purple:#a371f7;--tint:#221e36;--amber:#d29922;--green:#3fb950}}
@@ -21,7 +21,7 @@ text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helveti
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
 <g class="a0" data-part="window">
-<rect x="0.5" y="0.5" width="959" height="399" rx="12" fill="#0d1117" stroke="#30363d"/>
+<rect x="0.5" y="0.5" width="959" height="419" rx="12" fill="#0d1117" stroke="#30363d"/>
 <path d="M1 13a12 12 0 0 1 12-12h934a12 12 0 0 1 12 12v31h-958z" fill="#161b22"/>
 <path d="M12 44v-28a8 8 0 0 1 8-8h88a8 8 0 0 1 8 8v28z" fill="#0d1117"/>
 <circle cx="30" cy="27" r="4.5" fill="#a371f7"/>
@@ -34,12 +34,12 @@ text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helveti
 <rect x="28" y="178" width="350" height="8" rx="4" fill="#6e7681" fill-opacity="0.5"/>
 <rect x="28" y="194" width="380" height="8" rx="4" fill="#6e7681" fill-opacity="0.5"/>
 <text x="28" y="236" class="mono line"><tspan fill="#e6edf3">T9 waits on the mail key; api has T13 for it.</tspan></text>
-<rect x="28.5" y="338.5" width="531" height="45" rx="9" fill="#0d1117" stroke="#30363d"/>
-<text x="44" y="367" class="mono line"><tspan fill="#8b949e">&gt;</tspan></text>
-<rect x="62" y="352" width="8" height="18" fill="#e6edf3"/>
+<rect x="28.5" y="358.5" width="531" height="45" rx="9" fill="#0d1117" stroke="#30363d"/>
+<text x="44" y="387" class="mono line"><tspan fill="#8b949e">&gt;</tspan></text>
+<rect x="62" y="372" width="8" height="18" fill="#e6edf3"/>
 </g>
 <g data-part="pane">
-<rect x="584.5" y="60.5" width="359" height="323" rx="10" fill="#11161d" stroke="#30363d"/>
+<rect x="584.5" y="60.5" width="359" height="343" rx="10" fill="#11161d" stroke="#30363d"/>
 <g class="a1" data-part="tasks">
 <rect x="604.5" y="72.5" width="58" height="26" rx="6" fill="#a371f7" fill-opacity="0.2" stroke="#a371f7" data-button="tasks"/>
 <text x="633.5" y="90" class="mono btn" text-anchor="middle"><tspan fill="#e6edf3" font-weight="600">Tasks</tspan></text>
@@ -57,23 +57,24 @@ text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helveti
 <text x="620.8" y="220" class="mono pane"><tspan fill="#e6edf3" font-weight="600">T14</tspan></text>
 <text x="662.8" y="220" class="mono pane"><tspan fill="#e6edf3">Form tests</tspan></text>
 <text x="662.8" y="236" class="mono pane"><tspan fill="#8b949e">p2</tspan><tspan fill="#8b949e"> · </tspan><tspan fill="#8b949e">after T12</tspan><tspan fill="#8b949e"> · </tspan><tspan fill="#79c0ff">new</tspan></text>
-<text x="604" y="256" class="mono pane"><tspan fill="#e6edf3" font-weight="600">Waiting</tspan><tspan fill="#8b949e"> (2)</tspan></text>
+<text x="604" y="256" class="mono pane"><tspan fill="#e6edf3" font-weight="600">Waiting</tspan><tspan fill="#8b949e"> (1)</tspan></text>
 <g data-glyph="waiting" transform="translate(608.2 269)"><rect x="-4.5" y="-4.5" width="9" height="9" fill="#f85149"/></g>
 <text x="620.8" y="274" class="mono pane"><tspan fill="#e6edf3" font-weight="600">T9</tspan></text>
 <text x="654.4" y="274" class="mono pane"><tspan fill="#e6edf3">Email check</tspan></text>
 <text x="654.4" y="290" class="mono pane"><tspan fill="#8b949e">p2</tspan><tspan fill="#8b949e"> · </tspan><tspan fill="#f85149">waiting since 10:20: on T13</tspan></text>
-<g data-glyph="open" transform="translate(608.2 303)"><circle r="4.5" fill="none" stroke="#e6edf3" stroke-width="1.5"/></g>
-<text x="620.8" y="308" class="mono pane"><tspan fill="#e6edf3" font-weight="600">T13</tspan></text>
-<text x="662.8" y="308" class="mono pane"><tspan fill="#e6edf3">Mail key</tspan></text>
-<text x="662.8" y="324" class="mono pane"><tspan fill="#8b949e">on api</tspan><tspan fill="#8b949e"> · </tspan><tspan fill="#8b949e">p2</tspan><tspan fill="#8b949e"> · </tspan><tspan fill="#8b949e">due Thu 10-22</tspan></text>
-<text x="604" y="344" class="mono pane"><tspan fill="#e6edf3" font-weight="600">Done today</tspan><tspan fill="#8b949e"> (1)</tspan></text>
-<g data-glyph="done" transform="translate(608.2 357)"><path d="M-4.5 0l3 3.2l6-6.7" fill="none" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g>
-<text x="620.8" y="362" class="mono pane"><tspan fill="#8b949e">T11</tspan></text>
-<text x="662.8" y="362" class="mono pane"><tspan fill="#8b949e">Signup API</tspan></text>
-<text x="923.2" y="362" class="mono pane" text-anchor="end"><tspan fill="#8b949e">09:40</tspan></text>
+<text x="604" y="310" class="mono pane"><tspan fill="#e6edf3" font-weight="600">Asked of others</tspan><tspan fill="#8b949e"> (1)</tspan></text>
+<g data-glyph="open" transform="translate(608.2 323)"><circle r="4.5" fill="none" stroke="#e6edf3" stroke-width="1.5"/></g>
+<text x="620.8" y="328" class="mono pane"><tspan fill="#e6edf3" font-weight="600">T13</tspan></text>
+<text x="662.8" y="328" class="mono pane"><tspan fill="#e6edf3">Mail key</tspan></text>
+<text x="662.8" y="344" class="mono pane"><tspan fill="#8b949e">api's</tspan><tspan fill="#8b949e"> · </tspan><tspan fill="#8b949e">p2</tspan><tspan fill="#8b949e"> · </tspan><tspan fill="#8b949e">due Thu 10-22</tspan></text>
+<text x="604" y="364" class="mono pane"><tspan fill="#e6edf3" font-weight="600">Done today</tspan><tspan fill="#8b949e"> (1)</tspan></text>
+<g data-glyph="done" transform="translate(608.2 377)"><path d="M-4.5 0l3 3.2l6-6.7" fill="none" stroke="#3fb950" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="620.8" y="382" class="mono pane"><tspan fill="#8b949e">T11</tspan></text>
+<text x="662.8" y="382" class="mono pane"><tspan fill="#8b949e">Signup API</tspan></text>
+<text x="923.2" y="382" class="mono pane" text-anchor="end"><tspan fill="#8b949e">09:40</tspan></text>
 </g>
 <g class="a2" data-part="changes">
-<rect x="586" y="62" width="356" height="320" fill="#11161d"/>
+<rect x="586" y="62" width="356" height="340" fill="#11161d"/>
 <rect x="604.5" y="72.5" width="58" height="26" rx="6" fill="none" stroke="#30363d" data-button="tasks"/>
 <text x="633.5" y="90" class="mono btn" text-anchor="middle"><tspan fill="#8b949e">Tasks</tspan></text>
 <rect x="670.5" y="72.5" width="96" height="26" rx="6" fill="#a371f7" fill-opacity="0.2" stroke="#a371f7" data-button="changes"/>
@@ -89,7 +90,7 @@ text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helveti
 </g>
 </g>
 </g>
-<text x="480" y="438" text-anchor="middle" class="cap a3" data-part="caption">Your tasks: what's next, what's waiting, what's done</text>
-<text x="480" y="438" text-anchor="middle" class="cap a4" data-part="caption">One press on Changes: the files changed in your repo</text>
-<text x="480" y="438" text-anchor="middle" class="cap a5" data-part="caption">Your tasks: what's next, what's waiting, what's done</text>
+<text x="480" y="458" text-anchor="middle" class="cap a3" data-part="caption">Your tasks: what's next, what's waiting, what's done</text>
+<text x="480" y="458" text-anchor="middle" class="cap a4" data-part="caption">One press on Changes: the files changed in your repo</text>
+<text x="480" y="458" text-anchor="middle" class="cap a5" data-part="caption">Your tasks: what's next, what's waiting, what's done</text>
 </svg>

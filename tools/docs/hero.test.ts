@@ -121,7 +121,7 @@ describe('renderHero', () => {
     assert.ok(
       label.includes(
         'Working on: T12 Signup form (p1, in progress since 11:55). Up next: T14 Form tests (p2, after T12, new). ' +
-          'Waiting: T9 Email check (p2, waiting since 10:20: on T13); T13 Mail key (on api, p2, due Thu 10-22). ' +
+          'Waiting: T9 Email check (p2, waiting since 10:20: on T13). Asked of others: T13 Mail key (api\'s, p2, due Thu 10-22). ' +
           'Done today: T11 Signup API, done at 09:40.',
       ),
       label,
@@ -179,7 +179,7 @@ describe('renderHero', () => {
     );
   });
 
-  it("draws the tasks as the pane's rows: a header naming no area, then Working on, Up next, Waiting and Done today", () => {
+  it("draws the tasks as the pane's rows: a header naming no area, then Working on, Up next, Waiting, Asked of others and Done today", () => {
     assert.deepEqual(
       paneRows.map((row) => row.text),
       [
@@ -190,18 +190,19 @@ describe('renderHero', () => {
         'Up next (1)',
         '○ T14  Form tests',
         '       p2 · after T12 · new',
-        'Waiting (2)',
+        'Waiting (1)',
         '■ T9  Email check',
         '      p2 · waiting since 10:20: on T13',
+        'Asked of others (1)',
         '○ T13  Mail key',
-        '       on api · p2 · due Thu 10-22',
+        "       api's · p2 · due Thu 10-22",
         'Done today (1)',
         '✓ T11  Signup API                09:40',
       ],
     );
     assert.deepEqual(
       SECTIONS.map((section) => section.name),
-      ['Working on', 'Up next', 'Waiting'],
+      ['Working on', 'Up next', 'Waiting', 'Asked of others'],
     );
     assert.equal(DONE_TODAY.length, 1);
   });
@@ -224,7 +225,7 @@ describe('renderHero', () => {
     const headings = gaps(/^\S.* \(\d+\)$/);
     const titles = gaps(/^[○◐■✓] /);
     const metas = gaps(/^ /);
-    assert.deepEqual([headings.length, titles.length, metas.length], [4, 5, 4]);
+    assert.deepEqual([headings.length, titles.length, metas.length], [5, 5, 4]);
     assert.ok(Math.min(...metas) >= 16, metas.join(' '));
     assert.ok(Math.min(...titles) > Math.max(...metas), titles.join(' '));
     assert.ok(Math.min(...headings) > Math.max(...titles), headings.join(' '));
@@ -269,8 +270,8 @@ describe('renderHero', () => {
       [' · ', PALETTE.muted, false],
       ['waiting since 10:20: on T13', PALETTE.red, false],
     ]);
-    assert.deepEqual(spansIn(taskText('on api · p2 · due Thu 10-22')).map(([words, fill]) => [words, fill]), [
-      ['on api', PALETTE.muted],
+    assert.deepEqual(spansIn(taskText("api's · p2 · due Thu 10-22")).map(([words, fill]) => [words, fill]), [
+      ["api's", PALETTE.muted],
       [' · ', PALETTE.muted],
       ['p2', PALETTE.muted],
       [' · ', PALETTE.muted],
@@ -287,7 +288,7 @@ describe('renderHero', () => {
   it("heads the list with the session's active count alone, naming no area and no inbox, and each section with its name and count", () => {
     assert.deepEqual(spansIn(taskText('3 active')), [['3 active', PALETTE.muted, false]]);
     assert.equal(texts('window').filter((words) => words === AREA).length, 1, 'only the tab names the area');
-    for (const [name, count] of [['Working on', 1], ['Up next', 1], ['Waiting', 2], ['Done today', 1]] as const) {
+    for (const [name, count] of [['Working on', 1], ['Up next', 1], ['Waiting', 1], ['Asked of others', 1], ['Done today', 1]] as const) {
       assert.deepEqual(spansIn(taskText(`${name} (${count})`)), [
         [name, PALETTE.fg, true],
         [` (${count})`, PALETTE.muted, false],

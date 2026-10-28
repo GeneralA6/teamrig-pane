@@ -199,20 +199,23 @@ or an earlier one of an active task that needs it) under a bold heading with its
 1. `Verifying`: the change landed, its proof is still to come; these lead, because closing them comes first;
 2. `Working on`: in progress;
 3. `Up next`: open, not started;
-4. `Waiting`: the area's waiting tasks, then the active tasks it asked of other sessions, the first 8, each
-   saying `on <owner>` (a dim line counts the rest, which `i` lists);
-5. `Done today`: its tasks done or dropped today, the team's day, the newest 6, one dim line each with the time it
+4. `Waiting`: the area's own waiting tasks;
+5. `Asked of others`: the active tasks it asked of other sessions, the first 8, each saying whose it is (`api's`);
+   a dim line counts the rest, which `i` lists;
+6. `Done today`: its tasks done or dropped today, the team's day, the newest 6, one dim line each with the time it
    closed. Past them a dim line says how many more, which `o` lists.
 
-A heading's count is the status bar's count for its section, the tasks past a cap included.
+A heading's count is the status bar's count for its section, the tasks past a cap included; the bar's `waiting`
+count is Waiting's and Asked of others' together.
 
 The header names the area only for a pin (`web (pinned) · 3 active`); the session's own area goes unnamed, as the
 title line above names the session. The area's unread inbox lines are counted on the switch's Inbox button (see
 [The Inbox view](#the-inbox-view)).
 
-**all** shows every owner's active tasks, grouped by owner, each heading with its counts
-(`api · 4 active · 1 waiting · 1 verifying`, a count with none left out), the verifying tasks first
-in each group; your own area is highlighted.
+**all** shows every owner's active tasks, grouped by owner: your own area first, highlighted and marked `(you)`
+(`(pinned)` for the area a pin shows), then the others by name. Each heading has its counts
+(`api · 4 active · 1 waiting · 1 verifying`, a count with none left out), and the verifying tasks come first
+in each group.
 
 A task is two lines, its title and a dim meta line under it:
 
@@ -232,7 +235,7 @@ A task is two lines, its title and a dim meta line under it:
 | `waiting since 14:00 IDT: decision owner, on T5 ready; the copy first` | In red: what a waiting task waits for (a decision, an approval, a task or a time, as `teamrig list` words it), a cleared one `ready`, then its note. An old `blocked` line reads as waiting, with only its note |
 | `after T5, T6` | A task not started: the tasks planned before it that are still unfinished |
 | `needed by T7 (beta, due Thu 10-22) +1` | Whom it holds up, as `teamrig list` says it: the active task of another session that needs it and is due first, its owner and due (left out when the due already says `(from T7)`), and how many more |
-| `on api` | In `Waiting`: a task asked of another session, and its owner |
+| `api's` | In `Asked of others`: a task asked of another session, and whose it is |
 | `late 1d` | Past its due, in red |
 | `new` | The owner has not touched it yet |
 | `not picked up 2d` | The owner has still not touched it 24 hours after it was assigned, in red |
@@ -240,6 +243,9 @@ A task is two lines, its title and a dim meta line under it:
 
 A task done today is one dim line, `✓ T11  Signup API`, the time it closed at the right edge. Other messages:
 `Reading the register…` (the first moments, at most 3 seconds), `Nothing active.` (mine) and `No active tasks.` (all).
+While the tasks it asked of others are all mine holds, the line says so:
+`Nothing of yours is active. 1 task you asked of others is below.` (for a pin, `Nothing of web's is active. 2 tasks it
+asked of others are below.`).
 
 ### The status bar
 
@@ -258,14 +264,15 @@ Under it, a dim line counts them, each behind its key and the glyph its section'
 (`o: ✓ 1 done today · v: ◑ 1 verifying · w: ◐ 2 working · i: ■ 1 waiting`), so the counts are the glyphs' legend,
 leaving out a status with none; where the counts, keys included, are wider than the pane they wrap onto more lines.
 Today is the team's day; tasks closed on an earlier day are left out. Each count is the one its section's heading
-names. The cells are shared by largest
+names (`waiting`, Waiting's and Asked of others' together). The cells are shared by largest
 remainder, and a status with any task gets at least one. With none of these tasks there is no bar, and **all** has
 none.
 
 A click on a status's cells or its count, or its key (`o`, `v`, `w`, `i`, `n`), shows that status's tasks alone
 under the header, every one its count names: today's done ones newest first, the others in plan order (the waiting
-ones the area's own first); the other sections hide. Its cells and
-count turn bold, and a dim line under the counts reads `showing verifying only, click again for all`. The same
+ones the area's own first); the other sections hide. Its cells and count turn bold, and the dim line under the
+counts, `click a count to show only those` while every task shows, reads `showing verifying only, click again for
+all`; either wraps by words onto more lines where the pane is narrower. The same
 click or key again shows every task; another status switches to it. A shown status that empties keeps its count,
 `0 waiting`, so it can still be cleared, and the list says `Nothing waiting.` (`Nothing done today.`, `Nothing
 to verify.`, `Nothing in progress.`, `Nothing left to start.` for the others).
@@ -276,7 +283,8 @@ is never kept across a reload: a new session, `/reload-plugins` or a restart sho
 ### A task's card
 
 A press on a task (Enter, or a click) opens its card: the title shows whole and the card takes the meta line's
-place; another press closes it, and `c` closes every card. A done-today row opens the same card. The card shows
+place; another press closes it, as the card's dim last line says, and `c` closes every card. A done-today row opens
+the same card. The card shows
 what teamrig recorded for the task, one labelled row per fact in a task tracker's words, each only when it has a
 value:
 
@@ -296,6 +304,7 @@ value:
     │ Reference    inbox/api.md
     │ Evidence     abc1234
     │ Links        https://github.com/acme/app/pull/7
+    │ press the title again to close
 ```
 
 | Row | What it holds |
@@ -390,16 +399,16 @@ the pane holds that every word matches, on a dim line, then lists them, the matc
 2 tasks match
 
 ○ T50  Load the feed
-       on etl
+       etl's
 
 ○ T58  Read the source
-       on etl
+       etl's
 ```
 
 | Part | What it does |
 | --- | --- |
 | A word | Matches, case aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note, evidence or ref; one that starts with a mark (`.md`) matches anywhere |
-| An active result | Its title row, then a dim line of whose it is and the other fields a word matched in |
+| An active result | Its title row, then a dim line of whose it is and the other fields a word matched in, each named (`etl's · note: …tests pass…`) |
 | A finished result | One dim line with when it closed |
 | A click on a result | Opens its page; `‹ back` (`b`) returns to the results |
 | Enter | With one match, opens its page and moves the cursor onto its `‹ back`, so `b`, `f` and `s` work there; with more, moves the cursor onto the first result |
