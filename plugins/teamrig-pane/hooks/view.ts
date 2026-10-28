@@ -98,15 +98,18 @@ export function statusLines(tasks: readonly TaskRow[], area: string, tree: TaskT
   return lines.sort(status === 'done-today' ? newestFirst : ownFirst)
 }
 
-/** Every owner with active tasks, by name, each list verifying first, then in plan order on `tree`'s effective dues. */
-export function ownerGroups(tasks: readonly TaskRow[], tree: TaskTree<TaskRow>): OwnerGroup[] {
+/**
+ * Every owner with active tasks, `area`'s first (the list's own: the session's, or the one pinned; null for none), the
+ * rest by name, each list verifying first, then in plan order on `tree`'s effective dues.
+ */
+export function ownerGroups(tasks: readonly TaskRow[], tree: TaskTree<TaskRow>, area: string | null): OwnerGroup[] {
   const byOwner = new Map<string, TaskRow[]>()
   for (const task of tasks) {
     if (!isActive(task)) continue
     byOwner.set(task.owner, [...(byOwner.get(task.owner) ?? []), task])
   }
   return [...byOwner.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => Number(b === area) - Number(a === area) || a.localeCompare(b))
     .map(([owner, list]) => ({
       owner,
       active: [...list].sort(verifyingFirst(tree)),

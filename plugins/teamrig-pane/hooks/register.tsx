@@ -1,8 +1,8 @@
 // teamrig-pane: docks this session's list from the task register (where it is: places.ts) on the right
 // of the fullscreen UI. `mine` shows the session's area: a status bar of its tasks (status-bar.ts),
-// then its tasks in sections (rows.ts): Verifying, Working on, Up next, Waiting (its waiting tasks, then
-// those asked of another session) and Done today (the team zone's day, as the bar counts it), each task a row with a
-// dim meta line (meta.ts); `all` shows every owner's active tasks. A press on a task row opens its card in
+// then its tasks in sections (rows.ts): Verifying, Working on, Up next, Waiting (its own waiting tasks), Asked of
+// others (those it asked of another session) and Done today (the team zone's day, as the bar counts it), each task a
+// row with a dim meta line (meta.ts); `all` shows every owner's active tasks, its own first. A press on a task row opens its card in
 // place of the meta line (card.ts): its status and note, plan, the ask quoted where its refs still point, who
 // asked, the tasks planned first, its goals' roadmap items, evidence and links. A press on a task id in a card opens
 // that task's page (page.ts), the card with the body to itself, under back and forward (b, f) and a trail of the
