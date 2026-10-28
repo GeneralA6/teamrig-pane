@@ -216,6 +216,18 @@ function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expande
 }
 
 /**
+ * The line under the header while the area has nothing active, `asked` the tasks it asked of others, which the list
+ * still holds: the bar counts them as waiting, so a bare `Nothing active.` read as wrong. `pinned` names the area
+ * a pin shows, which is not the reader's own.
+ */
+export function noneActiveText(asked: number, pinned: string | null): string {
+  if (asked === 0) return 'Nothing active.'
+  const whose = pinned === null ? 'yours' : `${pinned}'s`
+  const who = pinned === null ? 'you' : 'it'
+  return `Nothing of ${whose} is active. ${asked === 1 ? `1 task ${who} asked of others is` : `${asked} tasks ${who} asked of others are`} below.`
+}
+
+/**
  * The area's tasks in sections: Verifying (the ones to close first), Working on, Up next, Waiting (its own), Asked
  * of others (its asks still active, which the bar counts as waiting too) and Done today, each heading its count.
  */
@@ -231,7 +243,8 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   const blocks: Block[] = [{ key: 'header', rows: [{ key: 'header', spans: header, rule: true }] }]
   // Filtered from the status bar, the header leads that status's tasks alone.
   if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
-  if (activeTotal === 0) blocks.push(single('none-active', [{ text: 'Nothing active.', dim: true }]))
+  const pinned = snap.areaSource === 'pinned' ? view.area : null
+  if (activeTotal === 0) blocks.push(single('none-active', [{ text: noneActiveText(view.askedTotal, pinned), dim: true }]))
   const tasks = (status: BarStatus, list: readonly TaskRow[]) => list.map(task => taskBlock(SECTION_KEY[status], task, expanded, tree, view.area))
   const done = view.doneToday.map(task => doneBlock(task, expanded, tree))
   const { counts } = view
