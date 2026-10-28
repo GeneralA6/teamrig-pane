@@ -16,13 +16,14 @@ import { cells, graphemes } from './width'
 
 /**
  * A piece of a line that holds a press: a task id and the task it names, a reference file and the file it names, an
- * unread count and the inbox it opens, a Team tab key, or the words between them.
+ * unread count and the inbox it opens, a Team tab key, a session a press ties the tab to, or the words between them.
  */
 export type Piece =
   | { kind: 'id'; span: Span; task: string }
   | { kind: 'file'; span: Span; file: RefFile }
   | { kind: 'inbox'; span: Span; inbox: InboxPress }
   | { kind: 'toggle'; span: Span; toggles: string }
+  | { kind: 'pin'; span: Span; pins: string }
   | { kind: 'words'; spans: Span[] }
 /**
  * A run of a card's lines: a Text of the lines that hold no press (`text`), one line that holds one (`line`), its
@@ -102,13 +103,17 @@ function sameStyle(a: Span, b: Span): boolean {
     a.file === b.file &&
     a.inbox?.area === b.inbox?.area &&
     a.inbox?.unread === b.inbox?.unread &&
-    a.toggles === b.toggles
+    a.toggles === b.toggles &&
+    a.pins === b.pins
   )
 }
 
-/** Whether `span` is a press drawn as a piece of its line: a task id or a reference file in a card, an inbox count, a Team tab key. */
+/**
+ * Whether `span` is a press drawn as a piece of its line: a task id or a reference file in a card, an inbox count, a
+ * Team tab key, a session to tie the tab to.
+ */
 function isPress(span: Span): boolean {
-  return span.task !== undefined || span.file !== undefined || span.inbox !== undefined || span.toggles !== undefined
+  return span.task !== undefined || span.file !== undefined || span.inbox !== undefined || span.toggles !== undefined || span.pins !== undefined
 }
 
 /** Spans with each run of one style joined into one span, so a block draws as few elements as it can. */
@@ -273,7 +278,10 @@ function joinedLines(lines: Lines): Span[] {
   return merged(lines.flatMap((line, i) => (i === 0 ? line : [NEW_LINE, ...line])))
 }
 
-/** A line's spans as pieces: each task id, reference file, inbox count and Team tab key its own, each run of words between them one. */
+/**
+ * A line's spans as pieces: each task id, reference file, inbox count, Team tab key and session to tie the tab to its
+ * own, each run of words between them one.
+ */
 export function piecesOf(line: readonly Span[]): Piece[] {
   const pieces: Piece[] = []
   for (const span of line) {
@@ -282,6 +290,7 @@ export function piecesOf(line: readonly Span[]): Piece[] {
     else if (span.file !== undefined) pieces.push({ kind: 'file', span, file: span.file })
     else if (span.inbox !== undefined) pieces.push({ kind: 'inbox', span, inbox: span.inbox })
     else if (span.toggles !== undefined) pieces.push({ kind: 'toggle', span, toggles: span.toggles })
+    else if (span.pins !== undefined) pieces.push({ kind: 'pin', span, pins: span.pins })
     else if (last?.kind === 'words') last.spans.push(span)
     else pieces.push({ kind: 'words', spans: [span] })
   }

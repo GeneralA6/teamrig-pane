@@ -43,6 +43,7 @@ describe('press-keys', () => {
     expect(pieceKey({ kind: 'file', span: { text: 'a' }, file: { file: 'a', line: 3 } }, 'T5-open', 'p1', 2)).toBe('goto:file:T5-open:p1:2')
     expect(pieceKey({ kind: 'inbox', span: { text: '2' }, inbox: { area: 'api', unread: 2 } }, 'header', 'p0', 0)).toBe('goto:inbox:header:p0:0')
     expect(pieceKey({ kind: 'toggle', span: { text: 'web' }, toggles: 'card:web' }, 'team:web', 'card:0', 2)).toBe('team:card:web:team:web:card:0:2')
+    expect(pieceKey({ kind: 'pin', span: { text: 'api' }, pins: 'api' }, 'no-area', 'card:1', 2)).toBe('pin:api:no-area:card:1:2')
     expect(diffKey('C1-open', 'f1')).toBe('diff:C1-open:f1')
   })
 

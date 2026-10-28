@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TeamLeads } from '../types'
-import { leadOf, sameLeads, teamLeads } from '../hooks/leads'
+import { leadOf, sameLeads, teamLeads, teamSessions } from '../hooks/leads'
 import { configOf } from './team-fixtures'
 
 /** Team acme: lead over web and ops; web a sub-lead over api and ui. */
@@ -14,6 +14,13 @@ describe('teamLeads', () => {
 
   test('a config with no sub-leads puts every session under the lead', () => {
     expect(teamLeads(configOf({ ...ACME, leads: {} }))).toEqual({ lead: 'lead', leaderOf: { web: 'lead', api: 'lead', ui: 'lead', ops: 'lead' } })
+  })
+})
+
+describe('teamSessions', () => {
+  test("the lead first, then the others in the config's order, a sub-lead's members too", () => {
+    expect(teamSessions(LEADS)).toEqual(['lead', 'web', 'api', 'ui', 'ops'])
+    expect(teamSessions(teamLeads(configOf({ ...ACME, sessions: ['ops', 'api', 'lead'], leads: {} })))).toEqual(['lead', 'ops', 'api'])
   })
 })
 
