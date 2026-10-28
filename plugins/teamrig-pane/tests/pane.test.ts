@@ -658,6 +658,19 @@ function keyedNode(node: unknown, key: string): unknown {
   return null
 }
 
+/**
+ * The items on each row of the packed header part keyed `key` (a column Box of row Boxes), row by row: each by its
+ * key, a Text, which keeps none, by its words.
+ */
+function rowItems(node: unknown, key: string): (string | null)[][] {
+  const nameOf = (item: unknown): string | null => {
+    const props = propsOf(item)
+    if (props !== null && 'key' in props && typeof props.key === 'string') return props.key
+    return typeOf(item) === 'Text' ? screenOf(item).join('\n') : null
+  }
+  return childrenOf(keyedNode(node, key)).map(row => childrenOf(row).map(nameOf))
+}
+
 const FOCUSABLE = new Set(['Button', 'Input', 'Select'])
 
 /** A drawing's focusable elements (Button, Input, Select) in drawing order, by tag and key: the engine's focus ring is an index into them. */
@@ -1160,9 +1173,16 @@ test('a session starts minimized when the last one was left so: one row, docked 
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  for (const props of [PANE_PROPS, { ...PANE_PROPS, bodyColumns: 23 }, { ...PANE_PROPS, placement: 'inline' as const }]) {
+  // The mark follows a `·` on the switch's last row where the two fit there (Team, wrapped under Inbox (2), leaves the
+  // room in 48 columns), and takes a row of its own where not.
+  const strips = [
+    { props: PANE_PROPS, texts: ['·', 'minimized, press a view'] },
+    { props: { ...PANE_PROPS, bodyColumns: 23 }, texts: ['minimized, press a view'] },
+    { props: { ...PANE_PROPS, placement: 'inline' as const }, texts: ['·', 'minimized, press a view'] },
+  ]
+  for (const { props, texts } of strips) {
     await pane.redraw(props)
-    expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(['minimized'])
+    expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(texts)
     expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
   }
   // The strip counts the unread lines too.
@@ -1172,6 +1192,25 @@ test('a session starts minimized when the last one was left so: one row, docked 
   await pane.press({ key: 'tasks' })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
   expect(store.get('paneSize')).toBe('open')
+})
+
+test('minimized, the mark after the switch is a group of its own: a dim · before it on a shared row, none where it wraps', async ($, on) => {
+  await start(on, { paneSize: 'minimized' })
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  const mark = 'minimized, press a view'
+  expect(rowItems(await pane.drawn(), 'switch')).toEqual([['tasks', 'changes', 'log', 'inbox', 'team', '·', mark]])
+  expect(await pane.find({ type: 'Text', text: /^·$/ })).toMatchObject({ props: { dimColor: true } })
+  expect(await pane.find({ type: 'Text', text: mark })).toMatchObject({ props: { dimColor: true } })
+  await pane.redraw(PANE_PROPS)
+  expect(rowItems(await pane.drawn(), 'switch')).toEqual([
+    ['tasks', 'changes', 'log', 'inbox'],
+    ['team', '·', mark],
+  ])
+  // In 21 columns `· minimized, press a view` fits beside no button: the mark starts a row, with no `·` before it.
+  await pane.redraw({ ...PANE_PROPS, bodyColumns: 23 })
+  expect(rowItems(await pane.drawn(), 'switch')).toEqual([['tasks', 'changes'], ['log', 'inbox'], ['team'], [mark]])
 })
 
 /** The band above the prompt (AbovePrompt) as the terminal raises it with no survey up. */
@@ -1243,7 +1282,7 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
   // The strip is the switch alone: the title comes back with the pane.
-  expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(['minimized'])
+  expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(['·', 'minimized, press a view'])
   await pane.press({ key: 'tasks' })
   const title = childrenOf(keyedNode(await pane.drawn(), 'controls'))[0]
   expect(typeOf(title)).toBe('Text')

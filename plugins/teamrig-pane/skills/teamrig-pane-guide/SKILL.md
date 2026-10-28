@@ -131,7 +131,8 @@ status, note, proof, priority and due under it; a second click closes it. Its `o
 pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
 band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
-Minimized, the pane is one row: the `[Tasks] [Changes n] [Log] [Inbox (n)] [Team]` switch and a `minimized` mark. A
+Minimized, the pane is the `[Tasks] [Changes n] [Log] [Inbox (n)] [Team]` switch, then a dim `· minimized, press a view`
+(on a row of its own, with no `·`, in a dock too narrow for both). A
 click on any of its buttons, `t`, `d`, `g`, `u` or `e`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
 session.
 
