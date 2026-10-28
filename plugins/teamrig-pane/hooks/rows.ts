@@ -260,17 +260,22 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   ]
 }
 
-/** Every owner with active tasks under a heading with its counts, the session's own area marked. */
+/**
+ * Every owner with active tasks under a heading with its counts, the session's own area first and marked: `(you)`,
+ * or `(pinned)` for an area a pin shows.
+ */
 function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
   const tree = treeOf(snap)
-  const groups = ownerGroups(snap.tasks, tree)
+  const groups = ownerGroups(snap.tasks, tree, snap.area)
   if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
   return groups.flatMap((group, i) => {
     const waiting = group.waiting > 0 ? ` · ${group.waiting} waiting` : ''
     const verifying = group.verifying > 0 ? ` · ${group.verifying} verifying` : ''
-    const owner: Span = { text: group.owner, color: group.owner === snap.area ? 'claude' : undefined }
+    const isOwn = group.owner === snap.area
+    const owner: Span = { text: group.owner, color: isOwn ? 'claude' : undefined }
+    const mark = !isOwn ? '' : snap.areaSource === 'pinned' ? ' (pinned)' : ' (you)'
     // The first group sits under the buttons, already a gap away.
-    const head = { ...sectionHeading(`owner:${group.owner}`, owner, ` · ${group.active.length} active${waiting}${verifying}`), opensSection: i > 0 }
+    const head = { ...sectionHeading(`owner:${group.owner}`, owner, `${mark} · ${group.active.length} active${waiting}${verifying}`), opensSection: i > 0 }
     return [head, ...group.active.map(task => taskBlock(group.owner, task, expanded, tree, null))]
   })
 }

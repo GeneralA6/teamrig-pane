@@ -235,7 +235,7 @@ describe('view', () => {
     )
     const tree = treeAt(tasks, NOW)
     expect(areaView(tasks, 'po', tree).upNext.map(t => t.id)).toEqual(['T2', 'T1'])
-    expect(ownerGroups(tasks, tree).map(g => g.active.map(t => t.id))).toEqual([['T3'], ['T2', 'T1']])
+    expect(ownerGroups(tasks, tree, null).map(g => g.active.map(t => t.id))).toEqual([['T3'], ['T2', 'T1']])
   })
 
   test('waiting holds its own waiting tasks; up to 8 it asked of others sit apart, all counted, the bar counting both', async () => {
@@ -320,10 +320,12 @@ describe('view', () => {
       createLine('T3', { owner: 'etl', by: 'etl', at: NOW }),
       statusLine('T3', 'etl', NOW, 'done'),
     )
-    expect(ownerGroups(tasks, treeAt(tasks, NOW)).map(g => [g.owner, g.active.length, g.waiting])).toEqual([
+    expect(ownerGroups(tasks, treeAt(tasks, NOW), null).map(g => [g.owner, g.active.length, g.waiting])).toEqual([
       ['etl', 1, 0],
       ['security', 1, 1],
     ])
+    // The list's own area leads, the others by name after it.
+    expect(ownerGroups(tasks, treeAt(tasks, NOW), 'security').map(g => g.owner)).toEqual(['security', 'etl'])
   })
 
   test('keeps the verifying tasks apart, in plan order, and leads each owner group with them', async () => {
@@ -337,7 +339,7 @@ describe('view', () => {
     const view = areaView(tasks, 'po', treeAt(tasks, NOW))
     expect(view.verifying.map(t => t.id)).toEqual(['T3', 'T2'])
     expect(view.upNext.map(t => t.id)).toEqual(['T1'])
-    const [group] = ownerGroups(tasks, treeAt(tasks, NOW))
+    const [group] = ownerGroups(tasks, treeAt(tasks, NOW), 'po')
     expect(group?.active.map(t => t.id)).toEqual(['T3', 'T2', 'T1'])
     expect([group?.waiting, group?.verifying]).toEqual([0, 2])
   })
@@ -739,8 +741,24 @@ describe('rows', () => {
     expect(blockAt(blocks, 'security:T1')?.rows.map(r => r.key)).toEqual(['security:T1', 'security-meta:T1'])
     expect(textAt(blocks, 'security-meta:T1')).toBe('      p3 · waiting since 14:00 UTC: needs owner')
     expect(rowAt(blocks, 'owner:security')?.spans).toEqual([{ text: 'security', bold: true }, { text: ' · 1 active · 1 waiting', dim: true }])
-    expect(rowAt(blocks, 'owner:etl')?.spans[0]?.color).toBe('claude')
+    expect(rowAt(blocks, 'owner:etl')?.spans).toEqual([{ text: 'etl', color: 'claude', bold: true }, { text: ' (you) · 1 active', dim: true }])
     expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => b.opensSection)).toEqual([false, true])
+  })
+
+  test("the all view lists the session's own area first, marked (you), or (pinned) for an area a pin shows", async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'security', by: 'lead', at: NOW }),
+      createLine('T2', { owner: 'etl', by: 'etl', at: NOW, source: 'etl' }),
+      createLine('T3', { owner: 'api', by: 'api', at: NOW, source: 'api' }),
+    )
+    const own = paneBlocks(snapshotOf(tasks, 'security'), 'all')
+    expect(own.filter(b => b.key.startsWith('owner:')).map(b => b.key)).toEqual(['owner:security', 'owner:api', 'owner:etl'])
+    expect(textAt(own, 'owner:security')).toBe('security (you) · 1 active')
+    expect(textAt(own, 'owner:api')).toBe('api · 1 active')
+    expect(own.filter(b => b.key.startsWith('owner:')).map(b => b.opensSection)).toEqual([false, true, true])
+    const pinned = paneBlocks({ ...snapshotOf(tasks, 'etl'), areaSource: 'pinned' }, 'all')
+    expect(pinned.filter(b => b.key.startsWith('owner:')).map(b => b.key)).toEqual(['owner:etl', 'owner:api', 'owner:security'])
+    expect(textAt(pinned, 'owner:etl')).toBe('etl (pinned) · 1 active')
   })
 
   test('with nothing of its own active, the list says what it still holds: the tasks it asked of others', async () => {

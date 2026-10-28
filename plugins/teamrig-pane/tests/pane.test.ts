@@ -476,7 +476,8 @@ test('a register of 20,000 events loads and draws in well under a second, and a 
   const redrawn = performance.now()
   await pane.press({ key: 'all' })
   const switched = performance.now()
-  expect(await pane.find({ text: /Task 4082 with a title/ })).toBeDefined()
+  // The all view leads with the session's own group, the 408 of po; etl's T4082 sits past them, out of the window.
+  expect(await pane.find({ text: /^po \(you\) · 408 active/ })).toBeDefined()
   // Measured on the dev host (2026-10-15, three runs): load 185-200 ms, a redraw 43-48 ms, the switch to all 36-40 ms.
   expect(loaded - started).toBeLessThan(1_500)
   expect(switched - loaded).toBeLessThan(1_000)
