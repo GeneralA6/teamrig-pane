@@ -255,11 +255,11 @@ function sectionHeading(name: string, count: number, y: number): string {
   return line(PANE_X, y, 'pane', [span(name, C.fg, { bold: true }), span(` (${count})`, C.muted)]);
 }
 
-/** The switch that leads the pane: Tasks and `Changes Δn`, the shown view's button filled. */
+/** The switch that leads the pane: Tasks and `Changes n`, the shown view's button filled. */
 function switchRow(shown: 'tasks' | 'changes'): string[] {
   const buttons = [
     { view: 'tasks', label: 'Tasks', x: PANE_X, width: 58 },
-    { view: 'changes', label: `Changes Δ${CHANGED.length}`, x: PANE_X + 66, width: 106 },
+    { view: 'changes', label: `Changes ${CHANGED.length}`, x: PANE_X + 66, width: 96 },
   ] as const;
   return buttons.flatMap(({ view, label, x, width }) => {
     const primary = view === shown;

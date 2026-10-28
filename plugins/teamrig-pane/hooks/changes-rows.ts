@@ -34,16 +34,16 @@ export type ChangesSearch = { query: string; hits: readonly ChangeHit[] }
 type FileMarks = { path: readonly Mark[]; from: readonly Mark[] }
 const UNMARKED: FileMarks = { path: [], from: [] }
 
-/** `Changes Δ3`, or `Changes` while nothing changed: the switch's button. */
+/** `Changes 3`, the changed files counted, or `Changes` while nothing changed: the switch's button. */
 export function changesLabel(changes: ChangesSnapshot): string {
   const count = changeCount(changes)
-  return count > 0 ? `Changes Δ${count}` : 'Changes'
+  return count > 0 ? `Changes ${count}` : 'Changes'
 }
 
-/** `Tasks · Δ3`, or `Tasks` while nothing changed: the pane's tab title. */
+/** `Tasks · 3 changed`, or `Tasks` while nothing changed: the pane's tab title. */
 export function paneTitle(changes: ChangesSnapshot): string {
   const count = changeCount(changes)
-  return count > 0 ? `Tasks · Δ${count}` : 'Tasks'
+  return count > 0 ? `Tasks · ${count} changed` : 'Tasks'
 }
 
 /** The code's index letter in green (staged), its work-tree letter in yellow; `??` (untracked) dim. */

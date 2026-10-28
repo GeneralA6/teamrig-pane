@@ -490,7 +490,7 @@ describe('changes rows', () => {
 
   test("counts on the button and the title only once something changed", () => {
     const changed: ChangesSnapshot = { repos: [repo({ files: { items: [change(' M', 'a.ts')], more: 4 } })], outside: ['C:/n.md'], isRead: true }
-    expect([changesLabel(changed), paneTitle(changed)]).toEqual(['Changes Δ6', 'Tasks · Δ6'])
+    expect([changesLabel(changed), paneTitle(changed)]).toEqual(['Changes 6', 'Tasks · 6 changed'])
     expect([changesLabel(EMPTY_CHANGES), paneTitle(EMPTY_CHANGES)]).toEqual(['Changes', 'Tasks'])
   })
 

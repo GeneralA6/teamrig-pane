@@ -275,7 +275,7 @@ or what is wrong.
 
 ## Tasks, Changes, Log, Inbox and Team
 
-The switch, `[Tasks] [Changes Δ3] [Log] [Inbox (2)] [Team]`, shows in every state: open, in a dock however narrow (its
+The switch, `[Tasks] [Changes 3] [Log] [Inbox (2)] [Team]`, shows in every state: open, in a dock however narrow (its
 buttons wrap under each other rather than clip) under the title line, above the prompt, and as the
 minimized strip. While
 the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Log, `u` Inbox and `e` Team (`c` already closes the
@@ -323,13 +323,13 @@ edits costs one run), every 60 s for changes made from elsewhere, and at once on
 each open diff is one more run then. Git only, no model calls. After a hot reload the repos and files already found stay known, also after a
 version that changes how the drawn changes are kept.
 
-`Δn` on the Changes button counts the files the view lists, and so does the pane's tab title
-(`Tasks · Δ3`). The title is set by opening the open pane again under the same id, only when the count
+The number on the Changes button, `Changes 3`, counts the files the view lists, and so does the pane's tab title
+(`Tasks · 3 changed`). The title is set by opening the open pane again under the same id, only when the count
 moves.
 
 What the host draws and the mod can't change:
 
-- the tab strip, and so the title's `Δn`, shows only while more than one pane is open;
+- the tab strip, and so the title's count, shows only while more than one pane is open;
 - a mod can't show or focus the built-in Diff pane (`/diff`), so Changes is the plugin's own list of
   git's changes, and its own diff of each file under it.
 
