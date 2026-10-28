@@ -214,7 +214,7 @@ export function typeWords(task: Pick<TaskRow, 'type' | 'critical'>): string | nu
 }
 
 /**
- * The meta line's parts, in order: `on <owner>` when `viewer` (the area whose list it is) does not own it, the
+ * The meta line's parts, in order: `<owner>'s` when `viewer` (the area whose list it is) does not own it, the
  * priority, the type past a plain task (typeWords), `due …` (`verify by …` while verifying; `(from T7)` on a date
  * taken from T7), `<status> since …` with why a waiting task waits or what proves a verifying one, `after T5` while a
  * task not yet started has one unfinished, `needed by T7 (beta)` while a task of another owner needs it
@@ -227,7 +227,7 @@ export function metaParts(task: TaskRow, tree: PaneTree, viewer: string | null):
   const now = context.now
   const others = viewer !== null && task.owner !== viewer
   const parts: Span[] = []
-  if (others) parts.push({ text: `on ${task.owner}` })
+  if (others) parts.push({ text: `${task.owner}'s` })
   parts.push({ text: priorityText(task.priority) })
   const type = typeWords(task)
   if (type !== null) parts.push({ text: type })

@@ -3,7 +3,8 @@
 // key and the glyph its section's rows wear (so the counts are the glyphs' legend), wrapped to the bar's width as
 // drawn (drawnText). The statuses are done today, verifying,
 // working, waiting and not started, one per section of the list, each counting the tasks its section holds
-// (barStatusOf), so a section's heading and its count name one number. "Today" is the
+// (barStatusOf), so a section's heading and its count name one number (waiting's the sum of Waiting's and Asked of
+// others'). "Today" is the
 // team zone's day of the snapshot's clock, as every day the pane draws is the zone's (zone.ts). A press on a segment or
 // its count, or the count's key, filters the list to that status (rows.ts) and a second press clears
 // it; the filtered segment and count draw bold, a dim line under the counts says so. With no filter on, that dim line

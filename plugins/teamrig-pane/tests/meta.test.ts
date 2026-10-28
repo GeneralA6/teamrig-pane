@@ -290,8 +290,8 @@ describe('meta line', () => {
 
   test('a task asked of another session names its owner first; it is not new to the asker, who is not named', async () => {
     const task = taskOf(createLine('T1', { owner: 'etl', by: 'po', at: NOW - HOUR, source: 'po' }))
-    expect(textOf(task, 'po')).toEqual(['on etl', 'p3'])
-    expect(textOf(task, 'po', NOW + 2 * DAY)).toEqual(['on etl', 'p3', 'not picked up 2d'])
+    expect(textOf(task, 'po')).toEqual(["etl's", 'p3'])
+    expect(textOf(task, 'po', NOW + 2 * DAY)).toEqual(["etl's", 'p3', 'not picked up 2d'])
     expect(textOf(task, null)).toEqual(['p3', 'new', 'asked by po'])
   })
 
