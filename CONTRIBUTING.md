@@ -74,7 +74,11 @@ tests on Linux, Windows and macOS under node 22 and 24, with a pinned Claude Cod
 by `scripts/sync-core.ts`; never edit it by hand. The `hooks/core matches the teamrig pin` check (a CI job
 and a step of the local gate) runs `sync-core.ts --check` against teamrig and fails on any difference;
 teamrig is private, so in CI that job alone reads the `TEAMRIG_READ_TOKEN` secret, and the local gate
-reads a teamrig checkout on your machine. After each sync, rerun `scripts/golden.ts` so
+reads a teamrig checkout on your machine. The `hooks/core reads teamrig main's formats` check (a step of
+that job and of the local gate) runs `sync-core.ts --formats`: it fails while a format number in
+`hooks/core/` (an `export const <NAME>_VERSION` or `_FORMAT`, as teamrig declares the format of each file
+it keeps) is lower than teamrig main's, or missing, so a format teamrig raised fails the next pane push
+until a sync brings the pane the reader for it. After each sync, rerun `scripts/golden.ts` so
 `tests/golden-register.ts` holds what teamrig at the new pin writes and prints (the plugin README says
 how).
 

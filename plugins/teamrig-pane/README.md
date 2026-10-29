@@ -490,11 +490,17 @@ After teamrig changes those modules, move the pin, sync and commit the copy with
 
     node --disable-warning=ExperimentalWarning scripts/sync-core.ts --teamrig <repo> --ref <commit>   # move the pin, write hooks/core
     node --disable-warning=ExperimentalWarning scripts/sync-core.ts --teamrig <repo> --check          # list drift from the pin, exit 1
+    node --disable-warning=ExperimentalWarning scripts/sync-core.ts --teamrig <repo> --formats        # list formats behind teamrig main, exit 1
 
 `--teamrig` is a teamrig git checkout; the modules are read from its history (`git cat-file`), never
 from its working tree, so a local edit there cannot reach the pane. `--ref` takes a sha, branch or tag
 and writes the commit it names to the pin. `--check` also fails on a file under `hooks/core/` that no
-copy names; the local gate runs it before each push, and CI, when it runs, as the `hooks/core matches the teamrig pin` job. The plugin contract (`types/index.d.ts`) cannot import, so it spells the status unions
+copy names; the local gate runs it before each push, and CI, when it runs, as the `hooks/core matches the teamrig pin` job.
+`--formats` fetches teamrig's main and fails while a format number in `hooks/core/` (each
+`export const <NAME>_VERSION` or `_FORMAT`) is lower than the one main's read modules declare, or missing
+(`BEHIND teamrig main <sha>: EVENT_VERSION 2, teamrig main 3. ...`): a pane that copied an older format
+skips every line teamrig now writes in the newer one. The local gate and the same CI job run it too, so a
+format raise in teamrig fails the next pane push until a sync. The plugin contract (`types/index.d.ts`) cannot import, so it spells the status unions
 out; a spec fails when the register adds or drops a status the pane has no glyph for.
 
 Then capture teamrig again at the new pin, and commit the capture with the sync:
