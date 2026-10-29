@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { CORE_FILES, headerOf, importsOf, parsePin, pinText, planSync, READ_ENTRY, resolveImport, unreachedFiles, vendoredText } from '../scripts/vendor'
+import { CORE_FILES, headerOf, importsOf, parsePin, pinText, planSync, reachedModules, READ_ENTRY, resolveImport, unreachedFiles, vendoredText } from '../scripts/vendor'
 
 const SHA = '0123456789abcdef0123456789abcdef01234567'
 
@@ -65,6 +65,27 @@ describe('vendor', () => {
     sources.set(READ_ENTRY, "export { a } from '../register/fold.ts';\n")
     sources.set('register/fold.ts', "import { b } from './model.ts';\nimport { c } from './fold.ts';\n")
     expect(unreachedFiles(sources)).toEqual(CORE_FILES.filter(path => ![READ_ENTRY, 'register/fold.ts', 'register/model.ts'].includes(path)))
+  })
+
+  test('walks the read entry and what it reaches once each, a missing module as empty, never past src/', async () => {
+    const sources = new Map([
+      [READ_ENTRY, "export * from '../register/fold.ts';\nexport { gone } from '../register/gone.ts';\nimport 'node:fs';\n"],
+      ['register/fold.ts', "import { a } from './model.ts';\nimport { b } from '../read/index.ts';\nimport { c } from '../../outside.ts';\n"],
+      ['register/model.ts', 'export const A = 1;\n'],
+      ['config/types.ts', 'not reached'],
+    ])
+    const asked: string[] = []
+    const reached = reachedModules(path => {
+      asked.push(path)
+      return sources.get(path)
+    })
+    expect([...reached].sort(([a], [b]) => a.localeCompare(b))).toEqual([
+      [READ_ENTRY, sources.get(READ_ENTRY)],
+      ['register/fold.ts', sources.get('register/fold.ts')],
+      ['register/gone.ts', ''],
+      ['register/model.ts', 'export const A = 1;\n'],
+    ])
+    expect(asked.length).toBe(4)
   })
 
   test('a sync writes only the missing and changed copies, and names every file it does not write', async () => {
