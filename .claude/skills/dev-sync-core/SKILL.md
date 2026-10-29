@@ -12,7 +12,8 @@ description: Move the pane's copy of teamrig's read modules to a new teamrig com
 1. On a branch (`dev-ship-change`), with a teamrig git checkout that holds the commit, move the pin and write the copy:
    `node --disable-warning=ExperimentalWarning plugins/teamrig-pane/scripts/sync-core.ts --teamrig <repo> --ref <commit>`.
 2. Check it: the same command with `--check` instead of `--ref <commit>` lists every file that differs from the pin,
-   and exits 1 on any.
+   and exits 1 on any; with `--formats` it lists every format number still behind teamrig main's (`BEHIND ...`),
+   and exits 1 on any. A `BEHIND` from the local gate means teamrig raised a format: sync to the commit it names.
 3. Capture teamrig again at the new pin:
    `node --disable-warning=ExperimentalWarning plugins/teamrig-pane/scripts/golden.ts --teamrig <repo>` rewrites
    `plugins/teamrig-pane/tests/golden-register.ts`, which `plugins/teamrig-pane/tests/golden.test.ts` holds the pane to.
@@ -30,4 +31,4 @@ description: Move the pane's copy of teamrig's read modules to a new teamrig com
 - The plugin contract (`plugins/teamrig-pane/types/index.d.ts`) cannot import, so it spells the status unions out
   by hand; a spec fails when the register adds or drops a status the pane has no glyph for.
 
-Last verified: 2026-10-22
+Last verified: 2026-10-29
