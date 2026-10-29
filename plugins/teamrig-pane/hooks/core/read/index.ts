@@ -8,7 +8,7 @@
  */
 
 // The task register (`events.jsonl`, and once rotated its `archive/` and `snapshot.jsonl`).
-export { EVENT_VERSION, type CreateEvent, type RegisterEvent, type StatusEvent, type TaskFields, type UpdateEvent } from '../register/events.ts';
+export { EVENT_VERSION, TASK_LINE_VERSION, type CreateEvent, type MovedEvent, type RegisterEvent, type StatusEvent, type TaskFields, type UpdateEvent } from '../register/events.ts';
 export { foldEvents, taskNumber, type RegisterState, type Task } from '../register/fold.ts';
 export { ACTIVE_STATUSES, isTaskStatus, priorityText, SESSION_NAME, TASK_STATUSES, type TaskStatus } from '../register/model.ts';
 export {
@@ -50,6 +50,20 @@ export {
   type WaitKind,
   type WaitReason,
 } from '../register/waits.ts';
+
+// Waits on the owner: which tasks wait on the owner's decision or approval, which of those the lead asks now and which
+// the owner put off (Later) until a time, and each session's cards grouped as `teamrig meet` asks them (T1295). The
+// owner marker is the config's `register.ownerSource`, `requireGate` its `register.requireDecisionCard`.
+export {
+  asksOwner,
+  deferredUntil,
+  isUngated,
+  ownerCardsBySession,
+  ownerLater,
+  waitsOnOwner,
+  type LaterCard,
+  type OwnerCards,
+} from '../register/owner-waits.ts';
 
 // The inboxes (`inbox/<area>.md`) and their read marks (`inbox-marks.jsonl`).
 export { indexMarks, MARK_VERSION, parseMark, readMarks, type InboxMark, type MarkIndex, type MarkLogRead } from '../inbox/marks.ts';

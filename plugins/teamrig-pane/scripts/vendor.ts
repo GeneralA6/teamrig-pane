@@ -47,6 +47,7 @@ export const CORE_FILES: readonly string[] = [
   'register/layout.ts',
   'register/marker.ts',
   'register/model.ts',
+  'register/owner-waits.ts',
   'register/review.ts',
   'register/snapshot.ts',
   'register/tree.ts',

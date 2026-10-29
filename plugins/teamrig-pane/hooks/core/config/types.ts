@@ -103,12 +103,20 @@ export interface RegisterConfig {
    * `--options`, `--recommend`, `--default`; register/card.ts), so the owner decides from it alone.
    */
   readonly requireDecisionCard: boolean;
-  /** Whether `set --status verifying` needs `--proof`, what will prove the shipped change works. */
+  /**
+   * Whether `set --status verifying` needs `--proof`, what will prove the shipped change works, and `--waits` naming
+   * when it runs: a time, or a task in progress or verifying.
+   */
   readonly requireProofOnVerifying: boolean;
   /** What `set --status in-progress` does while a task it needs is still verifying, or, on a first start, while its owner's own verify steps are due. */
   readonly verifyGate: VerifyGate;
   /** A session holding more verifying tasks than this is a PILE-UP in `check`, and its oldest are due to verify before new work starts; 0 turns both off. */
   readonly maxVerifying: number;
+  /**
+   * How many times in a row a verifying task's proof may be put off to other waits; past it `set --status verifying`
+   * with other waits is refused, and `check` flags REPARKED on the task. 0 turns both off.
+   */
+  readonly maxReparks: number;
   readonly check: RegisterCheckConfig;
   readonly review: RegisterReviewConfig;
 }
@@ -403,8 +411,8 @@ export interface LeadBoundaryConfig {
 /** Loop discipline inside a turn. */
 export interface LoopsConfig {
   /**
-   * After this many single-tool calls in a row in one turn, the session gets one line asking it to batch
-   * independent steps into one message; 0 never asks.
+   * After this many single-tool calls in a row in one turn, the session gets one line asking it to send
+   * independent steps as several tool calls in one message; 0 never asks.
    */
   readonly chainNudgeAt: number;
 }
@@ -418,8 +426,9 @@ export interface WakeConfig {
   /** Off: a session sees new work only at its next prompt. */
   readonly enabled: boolean;
   /**
-   * The least urgent priority that wakes a session: 1 wakes for p1 only. A session past its daily budget, or in
-   * the budget's quiet hours, wakes for p1 only whatever this says.
+   * The least urgent priority that wakes a session: 1 wakes for p0 and p1 only. A session its budget holds (past
+   * its daily budget, the wake's own turn counted, while the team has no room today) wakes for p0 only, and one in
+   * the budget's quiet hours for p0 and p1 only, whatever this says.
    */
   readonly priority: number;
   /** How long a wake waits after the first new task it is for, so tasks handed together wake the session once. */
@@ -651,8 +660,39 @@ export interface CoordinatorRepoConfig {
   readonly dependencyCheck?: readonly string[];
   /** After the push, fast-forward the main checkout to it: only a fast-forward, only on the default branch with no tracked changes. */
   readonly followMainCheckout: boolean;
+  /**
+   * The folder `teamrig worktree add` makes each new worktree in, one folder per branch named after it with each `/`
+   * as `-`. A relative path is in the main checkout; unset: `.claude/worktrees` there.
+   */
+  readonly worktreeFolder?: string;
+  /**
+   * What `teamrig worktree add` runs in a new worktree, such as a link to the main checkout's node_modules: a program
+   * and its arguments, run without a shell, with the main checkout's folder in `TEAMRIG_MAIN_CHECKOUT`. Anything but
+   * exit 0 leaves the worktree in place and fails the add. Unset: nothing runs.
+   */
+  readonly worktreeSetup?: readonly string[];
+  /** How `teamrig integrate` merges a branch through the team's own flow, such as a pull request; unset: integrate pushes it to the default branch. */
+  readonly merge?: MergeConfig;
   /** How `teamrig roll` deploys what landed on the default branch; unset: the repository is not rolled. */
   readonly roll?: RollConfig;
+}
+
+/** A team's own way of merging a branch into the default branch, such as a pull request merged by the forge. */
+export interface MergeConfig {
+  /**
+   * A program and its arguments, run without a shell in the branch's checkout under the host lock after the rebase and
+   * the dependency check, with `TEAMRIG_MERGE_BRANCH`, `TEAMRIG_MERGE_BASE` (the default branch), `TEAMRIG_MERGE_HEAD`
+   * and `TEAMRIG_SESSION` set. Exit 0: the branch merged, which integrate confirms on the remote; 75: it waits (say a
+   * pull request waits on its checks or review), and running integrate again finishes it once it merges; anything else
+   * fails it. Its last output line is shown as the reason.
+   */
+  readonly command: readonly string[];
+  /**
+   * The git remote whose default branch the command merges into: integrate rebases onto it and confirms the merge on
+   * it, and moves the local default branch to it. `origin` unless set; say `upstream` where origin is a contributor's
+   * fork. The branch itself is pushed to and deleted from origin either way.
+   */
+  readonly remote: string;
 }
 
 /** A check `teamrig roll` asks before it rolls: a program and its arguments, run without a shell from the main checkout. */
@@ -732,6 +772,19 @@ export interface DecisionsConfig {
   readonly batchTimesUtc: readonly string[];
   /** A batch is due once this many waits on the owner are not yet asked; 0: never by count. */
   readonly batchAt: number;
+  /** How the lead asks the owner at the daily meeting: in plain text, or with Claude Code's question picker. */
+  readonly askWith: AskWith;
+}
+
+export const ASK_WITH = ['text', 'picker'] as const;
+/**
+ * How the daily meeting asks the owner each decision: `text` reads the cards in plain text and the owner answers in
+ * their own words; `picker` asks the choices with Claude Code's question picker (AskUserQuestion), at most 4 a call.
+ */
+export type AskWith = (typeof ASK_WITH)[number];
+
+export function isAskWith(value: unknown): value is AskWith {
+  return ASK_WITH.some((way) => way === value);
 }
 
 /**
@@ -770,7 +823,7 @@ export interface RefreshConfig {
   readonly holdAfterActivityMinutes: number;
   /**
    * Before the plugin's mod runs the automatic /clear, a band above the prompt counts down this many seconds, with
-   * "Refresh now" and "Hold 10 min"; a key in the prompt holds it too. 0: no band, the /clear runs at once.
+   * "Refresh now" and "Hold 10 min"; a key in the prompt holds it too. 0: no count, the /clear runs once nothing else holds it.
    */
   readonly countdownSeconds: number;
   /**
@@ -809,6 +862,17 @@ export function isHiringPolicy(value: unknown): value is HiringPolicy {
   return HIRING_POLICIES.some((policy) => policy === value);
 }
 
+/**
+ * Who raises `hiring.maxSessions` when it blocks a hire a SCALE-OUT calls for: `owner` on the lead's card, as a
+ * raised cap spends more of the week; `lead` the lead itself, in the team config, saying so in its next report.
+ */
+export const CAP_RAISERS = ['owner', 'lead'] as const;
+export type CapRaiser = (typeof CAP_RAISERS)[number];
+
+export function isCapRaiser(value: unknown): value is CapRaiser {
+  return CAP_RAISERS.some((raiser) => raiser === value);
+}
+
 /** How `check` measures an area against its dated work for a SCALE-OUT flag (src/hiring/scale-out.ts). */
 export interface ScaleOutConfig {
   /** Days back over which the tasks an area finished give its pace; at most the 8 days a register keeps finished tasks. */
@@ -827,6 +891,8 @@ export interface HiringConfig {
   readonly policy: HiringPolicy;
   /** Hired sessions on the team at once. */
   readonly maxSessions: number;
+  /** Who raises `maxSessions` when it blocks a SCALE-OUT's hire. */
+  readonly capRaisedBy: CapRaiser;
   /** Hours a hired session may hold no open task before it is due to retire. */
   readonly idleHours: number;
   /** Days from a hire to its review date, unless the hire names one. */
@@ -908,6 +974,8 @@ export interface IdleConfig {
 
 export interface OpenConfig {
   readonly terminal: TerminalChoice;
+  /** Each tab of the team's sessions opens in a window of the team's own, apart from other teams' (Windows Terminal). */
+  readonly teamWindow: boolean;
   readonly headroom: HeadroomConfig;
   readonly idle: IdleConfig;
 }

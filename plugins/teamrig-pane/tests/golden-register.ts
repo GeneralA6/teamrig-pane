@@ -1,8 +1,8 @@
-// Written by scripts/golden.ts from teamrig ef054e6fb39eb5ff2ad12e79b34c5fb37d62a824: rerun it after a sync, never edit it by hand.
+// Written by scripts/golden.ts from teamrig fc2563ce5a82e223df4ea113049abbf9f5266c9f: rerun it after a sync, never edit it by hand.
 import type { GoldenRegister } from '../scripts/golden-format'
 
 export const GOLDEN: GoldenRegister = {
-  "pin": "ef054e6fb39eb5ff2ad12e79b34c5fb37d62a824",
+  "pin": "fc2563ce5a82e223df4ea113049abbf9f5266c9f",
   "generatedAt": 1792236300000,
   "files": {
     "kit/teams/demo/config.json": "{\n  \"configVersion\": 4,\n  \"team\": {\n    \"id\": \"demo\"\n  },\n  \"sessions\": [\n    \"lead\",\n    \"alpha\",\n    \"beta\"\n  ],\n  \"roles\": {\n    \"lead\": \"lead\"\n  },\n  \"tabStatus\": {\n    \"enabled\": true\n  },\n  \"timeZone\": \"Asia/Jerusalem\",\n  \"register\": {\n    \"priorities\": [\n      {\n        \"id\": 1,\n        \"name\": \"keep the lights on\"\n      },\n      {\n        \"id\": 2,\n        \"name\": \"correctness\"\n      },\n      {\n        \"id\": 3,\n        \"name\": \"scale\"\n      },\n      {\n        \"id\": 4,\n        \"name\": \"this week's owner decisions\"\n      },\n      {\n        \"id\": 5,\n        \"name\": \"if budget allows\"\n      },\n      {\n        \"id\": 7,\n        \"name\": \"icebox\"\n      }\n    ]\n  }\n}\n",
@@ -12,7 +12,7 @@ export const GOLDEN: GoldenRegister = {
     "proj/.teamrig.json": "{\n  \"team\": \"demo\"\n}\n"
   },
   "list": "T2 in-progress, p1, owner alpha, due 10-20 (from T4), from lead | First task with ref · needed by T8 (beta, due 10-22) · ahead: due\nT1 in-progress, p1, owner lead, from owner | Set up the team · ahead: in progress\nT4 open, p1, owner alpha, due 10-20, after T2, week 10-12, from lead, goals G1,roadmap goal | Goals task renamed\nT3 waiting, p2, owner alpha, from lead | No ref task (waiting: decision owner · until Wed 01-09 12:00 IST; waiting on beta)\nT8 open, p3, owner beta, due 10-22, after T2, from beta | Beta task after T2\nT5 done, p4, owner beta, from alpha | Beta task from alpha\nT6 dropped, p5, owner alpha, from lead | To be dropped\nT7 open, p7, owner alpha, from lead | Icebox task\n",
-  "warn": "WARN G:/golden\\kit\\teams\\demo\\state\\events.jsonl: 1 unreadable line(s), 1 line(s) from a newer teamrig, 1 event(s) naming no task\n",
+  "warn": "WARN G:/golden\\kit\\teams\\demo\\state\\events.jsonl: 2 unreadable line(s), 0 line(s) from a newer teamrig, 1 event(s) naming no task\n",
   "inbox": [
     {
       "label": "after a read and one more line",
@@ -48,9 +48,9 @@ export const GOLDEN: GoldenRegister = {
     },
     {
       "name": "events-v2.jsonl",
-      "events": "{\"v\":1,\"type\":\"create\",\"id\":\"T1\",\"at\":\"2030-01-07T09:00:00.000Z\",\"by\":\"lead\",\"task\":{\"title\":\"Add a health check to the web service\",\"owner\":\"alpha\",\"source\":\"owner\",\"ref\":null,\"tier\":1,\"due\":null,\"goals\":[],\"week\":null}}\n{\"v\":2,\"type\":\"create\",\"id\":\"T2\",\"at\":\"2030-01-07T09:05:00.000Z\",\"by\":\"lead\",\"task\":{\"title\":\"Trim the build cache\",\"owner\":\"bravo\",\"source\":\"lead\",\"ref\":null,\"priority\":2,\"due\":null,\"goals\":[],\"week\":null}}\n{\"v\":2,\"type\":\"update\",\"id\":\"T1\",\"at\":\"2030-01-07T10:00:00.000Z\",\"by\":\"lead\",\"changes\":{\"priority\":4},\"note\":\"after the release\"}\n{\"v\":2,\"type\":\"status\",\"id\":\"T1\",\"at\":\"2030-01-07T11:00:00.000Z\",\"by\":\"alpha\",\"status\":\"in-progress\",\"note\":null,\"evidence\":null,\"skill\":null}\n{\"v\":3,\"type\":\"create\",\"id\":\"T3\",\"at\":\"2030-01-07T12:00:00.000Z\",\"by\":\"lead\",\"task\":{\"title\":\"Written by a newer release\",\"owner\":\"alpha\"},\"newField\":true}\n",
+      "events": "{\"v\":1,\"type\":\"create\",\"id\":\"T1\",\"at\":\"2030-01-07T09:00:00.000Z\",\"by\":\"lead\",\"task\":{\"title\":\"Add a health check to the web service\",\"owner\":\"alpha\",\"source\":\"owner\",\"ref\":null,\"tier\":1,\"due\":null,\"goals\":[],\"week\":null}}\n{\"v\":2,\"type\":\"create\",\"id\":\"T2\",\"at\":\"2030-01-07T09:05:00.000Z\",\"by\":\"lead\",\"task\":{\"title\":\"Trim the build cache\",\"owner\":\"bravo\",\"source\":\"lead\",\"ref\":null,\"priority\":2,\"due\":null,\"goals\":[],\"week\":null}}\n{\"v\":2,\"type\":\"update\",\"id\":\"T1\",\"at\":\"2030-01-07T10:00:00.000Z\",\"by\":\"lead\",\"changes\":{\"priority\":4},\"note\":\"after the release\"}\n{\"v\":2,\"type\":\"status\",\"id\":\"T1\",\"at\":\"2030-01-07T11:00:00.000Z\",\"by\":\"alpha\",\"status\":\"in-progress\",\"note\":null,\"evidence\":null,\"skill\":null}\n",
       "list": "T2 open, p2, owner bravo, from lead | Trim the build cache\nT1 in-progress, p4, owner alpha, from owner | Add a health check to the web service\n",
-      "warn": "WARN G:/golden\\kit\\teams\\demo\\state\\events.jsonl: 0 unreadable line(s), 1 line(s) from a newer teamrig, 0 event(s) naming no task\n"
+      "warn": ""
     }
   ]
 }
