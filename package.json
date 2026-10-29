@@ -14,9 +14,10 @@
     "test": "node --test \"tools/**/*.test.ts\"",
     "scrub": "node tools/scrub/cli.ts --tree",
     "setup": "node tools/setup/cli.ts",
+    "prepare": "node tools/setup/cli.ts",
     "coverage": "node tools/ci/coverage-cli.ts",
     "plugin-tests": "node tools/ci/plugin-tests-cli.ts",
-    "check": "npm run typecheck && npm run coverage && npm run plugin-tests && npm run scrub && node tools/docs/images-cli.ts --check && node tools/ci/plugin-version-cli.ts && node tools/ci/size-rule-cli.ts",
+    "check": "node tools/setup/cli.ts --check && npm run typecheck && npm run coverage && npm run plugin-tests && npm run scrub && node tools/docs/images-cli.ts --check && node tools/ci/plugin-version-cli.ts && node tools/ci/size-rule-cli.ts",
     "docs:images": "node tools/docs/images-cli.ts",
     "pane-test": "claude plugin test plugins/teamrig-pane"
   },
