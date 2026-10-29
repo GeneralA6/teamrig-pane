@@ -64,6 +64,13 @@ describe('localChecks', () => {
     assert.match(CI, /working-directory: plugins\/teamrig-pane/);
   });
 
+  it("checks hooks/core's format numbers against teamrig main, as CI does", () => {
+    const formats = checks.find((check) => check.name === "hooks/core reads teamrig main's formats");
+    assert.deepEqual(formats?.argv.slice(2), ['scripts/sync-core.ts', '--teamrig', TEAMRIG, '--formats']);
+    assert.equal(formats?.cwd, 'plugins/teamrig-pane');
+    assert.match(CI, /^\s*- run: node --disable-warning=ExperimentalWarning scripts\/sync-core\.ts --teamrig \.\.\/\.\.\/teamrig-src --formats$/m);
+  });
+
   it('checks the commits since the base, names each check once and reads no CI event', () => {
     assert.deepEqual(localChecks('upstream/main', TEAMRIG).find((check) => check.name === 'DCO')?.argv, ['node', 'tools/dco/cli.ts', '--range', 'upstream/main..HEAD']);
     assert.deepEqual(localChecks('upstream/main', TEAMRIG).find((check) => check.name === 'size rule')?.argv, ['node', 'tools/ci/size-rule-cli.ts', '--base', 'upstream/main']);

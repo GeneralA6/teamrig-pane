@@ -46,6 +46,11 @@ export function localChecks(base: string, teamrig: string): readonly LocalCheck[
       argv: ['node', '--disable-warning=ExperimentalWarning', 'scripts/sync-core.ts', '--teamrig', teamrig, '--check'],
       cwd: 'plugins/teamrig-pane',
     },
+    {
+      name: "hooks/core reads teamrig main's formats",
+      argv: ['node', '--disable-warning=ExperimentalWarning', 'scripts/sync-core.ts', '--teamrig', teamrig, '--formats'],
+      cwd: 'plugins/teamrig-pane',
+    },
     { name: 'typecheck', argv: ['node', TSC, '-p', 'tsconfig.json'] },
     { name: 'typecheck: pane', argv: ['node', TSC, '-p', 'tsconfig.pane.json'] },
     { name: 'coverage gate', argv: ['node', 'tools/ci/coverage-cli.ts'] },
