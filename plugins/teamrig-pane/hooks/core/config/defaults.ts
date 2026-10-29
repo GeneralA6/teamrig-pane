@@ -76,6 +76,7 @@ export const DEFAULT_REGISTER: RegisterConfig = {
   requireDecisionCard: true,
   verifyGate: 'refuse',
   maxVerifying: 5,
+  maxReparks: 2,
   /**
    * maxSelfMadePerDay, measured on a working team (10-15 to 10-18): on a day a session added tasks for itself, it added
    * 3 at the median and 9 at the 90th percentile; the two days past 10 (36 and 19) were the run that raised the question.
@@ -213,15 +214,21 @@ export const DEFAULT_SESSION_SHARE = 1;
 
 export const DEFAULT_ALERTS: AlertsConfig = { persistentFailureHours: 24 };
 
-export const DEFAULT_DECISIONS: DecisionsConfig = { batchTimesUtc: [], batchAt: 5 };
+/** The remote a repository's merge command merges into when `merge.remote` is unset. */
+export const DEFAULT_MERGE_REMOTE = 'origin';
 
-export const DEFAULT_LOOPS: LoopsConfig = { chainNudgeAt: 6 };
+/** Where `teamrig worktree add` makes a repository's worktrees when `worktreeFolder` is unset: in its main checkout, where Claude Code makes its own. */
+export const DEFAULT_WORKTREE_FOLDER = '.claude/worktrees';
+
+export const DEFAULT_DECISIONS: DecisionsConfig = { batchTimesUtc: [], batchAt: 5, askWith: 'text' };
+
+export const DEFAULT_LOOPS: LoopsConfig = { chainNudgeAt: 3 };
 export const DEFAULT_LEAD_BOUNDARY: LeadBoundaryConfig = { enabled: true, ownPaths: [], searchNudgeAt: 3 };
 /** On, for a day: what a tab showed stays readable through a night of refreshes. */
 export const DEFAULT_TURN_LOG: TurnLogConfig = { enabled: true, keepHours: 24 };
 
 /**
- * On, for p1 only. In one team of 12 sessions, others handed a session 3 to 6 p1 tasks a day once its register
+ * On, for p0 and p1 only. In one team of 12 sessions, others handed a session 3 to 6 p1 tasks a day once its register
  * settled, so even all of them waking a session cold (about 210k W each) costs about 1.3M W a day, under 0.2% of
  * a 900M W week. Two minutes gathers the tasks handed in one sitting into one wake, and 15 minutes between wakes
  * caps a session at 4 an hour however much is handed. No day start: waking every session each morning costs up to
@@ -269,10 +276,13 @@ export const DEFAULT_REFRESH: RefreshConfig = {
  */
 export const DEFAULT_HEADROOM: HeadroomConfig = { sessionMb: 1200, commitMaxPct: 92, closeIdleMinutes: 60 };
 
-/** No idle pass runs until the team turns it on, and then it keeps open only the sessions its roles name. */
-export const DEFAULT_IDLE: IdleConfig = { mode: 'off', keepOpen: [] };
+/**
+ * The idle pass closes and reopens sessions unless the team sets it to dry-run or off, so an idle tab spends no tokens
+ * on any team (owner order, T1409); it keeps open only the sessions its roles name.
+ */
+export const DEFAULT_IDLE: IdleConfig = { mode: 'on', keepOpen: [] };
 
-export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto', headroom: DEFAULT_HEADROOM, idle: DEFAULT_IDLE };
+export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto', teamWindow: false, headroom: DEFAULT_HEADROOM, idle: DEFAULT_IDLE };
 
 /** The status line shows the session's folder, its branch and the command that resumes it, unless the team turns them off. */
 export const DEFAULT_STATUS_LINE: StatusLineConfig = { folder: true, branch: true, resume: true };
@@ -315,14 +325,15 @@ export const DEFAULT_BURST: BurstConfig = { policy: 'owner', surplusHours: 48, m
 export const DEFAULT_SCALE_OUT: ScaleOutConfig = { windowDays: 7, minDone: 3, topPriorities: 2 };
 
 /**
- * A hire spends the week's budget, so it waits for the owner's yes: at most two hires at once, each spending its
- * part of the team's daily budget, reviewed after a week and due to retire after 4 hours with no open task. A
- * rehire resumes its last Claude Code session only when it holds at most 250k tokens of context and was idle at
- * most a week.
+ * A hire spends the week's budget, so it waits for the owner's yes: at most two hires at once, a cap only the
+ * owner raises, each spending its part of the team's daily budget, reviewed after a week and due to retire after 4
+ * hours with no open task. A rehire resumes its last Claude Code session only when it holds at most 250k tokens of
+ * context and was idle at most a week.
  */
 export const DEFAULT_HIRING: HiringConfig = {
   policy: 'owner',
   maxSessions: 2,
+  capRaisedBy: 'owner',
   idleHours: 4,
   reviewDays: 7,
   resumeMaxTokens: 250_000,

@@ -27,6 +27,7 @@ import {
   DEFAULT_LEAD_BOUNDARY,
   DEFAULT_TURN_LOG,
   DEFAULT_LOOPS,
+  DEFAULT_MERGE_REMOTE,
   DEFAULT_MESSAGES,
   DEFAULT_HEADROOM,
   DEFAULT_IDLE,
@@ -55,14 +56,18 @@ import { BUDGET_ACCOUNT_MAX_LENGTH, CONFIG_LIMITS, RULE_CONFLICT_LIMITS } from '
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
 import {
   AD_HOC_RUNNERS,
+  ASK_WITH,
   PACKAGE_INSTALLS,
   BURST_POLICIES,
+  CAP_RAISERS,
   CONFLICT_WINNERS,
   ESCALATIONS,
   HIRING_POLICIES,
   isAdHocRunners,
+  isAskWith,
   isPackageInstalls,
   isBurstPolicy,
+  isCapRaiser,
   isCommitGate,
   isConflictWinner,
   isEffortLevel,
@@ -87,6 +92,7 @@ import {
   SECRET_READS,
   SKIP_HOOKS,
   TERMINALS,
+  type AskWith,
   type ContextFilesConfig,
   type ExecConfig,
   type OtherAreaListing,
@@ -101,6 +107,7 @@ import {
   type CoordinatorConfig,
   type CoordinatorRepoConfig,
   type HeavyConfig,
+  type MergeConfig,
   type RollConfig,
   type RollGateConfig,
   type CommitsConfig,
@@ -472,6 +479,7 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
     decisions: {
       batchTimesUtc: read.stringList(decisions, 'batchTimesUtc', 'decisions', DEFAULT_DECISIONS.batchTimesUtc, isUtcTime, CONFIG_LIMITS.decisionBatchTimes.maxItems),
       batchAt: read.integer(decisions, 'batchAt', 'decisions', DEFAULT_DECISIONS.batchAt, CONFIG_LIMITS.decisionBatchAt),
+      askWith: parseAskWith(read, decisions),
     },
     tabStatus: { enabled: read.boolean(tabStatus, 'enabled', 'tabStatus', false) },
     pickerGuard: { enabled: read.boolean(pickerGuard, 'enabled', 'pickerGuard', false) },
@@ -699,25 +707,46 @@ function parseCoordinatorRepos(read: ConfigReader, raw: JsonRecord): Record<stri
     if (mainCheckout === '') {
       continue;
     }
+    const merge = entry['merge'] === undefined ? undefined : parseMerge(read, entry['merge'], `${path}.merge`);
     const roll = entry['roll'] === undefined ? undefined : parseRoll(read, entry['roll'], `${path}.roll`);
     const dependencyGate = read.boolean(entry, 'dependencyGate', path, false);
     const dependencyCheck = entry['dependencyCheck'] === undefined ? undefined : read.stringListItem(entry['dependencyCheck'], `${path}.dependencyCheck`, ROLL_ARGV_MAX_ITEMS);
     if (dependencyCheck !== undefined && !dependencyGate) {
       read.report(`${path}.dependencyCheck`, 'runs only with dependencyGate true, so it never runs');
     }
+    const worktreeFolder = read.optionalString(entry, 'worktreeFolder', path, isPathText);
+    const worktreeSetup = entry['worktreeSetup'] === undefined ? undefined : read.stringListItem(entry['worktreeSetup'], `${path}.worktreeSetup`, ROLL_ARGV_MAX_ITEMS);
     repos[name] = {
       mainCheckout,
       deploysOnPush: read.stringList(entry, 'deploysOnPush', path, [], isCoordinatorName),
       dependencyGate,
       ...(dependencyCheck === undefined ? {} : { dependencyCheck }),
       followMainCheckout: read.boolean(entry, 'followMainCheckout', path, false),
+      ...(worktreeFolder === undefined ? {} : { worktreeFolder }),
+      ...(worktreeSetup === undefined ? {} : { worktreeSetup }),
+      ...(merge === undefined ? {} : { merge }),
       ...(roll === undefined ? {} : { roll }),
     };
   }
   return repos;
 }
 
-/** A program's arguments in a roll hook, and the hooks of one kind, at most. */
+/** A repository's merge command; one with no usable command is reported and left out, so integrate pushes the branch. */
+function parseMerge(read: ConfigReader, raw: unknown, path: string): MergeConfig | undefined {
+  const entry = read.objectItem(raw, path);
+  if (entry === undefined) {
+    return undefined;
+  }
+  const command = read.stringListItem(entry['command'], `${path}.command`, ROLL_ARGV_MAX_ITEMS);
+  const remote = read.string(entry, 'remote', path, DEFAULT_MERGE_REMOTE, isRemoteName);
+  return command === undefined ? undefined : { command, remote };
+}
+
+/** A git remote's name, as `git remote add` takes it; it never starts with `-`, so git cannot read it as an option. */
+const isRemoteName: Check<string> = (name) =>
+  /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && !name.includes('..') ? undefined : 'expected a git remote name: letters, digits, ., _ or -, from a letter or digit, without ..';
+
+/** A program's arguments in a roll or merge hook, and the roll hooks of one kind, at most. */
 const ROLL_ARGV_MAX_ITEMS = 64;
 const ROLL_HOOKS_MAX_ITEMS = 16;
 
@@ -972,6 +1001,7 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
     requireDecisionCard: read.boolean(raw, 'requireDecisionCard', path, defaults.requireDecisionCard),
     verifyGate: isVerifyGate(verifyGate) ? verifyGate : defaults.verifyGate,
     maxVerifying: read.integer(raw, 'maxVerifying', path, defaults.maxVerifying, CONFIG_LIMITS.maxVerifying),
+    maxReparks: read.integer(raw, 'maxReparks', path, defaults.maxReparks, CONFIG_LIMITS.maxReparks),
     check: {
       staleAfterHours: read.integer(check, 'staleAfterHours', `${path}.check`, defaults.check.staleAfterHours, { min: 1 }),
       notPickedUpAfterHours: read.integer(check, 'notPickedUpAfterHours', `${path}.check`, defaults.check.notPickedUpAfterHours, { min: 1 }),
@@ -1091,6 +1121,7 @@ function parseOpen(read: ConfigReader, raw: JsonRecord, sessions: readonly strin
   );
   return {
     terminal: isTerminalChoice(terminal) ? terminal : DEFAULT_OPEN.terminal,
+    teamWindow: read.boolean(raw, 'teamWindow', 'open', DEFAULT_OPEN.teamWindow),
     headroom: parseHeadroom(read, read.section(raw, 'headroom', 'open')),
     idle: parseIdle(read, read.section(raw, 'idle', 'open'), sessions),
   };
@@ -1128,6 +1159,12 @@ function parseStatusLine(read: ConfigReader, raw: JsonRecord): StatusLineConfig 
     branch: read.boolean(raw, 'branch', path, DEFAULT_STATUS_LINE.branch),
     resume: read.boolean(raw, 'resume', path, DEFAULT_STATUS_LINE.resume),
   };
+}
+
+function parseAskWith(read: ConfigReader, raw: JsonRecord): AskWith {
+  const fallback = DEFAULT_DECISIONS.askWith;
+  const value = read.string(raw, 'askWith', 'decisions', fallback, oneOf(ASK_WITH));
+  return isAskWith(value) ? value : fallback;
 }
 
 function parsePushToProtected(read: ConfigReader, raw: JsonRecord): PushToProtected {
@@ -1228,7 +1265,7 @@ const REFRESH_TASKS = { min: 0, max: 100 } as const;
 const RESTART_DELAY_SECONDS = { min: 5, max: 600 } as const;
 /** 0: only a draft holds the /clear; an hour at most, since the restart gives up after one. */
 const HOLD_AFTER_ACTIVITY_MINUTES = { min: 0, max: 60 } as const;
-/** 0: no band; long enough to read and press, short of the restart's give-up. */
+/** 0: no count; long enough to read and press, short of the restart's give-up. */
 const COUNTDOWN_SECONDS = { min: 0, max: 120 } as const;
 /** 0 turns the stop of Claude Code's compaction off. */
 const COMPACT_CEILING_TOKENS = { min: 0, max: 10_000_000 } as const;
@@ -1258,17 +1295,19 @@ function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
   };
 }
 
-/** `hiring`: who decides, the session cap, idle and review days, and when a rehire resumes. */
+/** `hiring`: who decides, the session cap and who raises it, idle and review days, and when a rehire resumes. */
 function parseHiring(read: ConfigReader, raw: JsonRecord): HiringConfig {
   const path = 'hiring';
   const defaults = DEFAULT_HIRING;
   const policy = read.string(raw, 'policy', path, defaults.policy, oneOf(HIRING_POLICIES));
+  const capRaisedBy = read.string(raw, 'capRaisedBy', path, defaults.capRaisedBy, oneOf(CAP_RAISERS));
   const why = "a hire's daily budget is its part of the team's, by its share and queued work; maxSessions bounds hiring";
   read.dropped(raw, 'dailyPct', path, why);
   read.dropped(raw, 'maxDailyPct', path, why);
   return {
     policy: isHiringPolicy(policy) ? policy : defaults.policy,
     maxSessions: read.integer(raw, 'maxSessions', path, defaults.maxSessions, CONFIG_LIMITS.hiringMaxSessions),
+    capRaisedBy: isCapRaiser(capRaisedBy) ? capRaisedBy : defaults.capRaisedBy,
     idleHours: read.integer(raw, 'idleHours', path, defaults.idleHours, CONFIG_LIMITS.hiringIdleHours),
     reviewDays: read.integer(raw, 'reviewDays', path, defaults.reviewDays, CONFIG_LIMITS.hiringReviewDays),
     resumeMaxTokens: read.integer(raw, 'resumeMaxTokens', path, defaults.resumeMaxTokens, CONFIG_LIMITS.hiringResumeMaxTokens),

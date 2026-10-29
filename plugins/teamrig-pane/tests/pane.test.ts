@@ -7,7 +7,7 @@ import { barKeys, KEY_GROUPS } from '../hooks/keys-page'
 import { POLL_MS } from '../hooks/live'
 import { openKey } from '../hooks/press-keys'
 import { cells } from '../hooks/width'
-import type { HireRecord, RetireRecord } from '../hooks/core/read/index'
+import { EVENT_VERSION, type HireRecord, type RetireRecord } from '../hooks/core/read/index'
 import { HOUR, NOW, S1, S2, bigRegister, createLine, iso, markLine, statusLine, updateLine, verifyingLine } from './fixtures'
 import { hire, retire } from './team-fixtures'
 
@@ -421,7 +421,7 @@ test('lines teamrig skips are counted as teamrig counts them, and every task and
   const { disk } = await start(on)
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, title: 'Ship the task pane', lineKeys: { trace: 'a1' }, taskKeys: { risk: 'high', budget: { tokens: 5 } } }),
-    JSON.stringify({ v: 3, type: 'vote', id: 'T1', at: iso(NOW - HOUR / 2), by: 'etl', choice: 'ship' }),
+    JSON.stringify({ v: EVENT_VERSION + 1, type: 'vote', id: 'T1', at: iso(NOW - HOUR / 2), by: 'etl', choice: 'ship' }),
     updateLine('T1', 'lead', NOW - HOUR / 2, { risk: 'low' }),
     updateLine('T1', 'lead', NOW - HOUR / 3, { title: 'Ship the task pane v2', risk: 'low' }),
     createLine('T2', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Second task' }),

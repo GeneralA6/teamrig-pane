@@ -1,5 +1,6 @@
 // Copied from teamrig's src/register/events.ts by scripts/sync-core.ts: change it there, then run the sync.
 import { isRecord, type JsonRecord } from '../core/guards.ts';
+import { ID_PATTERN } from '../core/ids.ts';
 import type { JsonlRecord } from '../core/jsonl.ts';
 import { parseUtcDeadline } from '../core/time.ts';
 import { isTaskStatus, LEGACY_WAITING_STATUS, TASK_ID, WAIT_STATUSES, type TaskStatus } from './model.ts';
@@ -17,14 +18,20 @@ import { parseWaits, type WaitReason } from './waits.ts';
  * `verifying` status's `proof`, a task's `description` (0.44.0) and its `size` (0.47.0), and a `waiting` status's
  * decision `card` (0.79.0), the same `waits` and `card` on a `verifying` line for what its proof waits for
  * (0.109.0), an update's approval `verdict` (0.126.0), a task's `kind` (0.147.0), its `pin` (T637), a status line's
- * `review` (T916) and a task's `type` and `critical` mark (T1252), which replaced `kind`, which an older reader ignores:
+ * `review` (T916), a task's `type` and `critical` mark (T1252), which replaced `kind`, and a `done` status's `watch`
+ * (T1306) and an update's `waits` (T1295), which an older reader ignores:
  * each reads there as none (an answered update as a note alone). An older teamrig re-serialized the events of the snapshot a rotation or
  * `compact` rewrites, so it dropped such a field there (the archive keeps the lines as written); this one copies
  * each kept line as written (compaction.ts).
+ * Version 3 adds the `moved` record (T1144), and only a moved line carries it: an older teamrig reads that line as a
+ * newer format and writes to the register no more, so no session of it changes a task that moved to another team.
  * Parsing checks the FORMAT only (any priority from 0, any goal string): team policy is applied
  * on write, so changing the config never erases history.
  */
-export const EVENT_VERSION = 2;
+export const EVENT_VERSION = 3;
+
+/** The version every line but a moved one is written with, so a reader of version 2 reads them all. */
+export const TASK_LINE_VERSION = 2;
 
 /** The name lines before version 2 gave the `priority` field; still read, never written. */
 export const LEGACY_PRIORITY_FIELD = 'tier';
@@ -119,6 +126,8 @@ export interface StatusEvent extends EventBase {
   readonly card?: DecisionCard;
   /** What will prove a `verifying` task works; written only with that status, and absent on lines from before `--proof`. */
   readonly proof?: string;
+  /** What a sighting shows once a `done` change runs live (`--watch`); written only with that status. */
+  readonly watch?: string;
   /**
    * On a start the verifying tasks it needs held: what shows their proof exists (`--met`). Written only with
    * `in-progress`, apart from the evidence, which a task keeps until it is done and would then prove the wrong task.
@@ -145,9 +154,20 @@ export interface UpdateEvent extends EventBase {
   readonly note: string | null;
   /** The lead's answer to the task's approval wait, its note saying what it checked or why not; only `approve` writes it. */
   readonly verdict?: ApprovalVerdict;
+  /** The waits a Later gives a waiting or verifying task (T1295): its waits with the time the owner put it off to, or without one; only `defer` writes it. */
+  readonly waits?: readonly WaitReason[];
 }
 
-export type RegisterEvent = CreateEvent | StatusEvent | UpdateEvent;
+/**
+ * The task went to team `to` (T1144): its lines live in that team's register from then on, under the same id, and a
+ * later event on the id here is an orphan. Written with EVENT_VERSION, never with TASK_LINE_VERSION.
+ */
+export interface MovedEvent extends EventBase {
+  readonly type: 'moved';
+  readonly to: string;
+}
+
+export type RegisterEvent = CreateEvent | StatusEvent | UpdateEvent | MovedEvent;
 
 export type EventParse =
   | { readonly kind: 'event'; readonly event: RegisterEvent }
@@ -212,7 +232,7 @@ export function parseEvent(line: JsonlRecord): EventParse {
       if (!isTaskStatus(status)) {
         return typeof status === 'string' && STATUS_NAME.test(status) ? { kind: 'newer' } : unreadable(`unknown status ${JSON.stringify(status)}`);
       }
-      const problem = textProblem(record, ['note', 'evidence', 'skill', 'proof', 'met']);
+      const problem = textProblem(record, ['note', 'evidence', 'skill', 'proof', 'watch', 'met']);
       if (problem !== undefined) {
         return unreadable(problem);
       }
@@ -225,6 +245,7 @@ export function parseEvent(line: JsonlRecord): EventParse {
         return unreadable(card);
       }
       const proof = status === 'verifying' ? textOrNull(record, 'proof') : null;
+      const watch = status === 'done' ? textOrNull(record, 'watch') : null;
       const met = status === 'in-progress' ? textOrNull(record, 'met') : null;
       const followups = parseFollowups(record['followups']);
       if (typeof followups === 'string') {
@@ -244,6 +265,7 @@ export function parseEvent(line: JsonlRecord): EventParse {
         ...(waits === undefined ? {} : { waits }),
         ...(card === undefined ? {} : { card }),
         ...(proof === null ? {} : { proof }),
+        ...(watch === null ? {} : { watch }),
         ...(met === null ? {} : { met }),
         ...(followups === undefined ? {} : { followups }),
         ...(review === undefined ? {} : { review }),
@@ -263,7 +285,23 @@ export function parseEvent(line: JsonlRecord): EventParse {
       if (verdict !== undefined && !isApprovalVerdict(verdict)) {
         return unreadable(`unknown approval verdict ${JSON.stringify(verdict)}`);
       }
-      return { kind: 'event', event: { ...base, type: 'update', changes, note: textOrNull(record, 'note'), ...(verdict === undefined ? {} : { verdict }) } };
+      const waits = record['waits'] === undefined ? undefined : parseWaits(record['waits']);
+      if (typeof waits === 'string') {
+        return unreadable(waits);
+      }
+      const event: UpdateEvent = {
+        ...base,
+        type: 'update',
+        changes,
+        note: textOrNull(record, 'note'),
+        ...(verdict === undefined ? {} : { verdict }),
+        ...(waits === undefined ? {} : { waits }),
+      };
+      return { kind: 'event', event };
+    }
+    case 'moved': {
+      const to = record['to'];
+      return typeof to === 'string' && ID_PATTERN.test(to) ? { kind: 'event', event: { ...base, type: 'moved', to } } : unreadable(`bad team ${JSON.stringify(to)}`);
     }
     default:
       return unreadable(`unknown event type ${JSON.stringify(record['type'])}`);

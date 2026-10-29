@@ -3,7 +3,7 @@ import type { Snapshot, TaskRow, TaskStatus, TeamLeads } from '../types'
 import { CLOSE_TEXT, LABEL_CELLS } from '../hooks/card'
 import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
-import { indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
+import { EVENT_VERSION, indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
 import { ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, noSessionBlock, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
@@ -36,7 +36,7 @@ describe('log', () => {
       '{"v":2,"type":"create","id":"T2"',
       '',
       JSON.stringify({ v: 2, type: 'rename', id: 'T1', at: iso(NOW), by: 'po' }),
-      createLine('T3', { owner: 'po', by: 'lead', at: NOW, lineKeys: { v: 3, trace: 'a1' } }),
+      createLine('T3', { owner: 'po', by: 'lead', at: NOW, lineKeys: { v: EVENT_VERSION + 1, trace: 'a1' } }),
       statusLine('T9', 'po', NOW, 'done'),
     ]
     const register = readRegister(lines.join('\n'))
@@ -46,6 +46,19 @@ describe('log', () => {
       'events.jsonl: 2 unreadable line(s), 1 line(s) from a newer teamrig, 1 event(s) naming no task',
     )
     expect(skippedText(PATHS, readRegister(lines[0] ?? ''), readMarks(''))).toBe(null)
+  })
+
+  test('reads a version 3 moved line: the task leaves the list, and a later line on it is an orphan, not a newer line', async () => {
+    const lines = [
+      createLine('T1', { owner: 'po', by: 'lead', at: NOW }),
+      createLine('T2', { owner: 'po', by: 'lead', at: NOW }),
+      JSON.stringify({ v: 3, type: 'moved', id: 'T2', at: iso(NOW), by: 'lead', to: 'web' }),
+      statusLine('T2', 'po', NOW, 'done'),
+    ]
+    const register = readRegister(lines.join('\n'))
+    expect([...register.state.tasks.keys()]).toEqual(['T1'])
+    expect([...register.state.moved]).toEqual([['T2', 'web']])
+    expect([register.read.unreadable, register.read.newer, register.state.orphans]).toEqual([0, 0, 1])
   })
 
   test('counts the inbox marks teamrig skips apart from the events: one naming no Claude session, one from a newer teamrig', async () => {
@@ -1284,7 +1297,7 @@ describe('source', () => {
   test('lines teamrig skips show as the problem with its counts, and a read that skips none clears it', async () => {
     const files = new MemoryFiles()
     const good = createLine('T1', { owner: 'po', by: 'lead', at: NOW })
-    files.write(PATHS.events, [good, '{"v":2', createLine('T2', { owner: 'po', by: 'lead', at: NOW, lineKeys: { v: 3 } }), statusLine('T9', 'po', NOW, 'done')].join('\n'))
+    files.write(PATHS.events, [good, '{"v":2', createLine('T2', { owner: 'po', by: 'lead', at: NOW, lineKeys: { v: EVENT_VERSION + 1 } }), statusLine('T9', 'po', NOW, 'done')].join('\n'))
     const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)
     const first = await source.poll({ claudeSession: S1, pinned: 'po', now: NOW })
     expect(first?.tasks.map(task => task.id)).toEqual(['T1'])
