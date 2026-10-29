@@ -18,7 +18,7 @@ import {
   DEFAULT_CLAIMS,
   DEFAULT_DECISIONS,
   DEFAULT_COORDINATOR_WAIT,
-  DEFAULT_GATE_TIMEOUT_SECONDS,
+  DEFAULT_CHECK_TIMEOUT_SECONDS,
   DEFAULT_GITHUB,
   DEFAULT_HEAVY,
   DEFAULT_HIRING,
@@ -108,8 +108,8 @@ import {
   type CoordinatorRepoConfig,
   type HeavyConfig,
   type MergeConfig,
-  type RollConfig,
-  type RollGateConfig,
+  type DeployConfig,
+  type DeployCheckConfig,
   type CommitsConfig,
   type GithubConfig,
   type HiringConfig,
@@ -628,6 +628,16 @@ const RENAMED_PRIORITIES_KEY = 'tiers';
 /** The budget's old place, `coordinator.budget`; it moved to the top-level `budget` block, with no alias. */
 const MOVED_BUDGET_KEY = 'budget';
 
+/**
+ * Reports `raw`'s `from` as renamed to `to`. The v4-to-v5 migration renames each key it names (src/config/migrate.ts), so
+ * a current file holds one only when written so by hand, and it is read as nothing, never as an alias.
+ */
+function reportRenamedKey(read: ConfigReader, raw: JsonRecord, path: string, from: string, to: string): void {
+  if (raw[from] !== undefined) {
+    read.report(`${path}.${from}`, `was renamed: use ${path}.${to}`);
+  }
+}
+
 const isPathText: Check<string> = (text) => (text.trim() === '' ? 'expected a path' : undefined);
 
 /** A repository's or a deploy target's name in the coordinator block. */
@@ -639,6 +649,7 @@ function parseCoordinator(read: ConfigReader, raw: JsonRecord): CoordinatorConfi
   if (raw[MOVED_BUDGET_KEY] !== undefined) {
     read.report(`${path}.${MOVED_BUDGET_KEY}`, 'was moved: use the top-level budget block');
   }
+  reportRenamedKey(read, raw, path, 'gateTimeoutSeconds', 'checkTimeoutSeconds');
   const dir = read.optionalString(raw, 'dir', path, isPathText);
   const schedule = read.section(raw, 'schedule', path);
   const heavyCutoffUtc = read.optionalString(schedule, 'heavyCutoffUtc', `${path}.schedule`, isUtcTime);
@@ -654,7 +665,7 @@ function parseCoordinator(read: ConfigReader, raw: JsonRecord): CoordinatorConfi
       pollSeconds: read.integer(wait, 'pollSeconds', `${path}.wait`, DEFAULT_COORDINATOR_WAIT.pollSeconds, CONFIG_LIMITS.coordinatorPollSeconds),
       maxMinutes: read.integer(wait, 'maxMinutes', `${path}.wait`, DEFAULT_COORDINATOR_WAIT.maxMinutes, CONFIG_LIMITS.coordinatorWaitMaxMinutes),
     },
-    gateTimeoutSeconds: read.integer(raw, 'gateTimeoutSeconds', path, DEFAULT_GATE_TIMEOUT_SECONDS, CONFIG_LIMITS.gateTimeoutSeconds),
+    checkTimeoutSeconds: read.integer(raw, 'checkTimeoutSeconds', path, DEFAULT_CHECK_TIMEOUT_SECONDS, CONFIG_LIMITS.checkTimeoutSeconds),
     claims: { maxMinutes: read.integer(claims, 'maxMinutes', `${path}.claims`, DEFAULT_CLAIMS.maxMinutes, CONFIG_LIMITS.claimMaxMinutes) },
     windows: parseWindows(read, read.section(raw, 'windows', path), deployTargetsOf(repos)),
     repos,
@@ -664,6 +675,7 @@ function parseCoordinator(read: ConfigReader, raw: JsonRecord): CoordinatorConfi
 /** When a deploy target's measurement is clean; a settle time for a target no repository deploys, or out of bounds, is reported and left out. */
 function parseWindows(read: ConfigReader, raw: JsonRecord, knownTargets: readonly string[]): WindowsConfig {
   const path = 'coordinator.windows';
+  reportRenamedKey(read, raw, path, 'assumedRollMinutes', 'assumedDeployMinutes');
   const targetSettleMinutes: Record<string, number> = {};
   for (const [target, value] of Object.entries(read.section(raw, 'targetSettleMinutes', path))) {
     const itemPath = `${path}.targetSettleMinutes.${target}`;
@@ -684,12 +696,12 @@ function parseWindows(read: ConfigReader, raw: JsonRecord, knownTargets: readonl
   return {
     settleMinutes: read.integer(raw, 'settleMinutes', path, DEFAULT_WINDOWS.settleMinutes, CONFIG_LIMITS.settleMinutes),
     targetSettleMinutes,
-    assumedRollMinutes: read.integer(raw, 'assumedRollMinutes', path, DEFAULT_WINDOWS.assumedRollMinutes, CONFIG_LIMITS.assumedRollMinutes),
+    assumedDeployMinutes: read.integer(raw, 'assumedDeployMinutes', path, DEFAULT_WINDOWS.assumedDeployMinutes, CONFIG_LIMITS.assumedDeployMinutes),
     minMinutes: read.integer(raw, 'minMinutes', path, DEFAULT_WINDOWS.minMinutes, CONFIG_LIMITS.windowMinMinutes),
   };
 }
 
-/** The repositories `teamrig integrate` lands and `teamrig roll` deploys, by name; one with a bad name or no main checkout is reported and left out. */
+/** The repositories `teamrig merge` merges into and `teamrig deploy` deploys, by name; one with a bad name or no main checkout is reported and left out. */
 function parseCoordinatorRepos(read: ConfigReader, raw: JsonRecord): Record<string, CoordinatorRepoConfig> {
   const repos: Record<string, CoordinatorRepoConfig> = {};
   for (const [name, value] of Object.entries(raw)) {
@@ -708,14 +720,15 @@ function parseCoordinatorRepos(read: ConfigReader, raw: JsonRecord): Record<stri
       continue;
     }
     const merge = entry['merge'] === undefined ? undefined : parseMerge(read, entry['merge'], `${path}.merge`);
-    const roll = entry['roll'] === undefined ? undefined : parseRoll(read, entry['roll'], `${path}.roll`);
+    reportRenamedKey(read, entry, path, 'roll', 'deploy');
+    const deploy = entry['deploy'] === undefined ? undefined : parseDeploy(read, entry['deploy'], `${path}.deploy`);
     const dependencyGate = read.boolean(entry, 'dependencyGate', path, false);
-    const dependencyCheck = entry['dependencyCheck'] === undefined ? undefined : read.stringListItem(entry['dependencyCheck'], `${path}.dependencyCheck`, ROLL_ARGV_MAX_ITEMS);
+    const dependencyCheck = entry['dependencyCheck'] === undefined ? undefined : read.stringListItem(entry['dependencyCheck'], `${path}.dependencyCheck`, HOOK_ARGV_MAX_ITEMS);
     if (dependencyCheck !== undefined && !dependencyGate) {
       read.report(`${path}.dependencyCheck`, 'runs only with dependencyGate true, so it never runs');
     }
     const worktreeFolder = read.optionalString(entry, 'worktreeFolder', path, isPathText);
-    const worktreeSetup = entry['worktreeSetup'] === undefined ? undefined : read.stringListItem(entry['worktreeSetup'], `${path}.worktreeSetup`, ROLL_ARGV_MAX_ITEMS);
+    const worktreeSetup = entry['worktreeSetup'] === undefined ? undefined : read.stringListItem(entry['worktreeSetup'], `${path}.worktreeSetup`, HOOK_ARGV_MAX_ITEMS);
     repos[name] = {
       mainCheckout,
       deploysOnPush: read.stringList(entry, 'deploysOnPush', path, [], isCoordinatorName),
@@ -725,19 +738,19 @@ function parseCoordinatorRepos(read: ConfigReader, raw: JsonRecord): Record<stri
       ...(worktreeFolder === undefined ? {} : { worktreeFolder }),
       ...(worktreeSetup === undefined ? {} : { worktreeSetup }),
       ...(merge === undefined ? {} : { merge }),
-      ...(roll === undefined ? {} : { roll }),
+      ...(deploy === undefined ? {} : { deploy }),
     };
   }
   return repos;
 }
 
-/** A repository's merge command; one with no usable command is reported and left out, so integrate pushes the branch. */
+/** A repository's merge command; one with no usable command is reported and left out, so `teamrig merge` pushes the branch. */
 function parseMerge(read: ConfigReader, raw: unknown, path: string): MergeConfig | undefined {
   const entry = read.objectItem(raw, path);
   if (entry === undefined) {
     return undefined;
   }
-  const command = read.stringListItem(entry['command'], `${path}.command`, ROLL_ARGV_MAX_ITEMS);
+  const command = read.stringListItem(entry['command'], `${path}.command`, HOOK_ARGV_MAX_ITEMS);
   const remote = read.string(entry, 'remote', path, DEFAULT_MERGE_REMOTE, isRemoteName);
   return command === undefined ? undefined : { command, remote };
 }
@@ -746,38 +759,39 @@ function parseMerge(read: ConfigReader, raw: unknown, path: string): MergeConfig
 const isRemoteName: Check<string> = (name) =>
   /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) && !name.includes('..') ? undefined : 'expected a git remote name: letters, digits, ., _ or -, from a letter or digit, without ..';
 
-/** A program's arguments in a roll or merge hook, and the roll hooks of one kind, at most. */
-const ROLL_ARGV_MAX_ITEMS = 64;
-const ROLL_HOOKS_MAX_ITEMS = 16;
+/** A program's arguments in a deploy or merge hook, and the deploy hooks of one kind, at most. */
+const HOOK_ARGV_MAX_ITEMS = 64;
+const DEPLOY_HOOKS_MAX_ITEMS = 16;
 
-/** A repository's roll; one with no usable command is reported and left out, so the repository is not rolled. */
-function parseRoll(read: ConfigReader, raw: unknown, path: string): RollConfig | undefined {
+/** A repository's deploy block; one with no usable command is reported and left out, so the repository is not deployed. */
+function parseDeploy(read: ConfigReader, raw: unknown, path: string): DeployConfig | undefined {
   const entry = read.objectItem(raw, path);
   if (entry === undefined) {
     return undefined;
   }
-  const command = read.stringListItem(entry['command'], `${path}.command`, ROLL_ARGV_MAX_ITEMS);
+  const command = read.stringListItem(entry['command'], `${path}.command`, HOOK_ARGV_MAX_ITEMS);
   if (command === undefined) {
     return undefined;
   }
-  const dependencyInstall = entry['dependencyInstall'] === undefined ? undefined : read.stringListItem(entry['dependencyInstall'], `${path}.dependencyInstall`, ROLL_ARGV_MAX_ITEMS);
+  const dependencyInstall = entry['dependencyInstall'] === undefined ? undefined : read.stringListItem(entry['dependencyInstall'], `${path}.dependencyInstall`, HOOK_ARGV_MAX_ITEMS);
+  reportRenamedKey(read, entry, path, 'gates', 'checks');
   return {
     targets: read.stringList(entry, 'targets', path, [], isCoordinatorName),
-    gates: read.list(entry, 'gates', path, [], (value, itemPath) => parseRollGate(read, value, itemPath), ROLL_HOOKS_MAX_ITEMS),
+    checks: read.list(entry, 'checks', path, [], (value, itemPath) => parseDeployCheck(read, value, itemPath), DEPLOY_HOOKS_MAX_ITEMS),
     ...(dependencyInstall === undefined ? {} : { dependencyInstall }),
-    afterPull: read.list(entry, 'afterPull', path, [], (value, itemPath) => read.stringListItem(value, itemPath, ROLL_ARGV_MAX_ITEMS), ROLL_HOOKS_MAX_ITEMS),
+    afterPull: read.list(entry, 'afterPull', path, [], (value, itemPath) => read.stringListItem(value, itemPath, HOOK_ARGV_MAX_ITEMS), DEPLOY_HOOKS_MAX_ITEMS),
     command,
   };
 }
 
-/** One roll gate; one with a bad name or no usable command is reported and left out. */
-function parseRollGate(read: ConfigReader, value: unknown, path: string): RollGateConfig | undefined {
+/** One check of a deploy; one with a bad name or no usable command is reported and left out. */
+function parseDeployCheck(read: ConfigReader, value: unknown, path: string): DeployCheckConfig | undefined {
   const entry = read.objectItem(value, path);
   if (entry === undefined) {
     return undefined;
   }
   const name = read.stringItem(entry['name'], `${path}.name`, isCoordinatorName);
-  const command = read.stringListItem(entry['command'], `${path}.command`, ROLL_ARGV_MAX_ITEMS);
+  const command = read.stringListItem(entry['command'], `${path}.command`, HOOK_ARGV_MAX_ITEMS);
   return name === undefined || command === undefined ? undefined : { name, command };
 }
 
