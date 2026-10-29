@@ -105,18 +105,28 @@ export function vendoredText(path: string, source: string): Vendored {
   return { ok: true, text: headerOf(path) + source }
 }
 
-/** The CORE_FILES the read entry no longer reaches through `sources` (teamrig's modules by path), so a dropped import drops its copy too. */
-export function unreachedFiles(sources: ReadonlyMap<string, string>): string[] {
-  const reached = new Set<string>()
+/**
+ * The read entry and every module it reaches, by path under `src/`, each with its source as `read` gives it;
+ * a module `read` has no source for (undefined) reaches nothing and is held as ''.
+ */
+export function reachedModules(read: (path: string) => string | undefined): Map<string, string> {
+  const reached = new Map<string, string>()
   const queue = [READ_ENTRY]
   for (let path = queue.pop(); path !== undefined; path = queue.pop()) {
     if (reached.has(path)) continue
-    reached.add(path)
-    for (const target of importsOf(sources.get(path) ?? '')) {
+    const source = read(path) ?? ''
+    reached.set(path, source)
+    for (const target of importsOf(source)) {
       const resolved = resolveImport(path, target)
       if (resolved !== null) queue.push(resolved)
     }
   }
+  return reached
+}
+
+/** The CORE_FILES the read entry no longer reaches through `sources` (teamrig's modules by path), so a dropped import drops its copy too. */
+export function unreachedFiles(sources: ReadonlyMap<string, string>): string[] {
+  const reached = reachedModules(path => sources.get(path))
   return CORE_FILES.filter(path => !reached.has(path))
 }
 
