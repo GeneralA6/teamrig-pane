@@ -28,7 +28,7 @@ module in Claude Code's own runtime), an early-access plugin surface that may ch
 | teamrig | a team with a register | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). |
 | git | on the PATH | Only for the Changes tab, which runs `git status` per repo, `git diff` and `git grep` to count the changed lines, and `git diff` for each file's diff you open. Without it the pane draws a `WARN` line with the fix. |
 | Node.js | none to use it; 22.18 or later to develop it | The pane runs inside Claude Code. The repository's tools and tests run on Node (`engines` in `package.json`). |
-| Operating system | Linux, Windows or macOS | CI runs the tests on ubuntu, windows and macos, each on Node 22 and 24, and the plugin tests in Claude Code on each. CI is paused for now: each change is tested before it is pushed on one machine, Node and Claude Code release, so the others go unchecked until CI runs again. |
+| Operating system | Linux, Windows or macOS | CI runs the tests on ubuntu, windows and macos, each on Node 22 and 24, and the plugin tests in Claude Code on each. CI checks only once the repository is public: until then each change is tested before it is pushed on one machine, Node and Claude Code release, so the others go unchecked. |
 
 The pane checks the Claude Code version and git once a session, when it starts, and draws one `WARN` line
 above its body for each that falls short ([reference.md](reference.md#warn-lines-and-their-fixes)).
