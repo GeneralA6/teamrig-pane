@@ -1,3 +1,5 @@
+import { ASSIGNED_SECRET, SECRET_TOKEN_PATTERNS, type SecretPattern } from '../../plugins/teamrig-pane/hooks/core/core/secret-patterns.ts';
+
 export interface ScrubRule {
   readonly id: string;
   readonly description: string;
@@ -24,8 +26,14 @@ function isAllowedEmail(match: RegExpExecArray): boolean {
   );
 }
 
-function secret(id: string, description: string, pattern: RegExp): ScrubRule {
+/** A credential shape from teamrig's core copy, so the pane's scrub refuses the same tokens teamrig's does. */
+function secret({ id, description, pattern }: SecretPattern): ScrubRule {
   return { id, description, pattern, revealMatch: false };
+}
+
+/** A placeholder (`${VAULT}`, `<token>`, `%TOKEN%`, `{token}`) or a name (`SOME_READ_TOKEN`) stands for a secret, it does not hold one. */
+function isAssignedPlaceholder(value: string): boolean {
+  return /^[$<%{]/.test(value) || (ASSIGNED_SECRET.isAllowedValue?.(value) ?? false);
 }
 
 /** Checks that are safe to publish: they name no private term, only shapes of private data. */
@@ -57,20 +65,6 @@ export const GENERIC_RULES: readonly ScrubRule[] = [
     pattern: /\b[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:internal|intranet|corp)\b/g,
     revealMatch: false,
   },
-  secret('private-key', 'private key block', /-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----/g),
-  secret('github-token', 'GitHub token', /\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,})\b/g),
-  secret('anthropic-key', 'Anthropic API key', /\bsk-ant-[A-Za-z0-9_-]{20,}/g),
-  secret('sk-key', 'API key with an sk- prefix', /\bsk-(?!ant-)(?:proj-)?[A-Za-z0-9_-]{32,}/g),
-  secret('aws-key', 'AWS access key id', /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g),
-  secret('slack-token', 'Slack token', /\bxox[abposr]-[A-Za-z0-9-]{10,}/g),
-  secret('google-key', 'Google API key', /\bAIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])/g),
-  secret('jwt', 'JSON web token', /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g),
-  {
-    id: 'assigned-secret',
-    description: 'literal value assigned to a secret-like name',
-    pattern:
-      /\b(?:password|passwd|secret|token|api[_-]?key|access[_-]?key)\b["']?\s*[:=]\s*["']([^"'\s]{12,})["']/gi,
-    isAllowed: (match) => /^[$<%{]/.test(match[1] ?? ''),
-    revealMatch: false,
-  },
+  ...SECRET_TOKEN_PATTERNS.map(secret),
+  { ...secret(ASSIGNED_SECRET), isAllowed: (match) => match[1] !== undefined && isAssignedPlaceholder(match[1]) },
 ];
