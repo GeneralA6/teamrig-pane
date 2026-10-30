@@ -52,14 +52,14 @@ import {
   HEAVY_TTL_MARGIN_MINUTES,
 } from './defaults.ts';
 import { isEffort, isModel } from './launch.ts';
-import { BUDGET_ACCOUNT_MAX_LENGTH, CONFIG_LIMITS, RULE_CONFLICT_LIMITS } from './limits.ts';
+import { BUDGET_ACCOUNT_MAX_LENGTH, CONFIG_LIMITS, REVIEW_PATH_LIMITS, RULE_CONFLICT_LIMITS } from './limits.ts';
+import { HIRE_CAP_DROPPED, IDLE_RETIRE_DROPPED } from './migrate.ts';
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
 import {
   AD_HOC_RUNNERS,
   ASK_WITH,
   PACKAGE_INSTALLS,
   BURST_POLICIES,
-  CAP_RAISERS,
   CONFLICT_WINNERS,
   ESCALATIONS,
   HIRING_POLICIES,
@@ -67,7 +67,6 @@ import {
   isAskWith,
   isPackageInstalls,
   isBurstPolicy,
-  isCapRaiser,
   isCommitGate,
   isConflictWinner,
   isEffortLevel,
@@ -78,7 +77,10 @@ import {
   isIdleMode,
   isOtherAreaListing,
   isPushToProtected,
+  isReviewClass,
+  isReviewPathMode,
   isSecretReads,
+  isSecretWrites,
   isSkipHooks,
   isTerminalChoice,
   isReviewMode,
@@ -89,7 +91,10 @@ import {
   OTHER_AREA_LISTINGS,
   OVER_ACTIONS,
   PUSH_TO_PROTECTED,
+  REVIEW_CLASSES,
+  REVIEW_PATH_MODES,
   SECRET_READS,
+  SECRET_WRITES,
   SKIP_HOOKS,
   TERMINALS,
   type AskWith,
@@ -123,6 +128,7 @@ import {
   type PathsConfig,
   type PermissionsConfig,
   type PushToProtected,
+  type ReviewPath,
   type HookAsks,
   type QuietHours,
   type SecretGuardConfig,
@@ -456,6 +462,14 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
         CONFIG_LIMITS.protectedBranches.maxItems,
       ),
       pushToProtected: parsePushToProtected(read, pushGuard),
+      reviewPaths: read.list(
+        pushGuard,
+        'reviewPaths',
+        'pushGuard',
+        DEFAULT_PUSH_GUARD.reviewPaths,
+        (value, itemPath) => parseReviewPath(read, value, itemPath),
+        CONFIG_LIMITS.reviewPaths.maxItems,
+      ),
     },
     packageGuard: parsePackageGuard(read, read.section(raw, 'packageGuard', '')),
     commitGuard: { skipHooks: parseSkipHooks(read, read.section(raw, 'commitGuard', '')) },
@@ -727,6 +741,11 @@ function parseCoordinatorRepos(read: ConfigReader, raw: JsonRecord): Record<stri
     if (dependencyCheck !== undefined && !dependencyGate) {
       read.report(`${path}.dependencyCheck`, 'runs only with dependencyGate true, so it never runs');
     }
+    const reviewGate = read.boolean(entry, 'reviewGate', path, false);
+    const reviewCheck = entry['reviewCheck'] === undefined ? undefined : read.stringListItem(entry['reviewCheck'], `${path}.reviewCheck`, HOOK_ARGV_MAX_ITEMS);
+    if (reviewCheck !== undefined && !reviewGate) {
+      read.report(`${path}.reviewCheck`, 'runs only with reviewGate true, so it never runs');
+    }
     const worktreeFolder = read.optionalString(entry, 'worktreeFolder', path, isPathText);
     const worktreeSetup = entry['worktreeSetup'] === undefined ? undefined : read.stringListItem(entry['worktreeSetup'], `${path}.worktreeSetup`, HOOK_ARGV_MAX_ITEMS);
     repos[name] = {
@@ -734,6 +753,8 @@ function parseCoordinatorRepos(read: ConfigReader, raw: JsonRecord): Record<stri
       deploysOnPush: read.stringList(entry, 'deploysOnPush', path, [], isCoordinatorName),
       dependencyGate,
       ...(dependencyCheck === undefined ? {} : { dependencyCheck }),
+      reviewGate,
+      ...(reviewCheck === undefined ? {} : { reviewCheck }),
       followMainCheckout: read.boolean(entry, 'followMainCheckout', path, false),
       ...(worktreeFolder === undefined ? {} : { worktreeFolder }),
       ...(worktreeSetup === undefined ? {} : { worktreeSetup }),
@@ -1187,6 +1208,24 @@ function parsePushToProtected(read: ConfigReader, raw: JsonRecord): PushToProtec
   return isPushToProtected(value) ? value : fallback;
 }
 
+/**
+ * One `pushGuard.reviewPaths` entry: one with no usable glob is reported and left out; a bad mode or class is reported
+ * and read as the strictest, `always` and `security`, so a typo never weakens the gate.
+ */
+function parseReviewPath(read: ConfigReader, value: unknown, path: string): ReviewPath | undefined {
+  const entry = read.objectItem(value, path);
+  if (entry === undefined) {
+    return undefined;
+  }
+  const glob = read.requiredString(entry, 'glob', path, shortLine(REVIEW_PATH_LIMITS.globMaxLength));
+  if (glob === '') {
+    return undefined;
+  }
+  const mode = read.string(entry, 'mode', path, 'always', oneOf(REVIEW_PATH_MODES));
+  const reviewer = read.string(entry, 'class', path, 'security', oneOf(REVIEW_CLASSES));
+  return { glob, mode: isReviewPathMode(mode) ? mode : 'always', class: isReviewClass(reviewer) ? reviewer : 'security' };
+}
+
 function parsePackageGuard(read: ConfigReader, raw: JsonRecord): PackageGuardConfig {
   const path = 'packageGuard';
   const defaults = DEFAULT_PACKAGE_GUARD;
@@ -1218,22 +1257,28 @@ function parseSecretGuard(read: ConfigReader, raw: JsonRecord): SecretGuardConfi
   const path = 'secretGuard';
   const defaults = DEFAULT_SECRET_GUARD;
   const secretReads = read.string(raw, 'secretReads', path, defaults.secretReads, oneOf(SECRET_READS));
-  const { secretPaths, secretEnvNames } = CONFIG_LIMITS;
+  const writes = read.string(raw, 'writes', path, defaults.writes, oneOf(SECRET_WRITES));
+  const { secretPaths, secretEnvNames, secretCommands } = CONFIG_LIMITS;
   return {
     secretReads: isSecretReads(secretReads) ? secretReads : defaults.secretReads,
+    writes: isSecretWrites(writes) ? writes : defaults.writes,
     paths: read.stringList(raw, 'paths', path, defaults.paths, shortLine(secretPaths.maxLength, isSecretGlob), secretPaths.maxItems),
-    envNames: read.stringList(raw, 'envNames', path, defaults.envNames, shortLine(secretEnvNames.maxLength, isSecretNamePattern), secretEnvNames.maxItems),
+    envNames: read.stringList(raw, 'envNames', path, defaults.envNames, shortLine(secretEnvNames.maxLength, keepablePattern('keep a variable printable')), secretEnvNames.maxItems),
+    commands: read.stringList(raw, 'commands', path, defaults.commands, shortLine(secretCommands.maxLength, keepablePattern('let a command print')), secretCommands.maxItems),
+    redact: read.boolean(raw, 'redact', path, defaults.redact),
   };
 }
 
 /** A glob with something to match after its `!`. */
 const isSecretGlob: Check<string> = (value) => (value.replace(/^!/, '').trim() === '' ? 'expected a glob, with a leading ! to keep a path readable' : undefined);
 
-/** A regular expression with something to match after its `!`. */
-const isSecretNamePattern: Check<string> = (value) => {
-  const body = value.replace(/^!/, '');
-  return body === '' ? 'expected a regular expression, with a leading ! to keep a variable printable' : isValidRegex(body);
-};
+/** A regular expression with something to match after its `!`, which does what `keeps` says. */
+function keepablePattern(keeps: string): Check<string> {
+  return (value) => {
+    const body = value.replace(/^!/, '');
+    return body === '' ? `expected a regular expression, with a leading ! to ${keeps}` : isValidRegex(body);
+  };
+}
 
 function parseReadonlyShell(read: ConfigReader, raw: JsonRecord): ReadonlyShellConfig {
   const { maxItems, maxLength } = CONFIG_LIMITS.readonlyShellPrefixes;
@@ -1266,6 +1311,14 @@ function parseCommits(read: ConfigReader, raw: JsonRecord): CommitsConfig {
       defaults.testPatterns,
       shortLine(CONFIG_LIMITS.testPatterns.maxLength, isValidRegex),
       CONFIG_LIMITS.testPatterns.maxItems,
+    ),
+    sourcePatterns: read.stringList(
+      raw,
+      'sourcePatterns',
+      path,
+      defaults.sourcePatterns,
+      shortLine(CONFIG_LIMITS.sourcePatterns.maxLength, isValidRegex),
+      CONFIG_LIMITS.sourcePatterns.maxItems,
     ),
     gate: isCommitGate(gate) ? gate : defaults.gate,
   };
@@ -1309,20 +1362,19 @@ function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
   };
 }
 
-/** `hiring`: who decides, the session cap and who raises it, idle and review days, and when a rehire resumes. */
+/** `hiring`: who decides, review days, and when a rehire resumes. */
 function parseHiring(read: ConfigReader, raw: JsonRecord): HiringConfig {
   const path = 'hiring';
   const defaults = DEFAULT_HIRING;
   const policy = read.string(raw, 'policy', path, defaults.policy, oneOf(HIRING_POLICIES));
-  const capRaisedBy = read.string(raw, 'capRaisedBy', path, defaults.capRaisedBy, oneOf(CAP_RAISERS));
-  const why = "a hire's daily budget is its part of the team's, by its share and queued work; maxSessions bounds hiring";
-  read.dropped(raw, 'dailyPct', path, why);
-  read.dropped(raw, 'maxDailyPct', path, why);
+  const budgetWhy = "a hire's daily budget is its part of the team's, by its share and queued work";
+  read.dropped(raw, 'dailyPct', path, budgetWhy);
+  read.dropped(raw, 'maxDailyPct', path, budgetWhy);
+  read.dropped(raw, 'maxSessions', path, HIRE_CAP_DROPPED);
+  read.dropped(raw, 'capRaisedBy', path, HIRE_CAP_DROPPED);
+  read.dropped(raw, 'idleHours', path, IDLE_RETIRE_DROPPED);
   return {
     policy: isHiringPolicy(policy) ? policy : defaults.policy,
-    maxSessions: read.integer(raw, 'maxSessions', path, defaults.maxSessions, CONFIG_LIMITS.hiringMaxSessions),
-    capRaisedBy: isCapRaiser(capRaisedBy) ? capRaisedBy : defaults.capRaisedBy,
-    idleHours: read.integer(raw, 'idleHours', path, defaults.idleHours, CONFIG_LIMITS.hiringIdleHours),
     reviewDays: read.integer(raw, 'reviewDays', path, defaults.reviewDays, CONFIG_LIMITS.hiringReviewDays),
     resumeMaxTokens: read.integer(raw, 'resumeMaxTokens', path, defaults.resumeMaxTokens, CONFIG_LIMITS.hiringResumeMaxTokens),
     resumeMaxIdleDays: read.integer(raw, 'resumeMaxIdleDays', path, defaults.resumeMaxIdleDays, CONFIG_LIMITS.hiringResumeMaxIdleDays),
