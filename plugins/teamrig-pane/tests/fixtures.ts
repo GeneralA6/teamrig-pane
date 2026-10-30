@@ -121,9 +121,12 @@ export function verifyingLine(id: string, by: string, at: number, proof: string,
   return JSON.stringify({ v: EVENT_VERSION, type: 'status', id, at: iso(at), by, status: 'verifying', note, evidence, skill: null, proof })
 }
 
-/** A status line to `waiting` with its typed reasons, as `teamrig set --waits` writes it. */
-export function waitingLine(id: string, by: string, at: number, waits: readonly WaitRow[], note: string | null = null): string {
-  return JSON.stringify({ v: EVENT_VERSION, type: 'status', id, at: iso(at), by, status: 'waiting', note, evidence: null, skill: null, waits })
+/** A decision card as `teamrig set --question --options --recommend --default [--gate]` writes it beside a wait. */
+export type CardFields = { question: string; options: readonly string[]; recommend: string; byDefault: string; gate?: string }
+
+/** A status line to `waiting` with its typed reasons, as `teamrig set --waits` writes it, with its card when given. */
+export function waitingLine(id: string, by: string, at: number, waits: readonly WaitRow[], note: string | null = null, card: CardFields | null = null): string {
+  return JSON.stringify({ v: EVENT_VERSION, type: 'status', id, at: iso(at), by, status: 'waiting', note, evidence: null, skill: null, waits, ...(card === null ? {} : { card }) })
 }
 
 export function updateLine(id: string, by: string, at: number, changes: Record<string, unknown>, note: string | null = null): string {
