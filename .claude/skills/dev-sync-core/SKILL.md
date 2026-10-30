@@ -30,5 +30,7 @@ description: Move the pane's copy of teamrig's read modules to a new teamrig com
   golden test fail on any difference.
 - The plugin contract (`plugins/teamrig-pane/types/index.d.ts`) cannot import, so it spells the status unions out
   by hand; a spec fails when the register adds or drops a status the pane has no glyph for.
+- `tools/scrub/rules.ts` builds its secret rules from the copy's `core/secret-patterns.ts`, so a sync can change what
+  the scrub refuses: run `node --test tools/scrub/*.test.ts` and `npm run scrub` before you commit the copy.
 
-Last verified: 2026-10-29
+Last verified: 2026-10-30

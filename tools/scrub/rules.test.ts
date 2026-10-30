@@ -67,12 +67,14 @@ describe('generic scrub rules', () => {
       ['github-token', join('ghp', '_', 'a'.repeat(36))],
       ['github-token', join('github', '_pat_', 'b'.repeat(50))],
       ['anthropic-key', join('sk-', 'ant-', 'c'.repeat(40))],
-      ['sk-key', join('sk-', 'd'.repeat(40))],
+      ['sk-key', join('sk-', 'd4'.repeat(20))],
       ['aws-key', join('AKIA', 'ABCDEFGHIJKLMNOP')],
       ['slack-token', join('xoxb', '-', '1'.repeat(12))],
       ['google-key', join('AIza', 'e'.repeat(35))],
+      ['stripe-key', join('sk', '_live_', 'j'.repeat(24))],
       ['jwt', join('eyJ', 'f'.repeat(10), '.eyJ', 'g'.repeat(10), '.', 'h'.repeat(10))],
       ['assigned-secret', join('password', ': "', 'i'.repeat(16), '"')],
+      ['assigned-secret', join('DB_', 'PASSWORD', '="', 'k3'.repeat(8), '"')],
     ];
     for (const [rule, text] of cases) {
       assert.deepEqual(ruleIds(text), [rule], rule);
@@ -81,6 +83,12 @@ describe('generic scrub rules', () => {
 
   it('accepts a secret-like name bound to a placeholder', () => {
     assert.deepEqual(ruleIds(join('token', ': "', '${user_config.TOKEN}', '"')), []);
+  });
+
+  // teamrig's core judges these values names, not secrets; the copied doc comment of secret-patterns.ts holds both.
+  it('accepts a secret-like name bound to the name of a secret', () => {
+    assert.deepEqual(ruleIds(join('TOKEN', '="', 'SOME_READ_', 'TOKEN', '"')), []);
+    assert.deepEqual(ruleIds(join('secret', ': "', 'app-api-', 'secrets', '"')), []);
   });
 
   it('fails closed on a match without its captured part: no allow check accepts it', () => {
