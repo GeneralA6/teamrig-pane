@@ -1,13 +1,14 @@
 ---
 name: teamrig-pane-guide
-description: Use when a session runs the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes, Log, Inbox, Team views, where it finds the register, requirements.
+description: Use when running the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes, Log, Inbox, Team, Meetings views, where it finds the register, requirements.
 ---
 
 # teamrig-pane guide
 
 teamrig-pane is a Claude Code plugin that shows a session's teamrig tasks, and the files it changed in git,
 beside the conversation. It only reads: the [teamrig](https://github.com/GeneralA6/teamrig) CLI writes the task
-register and the inboxes, and the pane draws what is there. It makes no model calls and uses no tokens.
+register and the inboxes, and the pane draws what is there. The Meetings view is the one exception: it runs teamrig's
+CLI to list the team's meetings and to start one. It makes no model calls and uses no tokens.
 
 The pane is pre-release: it runs on Claude Code's function hooks (`hooks/hooks.json` loads `./register.tsx` as a
 module in Claude Code's own runtime), an early-access plugin surface that may change between releases.
@@ -25,9 +26,9 @@ module in Claude Code's own runtime), an early-access plugin surface that may ch
 | Claude Code | 2.1.295 or later | CI runs the plugin's tests on 2.1.295, the oldest release they pass on; earlier test kits cannot draw a pane. On an older one the pane draws a `WARN` line with the fix. |
 | Fullscreen layout | `"tui": "fullscreen"` in `~/.claude/settings.json` | Only the fullscreen layout docks the pane on the right. Without it the pane sits above the prompt. |
 | Terminal width | 110 columns to dock, 144 to open by itself | Narrower, the pane sits above the prompt; `/teamrig-pane` opens it at any width. |
-| teamrig | a team with a register | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). |
+| teamrig | a team with a register; for the Meetings view, the teamrig plugin 0.208.0 or later installed in Claude Code | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). The Meetings view runs the CLI of the teamrig plugin it finds in Claude Code's plugin list. |
 | git | on the PATH | Only for the Changes tab, which runs `git status` per repo, `git diff` and `git grep` to count the changed lines, and `git diff` for each file's diff you open. Without it the pane draws a `WARN` line with the fix. |
-| Node.js | none to use it; 22.18 or later to develop it | The pane runs inside Claude Code. The repository's tools and tests run on Node (`engines` in `package.json`). |
+| Node.js | `node` on the PATH for the Meetings view, as teamrig needs; 22.18 or later to develop it | The pane runs inside Claude Code; the Meetings view runs teamrig's CLI with `node`. The repository's tools and tests run on Node (`engines` in `package.json`). |
 | Operating system | Linux, Windows or macOS | CI runs the tests on ubuntu, windows and macos, each on Node 22 and 24, and the plugin tests in Claude Code on each. CI checks only once the repository is public: until then each change is tested before it is pushed on one machine, Node and Claude Code release, so the others go unchecked. |
 
 The pane checks the Claude Code version and git once a session, when it starts, and draws one `WARN` line
@@ -101,6 +102,7 @@ groups (the views, the list's own, a page's steps, the status bar's) and how the
 | `g` | The Log view: each conversation of the team's sessions, titled by its task (see [The Log view](#the-log-view)) |
 | `u` | The Inbox view: this session's inbox lines of the last 24 hours and every unread one (see [The Inbox view](#the-inbox-view)) |
 | `e` | The Team view: the tree of teams the session's team is in, each lead over the sessions it leads (see [The Team view](#the-team-view)) |
+| `j` | The Meetings view: the team's booked meetings by time, each a press that opens its card, where a scheduled one starts (see [The Meetings view](#the-meetings-view)) |
 | `m` | Tasks: this session's area (`mine`) |
 | `a` | Tasks: every owner (`all`) |
 | `o` | mine: only the tasks done today (the status bar's `done today`); again shows every task |
@@ -135,9 +137,9 @@ right end beside the `[-]`, opens the
 pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
 band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
-Minimized, the pane is the `[Tasks] [Changes n] [Log] [Inbox (n)] [Team]` switch, then a dim `· minimized, press a view`
+Minimized, the pane is the `[Tasks] [Changes n] [Log] [Inbox (n)] [Team] [Meetings]` switch, then a dim `· minimized, press a view`
 (on a row of its own, with no `·`, in a dock too narrow for both). A
-click on any of its buttons, `t`, `d`, `g`, `u` or `e`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
+click on any of its buttons, `t`, `d`, `g`, `u`, `e` or `j`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
 session.
 
 ## Where the pane sits
@@ -597,9 +599,39 @@ It reads each team folder's config, rename log and hire log (`~/.teamrig/teams/<
 While the view shows, it reads a file again on a 3 second poll only when its size or time moved; on another view, or
 minimized, it reads nothing.
 
+## The Meetings view
+
+`j`, or Meetings on the switch, lists the meetings booked for the session's team, the scheduled and started ones, by
+time. A ruled header counts them and the missed ones (`3 meetings · 1 missed`). A meeting's row gives its mark, its id,
+when it starts on the team's clock, its length, and the session met with those joining; under it, dim, what it is about
+and the tasks it settles:
+
+    › M3  Tue 10-13 15:00 IDT · 30 min · web with lead · next
+          the pricing tiers · T1
+
+| Mark | Meaning |
+| --- | --- |
+| `›`, `next` | the first scheduled meeting not missed; `now` once its time came |
+| `○` | one more scheduled meeting |
+| `!`, a red `missed` | a scheduled meeting whose slot ended with no start |
+| `◐`, `started` | a started meeting |
+
+A press on a row (a click, Enter or Space) opens its card in place of the dim line, and again closes it: About, With,
+Tasks (each with its title and status; an id the register holds opens its page), Brief (a press opens the file) and,
+on a scheduled meeting, `[Start meeting]`. That press runs `teamrig meeting start <id>` as the session
+(`$TEAMRIG_SESSION`, else the area the pane shows), as typing it would. What teamrig answered leads the list:
+`Starting M3…`, then `Started M3.` with teamrig's lines (`TOLD lead`), or `M3 did not start:` and why. One start runs
+at a time.
+
+The view runs the CLI of the teamrig plugin installed in Claude Code, with `node`: `teamrig meeting list --json` when
+the view opens and every 60 seconds while it shows; on another view, or minimized, it runs nothing. With no teamrig
+plugin, one older than 0.208.0, or a list that fails, it says why
+([reference.md](reference.md#warn-lines-and-their-fixes)). It has no Find field: a schedule is a few rows.
+
 ## How it relates to the teamrig CLI
 
-The pane never writes. To change what it shows, run teamrig (see the
+The pane never writes, but for the Meetings view's `[Start meeting]`, which runs `teamrig meeting start`. To change
+what it shows, run teamrig (see the
 [teamrig guide](https://github.com/GeneralA6/teamrig/blob/main/plugins/teamrig/skills/teamrig-guide/commands.md)):
 
 | To | Run |
@@ -609,8 +641,10 @@ The pane never writes. To change what it shows, run teamrig (see the
 | start, block or finish a task | `teamrig set T12 --status in-progress --session <you>` |
 | ask another session for work (shows in `asked of others`) | `teamrig add --owner <session> --title "..." --priority p2 --session <you>` |
 | give a task details to quote | `teamrig update T12 --ref "docs/spec.md:40-42" --session <you>` |
+| book a meeting (shows in Meetings) | `teamrig meeting schedule --meets <session> --at <time> --about "..." --session <you>` |
 
 The pane reads the register with teamrig's own read modules, copied into the plugin at a pinned teamrig commit,
-and a golden test holds its rows to what `teamrig list` prints. It reads files only: a stat every 3 seconds
+and a golden test holds its rows to what `teamrig list` prints. Besides the Meetings view, which runs teamrig's CLI, it
+reads files only: a stat every 3 seconds
 re-reads a file when its size or time moved, and a 60 second tick moves the due and age labels on. Its state
 (the size, a pin) lives in the plugin's own store, never in the register.

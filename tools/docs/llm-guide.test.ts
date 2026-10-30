@@ -112,7 +112,13 @@ describe('the pane guide documents the keys', () => {
 });
 
 describe('the pane guide documents where the register is', () => {
-  const variables = Array.from(read(`${PLUGIN}/hooks/places.ts`).matchAll(/'(TEAMRIG_[A-Z_]+)'/g), (match) => match[1] ?? '');
+  // places.ts names where the register is; register.tsx reads the rest itself (the session a meeting starts as).
+  const variables = [
+    ...new Set([
+      ...Array.from(read(`${PLUGIN}/hooks/places.ts`).matchAll(/'(TEAMRIG_[A-Z_]+)'/g), (match) => match[1] ?? ''),
+      ...Array.from(read(`${PLUGIN}/hooks/register.tsx`).matchAll(/env\.get\('(TEAMRIG_[A-Z_]+)'\)/g), (match) => match[1] ?? ''),
+    ]),
+  ];
 
   it('names every variable the pane reads, and none it does not', () => {
     assert.ok(variables.length > 0, 'places.ts names its variables');
