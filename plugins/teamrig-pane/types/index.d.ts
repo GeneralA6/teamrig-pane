@@ -147,6 +147,18 @@ export type Snapshot = {
 /** What the team config sets that the snapshot carries: the NOT PICKED UP hours and the team's zone. */
 export type TeamSettings = Pick<Snapshot, 'notPickedUpAfterHours' | 'timeZone'>
 
+/** What the team config says about the owner's waits: its `register.ownerSource` and `register.requireDecisionCard`. */
+export type OwnerSettings = { readonly ownerSource: string; readonly requireDecisionCard: boolean }
+
+/** A card waiting on the owner (hooks/owner-cards.ts): its task's id and title. */
+export type OwnerCard = { readonly id: string; readonly title: string }
+
+/** A card the owner put off (Later), with when the lead asks it again, in teamrig's words (`Mon 11-02`). */
+export type LaterOwnerCard = OwnerCard & { readonly until: string }
+
+/** One session's cards on the owner, as `teamrig meet` asks them: those the lead asks now, then those put off. */
+export type SessionOwnerCards = { readonly due: readonly OwnerCard[]; readonly later: readonly LaterOwnerCard[] }
+
 /** Lines quoted for a task (hooks/details.ts) from one part of its ref; `ref` names that part. */
 export type RefQuote = { ref: string; lines: string[] }
 
