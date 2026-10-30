@@ -3,16 +3,16 @@ import type { TaskStatus } from '../register/model.ts';
 import type { CoreRuleKey } from '../rules/keys.ts';
 
 /** The config format this code reads and writes. Older files are migrated in memory on load. */
-export const CONFIG_VERSION = 7;
+export const CONFIG_VERSION = 8;
 
 export interface RolesConfig {
   /** Owns priorities, team rules and the owner's decision queue; may re-prioritize and reassign tasks; hands the work itself to others (`leadBoundary`). */
   readonly lead: string;
   /**
-   * Owns deploy coordination and fleet health, when the team has that role: a session id of the team, or `<team>/<id>`,
-   * the holder of the same role on a team above it (T1143), for a child team with no coordinator of its own.
+   * Owns the delivery flow and fleet health, when the team has that role: a session id of the team, or `<team>/<id>`,
+   * the holder of the same role on a team above it (T1143), for a child team with no delivery owner of its own.
    */
-  readonly coordinatorOwner?: string;
+  readonly deliveryOwner?: string;
   /**
    * Reviews the privileged commands sessions ask to run (`exec`), when the team has that role; the owner always may too.
    * A session id of the team, or `<team>/<id>`, the reviewer of a team above it (T1143).
@@ -607,6 +607,16 @@ export interface BudgetLiftConfig {
 }
 
 /**
+ * The budget keys of the account's week, and whether the budget is on: a team under another (`team.parent`) that
+ * leaves one unset takes the team above's, unless it names another account (src/cli/kit.ts openKit), so the teams of
+ * a tree read one week alike without a copy that drifts.
+ */
+export const ACCOUNT_BUDGET_KEYS = ['enabled', 'account', 'weeklyLimitW', 'subagentWeight', 'extraWPerUsd', 'reset'] as const satisfies readonly (keyof BudgetConfig)[];
+
+/** The keys of ACCOUNT_BUDGET_KEYS as a team reads them, its own or the team above's. */
+export type AccountBudget = Pick<BudgetConfig, (typeof ACCOUNT_BUDGET_KEYS)[number]>;
+
+/**
  * The weekly token budget: the pace line the team is measured against and each session's daily part
  * of it. Off by default, and the defaults only measure and show: nothing blocks or acts.
  */
@@ -615,10 +625,11 @@ export interface BudgetConfig {
   readonly enabled: boolean;
   /**
    * The Claude account the team's week is on: teams with the same account share one week and split its daily
-   * budget. Unset: the Claude config dir, since one config dir signs in one account.
+   * budget. Unset: the team above's (`AccountBudget`), else the Claude config dir, since one config dir signs in one
+   * account.
    */
   readonly account?: string;
-  /** The weekly limit in weighted tokens (W). Unset: derived from the status line's weekly %. */
+  /** The weekly limit in weighted tokens (W). Unset: the team above's (`AccountBudget`), else derived from the status line's weekly %. */
   readonly weeklyLimitW?: number;
   /**
    * What one W of a subagent's transcript costs against the weekly limit, in W of a main session. The meter
@@ -627,10 +638,11 @@ export interface BudgetConfig {
   readonly subagentWeight: number;
   /**
    * W per US dollar of extra usage, standing in until two spent readings past 100% of the week teach the rate
-   * (src/budget/extra.ts). Unset: the extra-usage pool shows in dollars only until then, with no allowance.
+   * (src/budget/extra.ts). Unset: the team above's (`AccountBudget`), else the extra-usage pool shows in dollars only
+   * until then, with no allowance.
    */
   readonly extraWPerUsd?: number;
-  /** Unset: the reset time the status line reports. */
+  /** Unset: the team above's (`AccountBudget`), else the reset time the status line reports. */
   readonly reset?: BudgetReset;
   /** Use the week up to this share of the weekly limit. */
   readonly targetPct: number;
@@ -640,6 +652,12 @@ export interface BudgetConfig {
   readonly paceEndHoursBeforeReset: number;
   /** Each session's part, by id; a session not listed has a share of 1. */
   readonly sessions: Readonly<Record<string, SessionBudget>>;
+  /**
+   * On a short day (what is left of the week gives less than the pace line plans for the day), fund the team's
+   * sessions' queued work in priority order and pause the sessions none of it reaches. The lead, the delivery owner
+   * held in the team and lifted sessions are never paused. Off: no session of the team is paused.
+   */
+  readonly pauseByPriority: boolean;
   /** The live warning shows a line as a session passes each of these % of its daily budget. */
   readonly warnAtPct: readonly number[];
   /** The team is ahead of its pace line once its used % is more than this many points above it. */
@@ -655,8 +673,8 @@ export interface BudgetConfig {
 }
 
 export interface ScheduleConfig {
-  /** No heavy step starts on the host after this UTC time (HH:MM) until midnight. */
-  readonly heavyCutoffUtc?: string;
+  /** No queued step starts on the host after this UTC time (HH:MM) until midnight. */
+  readonly queueCutoffUtc?: string;
   /**
    * No deploy (`teamrig merge`) starts from this many hours before the weekly token reset until the reset, so
    * nothing that may need a fix lands while the week has no budget left to fix it. Unset: no blackout.
@@ -664,50 +682,50 @@ export interface ScheduleConfig {
   readonly resetBlackoutHours?: number;
 }
 
-/** `teamrig heavy`: one heavy step on the host at a time, each under the host lock. */
-export interface HeavyConfig {
+/** `teamrig queue`: one queued step on the host at a time, each under the host lock. */
+export interface QueueConfig {
   /**
-   * The host lock file every heavy step takes; a relative path is in the team's folder. Unset: `<kit home>/host.lock`,
+   * The host lock file every queued step takes; a relative path is in the team's folder. Unset: `<kit home>/host.lock`,
    * one lock for every team on the host.
    */
   readonly lockPath?: string;
   /** A taken host lock lasts this many minutes; past it, another step takes it over. */
   readonly lockTtlMinutes: number;
-  /** A heavy step still running after this many minutes is killed with every process it started. */
+  /** A queued step still running after this many minutes is killed with every process it started. */
   readonly maxRunMinutes: number;
   /**
-   * A small step (`heavy --small`) still running after this many minutes is killed the same way; at most
+   * A small step (`queue --small`) still running after this many minutes is killed the same way; at most
    * maxRunMinutes. A small step shares the host beside others and holds back any step waiting for the lock, so a hung
    * one is cut short; a longer step runs without --small.
    */
   readonly smallMaxRunMinutes: number;
-  /** A heavy step is refused once its line for the host lock has not moved for this many minutes: no step ahead of it, holding the lock or sharing the host ended meanwhile. */
+  /** A queued step is refused once its line for the host lock has not moved for this many minutes: no step ahead of it, holding the lock or sharing the host ended meanwhile. */
   readonly waitMinutes: number;
   /**
-   * While a heavy step runs, its process tree's memory and the host's free memory are sampled this often, for its
+   * While a queued step runs, its process tree's memory and the host's free memory are sampled this often, for its
    * ledger record's `peakTreeMb` and `lowFreeMb`; 0 samples nothing.
    */
   readonly memorySampleSeconds: number;
-  /** A small step (`heavy --small`) shares the host only while it keeps this many MB free besides those held for the small steps. */
+  /** A small step (`queue --small`) shares the host only while it keeps this many MB free besides those held for the small steps. */
   readonly memoryFloorMb: number;
   /** The MB held for a small step with no ledger record of its peak yet. */
   readonly smallReserveMb: number;
 }
 
-/** How a coordinator step waits. */
-export interface CoordinatorWaitConfig {
+/** How a delivery step waits. */
+export interface DeliveryWaitConfig {
   /** A waiting step looks again after this many seconds; the first in line for the host lock every 2 at most. */
   readonly pollSeconds: number;
-  /** A deploy step (`teamrig merge`, `deploy`) waits this many minutes at most for quiet claims and the host lock, then is refused; a wait in a line for the lock that keeps moving goes on past them. */
+  /** A deploy step (`teamrig merge`, `deploy`) waits this many minutes at most for deploy freezes and the host lock, then is refused; a wait in a line for the lock that keeps moving goes on past them. */
   readonly maxMinutes: number;
 }
 
 /** A repository whose branches `teamrig merge` merges into its default branch. */
-export interface CoordinatorRepoConfig {
+export interface DeliveryRepoConfig {
   /** The repository's main checkout; a branch merges from any worktree of it. A relative path is in the team's folder. */
   readonly mainCheckout: string;
   /**
-   * The deploy targets a push to the default branch deploys by itself (a host that builds on push): quiet claims on
+   * The deploy targets a push to the default branch deploys by itself (a host that builds on push): deploy freezes on
    * them hold the merge, and the push is recorded as their deploy.
    */
   readonly deploysOnPush: readonly string[];
@@ -738,7 +756,7 @@ export interface CoordinatorRepoConfig {
    */
   readonly reviewCheck?: readonly string[];
   /** After the push, fast-forward the main checkout to it: only a fast-forward, only on the default branch with no tracked changes. */
-  readonly followMainCheckout: boolean;
+  readonly updateMainCheckout: boolean;
   /**
    * The folder `teamrig worktree add` makes each new worktree in, one folder per branch named after it with each `/`
    * as `-`. A relative path is in the main checkout; unset: `.claude/worktrees` there.
@@ -784,7 +802,7 @@ export interface DeployCheckConfig {
 
 /** How `teamrig deploy` deploys a repository's default branch from its main checkout, each command run without a shell. */
 export interface DeployConfig {
-  /** The deploy targets it deploys: quiet claims on them hold it. */
+  /** The deploy targets it deploys: deploy freezes on them hold it. */
   readonly targets: readonly string[];
   /** Asked in order before the host lock and again under it; the first that does not pass holds the deploy. */
   readonly checks: readonly DeployCheckConfig[];
@@ -801,40 +819,40 @@ export interface DeployConfig {
   readonly command: readonly string[];
 }
 
-/** `teamrig claim`: quiet claims, which hold deploys of their targets while a session measures them. */
-export interface ClaimsConfig {
-  /** A claim lasts at most this many minutes. */
+/** `teamrig freeze`: deploy freezes, which hold deploys of their targets while a session measures them. */
+export interface FreezesConfig {
+  /** A freeze lasts at most this many minutes. */
   readonly maxMinutes: number;
 }
 
-/** `teamrig windows`: when a measurement of a deploy target is clean, between the deploys and heavy steps that disturb it. */
-export interface WindowsConfig {
+/** `teamrig stable-periods`: when a measurement of a deploy target is clean, between the deploys and queued steps that disturb it. */
+export interface StablePeriodsConfig {
   /** A target measures cleanly this many minutes after a deploy reached it. */
   readonly settleMinutes: number;
   /** Per deploy target, its own settle minutes in place of `settleMinutes`. */
   readonly targetSettleMinutes: Readonly<Record<string, number>>;
   /** How long a deploy is taken to have run before its ledger.md line when the ledger has no record of its start. */
   readonly assumedDeployMinutes: number;
-  /** The shortest clean window worth listing. */
+  /** The shortest stable period worth listing. */
   readonly minMinutes: number;
 }
 
 /**
- * The deploy coordinator: its folder, the heavy-step cutoff and the reset blackout, the host lock, how a step waits,
- * quiet claims, clean measurement windows, and the repositories whose branches `teamrig merge` merges and `teamrig deploy` deploys.
+ * The delivery flow: its folder, the queue cutoff and the reset blackout, the host lock, how a step waits,
+ * deploy freezes, the stable periods to measure in, and the repositories whose branches `teamrig merge` merges and `teamrig deploy` deploys.
  */
-export interface CoordinatorConfig {
-  /** The coordinator's folder, which holds its ledger; a relative path is in the team's folder. Unset: `<state>/deploys`. */
+export interface DeliveryConfig {
+  /** The delivery folder, which holds its ledger; a relative path is in the team's folder. Unset: `<state>/deploys`. */
   readonly dir?: string;
   readonly schedule: ScheduleConfig;
-  readonly heavy: HeavyConfig;
-  readonly wait: CoordinatorWaitConfig;
+  readonly queue: QueueConfig;
+  readonly wait: DeliveryWaitConfig;
   /** A deploy's check still running after this many seconds is stopped, and the deploy waits. */
   readonly checkTimeoutSeconds: number;
-  readonly claims: ClaimsConfig;
-  readonly windows: WindowsConfig;
+  readonly freezes: FreezesConfig;
+  readonly stablePeriods: StablePeriodsConfig;
   /** By name, such as `api`. */
-  readonly repos: Readonly<Record<string, CoordinatorRepoConfig>>;
+  readonly repos: Readonly<Record<string, DeliveryRepoConfig>>;
 }
 
 export interface AlertsConfig {
@@ -888,16 +906,18 @@ export interface RefreshConfig {
   /**
    * Once the handover is written and the turn has ended, start the session fresh, which reads the handover:
    * the plugin's mod runs /clear in its tab; where no mod claims the ask, end its Claude Code process and start
-   * it again, in the same tab when `teamrig open` started it, else in a new tab. A prompt typed before then
-   * keeps the context. Off (the default): the user types /clear once done with the screen, which a /clear wipes.
+   * it again, in the same tab when `teamrig open` started it, else in a new tab. A session with no work it can start
+   * then waits for the wake that brings it some, which starts it fresh instead of waking it (T1383). A prompt typed
+   * before then keeps the context. Off (the default): the user types /clear once done with the screen, which a /clear wipes.
    */
   readonly autoRestart: boolean;
   /** How long after the turn's end the automatic restart waits, so the user can still type to keep the context. */
   readonly restartDelaySeconds: number;
   /**
    * The plugin's mod holds the automatic /clear while the person typed in the tab's prompt (a key, a paste) or sent
-   * a prompt there this recently, and while the prompt holds a draft: a /clear never lands under the person. 0: only
-   * a draft holds it.
+   * a prompt there this recently, and while the prompt holds a draft: a /clear never lands under the person. The
+   * default 30 min keeps the context through the person's talk in the tab (reading a reply, thinking it over), the
+   * restart coming once they have been away that long (T1383). 0: only a draft holds it.
    */
   readonly holdAfterActivityMinutes: number;
   /**
@@ -1033,7 +1053,7 @@ export function isIdleMode(value: unknown): value is IdleMode {
 /** The idle pass: it closes a session the wake check would not wake once it is quiet, and reopens it when work arrives. */
 export interface IdleConfig {
   readonly mode: IdleMode;
-  /** Sessions never closed for being quiet (by the pass or `teamrig close`), on top of the lead and the coordinator owner. */
+  /** Sessions never closed for being quiet (by the pass or `teamrig close`), on top of the lead and the delivery owner. */
   readonly keepOpen: readonly string[];
 }
 
@@ -1150,7 +1170,7 @@ export interface KitConfig {
   /** Refuses a call that would print a secret file, the environment or a secret variable, or whose line holds a secret as text (hook-secret-guard). */
   readonly secretGuard: SecretGuardConfig;
   readonly commits: CommitsConfig;
-  readonly coordinator: CoordinatorConfig;
+  readonly delivery: DeliveryConfig;
   readonly budget: BudgetConfig;
   readonly leadBoundary: LeadBoundaryConfig;
   readonly loops: LoopsConfig;

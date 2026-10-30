@@ -1,5 +1,5 @@
 // Copied from teamrig's src/config/parse.ts by scripts/sync-core.ts: change it there, then run the sync.
-import { deployTargetsOf } from '../coordinator/targets.ts';
+import { deployTargetsOf } from '../delivery/targets.ts';
 import { ADDRESS_PATTERN, splitAddress } from '../core/address.ts';
 import { isRecord, type JsonRecord } from '../core/guards.ts';
 import { isReservedName, NAME_PATTERN, NAME_RULE, RESERVED_NAMES } from '../core/ids.ts';
@@ -15,12 +15,12 @@ import {
   DEFAULT_BURST,
   DEFAULT_COMMITS,
   DEFAULT_CONTEXT_FILES,
-  DEFAULT_CLAIMS,
+  DEFAULT_FREEZES,
   DEFAULT_DECISIONS,
-  DEFAULT_COORDINATOR_WAIT,
+  DEFAULT_DELIVERY_WAIT,
   DEFAULT_CHECK_TIMEOUT_SECONDS,
   DEFAULT_GITHUB,
-  DEFAULT_HEAVY,
+  DEFAULT_QUEUE,
   DEFAULT_HIRING,
   DEFAULT_EXEC,
   DEFAULT_LOCK,
@@ -48,8 +48,8 @@ import {
   DEFAULT_STATUS_LINE,
   DEFAULT_TESTS,
   DEFAULT_WAKE,
-  DEFAULT_WINDOWS,
-  HEAVY_TTL_MARGIN_MINUTES,
+  DEFAULT_STABLE_PERIODS,
+  QUEUE_TTL_MARGIN_MINUTES,
 } from './defaults.ts';
 import { isEffort, isModel } from './launch.ts';
 import { BUDGET_ACCOUNT_MAX_LENGTH, CONFIG_LIMITS, REVIEW_PATH_LIMITS, RULE_CONFLICT_LIMITS } from './limits.ts';
@@ -105,13 +105,14 @@ import {
   VERIFY_GATES,
   WEEKDAYS,
   type PackageGuardConfig,
+  type AccountBudget,
   type BudgetConfig,
   type BudgetLiftConfig,
   type BudgetReset,
   type BurstConfig,
-  type CoordinatorConfig,
-  type CoordinatorRepoConfig,
-  type HeavyConfig,
+  type DeliveryConfig,
+  type DeliveryRepoConfig,
+  type QueueConfig,
   type MergeConfig,
   type DeployConfig,
   type DeployCheckConfig,
@@ -144,7 +145,7 @@ import {
   type TeamLink,
   type TurnLogConfig,
   type WakeConfig,
-  type WindowsConfig,
+  type StablePeriodsConfig,
 } from './types.ts';
 
 export interface ConfigParse {
@@ -363,8 +364,11 @@ function readTeam(read: ConfigReader, raw: JsonRecord): TeamLink | undefined {
   return { id, ...(parent === undefined ? {} : { parent }), ...where };
 }
 
-/** Validates a migrated config object against the current format. */
-export function parseConfig(raw: JsonRecord): ConfigParse {
+/**
+ * Validates a migrated config object against the current format; `above` is the team above's budget keys of the
+ * account's week, for those it leaves unset (`AccountBudget`).
+ */
+export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse {
   const read = new ConfigReader();
   const sessions = read.list(raw, 'sessions', '', [], (value, path) => read.stringItem(value, path, isSessionName));
   if (raw['sessions'] === undefined) {
@@ -372,11 +376,12 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
   }
   const rolesRaw = read.section(raw, 'roles', '');
   const lead = read.requiredString(rolesRaw, 'lead', 'roles', isSessionName);
-  const coordinatorOwner = read.optionalString(rolesRaw, 'coordinatorOwner', 'roles', isRoleHolder);
+  reportRenamedKey(read, rolesRaw, 'roles', 'coordinatorOwner', 'deliveryOwner');
+  const deliveryOwner = read.optionalString(rolesRaw, 'deliveryOwner', 'roles', isRoleHolder);
   const securityReviewer = read.optionalString(rolesRaw, 'securityReviewer', 'roles', isRoleHolder);
   for (const [key, name] of [
     ['lead', lead],
-    ['coordinatorOwner', coordinatorOwner],
+    ['deliveryOwner', deliveryOwner],
     ['securityReviewer', securityReviewer],
   ] as const) {
     // A holder on a team above is the tree's to check (tree-role), as only the tree sees that team.
@@ -392,7 +397,7 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
   const launch = readLaunch(read, read.section(raw, 'launch', ''), sessions);
   const team = readTeam(read, raw);
   for (const [key, holder] of [
-    ['coordinatorOwner', coordinatorOwner],
+    ['deliveryOwner', deliveryOwner],
     ['securityReviewer', securityReviewer],
   ] as const) {
     const at = holder === undefined ? undefined : splitAddress(holder)?.team;
@@ -408,8 +413,9 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
   const lock = read.section(raw, 'lock', '');
   const tabStatus = read.section(raw, 'tabStatus', '');
   const pickerGuard = read.section(raw, 'pickerGuard', '');
-  const budget = parseBudget(read, read.section(raw, 'budget', ''), sessions);
+  const budget = parseBudget(read, read.section(raw, 'budget', ''), sessions, above);
   const decisions = read.section(raw, 'decisions', '');
+  reportRenamedKey(read, raw, '', 'coordinator', 'delivery');
 
   const config: KitConfig = {
     configVersion: read.integer(raw, 'configVersion', '', 1, { min: 1 }),
@@ -419,7 +425,7 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
     names,
     roles: {
       lead,
-      ...(coordinatorOwner === undefined ? {} : { coordinatorOwner }),
+      ...(deliveryOwner === undefined ? {} : { deliveryOwner }),
       ...(securityReviewer === undefined ? {} : { securityReviewer }),
     },
     leads,
@@ -476,7 +482,7 @@ export function parseConfig(raw: JsonRecord): ConfigParse {
     prompts: { hookAsks: parseHookAsks(read, read.section(raw, 'prompts', '')) },
     secretGuard: parseSecretGuard(read, read.section(raw, 'secretGuard', '')),
     commits: parseCommits(read, read.section(raw, 'commits', '')),
-    coordinator: parseCoordinator(read, read.section(raw, 'coordinator', '')),
+    delivery: parseDelivery(read, read.section(raw, 'delivery', '')),
     budget,
     leadBoundary: parseLeadBoundary(read, read.section(raw, 'leadBoundary', '')),
     loops: {
@@ -639,61 +645,67 @@ function readGithubOwners(read: ConfigReader, raw: JsonRecord, sessions: readonl
 /** Config version 1's name for `register.priorities`; the v1-to-v2 migration renames it, so a current file never holds it. */
 const RENAMED_PRIORITIES_KEY = 'tiers';
 
-/** The budget's old place, `coordinator.budget`; it moved to the top-level `budget` block, with no alias. */
+/** The budget's old place, `coordinator.budget`, now `delivery.budget`; it moved to the top-level `budget` block, with no alias. */
 const MOVED_BUDGET_KEY = 'budget';
 
 /**
- * Reports `raw`'s `from` as renamed to `to`. The v4-to-v5 migration renames each key it names (src/config/migrate.ts), so
- * a current file holds one only when written so by hand, and it is read as nothing, never as an alias.
+ * Reports `raw`'s `from`, below `path` ('' for the top level), as renamed to `to`. The v4-to-v5 and v7-to-v8
+ * migrations rename each key they name (src/config/migrate.ts), so a current file holds one only when written so by
+ * hand, and it is read as nothing, never as an alias.
  */
 function reportRenamedKey(read: ConfigReader, raw: JsonRecord, path: string, from: string, to: string): void {
+  const at = (key: string): string => (path === '' ? key : `${path}.${key}`);
   if (raw[from] !== undefined) {
-    read.report(`${path}.${from}`, `was renamed: use ${path}.${to}`);
+    read.report(at(from), `was renamed: use ${at(to)}`);
   }
 }
 
 const isPathText: Check<string> = (text) => (text.trim() === '' ? 'expected a path' : undefined);
 
-/** A repository's or a deploy target's name in the coordinator block. */
-const isCoordinatorName: Check<string> = (name) =>
+/** A repository's or a deploy target's name in the delivery block. */
+const isDeliveryName: Check<string> = (name) =>
   /^[a-z0-9][a-z0-9._-]*$/.test(name) ? undefined : 'expected a name: lowercase letters, digits, ., _ or -, from a letter or digit';
 
-function parseCoordinator(read: ConfigReader, raw: JsonRecord): CoordinatorConfig {
-  const path = 'coordinator';
+function parseDelivery(read: ConfigReader, raw: JsonRecord): DeliveryConfig {
+  const path = 'delivery';
   if (raw[MOVED_BUDGET_KEY] !== undefined) {
     read.report(`${path}.${MOVED_BUDGET_KEY}`, 'was moved: use the top-level budget block');
   }
   reportRenamedKey(read, raw, path, 'gateTimeoutSeconds', 'checkTimeoutSeconds');
+  reportRenamedKey(read, raw, path, 'heavy', 'queue');
+  reportRenamedKey(read, raw, path, 'claims', 'freezes');
+  reportRenamedKey(read, raw, path, 'windows', 'stablePeriods');
   const dir = read.optionalString(raw, 'dir', path, isPathText);
   const schedule = read.section(raw, 'schedule', path);
-  const heavyCutoffUtc = read.optionalString(schedule, 'heavyCutoffUtc', `${path}.schedule`, isUtcTime);
+  reportRenamedKey(read, schedule, `${path}.schedule`, 'heavyCutoffUtc', 'queueCutoffUtc');
+  const queueCutoffUtc = read.optionalString(schedule, 'queueCutoffUtc', `${path}.schedule`, isUtcTime);
   const resetBlackoutHours = read.optionalInteger(schedule, 'resetBlackoutHours', `${path}.schedule`, CONFIG_LIMITS.resetBlackoutHours);
   const wait = read.section(raw, 'wait', path);
-  const claims = read.section(raw, 'claims', path);
-  const repos = parseCoordinatorRepos(read, read.section(raw, 'repos', path));
+  const freezes = read.section(raw, 'freezes', path);
+  const repos = parseDeliveryRepos(read, read.section(raw, 'repos', path));
   return {
     ...(dir === undefined ? {} : { dir }),
-    schedule: { ...(heavyCutoffUtc === undefined ? {} : { heavyCutoffUtc }), ...(resetBlackoutHours === undefined ? {} : { resetBlackoutHours }) },
-    heavy: parseHeavy(read, read.section(raw, 'heavy', path)),
+    schedule: { ...(queueCutoffUtc === undefined ? {} : { queueCutoffUtc }), ...(resetBlackoutHours === undefined ? {} : { resetBlackoutHours }) },
+    queue: parseQueue(read, read.section(raw, 'queue', path)),
     wait: {
-      pollSeconds: read.integer(wait, 'pollSeconds', `${path}.wait`, DEFAULT_COORDINATOR_WAIT.pollSeconds, CONFIG_LIMITS.coordinatorPollSeconds),
-      maxMinutes: read.integer(wait, 'maxMinutes', `${path}.wait`, DEFAULT_COORDINATOR_WAIT.maxMinutes, CONFIG_LIMITS.coordinatorWaitMaxMinutes),
+      pollSeconds: read.integer(wait, 'pollSeconds', `${path}.wait`, DEFAULT_DELIVERY_WAIT.pollSeconds, CONFIG_LIMITS.deliveryPollSeconds),
+      maxMinutes: read.integer(wait, 'maxMinutes', `${path}.wait`, DEFAULT_DELIVERY_WAIT.maxMinutes, CONFIG_LIMITS.deliveryWaitMaxMinutes),
     },
     checkTimeoutSeconds: read.integer(raw, 'checkTimeoutSeconds', path, DEFAULT_CHECK_TIMEOUT_SECONDS, CONFIG_LIMITS.checkTimeoutSeconds),
-    claims: { maxMinutes: read.integer(claims, 'maxMinutes', `${path}.claims`, DEFAULT_CLAIMS.maxMinutes, CONFIG_LIMITS.claimMaxMinutes) },
-    windows: parseWindows(read, read.section(raw, 'windows', path), deployTargetsOf(repos)),
+    freezes: { maxMinutes: read.integer(freezes, 'maxMinutes', `${path}.freezes`, DEFAULT_FREEZES.maxMinutes, CONFIG_LIMITS.freezeMaxMinutes) },
+    stablePeriods: parseStablePeriods(read, read.section(raw, 'stablePeriods', path), deployTargetsOf(repos)),
     repos,
   };
 }
 
 /** When a deploy target's measurement is clean; a settle time for a target no repository deploys, or out of bounds, is reported and left out. */
-function parseWindows(read: ConfigReader, raw: JsonRecord, knownTargets: readonly string[]): WindowsConfig {
-  const path = 'coordinator.windows';
+function parseStablePeriods(read: ConfigReader, raw: JsonRecord, knownTargets: readonly string[]): StablePeriodsConfig {
+  const path = 'delivery.stablePeriods';
   reportRenamedKey(read, raw, path, 'assumedRollMinutes', 'assumedDeployMinutes');
   const targetSettleMinutes: Record<string, number> = {};
   for (const [target, value] of Object.entries(read.section(raw, 'targetSettleMinutes', path))) {
     const itemPath = `${path}.targetSettleMinutes.${target}`;
-    const badName = isCoordinatorName(target);
+    const badName = isDeliveryName(target);
     if (badName !== undefined) {
       read.report(itemPath, badName);
       continue;
@@ -708,23 +720,23 @@ function parseWindows(read: ConfigReader, raw: JsonRecord, knownTargets: readonl
     }
   }
   return {
-    settleMinutes: read.integer(raw, 'settleMinutes', path, DEFAULT_WINDOWS.settleMinutes, CONFIG_LIMITS.settleMinutes),
+    settleMinutes: read.integer(raw, 'settleMinutes', path, DEFAULT_STABLE_PERIODS.settleMinutes, CONFIG_LIMITS.settleMinutes),
     targetSettleMinutes,
-    assumedDeployMinutes: read.integer(raw, 'assumedDeployMinutes', path, DEFAULT_WINDOWS.assumedDeployMinutes, CONFIG_LIMITS.assumedDeployMinutes),
-    minMinutes: read.integer(raw, 'minMinutes', path, DEFAULT_WINDOWS.minMinutes, CONFIG_LIMITS.windowMinMinutes),
+    assumedDeployMinutes: read.integer(raw, 'assumedDeployMinutes', path, DEFAULT_STABLE_PERIODS.assumedDeployMinutes, CONFIG_LIMITS.assumedDeployMinutes),
+    minMinutes: read.integer(raw, 'minMinutes', path, DEFAULT_STABLE_PERIODS.minMinutes, CONFIG_LIMITS.stablePeriodMinMinutes),
   };
 }
 
 /** The repositories `teamrig merge` merges into and `teamrig deploy` deploys, by name; one with a bad name or no main checkout is reported and left out. */
-function parseCoordinatorRepos(read: ConfigReader, raw: JsonRecord): Record<string, CoordinatorRepoConfig> {
-  const repos: Record<string, CoordinatorRepoConfig> = {};
+function parseDeliveryRepos(read: ConfigReader, raw: JsonRecord): Record<string, DeliveryRepoConfig> {
+  const repos: Record<string, DeliveryRepoConfig> = {};
   for (const [name, value] of Object.entries(raw)) {
-    const path = `coordinator.repos.${name}`;
+    const path = `delivery.repos.${name}`;
     const entry = read.objectItem(value, path);
     if (entry === undefined) {
       continue;
     }
-    const badName = isCoordinatorName(name);
+    const badName = isDeliveryName(name);
     if (badName !== undefined) {
       read.report(path, badName);
       continue;
@@ -746,16 +758,17 @@ function parseCoordinatorRepos(read: ConfigReader, raw: JsonRecord): Record<stri
     if (reviewCheck !== undefined && !reviewGate) {
       read.report(`${path}.reviewCheck`, 'runs only with reviewGate true, so it never runs');
     }
+    reportRenamedKey(read, entry, path, 'followMainCheckout', 'updateMainCheckout');
     const worktreeFolder = read.optionalString(entry, 'worktreeFolder', path, isPathText);
     const worktreeSetup = entry['worktreeSetup'] === undefined ? undefined : read.stringListItem(entry['worktreeSetup'], `${path}.worktreeSetup`, HOOK_ARGV_MAX_ITEMS);
     repos[name] = {
       mainCheckout,
-      deploysOnPush: read.stringList(entry, 'deploysOnPush', path, [], isCoordinatorName),
+      deploysOnPush: read.stringList(entry, 'deploysOnPush', path, [], isDeliveryName),
       dependencyGate,
       ...(dependencyCheck === undefined ? {} : { dependencyCheck }),
       reviewGate,
       ...(reviewCheck === undefined ? {} : { reviewCheck }),
-      followMainCheckout: read.boolean(entry, 'followMainCheckout', path, false),
+      updateMainCheckout: read.boolean(entry, 'updateMainCheckout', path, false),
       ...(worktreeFolder === undefined ? {} : { worktreeFolder }),
       ...(worktreeSetup === undefined ? {} : { worktreeSetup }),
       ...(merge === undefined ? {} : { merge }),
@@ -797,7 +810,7 @@ function parseDeploy(read: ConfigReader, raw: unknown, path: string): DeployConf
   const dependencyInstall = entry['dependencyInstall'] === undefined ? undefined : read.stringListItem(entry['dependencyInstall'], `${path}.dependencyInstall`, HOOK_ARGV_MAX_ITEMS);
   reportRenamedKey(read, entry, path, 'gates', 'checks');
   return {
-    targets: read.stringList(entry, 'targets', path, [], isCoordinatorName),
+    targets: read.stringList(entry, 'targets', path, [], isDeliveryName),
     checks: read.list(entry, 'checks', path, [], (value, itemPath) => parseDeployCheck(read, value, itemPath), DEPLOY_HOOKS_MAX_ITEMS),
     ...(dependencyInstall === undefined ? {} : { dependencyInstall }),
     afterPull: read.list(entry, 'afterPull', path, [], (value, itemPath) => read.stringListItem(value, itemPath, HOOK_ARGV_MAX_ITEMS), DEPLOY_HOOKS_MAX_ITEMS),
@@ -811,26 +824,26 @@ function parseDeployCheck(read: ConfigReader, value: unknown, path: string): Dep
   if (entry === undefined) {
     return undefined;
   }
-  const name = read.stringItem(entry['name'], `${path}.name`, isCoordinatorName);
+  const name = read.stringItem(entry['name'], `${path}.name`, isDeliveryName);
   const command = read.stringListItem(entry['command'], `${path}.command`, HOOK_ARGV_MAX_ITEMS);
   return name === undefined || command === undefined ? undefined : { name, command };
 }
 
 /**
- * The host lock and a heavy step's limits; a step longer than the lock less its margin is cut to fit, so it never
+ * The host lock and a queued step's limits; a step longer than the lock less its margin is cut to fit, so it never
  * outlives its lock, and a small step's limit longer than a step's is cut to it.
  */
-function parseHeavy(read: ConfigReader, raw: JsonRecord): HeavyConfig {
-  const path = 'coordinator.heavy';
+function parseQueue(read: ConfigReader, raw: JsonRecord): QueueConfig {
+  const path = 'delivery.queue';
   const lockPath = read.optionalString(raw, 'lockPath', path, isPathText);
-  const lockTtlMinutes = read.integer(raw, 'lockTtlMinutes', path, DEFAULT_HEAVY.lockTtlMinutes, CONFIG_LIMITS.heavyLockTtlMinutes);
-  const longest = lockTtlMinutes - HEAVY_TTL_MARGIN_MINUTES;
-  const maxRunMinutes = read.integer(raw, 'maxRunMinutes', path, Math.min(DEFAULT_HEAVY.maxRunMinutes, longest), CONFIG_LIMITS.heavyMaxRunMinutes);
+  const lockTtlMinutes = read.integer(raw, 'lockTtlMinutes', path, DEFAULT_QUEUE.lockTtlMinutes, CONFIG_LIMITS.queueLockTtlMinutes);
+  const longest = lockTtlMinutes - QUEUE_TTL_MARGIN_MINUTES;
+  const maxRunMinutes = read.integer(raw, 'maxRunMinutes', path, Math.min(DEFAULT_QUEUE.maxRunMinutes, longest), CONFIG_LIMITS.queueMaxRunMinutes);
   if (maxRunMinutes > longest) {
-    read.report(`${path}.maxRunMinutes`, `must be at most lockTtlMinutes less ${HEAVY_TTL_MARGIN_MINUTES} (${longest})`);
+    read.report(`${path}.maxRunMinutes`, `must be at most lockTtlMinutes less ${QUEUE_TTL_MARGIN_MINUTES} (${longest})`);
   }
   const longestRun = Math.min(maxRunMinutes, longest);
-  const smallMaxRunMinutes = read.integer(raw, 'smallMaxRunMinutes', path, Math.min(DEFAULT_HEAVY.smallMaxRunMinutes, longestRun), CONFIG_LIMITS.heavySmallMaxRunMinutes);
+  const smallMaxRunMinutes = read.integer(raw, 'smallMaxRunMinutes', path, Math.min(DEFAULT_QUEUE.smallMaxRunMinutes, longestRun), CONFIG_LIMITS.queueSmallMaxRunMinutes);
   if (smallMaxRunMinutes > longestRun) {
     read.report(`${path}.smallMaxRunMinutes`, `must be at most maxRunMinutes (${longestRun})`);
   }
@@ -839,14 +852,15 @@ function parseHeavy(read: ConfigReader, raw: JsonRecord): HeavyConfig {
     lockTtlMinutes,
     maxRunMinutes: longestRun,
     smallMaxRunMinutes: Math.min(smallMaxRunMinutes, longestRun),
-    waitMinutes: read.integer(raw, 'waitMinutes', path, DEFAULT_HEAVY.waitMinutes, CONFIG_LIMITS.heavyWaitMinutes),
-    memorySampleSeconds: read.integer(raw, 'memorySampleSeconds', path, DEFAULT_HEAVY.memorySampleSeconds, CONFIG_LIMITS.heavyMemorySampleSeconds),
-    memoryFloorMb: read.integer(raw, 'memoryFloorMb', path, DEFAULT_HEAVY.memoryFloorMb, CONFIG_LIMITS.heavyMemoryFloorMb),
-    smallReserveMb: read.integer(raw, 'smallReserveMb', path, DEFAULT_HEAVY.smallReserveMb, CONFIG_LIMITS.heavySmallReserveMb),
+    waitMinutes: read.integer(raw, 'waitMinutes', path, DEFAULT_QUEUE.waitMinutes, CONFIG_LIMITS.queueWaitMinutes),
+    memorySampleSeconds: read.integer(raw, 'memorySampleSeconds', path, DEFAULT_QUEUE.memorySampleSeconds, CONFIG_LIMITS.queueMemorySampleSeconds),
+    memoryFloorMb: read.integer(raw, 'memoryFloorMb', path, DEFAULT_QUEUE.memoryFloorMb, CONFIG_LIMITS.queueMemoryFloorMb),
+    smallReserveMb: read.integer(raw, 'smallReserveMb', path, DEFAULT_QUEUE.smallReserveMb, CONFIG_LIMITS.queueSmallReserveMb),
   };
 }
 
-function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): BudgetConfig {
+/** The budget block; a key of the account's week it leaves unset is `above`'s, the team above's (`AccountBudget`). */
+function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly string[], above: AccountBudget | undefined): BudgetConfig {
   const path = 'budget';
   const defaults = DEFAULT_BUDGET;
   const targetPct = read.number(raw, 'targetPct', path, defaults.targetPct, CONFIG_LIMITS.budgetTargetPct);
@@ -854,10 +868,13 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
   if (targetPct + reservePct > 100) {
     read.report(`${path}.reservePct`, `with targetPct it passes 100% of the week (${targetPct} + ${reservePct})`);
   }
-  const account = read.optionalString(raw, 'account', path, shortLine(BUDGET_ACCOUNT_MAX_LENGTH));
-  const weeklyLimitW = read.optionalInteger(raw, 'weeklyLimitW', path, CONFIG_LIMITS.weeklyLimitW);
-  const extraWPerUsd = read.optionalInteger(raw, 'extraWPerUsd', path, CONFIG_LIMITS.extraWPerUsd);
-  const reset = parseBudgetReset(read, raw);
+  const stated = read.optionalString(raw, 'account', path, shortLine(BUDGET_ACCOUNT_MAX_LENGTH));
+  // The team above's keys describe its account's week: a team that names another account takes none of them.
+  const inherited = stated === undefined || stated === above?.account ? above : undefined;
+  const account = stated ?? inherited?.account;
+  const weeklyLimitW = read.optionalInteger(raw, 'weeklyLimitW', path, CONFIG_LIMITS.weeklyLimitW) ?? inherited?.weeklyLimitW;
+  const extraWPerUsd = read.optionalInteger(raw, 'extraWPerUsd', path, CONFIG_LIMITS.extraWPerUsd) ?? inherited?.extraWPerUsd;
+  const reset = parseBudgetReset(read, raw) ?? inherited?.reset;
   const why = "the team's daily budget is the pace, recomputed at every reading from what is left of the week";
   read.dropped(raw, 'dailyPct', path, why);
   read.dropped(raw, 'maxDailyPct', path, why);
@@ -866,16 +883,17 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
   const quietHours = parseQuietHours(read, raw);
   const statusSnapshotDir = read.optionalString(raw, 'statusSnapshotDir', path);
   return {
-    enabled: read.boolean(raw, 'enabled', path, defaults.enabled),
+    enabled: read.boolean(raw, 'enabled', path, inherited?.enabled ?? defaults.enabled),
     ...(account === undefined ? {} : { account }),
     ...(weeklyLimitW === undefined ? {} : { weeklyLimitW }),
-    subagentWeight: read.number(raw, 'subagentWeight', path, defaults.subagentWeight, CONFIG_LIMITS.subagentWeight),
+    subagentWeight: read.number(raw, 'subagentWeight', path, inherited?.subagentWeight ?? defaults.subagentWeight, CONFIG_LIMITS.subagentWeight),
     ...(extraWPerUsd === undefined ? {} : { extraWPerUsd }),
     ...(reset === undefined ? {} : { reset }),
     targetPct,
     reservePct,
     paceEndHoursBeforeReset: read.number(raw, 'paceEndHoursBeforeReset', path, defaults.paceEndHoursBeforeReset, CONFIG_LIMITS.paceEndHoursBeforeReset),
     sessions: parseSessionBudgets(read, read.section(raw, 'sessions', path), sessions),
+    pauseByPriority: read.boolean(raw, 'pauseByPriority', path, defaults.pauseByPriority),
     warnAtPct: read.list(
       raw,
       'warnAtPct',
