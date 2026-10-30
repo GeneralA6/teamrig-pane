@@ -16,7 +16,8 @@ import { cells, graphemes } from './width'
 
 /**
  * A piece of a line that holds a press: a task id and the task it names, a reference file and the file it names, an
- * unread count and the inbox it opens, a Team tab key, a session a press ties the tab to, or the words between them.
+ * unread count and the inbox it opens, a Team tab key, a session a press ties the tab to, a meeting a press starts,
+ * or the words between them.
  */
 export type Piece =
   | { kind: 'id'; span: Span; task: string }
@@ -24,6 +25,7 @@ export type Piece =
   | { kind: 'inbox'; span: Span; inbox: InboxPress }
   | { kind: 'toggle'; span: Span; toggles: string }
   | { kind: 'pin'; span: Span; pins: string }
+  | { kind: 'start'; span: Span; starts: string }
   | { kind: 'words'; spans: Span[] }
 /**
  * A run of a card's lines: a Text of the lines that hold no press (`text`), one line that holds one (`line`), its
@@ -37,7 +39,7 @@ export type CardPart =
 /**
  * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, its
  * page when `opens` does (a search result), a conversation's Log page when `reads` does (docked only), the Team tab's
- * key it opens or closes when `folds` does, or a Changes file's diff when `expands` does (inline a file's row, docked
+ * key or the meeting's card it opens or closes when `folds` does, or a Changes file's diff when `expands` does (inline a file's row, docked
  * a Changes search result). `card`, set while that card is open, is the card's own parts, drawn under the Button and
  * outside it. `parts`, set docked when no press but a Team tab key's opens the element and a line of its holds a press
  * (a leader's fold mark and id), is its lines as parts, drawn in place of its Text and its
@@ -104,16 +106,24 @@ function sameStyle(a: Span, b: Span): boolean {
     a.inbox?.area === b.inbox?.area &&
     a.inbox?.unread === b.inbox?.unread &&
     a.toggles === b.toggles &&
-    a.pins === b.pins
+    a.pins === b.pins &&
+    a.starts === b.starts
   )
 }
 
 /**
  * Whether `span` is a press drawn as a piece of its line: a task id or a reference file in a card, an inbox count, a
- * Team tab key, a session to tie the tab to.
+ * Team tab key, a session to tie the tab to, a meeting to start.
  */
 function isPress(span: Span): boolean {
-  return span.task !== undefined || span.file !== undefined || span.inbox !== undefined || span.toggles !== undefined || span.pins !== undefined
+  return (
+    span.task !== undefined ||
+    span.file !== undefined ||
+    span.inbox !== undefined ||
+    span.toggles !== undefined ||
+    span.pins !== undefined ||
+    span.starts !== undefined
+  )
 }
 
 /** Spans with each run of one style joined into one span, so a block draws as few elements as it can. */
@@ -279,8 +289,8 @@ function joinedLines(lines: Lines): Span[] {
 }
 
 /**
- * A line's spans as pieces: each task id, reference file, inbox count, Team tab key and session to tie the tab to its
- * own, each run of words between them one.
+ * A line's spans as pieces: each task id, reference file, inbox count, Team tab key, session to tie the tab to and
+ * meeting to start its own, each run of words between them one.
  */
 export function piecesOf(line: readonly Span[]): Piece[] {
   const pieces: Piece[] = []
@@ -291,6 +301,7 @@ export function piecesOf(line: readonly Span[]): Piece[] {
     else if (span.inbox !== undefined) pieces.push({ kind: 'inbox', span, inbox: span.inbox })
     else if (span.toggles !== undefined) pieces.push({ kind: 'toggle', span, toggles: span.toggles })
     else if (span.pins !== undefined) pieces.push({ kind: 'pin', span, pins: span.pins })
+    else if (span.starts !== undefined) pieces.push({ kind: 'start', span, starts: span.starts })
     else if (last?.kind === 'words') last.spans.push(span)
     else pieces.push({ kind: 'words', spans: [span] })
   }

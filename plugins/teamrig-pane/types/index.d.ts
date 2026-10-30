@@ -241,9 +241,9 @@ export type RequirementProblem =
 /**
  * What the pane's body shows, picked with the switch over it: the register's tasks, the session's git changes
  * (hooks/changes.ts), the team sessions' prompts and replies (hooks/turn-log.ts), the session's inbox lines
- * (hooks/inbox.ts), or the team tree (hooks/team.ts).
+ * (hooks/inbox.ts), the team tree (hooks/team.ts), or the team's meetings (hooks/meetings.ts).
  */
-export type PaneView = 'tasks' | 'changes' | 'log' | 'inbox' | 'team'
+export type PaneView = 'tasks' | 'changes' | 'log' | 'inbox' | 'team' | 'meetings'
 
 /**
  * The Team tab's tree (hooks/team-source.ts): the tree of teams that holds the pane's team (hooks/team.ts), its root
@@ -434,7 +434,7 @@ export type BodyScroll = { readonly seq: number; readonly to: ScrollTarget }
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page, the focus ring's landings, the setup, the body's window and the team tree are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE, TEAM_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page, the focus ring's landings, the setup, the body's window, the team tree and the meetings are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE, TEAM_SHAPE, MEETINGS_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -470,6 +470,12 @@ declare module 'claude-code' {
       teamTree: Shaped<TeamView>
       /** The Team tab's nodes the person opened or closed against their default (hooks/team.ts teamRows), by key. */
       teamToggled: readonly string[]
+      /** The team's meetings the Meetings view shows (hooks/meetings.ts), as last read. */
+      meetings: Shaped<MeetingsView>
+      /** The Meetings view's meetings whose cards are open (hooks/meetings-rows.ts meetingKey), by key. */
+      meetingsOpen: readonly string[]
+      /** What the last [Start meeting] press answered; null before one, and after a session start or a switch to the view. */
+      meetingStart: MeetingStart | null
     }
   }
 }

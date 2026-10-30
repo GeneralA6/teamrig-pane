@@ -24,7 +24,8 @@ import { cells } from './width'
  * on opens: the session's own in the Inbox view, another area's as a file's page at its first unread line; never split. With `toggles` the text is a press that opens or closes that Team tab key
  * (team-rows.ts): a leader's fold mark its node, its id its card; never split. With `pins` the text is a session's id
  * a press on ties the tab to, as `/teamrig-pane <session>` does (a tab tied to no session, noSessionBlock); never split.
- * `underline` marks the words a search matched (search-view.ts).
+ * With `starts` the text is a press that starts that meeting (a scheduled meeting's card, meetings-rows.ts); never
+ * split. `underline` marks the words a search matched (search-view.ts).
  */
 export type Span = {
   text: string
@@ -38,6 +39,7 @@ export type Span = {
   inbox?: InboxPress
   toggles?: string
   pins?: string
+  starts?: string
 }
 
 /** What an unread count's press opens: the area whose inbox it is, and how many of its newest lines are unread. */
@@ -63,9 +65,9 @@ export type Row = {
  * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press (a repo's files in
  * the Changes view are its header's card too, each a press of its own: changes-rows.ts); `opens` names
  * the task a press on it opens the page of (a search result, search-rows.ts); `reads` names the conversation a press
- * on it opens the Log page of (log-rows.ts); `folds` names the Team tab key a press on it opens or closes, a node or a
- * session's card (team-rows.ts), docked only while its rows hold no press of their own (`toggles`), which take its
- * place there; `expands` names the Changes file whose diff a press on it opens or closes, docked (a Changes search
+ * on it opens the Log page of (log-rows.ts); `folds` names the key a press on it opens or closes: on the Team tab a
+ * node or a session's card (team-rows.ts), on the Meetings view a meeting's card (meetings-rows.ts); docked only
+ * while its rows hold no press of their own (`toggles`), which take its place there; `expands` names the Changes file whose diff a press on it opens or closes, docked (a Changes search
  * result, changes-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.
  */
 export type Block = {

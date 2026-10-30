@@ -44,6 +44,9 @@ describe('press-keys', () => {
     expect(pieceKey({ kind: 'inbox', span: { text: '2' }, inbox: { area: 'api', unread: 2 } }, 'header', 'p0', 0)).toBe('goto:inbox:header:p0:0')
     expect(pieceKey({ kind: 'toggle', span: { text: 'web' }, toggles: 'card:web' }, 'team:web', 'card:0', 2)).toBe('team:card:web:team:web:card:0:2')
     expect(pieceKey({ kind: 'pin', span: { text: 'api' }, pins: 'api' }, 'no-area', 'card:1', 2)).toBe('pin:api:no-area:card:1:2')
+    expect(pieceKey({ kind: 'start', span: { text: '[Start meeting]' }, starts: 'M3' }, 'meeting:M3', 'meeting:M3:card:start', 1)).toBe(
+      'start:M3:meeting:M3:meeting:M3:card:start:1',
+    )
     expect(diffKey('C1-open', 'f1')).toBe('diff:C1-open:f1')
   })
 
