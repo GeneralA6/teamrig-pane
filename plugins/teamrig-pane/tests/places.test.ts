@@ -229,6 +229,14 @@ describe('places', () => {
     expect(named).toEqual({ kind: 'found', dirs: ALL_DIRS, team: WEB_LOGGED, settings, goalsDoc: null })
   })
 
+  test("the team config's register.ownerSource and requireDecisionCard decide the owner's cards; with none set, teamrig's defaults", async () => {
+    const files = { [POINTER]: json({ team: 'web' }), [CONFIG]: json({ register: { ownerSource: 'boss', requireDecisionCard: false } }) }
+    const settings = { ...TEAM_SETTINGS, ownerSource: 'boss', requireDecisionCard: false }
+    expect((await places({}, files)).found).toEqual({ ...TEAM_FOUND, team: WEB_LOGGED, settings })
+    expect(TEAM_SETTINGS).toMatchObject({ ownerSource: 'owner', requireDecisionCard: true })
+    expect((await places({}, { [POINTER]: json({ team: 'web' }) })).found).toEqual(TEAM_FOUND)
+  })
+
   test("the team config's turnLog.keepHours is how long its turn log is kept, the Log view's window, folders named or not", async () => {
     const files = { [POINTER]: json({ team: 'web' }), [CONFIG]: json({ turnLog: { keepHours: 2 } }) }
     const team = { ...WEB_FILES, turnLog: { dir: `${STATE}/turn-log`, keepHours: 2 } }
