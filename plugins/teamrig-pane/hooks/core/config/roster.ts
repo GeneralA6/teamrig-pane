@@ -4,12 +4,12 @@ import type { Rename } from '../names/rename.ts';
 import type { KitConfig, RolesConfig } from './types.ts';
 
 /** The roles a config can assign, by their key under `roles`. */
-export const ROLES = ['lead', 'coordinatorOwner', 'securityReviewer'] as const satisfies readonly (keyof RolesConfig)[];
+export const ROLES = ['lead', 'deliveryOwner', 'securityReviewer'] as const satisfies readonly (keyof RolesConfig)[];
 
 export type Role = (typeof ROLES)[number];
 
 /** The roles a child team may leave to a team above it, naming that team's holder as `<team>/<id>` (T1143); never the lead. */
-export const ANCESTOR_ROLES = ['coordinatorOwner', 'securityReviewer'] as const satisfies readonly Role[];
+export const ANCESTOR_ROLES = ['deliveryOwner', 'securityReviewer'] as const satisfies readonly Role[];
 
 export type AncestorRole = (typeof ANCESTOR_ROLES)[number];
 
@@ -19,7 +19,7 @@ export function isRole(text: string): text is Role {
 
 /**
  * The session holding a role, if the team assigns it: a bare id is a session of `team` itself, and `<team>/<id>` one of
- * a team above it (T1143), as a child team with no reviewer or coordinator of its own names its parent's.
+ * a team above it (T1143), as a child team with no reviewer or delivery owner of its own names its parent's.
  */
 export function roleHolderOf(roles: RolesConfig, role: Role, team: string): SessionAddress | undefined {
   const holder = roles[role];

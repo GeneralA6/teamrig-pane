@@ -18,7 +18,7 @@ import type { Role, SessionFacts } from './team'
 export type TeamCardField = 'role' | 'led-by' | 'launch' | 'hire' | 'scope' | 'reason' | 'now' | 'inbox' | 'retired' | 'heir' | 'handover'
 
 /** How the tab names each role a team config gives. */
-const ROLE_WORDS: Readonly<Record<Role, string>> = { lead: 'lead', coordinatorOwner: 'coordinator', securityReviewer: 'security reviewer' }
+const ROLE_WORDS: Readonly<Record<Role, string>> = { lead: 'lead', deliveryOwner: 'delivery owner', securityReviewer: 'security reviewer' }
 
 /** A card names no task by its words: its tasks are the Now row's, each a span of its own. */
 const NO_IDS = (): boolean => false

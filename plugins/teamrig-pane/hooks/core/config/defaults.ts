@@ -1,9 +1,9 @@
 // Copied from teamrig's src/config/defaults.ts by scripts/sync-core.ts: change it there, then run the sync.
 import type {
   AlertsConfig,
-  ClaimsConfig,
-  CoordinatorWaitConfig,
-  HeavyConfig,
+  FreezesConfig,
+  DeliveryWaitConfig,
+  QueueConfig,
   BudgetConfig,
   BurstConfig,
   CommitGuardConfig,
@@ -34,7 +34,7 @@ import type {
   TestsConfig,
   TurnLogConfig,
   WakeConfig,
-  WindowsConfig,
+  StablePeriodsConfig,
 } from './types.ts';
 
 /** Defaults for every key except the roster (`sessions`, `roles.lead`), which each team supplies. */
@@ -121,7 +121,7 @@ export const DEFAULT_CONTEXT_FILES: ContextFilesConfig = {
   maxSessionListsChars: 16_000,
 };
 
-export const DEFAULT_LOCK: LockConfig = { ttlMs: 30_000, pollMs: 50, waitMs: 20_000 };
+export const DEFAULT_LOCK: LockConfig = { ttlMs: 300_000, pollMs: 50, waitMs: 20_000 };
 
 /** No exec PATH: a privileged command names its program by absolute path until the team lists its tool folders. */
 export const DEFAULT_EXEC: ExecConfig = { path: [] };
@@ -205,6 +205,7 @@ export const DEFAULT_BUDGET: BudgetConfig = {
   reservePct: 0.5,
   paceEndHoursBeforeReset: 1,
   sessions: {},
+  pauseByPriority: false,
   warnAtPct: [80, 100],
   paceTolerancePct: 0.5,
   overAction: 'warn',
@@ -266,7 +267,7 @@ export const DEFAULT_REFRESH: RefreshConfig = {
   tabTitle: true,
   autoRestart: false,
   restartDelaySeconds: 15,
-  holdAfterActivityMinutes: 5,
+  holdAfterActivityMinutes: 30,
   countdownSeconds: 20,
   compactCeilingTokens: 185_000,
   handoverMaxBytes: 20_000,
@@ -292,28 +293,28 @@ export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto', teamWindow: false, h
 export const DEFAULT_STATUS_LINE: StatusLineConfig = { folder: true, branch: true, resume: true };
 
 /**
- * A host lock outlives the longest heavy step it may hold by this many minutes, so the step is killed
+ * A host lock outlives the longest queued step it may hold by this many minutes, so the step is killed
  * before its lock runs out and no second step starts beside it.
  */
-export const HEAVY_TTL_MARGIN_MINUTES = 10;
+export const QUEUE_TTL_MARGIN_MINUTES = 10;
 
 /**
- * A host lock lasts 150 minutes and a heavy step at most 45 of them, a small step at most 10; a step waits up to an hour
+ * A host lock lasts 150 minutes and a queued step at most 45 of them, a small step at most 10; a step waits up to an hour
  * for the lock, and its memory is sampled every 15 seconds while it runs.
  */
-export const DEFAULT_HEAVY: HeavyConfig = { lockTtlMinutes: 150, maxRunMinutes: 45, smallMaxRunMinutes: 10, waitMinutes: 60, memorySampleSeconds: 15, memoryFloorMb: 4096, smallReserveMb: 2048 };
+export const DEFAULT_QUEUE: QueueConfig = { lockTtlMinutes: 150, maxRunMinutes: 45, smallMaxRunMinutes: 10, waitMinutes: 60, memorySampleSeconds: 15, memoryFloorMb: 4096, smallReserveMb: 2048 };
 
-/** A waiting coordinator step looks again every 30 seconds; a deploy step waits up to an hour for claims and the host lock. */
-export const DEFAULT_COORDINATOR_WAIT: CoordinatorWaitConfig = { pollSeconds: 30, maxMinutes: 60 };
+/** A waiting delivery step looks again every 30 seconds; a deploy step waits up to an hour for freezes and the host lock. */
+export const DEFAULT_DELIVERY_WAIT: DeliveryWaitConfig = { pollSeconds: 30, maxMinutes: 60 };
 
 /** A deploy's check answers within 20 seconds, else the deploy waits. */
 export const DEFAULT_CHECK_TIMEOUT_SECONDS = 20;
 
-/** A quiet claim lasts at most two hours. */
-export const DEFAULT_CLAIMS: ClaimsConfig = { maxMinutes: 120 };
+/** A deploy freeze lasts at most two hours. */
+export const DEFAULT_FREEZES: FreezesConfig = { maxMinutes: 120 };
 
-/** A target measures cleanly 30 minutes after a deploy; a deploy the ledger knows only by its ledger.md line ran for 20 minutes; a window under 15 minutes is left out. */
-export const DEFAULT_WINDOWS: WindowsConfig = { settleMinutes: 30, targetSettleMinutes: {}, assumedDeployMinutes: 20, minMinutes: 15 };
+/** A target measures cleanly 30 minutes after a deploy; a deploy the ledger knows only by its ledger.md line ran for 20 minutes; a stable period under 15 minutes is left out. */
+export const DEFAULT_STABLE_PERIODS: StablePeriodsConfig = { settleMinutes: 30, targetSettleMinutes: {}, assumedDeployMinutes: 20, minMinutes: 15 };
 
 /**
  * A burst spends more of the week, so the owner approves each one. A surplus burst may start from 48 hours before

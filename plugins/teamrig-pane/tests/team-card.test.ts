@@ -6,7 +6,7 @@ import { TimeZone } from '../hooks/core/read/index'
 import { LABEL_CELLS } from '../hooks/card'
 import type { Row, Span } from '../hooks/rows'
 import { sessionKey, teamRows, type SessionFacts } from '../hooks/team'
-import { sessionCard } from '../hooks/team-card'
+import { roleWords, sessionCard } from '../hooks/team-card'
 import { HOUR, JERUSALEM, NOW } from './fixtures'
 import { ACME, TOOLS, retire, treeOf } from './team-fixtures'
 
@@ -79,6 +79,11 @@ describe('sessionCard', () => {
       line('Launch', 'the default model and effort'),
       line('Rehired', 'Sun 10-11 by lead · review Sun 10-25'),
     ])
+  })
+
+  test("each role a team config gives reads in teamrig's words, the delivery owner too", () => {
+    const ops = sessionOf('acme', 'ops')
+    expect(roleWords({ ...ops, roles: ['lead', 'deliveryOwner', 'securityReviewer'] })).toEqual(['lead', 'delivery owner', 'security reviewer'])
   })
 
   test("a closed session's card is its retire: the day and who retired it, why, its heir and its handover, a press", () => {
