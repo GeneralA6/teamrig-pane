@@ -20,7 +20,7 @@ import {
 import { statusLines } from '../hooks/view'
 import { cells } from '../hooks/width'
 import { dayOf } from '../hooks/zone'
-import { HOUR, JERUSALEM, NOW, NO_TEAM, TEAM_SETTINGS, clockAt, createLine, statusLine, treeAt, updateLine } from './fixtures'
+import { HOUR, JERUSALEM, NOW, NO_TEAM, SNAPSHOT_SETTINGS, clockAt, createLine, statusLine, treeAt, updateLine } from './fixtures'
 
 const DAY = 24 * HOUR
 /** The start of NOW's UTC day. */
@@ -48,7 +48,7 @@ const snapshotOf = (tasks: TaskRow[], area: string | null, now = NOW): Snapshot 
   inbox: [],
   problem: null,
   ...NO_TEAM,
-  ...TEAM_SETTINGS,
+  ...SNAPSHOT_SETTINGS,
   now,
 })
 

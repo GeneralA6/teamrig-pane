@@ -207,7 +207,8 @@ export function sameView(a: Snapshot, b: Snapshot): boolean {
     !sameInbox(a, b) ||
     a.problem !== b.problem ||
     a.notPickedUpAfterHours !== b.notPickedUpAfterHours ||
-    a.timeZone !== b.timeZone
+    a.timeZone !== b.timeZone ||
+    JSON.stringify(a.ownerCards) !== JSON.stringify(b.ownerCards)
   )
     return false
   if (a.tasks.length !== b.tasks.length) return false

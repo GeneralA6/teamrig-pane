@@ -140,15 +140,24 @@ export type Snapshot = {
    * resolves it. Every time prints on its clock, and a stored bare day is a day of it (hooks/zone.ts).
    */
   timeZone: string
+  /**
+   * Each session's cards on the owner, keyed by its id, as the last poll found them (hooks/owner-cards.ts): recounted
+   * when the register moves and, while a card is put off, each minute, so one comes back with no file change. A
+   * session with none is absent.
+   */
+  ownerCards: Readonly<Record<string, SessionOwnerCards>>
   /** When it was built, so due and age labels move on without a file change. */
   now: number
 }
 
 /** What the team config sets that the snapshot carries: the NOT PICKED UP hours and the team's zone. */
-export type TeamSettings = Pick<Snapshot, 'notPickedUpAfterHours' | 'timeZone'>
+export type DrawnSettings = Pick<Snapshot, 'notPickedUpAfterHours' | 'timeZone'>
 
 /** What the team config says about the owner's waits: its `register.ownerSource` and `register.requireDecisionCard`. */
 export type OwnerSettings = { readonly ownerSource: string; readonly requireDecisionCard: boolean }
+
+/** What the pane reads from the team config: what the snapshot carries, and what decides which cards are the owner's. */
+export type TeamSettings = DrawnSettings & OwnerSettings
 
 /** A card waiting on the owner (hooks/owner-cards.ts): its task's id and title. */
 export type OwnerCard = { readonly id: string; readonly title: string }

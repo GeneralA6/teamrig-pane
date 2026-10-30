@@ -3,7 +3,7 @@
 // and the register put together by teamrig's own read entry (hooks/core/read), so the pane shows what
 // teamrig's commands show, on a register never rotated and on a rotated one alike.
 // File access goes through `Files`, which register.tsx backs with $.fs and tests with a fake.
-import type { AreaSource, Snapshot, TaskRow, TeamLeads, TeamSettings, WorkMark } from '../types'
+import type { AreaSource, DrawnSettings, OwnerSettings, SessionOwnerCards, Snapshot, TaskRow, TeamLeads, TeamSettings, WorkMark } from '../types'
 import {
   assemble,
   indexMarks,
@@ -27,16 +27,20 @@ import {
   type RegisterSnapshot,
   type Rename,
   type SnapshotRead,
+  type TimeZone,
 } from './core/read/index'
 import { lineHash } from './line-hash'
 import { isHeldFinished } from './done'
 import { inboxItems } from './inbox'
 import { teamLeads } from './leads'
 import { rowOf } from './log'
+import { ownerCardsOf } from './owner-cards'
 import type { TeamFiles } from './places'
 import { isActive } from './view'
 import { workMarks } from './work'
+import { zoneNamed } from './zone'
 
+const MINUTE_MS = 60_000
 const HOUR_MS = 3_600_000
 
 export type FileStamp = { mtimeMs: number; size: number }
@@ -271,7 +275,15 @@ export class TaskRegisterSource {
   private readonly files: Files
   private readonly paths: RegisterPaths
   /** The team config's settings each snapshot carries (places.ts teamSettings), read once when the session starts. */
-  private readonly settings: TeamSettings
+  private readonly drawn: DrawnSettings
+  /** The team config's settings that decide which waits are the owner's, read with the others. */
+  private readonly owner: OwnerSettings
+  /** The team's zone, the day a card is put off to ends in. */
+  private readonly zone: TimeZone
+  /** Each session's cards on the owner, as last counted (owner-cards.ts). */
+  private ownerCards: Record<string, SessionOwnerCards> = {}
+  /** The minute they were last counted at: while a card is put off, a new minute counts them again. */
+  private ownerCardsMinute = -1
   /** The team's session names, for the area's name; null when the pane found no team. */
   private readonly names: TeamNames | null
   /** The hours the team keeps its turn log, the work marks' window; null with no team or no team config, which have none. */
@@ -280,7 +292,10 @@ export class TaskRegisterSource {
   constructor(files: Files, paths: RegisterPaths, settings: TeamSettings, team: TeamFiles | null) {
     this.files = files
     this.paths = paths
-    this.settings = settings
+    const { ownerSource, requireDecisionCard, ...drawn } = settings
+    this.drawn = drawn
+    this.owner = { ownerSource, requireDecisionCard }
+    this.zone = zoneNamed(settings.timeZone)
     this.register = new LayoutRegister(files, paths.events)
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
     this.names = team === null ? null : new TeamNames(files, team)
@@ -299,6 +314,7 @@ export class TaskRegisterSource {
       // a task a compaction retired that is touched again marks nothing, its create no longer read.
       this.work = this.keepHours === null ? [] : workMarks(this.register.current.read.events, now - this.keepHours * HOUR_MS)
     }
+    const ownerChanged = this.refreshOwnerCards(registerChanged, now)
     const marksChanged = await this.marks.refresh()
     const { byArea, areaBySession } = indexMarks(this.marks.current.marks)
     const inboxArea = areaBySession.get(claudeSession) ?? null
@@ -309,7 +325,7 @@ export class TaskRegisterSource {
     this.lastArea = area
     const inboxChanged = this.inbox ? await this.inbox.refresh() : false
     const namesChanged = this.names ? await this.names.refresh() : false
-    if (!force && !registerChanged && !marksChanged && !areaChanged && !inboxChanged && !namesChanged) return null
+    if (!force && !registerChanged && !ownerChanged && !marksChanged && !areaChanged && !inboxChanged && !namesChanged) return null
 
     // An area that never ran `inbox read` has no mark: its count is unknown, not everything.
     const mark = area === null ? undefined : byArea.get(area)
@@ -326,8 +342,24 @@ export class TaskRegisterSource {
       unreadInbox: unread === null ? null : unread.lines.length,
       inbox: inboxItems(lines, unread === null ? null : unread.total - unread.lines.length, now),
       problem: skippedText(this.paths, this.register.current, this.marks.current),
-      ...this.settings,
+      ...this.drawn,
+      ownerCards: this.ownerCards,
       now,
     }
+  }
+
+  /**
+   * Counts the cards on the owner again when the register moved, or when a card is put off and a minute passed (its
+   * time may have come); true when they changed.
+   */
+  private refreshOwnerCards(registerChanged: boolean, now: number): boolean {
+    const minute = Math.floor(now / MINUTE_MS)
+    const putOff = Object.values(this.ownerCards).some(cards => cards.later.length > 0)
+    if (!registerChanged && !(putOff && minute !== this.ownerCardsMinute)) return false
+    this.ownerCardsMinute = minute
+    const cards = ownerCardsOf(this.register.current.state.tasks, now, this.zone, this.owner)
+    if (JSON.stringify(cards) === JSON.stringify(this.ownerCards)) return false
+    this.ownerCards = cards
+    return true
   }
 }

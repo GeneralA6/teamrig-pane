@@ -14,7 +14,7 @@ import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessM
 import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
 import { HELD_DAYS } from '../hooks/done'
 import type { TeamFiles } from '../hooks/places'
-import { HOUR, MemoryFiles, NOT_PICKED_UP_HOURS, NOW, NO_TEAM, S1, S2, S3, TEAM_SETTINGS, bigRegister, clockAt, createLine, iso, markLine, statusLine, treeAt, updateLine, waitingLine, verifyingLine } from './fixtures'
+import { HOUR, MemoryFiles, NOT_PICKED_UP_HOURS, NOW, NO_TEAM, S1, S2, S3, SNAPSHOT_SETTINGS, TEAM_SETTINGS, bigRegister, clockAt, createLine, iso, markLine, statusLine, treeAt, updateLine, waitingLine, verifyingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
@@ -282,7 +282,7 @@ describe('view', () => {
 
   test('two snapshots draw the same pane unless a field, a task or a time label differs', async () => {
     const tasks = fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' }))
-    const base: Snapshot = { tasks, area: 'po', areaSource: 'pinned', unreadInbox: 0, inbox: [], problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW }
+    const base: Snapshot = { tasks, area: 'po', areaSource: 'pinned', unreadInbox: 0, inbox: [], problem: null, ...NO_TEAM, ...SNAPSHOT_SETTINGS, now: NOW }
     expect(sameView(base, { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'lead', at: NOW, due: '2026-10-13 15:00' })) })).toBe(true)
     expect(sameView(base, { ...base, now: NOW + HOUR / 2 })).toBe(true)
     expect(sameView(base, { ...base, now: NOW + 2 * HOUR })).toBe(false)
@@ -301,6 +301,9 @@ describe('view', () => {
     expect(sameView(one, { ...one, now: Date.UTC(2026, 9, 14, 0, 1) })).toBe(false)
     expect(sameView(base, { ...base, notPickedUpAfterHours: NOT_PICKED_UP_HOURS * 2 })).toBe(false)
     expect(sameView(base, { ...base, timeZone: 'Asia/Jerusalem' })).toBe(false)
+    const cards = { po: { due: [{ id: 'T1', title: 'Ship it?' }], later: [] } }
+    expect(sameView({ ...base, ownerCards: cards }, { ...base, ownerCards: { po: { due: [{ id: 'T1', title: 'Ship it?' }], later: [] } } })).toBe(true)
+    expect(sameView(base, { ...base, ownerCards: cards })).toBe(false)
     const leads = { lead: 'lead', leaderOf: { po: 'lead' } }
     expect(sameView({ ...base, leads }, { ...base, leads: { lead: 'lead', leaderOf: { po: 'lead' } } })).toBe(true)
     expect(sameView(base, { ...base, leads })).toBe(false)
@@ -384,7 +387,7 @@ describe('rows', () => {
     inbox: [],
     problem: null,
     ...NO_TEAM,
-    ...TEAM_SETTINGS,
+    ...SNAPSHOT_SETTINGS,
     now: NOW,
   })
 
@@ -544,7 +547,7 @@ describe('rows', () => {
     const line = drawn?.parts?.[1]
     expect(line?.kind === 'line' ? line.pieces.map(piece => piece.kind) : []).toEqual(['pin', 'words', 'pin', 'words', 'pin'])
     // The Tasks view draws it in place of the area's tasks.
-    const snap: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, team: 'web', leads, ...TEAM_SETTINGS, now: NOW }
+    const snap: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, team: 'web', leads, ...SNAPSHOT_SETTINGS, now: NOW }
     expect(paneBlocks(snap, 'mine')).toEqual([block])
     const lone = (team: string | null) => noSessionBlock('no-area', { team, leads: null }).rows.map(row => row.spans.map(span => span.text).join(''))
     expect(lone('web')).toEqual(['This tab is not tied to a session of team web yet: /teamrig-pane <session> ties it to one.'])
@@ -1309,15 +1312,49 @@ describe('source', () => {
   test('a pin wins over the inbox read, and missing files read as an empty register with no unread count', async () => {
     const source = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, null)
     const snap = await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW })
-    expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: NOW })
+    expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...SNAPSHOT_SETTINGS, now: NOW })
   })
 
   test("each snapshot carries the team config's settings the source was made with: its NOT PICKED UP hours and zone", async () => {
-    const settings = { notPickedUpAfterHours: 48, timeZone: 'Asia/Jerusalem' }
-    const source = new TaskRegisterSource(new MemoryFiles(), PATHS, settings, null)
+    const drawn = { notPickedUpAfterHours: 48, timeZone: 'Asia/Jerusalem' }
+    const source = new TaskRegisterSource(new MemoryFiles(), PATHS, { ...TEAM_SETTINGS, ...drawn }, null)
     const settingsOf = (snap: Snapshot | null) => (snap === null ? null : { notPickedUpAfterHours: snap.notPickedUpAfterHours, timeZone: snap.timeZone })
-    expect(settingsOf(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW }))).toEqual(settings)
-    expect(settingsOf(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW + HOUR, force: true }))).toEqual(settings)
+    expect(settingsOf(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW }))).toEqual(drawn)
+    expect(settingsOf(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW + HOUR, force: true }))).toEqual(drawn)
+  })
+
+  /** po's T1, waiting on the owner's decision; put off to `until` when given, as the owner's Later writes it. */
+  const ownerWait = (until: string | null): string[] => [
+    createLine('T1', { owner: 'po', by: 'lead', at: NOW - 2 * HOUR, title: 'Ship the tab?' }),
+    waitingLine('T1', 'po', NOW - HOUR, [{ kind: 'decision', who: 'owner' }, ...(until === null ? [] : [{ kind: 'time' as const, at: until }])], null, {
+      question: 'Ship the tab?',
+      options: ['A: now', 'B: later'],
+      recommend: 'A',
+      byDefault: 'B',
+      gate: 'product',
+    }),
+  ]
+
+  test("each snapshot carries each session's cards on the owner, by the team config's owner marker", async () => {
+    const files = new MemoryFiles()
+    files.write(PATHS.events, ownerWait(null).join('\n'))
+    const snap = await new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null).poll({ claudeSession: S1, pinned: 'etl', now: NOW })
+    expect(snap?.ownerCards).toEqual({ po: { due: [{ id: 'T1', title: 'Ship the tab?' }], later: [] } })
+    const bossed = await new TaskRegisterSource(files, PATHS, { ...TEAM_SETTINGS, ownerSource: 'boss' }, null).poll({ claudeSession: S1, pinned: 'etl', now: NOW })
+    expect(bossed?.ownerCards).toEqual({})
+  })
+
+  test('a card put off comes back once its time passes, with no file change; with none put off a later poll stays null', async () => {
+    const files = new MemoryFiles()
+    files.write(PATHS.events, ownerWait('2026-10-13 15:00').join('\n'))
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)
+    const first = await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW })
+    expect(first?.ownerCards).toEqual({ po: { due: [], later: [{ id: 'T1', title: 'Ship the tab?', until: '10-13 15:00 UTC' }] } })
+    expect(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW + 30 * 60_000 })).toBe(null)
+    const back = await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW + HOUR })
+    expect(back?.ownerCards).toEqual({ po: { due: [{ id: 'T1', title: 'Ship the tab?' }], later: [] } })
+    // Nothing put off any more: the minutes pass with no recount.
+    expect(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW + 2 * HOUR })).toBe(null)
   })
 
   /** Team web, whose config calls api web-backend and gives ui the team's default name. */
@@ -1381,7 +1418,7 @@ describe('source', () => {
 
 /** Ports over a MemoryFiles register, recording what the class publishes and pins; `clock.now` moves its time. */
 function livePorts(files: MemoryFiles, ids: string[]) {
-  let current: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...TEAM_SETTINGS, now: 0 }
+  let current: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...SNAPSHOT_SETTINGS, now: 0 }
   let writes = 0
   const clock = { now: NOW }
   const pins = new Map<string, string>()
