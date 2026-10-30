@@ -72,13 +72,19 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | In Log, `The turn logs could not be read: <error>.` | The turn-log folder could not be listed; the pane tries again on the next poll. |
 | On a session's Log page, `Not all read: <file>: <error>.` | One hour's file could not be read; the page shows the rest and tries again on the next poll. |
 | In Changes, `WARN <git's first error line>` under a repo | git could not read that repo (or took over 10 seconds); its header then names only the folder. A worktree whose folder was removed shows no warning: it leaves the view. |
+| In Meetings, `The meetings could not be read: no plugin list at <path>: install the teamrig plugin.` (or `no teamrig plugin with its CLI in <path>`) | The view runs the CLI of the teamrig plugin installed in Claude Code, found once a session: `claude plugin install teamrig@teamrig`, then restart or resume the session. |
+| In Meetings, `The meetings could not be read: teamrig printed no meeting list the pane can read: update teamrig.` | The teamrig plugin is older than 0.208.0: update it, then restart or resume the session. |
+| In Meetings, `The meetings could not be read: <teamrig's error>.` | teamrig refused the list, or did not finish in 30 seconds (`node` not on the PATH says `spawn node ENOENT`); fix what it says. The view tries again every 60 seconds while it shows. |
+| In Meetings, `WARN 2 meetings teamrig printed are in a newer format: update the pane.` | teamrig is newer than the pane: update teamrig-pane. The meetings it can read still show. |
+| In Meetings, `M3 did not start:` and teamrig's reason | `teamrig meeting start` refused the start (the meeting was started, ended or dropped since the list was read), or did not finish in 60 seconds. |
 
 ## Limits
 
 | Limit | Value |
 | --- | --- |
 | One file read | 4 MiB, about 13,500 register events |
-| Polls | a file stat every 3 seconds; a 60 second tick for due and age labels and for Changes |
+| Polls | a file stat every 3 seconds; a 60 second tick for due and age labels, for Changes and for the Meetings view |
+| Meetings | `teamrig meeting list --json` every 60 seconds while the view shows, given 30 seconds to answer; a start is given 60 seconds |
 | `Waiting`, asked of others | the first 8 asked of other sessions, after the area's own waiting tasks; the heading and the status bar count them all, a dim line the rest |
 | `Done today` | done or dropped on the team's day, the newest 6; the heading and the status bar count them all, a dim line the rest |
 | `not picked up` | untouched by its owner 24 hours after it was assigned |
@@ -96,5 +102,6 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | A Claude dialog (a permission prompt, a question) | while it is open, Claude Code sends the pane no keys, clicks or wheel scroll, and tells it nothing: answer the dialog first |
 | Archive | 50 rows a week, a dim line counting the rest; the tasks finished in the last 8 days, teamrig's own retention |
 
-The pane never writes the register, the inboxes or any repo. It keeps only its size and the pins in the
-plugin's own store.
+The pane never writes the register, the inboxes or any repo itself: the Meetings view's `[Start meeting]` runs
+`teamrig meeting start`, and teamrig writes what that changes. It keeps only its size and the pins in the plugin's own
+store.

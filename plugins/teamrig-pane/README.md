@@ -7,13 +7,13 @@ an older one:
 
 Docks the session's tasks from teamrig's task register (its tasks folder: `events.jsonl`, with the
 `inbox-marks.jsonl` that `teamrig inbox read` writes; see Where the register is, below) on the right of
-Claude Code's fullscreen UI. It reads files only: a stat poll
+Claude Code's fullscreen UI. It reads files only (the Meetings view aside, which runs teamrig's CLI): a stat poll
 every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick moves the due/age
 labels on. No model calls, so no tokens. Every time is on the team's clock and zone-marked
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
 session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
-to each team session's prompts and replies, or to its own inbox lines, or to the team's tree (Tasks, Changes, Log,
-Inbox and Team, below). Docked, its first line
+to each team session's prompts and replies, or to its own inbox lines, or to the team's tree, or to the team's
+meetings (Tasks, Changes, Log, Inbox, Team and Meetings, below). Docked, its first line
 names the session as its tab title does (`[acme] pane`: the team, then the name without the team's prefix), so
 panes open in several tabs tell apart at a glance. That line and the controls under it stay put, and the body
 scrolls under them in a window of the pane's own: the mouse wheel moves it 3 rows a tick, PgUp and PgDn a
@@ -132,7 +132,7 @@ folder, a relative path in the session's folder and each folder above it, then i
 not find lists each path it looked at; one over 256 KiB, or not text, says why it is not shown.
 
 In the Tasks view, the Inbox view, the Changes view, over the Log view's list and on the Team tab (see Changes, Log,
-Inbox and Team, below), the dock shows a Find field under its switch; `s` or a click
+Inbox and Team, below), the dock shows a Find field under its switch (the Meetings view, a few rows, shows none); `s` or a click
 puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
 aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
@@ -224,7 +224,7 @@ stray click never loses it. The close is refused (a `ui.close` veto), so the pan
 among the panes the person opened: a later open needs 110 columns, not the 144 an unasked open needs.
 The strip is the view switch (below), its Inbox button counting the unread lines, then a dim `· minimized, press a view` (on a row of
 its own, with no `·`, in a dock too narrow for both). To open it
-in full again, click any of its buttons, which opens the pane on that view, press `t`, `d`, `g`, `u` or `e` while the
+in full again, click any of its buttons, which opens the pane on that view, press `t`, `d`, `g`, `u`, `e` or `j` while the
 pane holds the keyboard
 (`ctrl+x tab` or a click on it), or run `/teamrig-pane`. The size is kept in `$.store` (`paneSize`, one
 for the plugin), so the next session, after a restart or a hot reload too, opens as the last one was
@@ -278,13 +278,13 @@ too), all of it once when the session starts. When nothing names the register, o
 the pointer file or the team config cannot be used, the pane draws one `WARN` line saying what to set
 or what is wrong.
 
-## Tasks, Changes, Log, Inbox and Team
+## Tasks, Changes, Log, Inbox, Team and Meetings
 
-The switch, `[Tasks] [Changes 3] [Log] [Inbox (2)] [Team]`, shows in every state: open, in a dock however narrow (its
+The switch, `[Tasks] [Changes 3] [Log] [Inbox (2)] [Team] [Meetings]`, shows in every state: open, in a dock however narrow (its
 buttons wrap under each other rather than clip) under the title line, above the prompt, and as the
 minimized strip. While
-the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Log, `u` Inbox and `e` Team (`c` already closes the
-cards, `i` shows the waiting tasks alone).
+the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Log, `u` Inbox, `e` Team and `j` Meetings (`c`
+already closes the cards, `i` shows the waiting tasks alone, `m` and `w` the session's own and its working ones).
 
 Changes lists the files changed in the git repos the session works in: the repo of the session's folder,
 and the repo of each file the session or one of its agents writes (Edit, Write, NotebookEdit; a file a
@@ -436,6 +436,34 @@ It reads each team's config and, in the state folder that config names, its rena
 own team its register and inbox read marks and each marked session's inbox, with teamrig's own readers. It reads files
 only, and only while it shows: on each 3 s poll a file is read again only when its size or time moved. No model calls,
 no tokens.
+
+### Meetings
+
+Meetings lists the meetings booked for the session's team (`teamrig meeting schedule`), the scheduled and started
+ones, by time, as `teamrig meeting list --json` prints them. A ruled header counts them and the missed ones
+(`3 meetings · 1 missed`). A meeting's row is its mark, its id in bold, when it starts on the team's clock, its length
+and the session met with those joining; under it, dim, what it is about and the tasks it settles:
+
+    › M3  Tue 10-13 15:00 IDT · 30 min · web with lead · next
+          the pricing tiers · T1
+
+The first scheduled meeting not missed is `›` and `next` (`now` once its time came), one more scheduled meeting a dim
+`○`, a missed one (scheduled, its slot ended with no start) a red `!` and `missed`, a started one `◐` and `started`.
+Marks are one cell of plain text, never an emoji.
+
+A press on a row (a click, or Enter or Space on it) opens its card in place of the dim line, and a second closes it:
+About whole, With, Tasks (each with its title and status, an id the register holds a press that opens its page; one it
+lacks says so), Brief (a press that opens the file) and, on a scheduled meeting, `[Start meeting]`. That press runs
+`teamrig meeting start <id> --session <caller>`, the caller being `$TEAMRIG_SESSION`, else the area the pane shows, as
+typing it would. What teamrig answered leads the list: `Starting M3…`, then `Started M3.` with teamrig's lines
+(`TOLD lead`), or `M3 did not start:` and why. One start runs at a time, and the list is read again once it ends.
+
+It runs the CLI of the teamrig plugin installed in Claude Code, found once a session from Claude Code's plugin list
+(`plugins/installed_plugins.json` under `$CLAUDE_CONFIG_DIR`, else `~/.claude`), with `node`: teamrig 0.208.0 or
+later and `node` on the PATH. It reads the list when the view opens and every 60 s while it shows, giving teamrig
+30 s to answer and a start 60 s; on another view, or minimized, it runs nothing. A list it cannot read says why: no
+teamrig plugin, one too old to print the list, or teamrig's own error. A meeting in a newer format than the pane
+reads is counted on a `WARN` line, the rest still shown. There is no Find field: a schedule is a few rows.
 
 ## Reading the register
 
