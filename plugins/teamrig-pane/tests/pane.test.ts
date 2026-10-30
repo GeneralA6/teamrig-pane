@@ -138,16 +138,24 @@ type FakeRepos = {
   patches?: Record<string, string>
   /** No git to start: every run rejects as a spawn of a missing program does. */
   isMissing?: boolean
+  /** What the teamrig CLI (`node <main.js> <args>`) prints for its args; unset, a run of it fails as a missing script does. */
+  teamrig?: (args: readonly string[]) => string
 }
 
 /**
- * Answers $.process.run as git over `repos`, a folder it does not know being outside any repo; `runs` lists each as
- * `<command> <cwd>`, `git --version` as `--version `.
+ * Answers $.process.run as git over `repos`, a folder it does not know being outside any repo, and as the teamrig CLI
+ * by `repos.teamrig`; `runs` lists each as `<command> <cwd>`, `git --version` as `--version `, a CLI run as
+ * `teamrig <args>`.
  */
 function fakeGit(on: On, repos: FakeRepos) {
   const runs: string[] = []
   const answer = (stdout: string, exitCode = 0, stderr = '') => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
   on('process.run', async ($, e) => {
+    if (e.argv[0] === 'node') {
+      const args = e.argv.slice(2)
+      runs.push(`teamrig ${args.join(' ')}`)
+      return repos.teamrig === undefined ? answer('', 1, 'Error: Cannot find module') : answer(repos.teamrig(args))
+    }
     const cwd = e.init?.cwd ?? ''
     const command = e.argv.slice(1).find(arg => !arg.startsWith('-')) ?? e.argv[1] ?? ''
     runs.push(`${command} ${cwd}`)
@@ -804,7 +812,7 @@ test('a pane left minimized in a project teamrig is not set up for keeps its swi
   await start(on, { paneSize: 'minimized' }, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings'])
 
   await pane.press({ key: 'changes' })
   expect(await pane.find({ text: SETUP_HEAD })).toBeDefined()
@@ -1153,7 +1161,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^WARN the pane could not draw: .*state store unavailable/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'find-key', 'mine', 'all', 'archive', 'keys'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', 'find-key', 'mine', 'all', 'archive', 'keys'])
 
   isStateDown = false
   await pane.redraw(PANE_PROPS)
@@ -1234,7 +1242,7 @@ test('a session starts minimized when the last one was left so: one row, docked 
   for (const { props, texts } of strips) {
     await pane.redraw(props)
     expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(texts)
-    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
+    expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings'])
   }
   // The strip counts the unread lines too.
   expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox (2)' })
@@ -1251,17 +1259,17 @@ test('minimized, the mark after the switch is a group of its own: a dim · befor
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
   const mark = 'minimized, press a view'
-  expect(rowItems(await pane.drawn(), 'switch')).toEqual([['tasks', 'changes', 'log', 'inbox', 'team', '·', mark]])
+  expect(rowItems(await pane.drawn(), 'switch')).toEqual([['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', '·', mark]])
   expect(await pane.find({ type: 'Text', text: /^·$/ })).toMatchObject({ props: { dimColor: true } })
   expect(await pane.find({ type: 'Text', text: mark })).toMatchObject({ props: { dimColor: true } })
   await pane.redraw(PANE_PROPS)
   expect(rowItems(await pane.drawn(), 'switch')).toEqual([
     ['tasks', 'changes', 'log', 'inbox'],
-    ['team', '·', mark],
+    ['team', 'meetings', '·', mark],
   ])
   // In 21 columns `· minimized, press a view` fits beside no button: the mark starts a row, with no `·` before it.
   await pane.redraw({ ...PANE_PROPS, bodyColumns: 23 })
-  expect(rowItems(await pane.drawn(), 'switch')).toEqual([['tasks', 'changes'], ['log', 'inbox'], ['team'], [mark]])
+  expect(rowItems(await pane.drawn(), 'switch')).toEqual([['tasks', 'changes'], ['log', 'inbox'], ['team', 'meetings'], [mark]])
 })
 
 /** The band above the prompt (AbovePrompt) as the terminal raises it with no survey up. */
@@ -1331,7 +1339,7 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings'])
   // The strip is the switch alone: the title comes back with the pane.
   expect((await pane.findAll({ type: 'Text' })).map(found => found.text)).toEqual(['·', 'minimized, press a view'])
   await pane.press({ key: 'tasks' })
@@ -1458,7 +1466,7 @@ function buttonLabel(node: unknown, key: string): string | null {
   return props !== null && 'label' in props && typeof props.label === 'string' ? props.label : null
 }
 
-test('the Tasks / Changes / Log / Inbox / Team switch leads the pane in every view, width and placement, wrapping rather than clipping', async ($, on) => {
+test('the Tasks / Changes / Log / Inbox / Team / Meetings switch leads the pane in every view, width and placement, wrapping rather than clipping', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
@@ -1466,21 +1474,21 @@ test('the Tasks / Changes / Log / Inbox / Team switch leads the pane in every vi
   for (const props of [PANE_PROPS, ...NARROW_AND_INLINE]) {
     await pane.redraw(props)
     const drawn = await pane.drawn()
-    expect(buttonKeys(keyedNode(drawn, 'switch'))).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
+    expect(buttonKeys(keyedNode(drawn, 'switch'))).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings'])
     // Then the mode buttons, past the Find row the dock draws between them.
-    expect(buttonKeys(drawn).filter(key => key !== 'find-key').slice(0, 7)).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'mine', 'all'])
+    expect(buttonKeys(drawn).filter(key => key !== 'find-key').slice(0, 8)).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', 'mine', 'all'])
     // Packed in code (pack.ts), a row Box a row: `[ Tasks ] [ Changes ] [ Log ] [ Inbox (2) ]` takes 43 cells, one row
-    // in a 50-column dock (48 inside its padding), `[ Team ]` wrapping under them; at 20 and 12 columns a row a button.
+    // in a 50-column dock (48 inside its padding), `[ Team ] [ Meetings ]` wrapping under them; at 20 and 12 columns a row a button.
     const rows = childrenOf(keyedNode(drawn, 'switch')).map(row => buttonKeys(row))
-    const narrowRows = [['tasks'], ['changes'], ['log'], ['inbox'], ['team']]
-    expect(rows).toEqual(props.bodyColumns === 50 ? [['tasks', 'changes', 'log', 'inbox'], ['team']] : narrowRows)
+    const narrowRows = [['tasks'], ['changes'], ['log'], ['inbox'], ['team'], ['meetings']]
+    expect(rows).toEqual(props.bodyColumns === 50 ? [['tasks', 'changes', 'log', 'inbox'], ['team', 'meetings']] : narrowRows)
   }
   await pane.redraw(PANE_PROPS)
   await pane.press({ key: 'changes' })
   for (const props of [PANE_PROPS, ...NARROW_AND_INLINE]) {
     await pane.redraw(props)
     // The Changes view has no modes: the switch alone, past the Find row the dock draws under it.
-    expect(buttonKeys(await pane.drawn()).filter(key => key !== 'find-key')).toEqual(['tasks', 'changes', 'log', 'inbox', 'team'])
+    expect(buttonKeys(await pane.drawn()).filter(key => key !== 'find-key')).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings'])
   }
 })
 
@@ -1689,7 +1697,7 @@ test('from the minimized strip, Changes opens the pane in full on the Changes vi
   expect(store.get('paneSize')).toBe('open')
   expect(await pane.find({ text: /No git repo yet/ })).toBeDefined()
   // The switch, then the Find row under it.
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'find-key'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', 'find-key'])
 })
 
 const WEB_LOG = '/Homes/tester/.teamrig/teams/web/state/turn-log'
@@ -1755,7 +1763,7 @@ test('a press on a conversation opens its page: its title, its lines oldest firs
 
   await pane.press({ key: 'log' })
   await pane.press({ key: 'log:conv:api:c-1' })
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'back'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', 'back'])
   expect(await pane.find({ text: /^lead · /m })).toBeUndefined()
   // Under back, the trail says where the page is, as a task's page does, and its row is cut at its end.
   expect(await drawnLines(pane)).toContain('Log › Ship the log view')
@@ -1782,7 +1790,7 @@ test('a press on a conversation opens its page: its title, its lines oldest firs
 
   await pane.press({ key: 'back' })
   // The list draws the Find field again (s: Find before it), the page none.
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'find-key', 'log:conv:api:c-1', 'log:conv:lead:c-1'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', 'find-key', 'log:conv:api:c-1', 'log:conv:lead:c-1'])
 
   // Log from a page shows the list too, and inline the list shows alone.
   await pane.press({ key: 'log:conv:api:c-1' })
@@ -2206,6 +2214,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     'log',
     'inbox',
     'team',
+    'meetings',
     'find-key',
     'mine',
     'all',
@@ -2225,7 +2234,7 @@ test("a task id in an open card opens that task's page: its title and card alone
   expect(screenOf(await pane.drawn())).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team',
+    ' Team Meetings',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2282,6 +2291,7 @@ test('back, forward and the trail step through the places; the list keeps the he
     'log',
     'inbox',
     'team',
+    'meetings',
     'find-key',
     'mine',
     'all',
@@ -2356,7 +2366,7 @@ test("a reference file in an open card opens as a page: its name, where it was r
   expect(screenOf(await pane.drawn())).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team',
+    ' Team Meetings',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2522,7 +2532,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   expect(screenOf(drawn)).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team',
+    ' Team Meetings',
     ' Find  clear',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2628,8 +2638,8 @@ test('the Find field keeps its index among the focusable elements on the list, w
   drawn = await pane.drawn()
   expect(keyedNode(drawn, 'week-steps')).not.toBe(null)
   indexes.push(fieldIndex(drawn))
-  // After Tasks, Changes, Log, Inbox, Team and s: Find.
-  expect(indexes).toEqual([6, 6, 6, 6, 6])
+  // After Tasks, Changes, Log, Inbox, Team, Meetings and s: Find.
+  expect(indexes).toEqual([7, 7, 7, 7, 7])
 })
 
 test("the line under the Find field says where the keys go: to Claude's prompt, to the pane, typed into the search, or on a result", async ($, on) => {
@@ -2754,7 +2764,7 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   expect(screenOf(drawn)).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team',
+    ' Team Meetings',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2821,7 +2831,7 @@ test('keys (k) opens the Keys page, every key the pane answers in a grid at the 
   expect(screenOf(await pane.drawn())).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team',
+    ' Team Meetings',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2831,7 +2841,7 @@ test('keys (k) opens the Keys page, every key the pane answers in a grid at the 
     ` ${'─'.repeat(PANE_PROPS.bodyColumns - 2)}`,
     '',
     ` ${'t  Tasks'.padEnd(16)}${'d  Changes'.padEnd(16)}g  Log`,
-    ` ${'u  Inbox'.padEnd(16)}e  Team`,
+    ` ${'u  Inbox'.padEnd(16)}${'e  Team'.padEnd(16)}j  Meetings`,
     '',
     ` ${'s  Find'.padEnd(16)}${'m  mine'.padEnd(16)}a  all`,
     ` ${'h  archive'.padEnd(16)}${'c  close cards'.padEnd(16)}k  keys`,
@@ -2871,11 +2881,70 @@ test("the Keys page names every key a button of the pane answers, and each key i
   const seen = new Set(hotkeysOf(await pane.drawn()))
   // A card open (close cards), the Archive page (back, prev), the week before (next), the list again (forward), then
   // each other view.
-  for (const key of ['next:T52', 'archive', 'prev', 'back', 'changes', 'log', 'inbox', 'team']) {
+  for (const key of ['next:T52', 'archive', 'prev', 'back', 'changes', 'log', 'inbox', 'team', 'meetings']) {
     await pane.press({ key })
     for (const hotkey of hotkeysOf(await pane.drawn())) seen.add(hotkey)
   }
   const named = KEY_GROUPS.flatMap(group => group.entries.map(entry => entry.key))
   expect([...seen].filter(key => !named.includes(key) && !barKeys().split(' ').includes(key))).toEqual([])
   expect(named.filter(key => !seen.has(key))).toEqual([])
+})
+
+/** Where the fake Claude Code keeps its config, and the teamrig install its plugin list names. */
+const CLAUDE_DIR = '/Homes/tester/.claude'
+const TEAMRIG_INSTALL = `${CLAUDE_DIR}/plugins/cache/teamrig/teamrig/0.227.0`
+/** A scheduled meeting as `teamrig meeting list --json` prints it: an hour from now, with web, on T1. */
+const MEETING = {
+  id: 'M3',
+  at: iso(NOW + HOUR),
+  atText: 'Tue 10-13 15:00 UTC',
+  minutes: 30,
+  session: 'web',
+  with: ['lead'],
+  tasks: ['T1'],
+  about: 'the pricing tiers',
+  brief: null,
+  status: 'scheduled',
+  missed: false,
+}
+
+test("the switch's Meetings button lists the team's meetings through the teamrig CLI, with no Find field; a press on one opens its card, whose start press starts it", async ($, on) => {
+  let isStarted = false
+  const teamrig = (args: readonly string[]): string => {
+    if (args[1] !== 'start') return JSON.stringify({ meetings: [isStarted ? { ...MEETING, status: 'started' } : MEETING] })
+    isStarted = true
+    return ['STARTED M3 started, Tue 10-13 15:00 UTC, 30 min, web with lead, tasks T1 | the pricing tiers', 'TOLD web', 'TOLD lead', ''].join('\n')
+  }
+  // A session of team web, its pointer file in /work, its register holding T1.
+  const { disk, runs } = await start(on, {}, { roots: {}, statuses: {}, teamrig }, { USERPROFILE: HOME, CLAUDE_CONFIG_DIR: CLAUDE_DIR, TEAMRIG_SESSION: 'po' })
+  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write('/Homes/tester/.teamrig/teams/web/config.json', ['{}'])
+  disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [createLine('T1', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the pricing page' })])
+  disk.write(`${CLAUDE_DIR}/plugins/installed_plugins.json`, [JSON.stringify({ version: 2, plugins: { 'teamrig@teamrig': [{ installPath: TEAMRIG_INSTALL }] } })])
+  disk.write(`${TEAMRIG_INSTALL}/dist/cli/main.js`, [''])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  const cliRuns = () => runs.filter(run => run.startsWith('teamrig '))
+  const LIST = 'teamrig meeting list --json --session po'
+
+  // Nothing runs while another view shows.
+  expect(keyedProps(await pane.drawn(), 'meetings')).toMatchObject({ label: 'Meetings', hotkey: 'j', variant: 'secondary' })
+  expect(cliRuns()).toEqual([])
+
+  await pane.press({ key: 'meetings' })
+  expect(cliRuns()).toEqual([LIST])
+  expect(await drawsLine(pane, /^1 meeting ─+$/)).toBe(true)
+  expect(await drawsLine(pane, /^› M3  Tue 10-13 15:00 UTC · 30 min · web with lead · next$/)).toBe(true)
+  expect(keyedProps(await pane.drawn(), 'find')).toBeNull()
+
+  await pane.press({ key: 'meeting:M3' })
+  expect(await drawsLine(pane, /^│ Tasks +T1 Ship the pricing page · not started$/)).toBe(true)
+  const startKey = buttonKeys(await pane.drawn()).find(key => key.startsWith('start:M3:'))
+  if (startKey === undefined) throw new Error('no start press on the open card')
+  await pane.press({ key: startKey })
+  expect(cliRuns()).toEqual([LIST, 'teamrig meeting start M3 --session po', LIST])
+  expect(await drawsLine(pane, /^Started M3\.$/)).toBe(true)
+  expect(await drawsLine(pane, /^TOLD lead$/)).toBe(true)
+  expect(await drawsLine(pane, /^◐ M3  Tue 10-13 15:00 UTC · 30 min · web with lead · started$/)).toBe(true)
+  expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('start:'))).toEqual([])
 })

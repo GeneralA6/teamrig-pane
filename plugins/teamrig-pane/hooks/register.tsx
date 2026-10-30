@@ -22,11 +22,14 @@
 // the last 24 hours and its unread ones, newest first, with a search of its own (inbox-rows.ts, inbox-search.ts), a
 // press on the header's unread count opening it, and the Team tab: the tree of teams the
 // session's team is in, each team's lead over the sessions it leads and its retired ones (team.ts, team-source.ts), a
-// press on a row opening or closing what lies under it. The band above the prompt shows the session's
+// press on a row opening or closing what lies under it, and the Meetings view: the team's scheduled and started
+// meetings by time (meetings.ts, meetings-rows.ts), a press on one opening its card, whose [Start meeting] press
+// starts it. The band above the prompt shows the session's
 // name and the task it works on now
 // (banner.ts), a press opening its card and a button beside it the pane at the task's page, whether the pane is
 // open, minimized or never drawn. Reads
-// files and runs git (status, diff, grep; no model calls); /teamrig-pane steers it.
+// files and runs git (status, diff, grep) and the teamrig CLI (meeting list and start; no model calls); /teamrig-pane
+// steers it.
 import { atom, read, update } from 'claude-code'
 import type { Components, Context, Register } from 'claude-code'
 import type {
@@ -38,6 +41,8 @@ import type {
   LogList,
   LogPage,
   LogRead,
+  MeetingStart,
+  MeetingsView,
   Nav,
   PageDetails,
   PaneView,
@@ -88,6 +93,9 @@ import { cardKey, openedWith, teamBlocks, toggledWith } from './team-rows'
 import { searchTeam, TEAM_SEARCH_VIEW, type SessionHit } from './team-search'
 import { SetupWatch } from './setup'
 import { setupBlocks } from './setup-rows'
+import { LiveMeetings } from './meetings'
+import { meetingsBlocks } from './meetings-rows'
+import { findTeamrigCli } from './teamrig-cli'
 import {
   AT_LIST,
   back,
@@ -241,6 +249,16 @@ const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, TEAM
 const NOTHING_TOGGLED: readonly string[] = []
 /** The Team tab's nodes the person opened or closed against their default (team.ts teamRows), by key: a press flips one. */
 const teamToggled = atom({ plugin: 'teamrig-pane', key: 'teamToggled' } as const, NOTHING_TOGGLED)
+/** The Meetings view's list (meetings.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when MeetingsView or Meeting changes shape. */
+const MEETINGS_SHAPE = 'meetings-v1'
+const MEETINGS_READING: MeetingsView = { kind: 'reading' }
+const NO_TEAM_MEETINGS: MeetingsView = { kind: 'no-team' }
+const meetings = atom({ plugin: 'teamrig-pane', key: 'meetings' } as const, MEETINGS_READING, { shape: MEETINGS_SHAPE })
+/** The Meetings view's meetings whose cards are open (meetings-rows.ts meetingKey), by key: a press on a row flips one. */
+const meetingsOpen = atom({ plugin: 'teamrig-pane', key: 'meetingsOpen' } as const, NOTHING_TOGGLED)
+const NO_START: MeetingStart | null = null
+/** What the last [Start meeting] press answered (meetings.ts): cleared at each session start and each switch to the view. */
+const meetingStart = atom({ plugin: 'teamrig-pane', key: 'meetingStart' } as const, NO_START)
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -425,6 +443,8 @@ export const register: Register = on => {
   let logging: LiveLog | null = null
   /** Reads the Team tab's tree again while it shows; set when the session starts, null with no team. */
   let teaming: LiveTeam | null = null
+  /** Reads the Meetings view's list again while it shows and starts a meeting on a press; set when the session starts, null with no team. */
+  let scheduling: LiveMeetings | null = null
   /** Looks for the register again while the project is not set up for teamrig; set when the session starts in one. */
   let watch: SetupWatch | null = null
   /** The tab title last asked for: `Tasks · 3 changed` (changes-rows.ts paneTitle). */
@@ -448,10 +468,18 @@ export const register: Register = on => {
     tracked?.stop()
     logging?.stop()
     teaming?.stop()
+    scheduling?.stop()
     watch?.stop()
     // A filter is a look for the moment, never kept: a new session, or a hot reload, lists every task again.
     await update($, barFilter, () => null)
+    // A start's answer is to its press: a new session, or a hot reload, shows none.
+    await update($, meetingStart, () => NO_START)
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
+    // The teamrig CLI the Meetings view runs: the installed plugin's (teamrig-cli.ts), found once.
+    const cli = await findTeamrigCli(
+      { exists: path => $.fs.exists(path), read: path => $.fs.read(path) },
+      { configDir: await $.env.get('CLAUDE_CONFIG_DIR'), home },
+    )
     // A path that is not there stamps null; a locked or denied one, or any other failure, throws to
     // the poll (source.ts unlessMissing).
     const files: Files = {
@@ -494,6 +522,7 @@ export const register: Register = on => {
       live?.stop()
       logging?.stop()
       teaming?.stop()
+      scheduling?.stop()
       const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } =
         places.kind === 'found' ? { paths: registerPaths(places.dirs), settings: places.settings } : { missing: places.problem }
       team = places.kind === 'found' && places.team !== null ? { files, paths: places.team } : null
@@ -564,10 +593,28 @@ export const register: Register = on => {
             )
       teaming = teamLive
       if (teamLive === null) await update($, teamTree, () => NO_TEAM_TREE)
+      // The CLI runs as the tab's session: its TEAMRIG_SESSION, else the area the pane shows.
+      const meetingsLive =
+        team === null
+          ? null
+          : new LiveMeetings(cli, {
+              run: (argv, timeoutMs) => $.process.run(argv, { cwd: e.cwd, timeoutMs }),
+              caller: async () => (await $.env.get('TEAMRIG_SESSION')) ?? (await read($, snapshot)).area,
+              isShown: async () => (await read($, view)) === 'meetings' && (await read($, size)) !== 'minimized',
+              publish: async shown => {
+                await update($, meetings, () => shown)
+              },
+              tell: async start => {
+                await update($, meetingStart, () => start)
+              },
+            })
+      scheduling = meetingsLive
+      if (meetingsLive === null) await update($, meetings, () => NO_TEAM_MEETINGS)
       await started.refresh()
       started.startTimers((ms, fn) => $.clock.every(ms, fn))
       logLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
       teamLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
+      meetingsLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
     }
     sizer = new PaneSizer({
       load: () => $.store.get(SIZE_KEY),
@@ -621,9 +668,11 @@ export const register: Register = on => {
       refFiles = null
       logging = null
       teaming = null
+      scheduling = null
       await update($, logList, () => NO_TEAM_LOG)
       await update($, logPage, () => AT_LOG_LIST)
       await update($, teamTree, () => NO_TEAM_TREE)
+      await update($, meetings, () => NO_TEAM_MEETINGS)
       const watching = new SetupWatch(
         {
           find: findHere,
@@ -855,6 +904,8 @@ export const register: Register = on => {
                 ? changesBlocks(changed, isGitMissing(missing), await read($, diffs), place.kind === 'search' ? { query: place.query, hits: changesFound } : null)
                 : current === 'team'
                   ? teamBlocks(team, await read($, teamToggled), clockOf(snap).zone, place.kind === 'search' ? { query: place.query, hits: teamFound } : null)
+                  : current === 'meetings'
+                  ? meetingsBlocks(await read($, meetings), await read($, meetingsOpen), await read($, meetingStart), snap.tasks, snap.now)
                   : current === 'inbox'
                   ? inboxBlocks(snap, place.kind === 'search' ? { query: place.query, hits: inboxFound } : null)
                   : logShown === null
@@ -884,7 +935,8 @@ export const register: Register = on => {
     }
     // A press on the switch's buttons. The Tasks button shows the list, from a page too,
     // scrolled back to where the page was opened from; the Log button shows the sessions, from a session's page too;
-    // the Team button reads the team tree at once. Every button closes a search, which the views share: one typed in
+    // the Team button reads the team tree at once; the Meetings button reads the meetings at once, leaving the last
+    // start's answer behind. Every button closes a search, which the views share: one typed in
     // one view is never found shown in another.
     const switchTo = async (target: PaneView) => {
       await update($, view, () => target)
@@ -893,6 +945,10 @@ export const register: Register = on => {
       if (target === 'changes') await tracked?.refresh()
       if (target === 'log') await logging?.close()
       if (target === 'team') await teaming?.refresh()
+      if (target === 'meetings') {
+        await update($, meetingStart, () => NO_START)
+        await scheduling?.refresh()
+      }
     }
     // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Team tab session's
     // card, or another area's inbox count on it) shows the Tasks view at it, over its list: back shows the list, never the Team
@@ -1014,8 +1070,9 @@ export const register: Register = on => {
      * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, an inbox count
      * one that opens the inbox's, keyed `goto:inbox:`, each Team tab key one that opens or closes it in its span's
      * style, keyed `team:`, each session of a tab tied to none one that ties the tab to it as `/teamrig-pane
-     * <session>` does, keyed `pin:`, then where it is drawn (`from`, the card's element); a Changes file's row one
-     * press that opens or closes its diff, keyed `diff:`, then where it is drawn and the row.
+     * <session>` does, keyed `pin:`, a scheduled meeting's [Start meeting] one that starts it, keyed `start:`, then
+     * where it is drawn (`from`, the card's element); a Changes file's row one press that opens or closes its diff,
+     * keyed `diff:`, then where it is drawn and the row.
      */
     const drawPart = (part: CardPart, wrap: Drawn['wrap'], from: string) => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
@@ -1065,14 +1122,27 @@ export const register: Register = on => {
                   </Button>
                 )
               }
+              case 'start': {
+                const id = piece.starts
+                return (
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void scheduling?.start(id)}>
+                    {drawPress(piece.span, 'start')}
+                  </Button>
+                )
+              }
             }
           })}
         </Box>
       )
     }
+    // A Team tab key, or a meeting's card in the Meetings view, opened or closed.
+    const fold = (key: string) =>
+      current === 'meetings'
+        ? update($, meetingsOpen, opened => toggledWith(opened, key))
+        : update($, teamToggled, toggled => toggledWith(toggled, key))
     // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
-    // conversation's Log page (`reads`), opens or closes a Team tab key (`folds`), or a Changes file's diff (`expands`:
-    // inline a file's row, docked a Changes search result), else words alone.
+    // conversation's Log page (`reads`), opens or closes a Team tab key or a meeting's card (`folds`), or a Changes
+    // file's diff (`expands`: inline a file's row, docked a Changes search result), else words alone.
     const headOf = (drawn: Drawn) => {
       const id = drawn.toggle
       const opens = drawn.opens
@@ -1081,7 +1151,7 @@ export const register: Register = on => {
       const expands = drawn.expands
       if (folds !== undefined)
         return (
-          <Button key={drawn.key} plain onPress={() => void update($, teamToggled, toggled => toggledWith(toggled, folds))}>
+          <Button key={drawn.key} plain onPress={() => void fold(folds)}>
             {drawText(drawn.spans, drawn.wrap)}
           </Button>
         )
@@ -1247,7 +1317,7 @@ export const register: Register = on => {
     /** Words as a header item. */
     const worded = (node: JSX.Element, text: string): HeaderItem => ({ node, cells: cells(text) })
 
-    // The switch: under the title in every state but setup, so another view is always one press (or t / d / g / u / e) away,
+    // The switch: under the title in every state but setup, so another view is always one press (or t / d / g / u / e / j) away,
     // its buttons wrapping under each other in a dock too narrow for all of them. Minimized, it is the whole
     // pane, one row, and a press on any button opens the pane in full on that view (switchTo).
     const changesWords = changesLabel(changed)
@@ -1283,6 +1353,10 @@ export const register: Register = on => {
         plain: false,
         hotkey: 'e',
       }),
+      pressed(
+        <Button key="meetings" label="Meetings" hotkey="j" variant={current === 'meetings' ? 'primary' : 'secondary'} onPress={() => void switchTo('meetings')} />,
+        { label: 'Meetings', plain: false, hotkey: 'j' },
+      ),
     ]
     // Minimized, a dim mark after the switch says how to open the pane in full again, a group of its own.
     const minimizedWords = 'minimized, press a view'
@@ -1298,7 +1372,7 @@ export const register: Register = on => {
       return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>
     }
     // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
-    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, u, e, s, m, a, h, k) answers. The minimized strip
+    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, u, e, j, s, m, a, h, k) answers. The minimized strip
     // above keeps its switch, so a press on it still opens the pane, onto the setup.
     if (setupShown !== null) return drawPane(titleRow === null ? [] : [titleRow])
 
@@ -1356,7 +1430,8 @@ export const register: Register = on => {
         ]
 
     // The Find field, under the switch in the dock in the Tasks view whatever it shows, in the Inbox, Team and Changes
-    // views and over the Log view's list: the first change opens a search (a place, so back from a result's page
+    // views and over the Log view's list, never in the Meetings view (a few rows, nothing to search): the first change
+    // opens a search (a place, so back from a result's page
     // returns to it), each change shows the results for its words, Enter opens the one match's page (on the Team tab
     // its card, on the Changes view its diff) or moves the ring onto the first of more (in the Inbox view, whose lines
     // open nothing, it does nothing), and an empty field or clear closes the search. It is drawn under its round's key,
@@ -1369,30 +1444,35 @@ export const register: Register = on => {
     const isChanges = current === 'changes'
     // A Log page shows one conversation: the Find field is the list's.
     const isLogList = current === 'log' && logTitle === null
-    // The field in the view shown: what it shows empty, how many results its words match, and what Enter does.
-    const find: { placeholder: string; matches: number; submit: ((query: string) => Promise<void>) | null } = isTeam
-      ? { placeholder: 'id, name, role, scope…', matches: teamFound.length, submit: submitTeam }
-      : isInbox
-        ? { placeholder: 'sender, words…', matches: inboxFound.length, submit: null }
-        : isLogList
-          ? { placeholder: 'task, title, session…', matches: logFound.length, submit: submitLog }
-          : isChanges
-            ? { placeholder: 'path, repo, branch…', matches: changesFound.length, submit: submitChanges }
-            : { placeholder: 'id, title, owner, note…', matches: matchCount(found), submit }
-    // Enter's words, none in the Inbox view.
-    const enterWords = find.submit === null ? null : submitWords(find.matches)
-    const findRow = inline
-      ? null
-      : drawFindRow(components, {
-          key: fieldKey(field),
-          placeholder: find.placeholder,
-          text: field.text,
-          submitLabel: enterWords ?? 'search',
-          onFind: () => void focusFind($),
-          onInput: value => void go($, current => searched(current, value), 'typing'),
-          onSubmit: value => void find.submit?.(value),
-          onClear: place.kind === 'search' ? () => void clearSearch($) : null,
-        })
+    // The field in the view shown: what it shows empty, how many results its words match, and what Enter does; null
+    // in the Meetings view, which draws none.
+    const find: { placeholder: string; matches: number; submit: ((query: string) => Promise<void>) | null } | null =
+      current === 'meetings'
+        ? null
+        : isTeam
+          ? { placeholder: 'id, name, role, scope…', matches: teamFound.length, submit: submitTeam }
+          : isInbox
+            ? { placeholder: 'sender, words…', matches: inboxFound.length, submit: null }
+            : isLogList
+              ? { placeholder: 'task, title, session…', matches: logFound.length, submit: submitLog }
+              : isChanges
+                ? { placeholder: 'path, repo, branch…', matches: changesFound.length, submit: submitChanges }
+                : { placeholder: 'id, title, owner, note…', matches: matchCount(found), submit }
+    // Enter's words, none in the Inbox view or with no field.
+    const enterWords = find === null || find.submit === null ? null : submitWords(find.matches)
+    const findRow =
+      inline || find === null
+        ? null
+        : drawFindRow(components, {
+            key: fieldKey(field),
+            placeholder: find.placeholder,
+            text: field.text,
+            submitLabel: enterWords ?? 'search',
+            onFind: () => void focusFind($),
+            onInput: value => void go($, current => searched(current, value), 'typing'),
+            onSubmit: value => void find.submit?.(value),
+            onClear: place.kind === 'search' ? () => void clearSearch($) : null,
+          })
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
     // hotkeys or to Claude's prompt, and the key or the click that moves them, wrapped in a narrow dock.
     const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo, place.kind === 'search')
