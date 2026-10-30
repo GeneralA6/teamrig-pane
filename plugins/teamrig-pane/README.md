@@ -404,7 +404,7 @@ keeps under the kit home (`~/.teamrig/teams/<team>`). A team's row counts its ac
 (`▾ acme · 4 active · 1 closed`). Under it come its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a closed group (`▸ closed (1)`), and each child team (whose config names it as
 `team.parent`). A session's row is a `●` and its id in bold, then its current name where it differs from the id, then,
-dim: its roles (lead, coordinator, security reviewer), how many it leads, and its hire and review day
+dim: its roles (lead, delivery owner, security reviewer), how many it leads, and its hire and review day
 (`hired Fri 10-09 · review 10-25`) or its retire day, then its former names. A retired session's row is a dim `○`.
 Teams under another top team are left out. Until there is a tree, the tab says why: no team, a team with no config
 file teamrig can read, or a folder it could not read.
