@@ -256,6 +256,47 @@ export type TeamView =
   | { readonly kind: 'no-team' }
   | { readonly kind: 'failed'; readonly reason: string }
 
+/** A meeting's status as teamrig keeps it (its meeting schedule's statuses). */
+export type MeetingStatus = 'scheduled' | 'started' | 'done' | 'dropped'
+
+/**
+ * A meeting the Meetings view lists (hooks/meetings.ts), as `teamrig meeting list --json` prints it: its id (`M<n>`),
+ * when it starts (epoch ms) and that time on the team's clock, its length in minutes, the session met (whose tab a
+ * start brings to the front, or opens), the others joining, the tasks it settles, what it is about, its brief's path
+ * (null for none), its status, and whether it is missed: scheduled, its slot over with no start.
+ */
+export type Meeting = {
+  readonly id: string
+  readonly at: number
+  readonly atText: string
+  readonly minutes: number
+  readonly session: string
+  readonly with: readonly string[]
+  readonly tasks: readonly string[]
+  readonly about: string
+  readonly brief: string | null
+  readonly status: MeetingStatus
+  readonly missed: boolean
+}
+
+/**
+ * The Meetings view's list (hooks/meetings.ts): the team's scheduled and started meetings by time, and how many of the
+ * meetings teamrig printed the pane could not read (a newer teamrig's); or that it is not read yet, that the pane found
+ * no team, or why the list could not be read (no teamrig CLI, a refusal).
+ */
+export type MeetingsView =
+  | { readonly kind: 'list'; readonly meetings: readonly Meeting[]; readonly unreadable: number }
+  | { readonly kind: 'reading' }
+  | { readonly kind: 'no-team' }
+  | { readonly kind: 'failed'; readonly reason: string }
+
+/**
+ * What the last [Start meeting] press answered (hooks/meetings.ts): the meeting, whether teamrig is still starting it,
+ * started it or refused, and the lines it printed after its STARTED line (who it told, the tab it fronted or opened),
+ * or why it refused.
+ */
+export type MeetingStart = { readonly id: string; readonly outcome: 'starting' | 'started' | 'refused'; readonly lines: readonly string[] }
+
 /** What a turn log line records: a prompt the person sent, a reply the session showed, or a clear or compaction of its context. */
 export type TurnKind = 'prompt' | 'reply' | 'clear'
 
