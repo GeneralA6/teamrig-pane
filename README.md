@@ -102,5 +102,9 @@ Using an AI assistant? Point it at [llms.txt](llms.txt): the pane explained for 
 to teamrig's guide.
 
 [Plugin README](plugins/teamrig-pane/README.md) (every view, key and limit) ·
-[Contributing](CONTRIBUTING.md) · [teamrig](https://github.com/GeneralA6/teamrig) ·
-Licensed under [Apache-2.0](LICENSE).
+[Contributing](CONTRIBUTING.md) · [teamrig](https://github.com/GeneralA6/teamrig)
+
+## Licence
+
+[Apache License 2.0](LICENSE). Every copy keeps the [NOTICE](NOTICE) file, and a changed copy you share takes a name of
+its own ([the name policy](TRADEMARKS.md)).
