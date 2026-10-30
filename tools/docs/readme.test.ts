@@ -57,9 +57,21 @@ describe('README', () => {
     }
   });
 
-  it('links the plugin README, CONTRIBUTING and the licence, and every local link resolves', () => {
-    for (const path of ['plugins/teamrig-pane/README.md', 'CONTRIBUTING.md', 'LICENSE']) assert.ok(targets.includes(path), path);
+  it('links the plugin README, CONTRIBUTING, the licence, its NOTICE and the name policy, and every local link resolves', () => {
+    for (const path of ['plugins/teamrig-pane/README.md', 'CONTRIBUTING.md', 'LICENSE', 'NOTICE', 'TRADEMARKS.md']) assert.ok(targets.includes(path), path);
     for (const target of targets.filter((path) => !/^https?:/.test(path))) assert.ok(existsSync(`${ROOT}${target}`), target);
+  });
+
+  // The licence grants no right to the name (its section 6): the NOTICE says so, and the pane's name follows teamrig's
+  // policy, which covers the names built on teamrig.
+  it("has a NOTICE naming teamrig-pane, and a name policy pointing to teamrig's", () => {
+    const notice = readFileSync(`${ROOT}NOTICE`, 'utf8');
+    assert.match(notice, /^teamrig-pane\nCopyright \d{4} /);
+    assert.match(notice, /Apache License, Version 2\.0 \(see LICENSE\)/);
+    assert.match(notice, /see TRADEMARKS\.md/);
+    const policy = readFileSync(`${ROOT}TRADEMARKS.md`, 'utf8');
+    assert.ok(policy.includes(`(${TEAMRIG}/blob/main/TRADEMARKS.md)`), "TRADEMARKS.md links teamrig's name policy");
+    assert.match(policy, /\[NOTICE\]\(NOTICE\)/);
   });
 
   it('tells how to update: refresh the marketplace, update the plugin, then reload or restart', () => {
