@@ -126,7 +126,7 @@ export const DEFAULT_LOCK: LockConfig = { ttlMs: 30_000, pollMs: 50, waitMs: 20_
 /** No exec PATH: a privileged command names its program by absolute path until the team lists its tool folders. */
 export const DEFAULT_EXEC: ExecConfig = { path: [] };
 
-export const DEFAULT_PUSH_GUARD: PushGuardConfig ={ protectedBranches: ['main', 'master'], pushToProtected: 'ask' };
+export const DEFAULT_PUSH_GUARD: PushGuardConfig = { protectedBranches: ['main', 'master'], pushToProtected: 'ask', reviewPaths: [] };
 
 /**
  * Refused by default: a helper's `npx eslint` once fetched and ran an unvetted package (T450, 10-16), and an install
@@ -141,7 +141,7 @@ export const DEFAULT_COMMIT_GUARD: CommitGuardConfig = { skipHooks: 'deny' };
 export const DEFAULT_PROMPTS: PromptsConfig = { hookAsks: 'ask' };
 
 /** Refused by default: a secret printed into a session lands in its transcript and every later prompt (T660, 10-19). */
-export const DEFAULT_SECRET_GUARD: SecretGuardConfig = { secretReads: 'deny', paths: [], envNames: [] };
+export const DEFAULT_SECRET_GUARD: SecretGuardConfig = { secretReads: 'deny', writes: 'deny', paths: [], envNames: [], commands: [], redact: true };
 
 /** Off, and trusting no prefix, until a team opts in. */
 export const DEFAULT_READONLY_SHELL: ReadonlyShellConfig = { enabled: false, allowPrefixes: [] };
@@ -180,12 +180,16 @@ export const DEFAULT_PERMISSIONS: PermissionsConfig = {
   ],
 };
 
-/** Tests: a test folder, `*.test.*` and `*.spec.*` files, and pytest's `test_*.py`. `warn` only adds to a push the guard already asks about. */
+/**
+ * Tests: a test folder, `*.test.*` and `*.spec.*` files, and pytest's `test_*.py`. Source: code files by extension, so
+ * docs, config and data are not. `warn` only adds to a push the guard already asks about.
+ */
 export const DEFAULT_COMMITS: CommitsConfig = {
   maxLines: 400,
   maxFiles: 15,
   largeCommitTrailer: 'Large-commit',
   testPatterns: ['(^|/)(tests?|__tests__|spec)/', '\\.(test|spec)\\.[^/]+$', '(^|/)test_[^/]+\\.py$'],
+  sourcePatterns: ['\\.([cm]?[jt]sx?|py|go|rs|java|kt|cs|c|cc|cpp|h|hpp|rb|swift|vue|svelte|sh|ps1)$'],
   gate: 'warn',
 };
 
@@ -314,7 +318,7 @@ export const DEFAULT_WINDOWS: WindowsConfig = { settleMinutes: 30, targetSettleM
 /**
  * A burst spends more of the week, so the owner approves each one. A surplus burst may start from 48 hours before
  * the reset once at least 5% of the week is projected unused; each burst session runs at most 3 helpers at once,
- * and one burst hires at most 2 sessions, as many as `hiring.maxSessions` allows by default.
+ * and one burst hires at most 2 sessions.
  */
 export const DEFAULT_BURST: BurstConfig = { policy: 'owner', surplusHours: 48, minSparePct: 5, maxHelpers: 3, maxHires: 2 };
 
@@ -325,16 +329,12 @@ export const DEFAULT_BURST: BurstConfig = { policy: 'owner', surplusHours: 48, m
 export const DEFAULT_SCALE_OUT: ScaleOutConfig = { windowDays: 7, minDone: 3, topPriorities: 2 };
 
 /**
- * A hire spends the week's budget, so it waits for the owner's yes: at most two hires at once, a cap only the
- * owner raises, each spending its part of the team's daily budget, reviewed after a week and due to retire after 4
- * hours with no open task. A rehire resumes its last Claude Code session only when it holds at most 250k tokens of
- * context and was idle at most a week.
+ * A hire spends the week's budget, so it waits for the owner's yes, each spending its part of the team's daily
+ * budget, and reviewed after a week. A rehire resumes its last Claude Code session only when it holds at most 250k
+ * tokens of context and was idle at most a week.
  */
 export const DEFAULT_HIRING: HiringConfig = {
   policy: 'owner',
-  maxSessions: 2,
-  capRaisedBy: 'owner',
-  idleHours: 4,
   reviewDays: 7,
   resumeMaxTokens: 250_000,
   resumeMaxIdleDays: 7,

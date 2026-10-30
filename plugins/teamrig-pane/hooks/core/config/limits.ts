@@ -18,9 +18,11 @@ export const CONFIG_LIMITS = {
   ownerGates: { maxItems: 8, maxLength: 60 },
   ruleConflicts: { maxItems: 40 },
   protectedBranches: { maxItems: 8, maxLength: 64 },
+  reviewPaths: { maxItems: 128 },
   commitMaxLines: { min: 50, max: 5000 },
   commitMaxFiles: { min: 2, max: 500 },
   testPatterns: { maxItems: 8, maxLength: 100 },
+  sourcePatterns: { maxItems: 8, maxLength: 100 },
   forbidFrontmatter: { maxItems: 8, maxLength: 32 },
   requireNoteOn: { maxItems: 5 },
   requireFollowupsOn: { maxItems: 3 },
@@ -42,6 +44,7 @@ export const CONFIG_LIMITS = {
   keepAllow: { maxItems: 64, maxLength: 120 },
   secretPaths: { maxItems: 32, maxLength: 200 },
   secretEnvNames: { maxItems: 16, maxLength: 120 },
+  secretCommands: { maxItems: 16, maxLength: 200 },
   packageCooldownDays: { min: 0, max: 365 },
   searchNudgeAt: { min: 0, max: 50 },
   turnLogKeepHours: { min: 1, max: 168 },
@@ -65,8 +68,6 @@ export const CONFIG_LIMITS = {
   liftMaxStopPct: { min: 1, max: 100 },
   liftReserveStopPct: { min: 1, max: 100 },
   maxBytesPerHook: { min: 100_000, max: 100_000_000 },
-  hiringMaxSessions: { min: 1, max: 20 },
-  hiringIdleHours: { min: 1, max: 168 },
   hiringReviewDays: { min: 1, max: 90 },
   hiringResumeMaxTokens: { min: 10_000, max: 1_000_000 },
   hiringResumeMaxIdleDays: { min: 1, max: 90 },
@@ -111,6 +112,11 @@ export const RULE_CONFLICT_LIMITS = {
 
 /** The longest `budget.account` name, on one line. */
 export const BUDGET_ACCOUNT_MAX_LENGTH = 100;
+
+/** Bounds on the fields of one review gate entry (`pushGuard.reviewPaths`). */
+export const REVIEW_PATH_LIMITS = {
+  globMaxLength: 200,
+} as const;
 
 /**
  * Bounds on a tree of teams, which `team create` and `doctor` enforce. A lead's `--tree` roll-up reads

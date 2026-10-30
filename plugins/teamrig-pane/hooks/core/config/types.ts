@@ -3,7 +3,7 @@ import type { TaskStatus } from '../register/model.ts';
 import type { CoreRuleKey } from '../rules/keys.ts';
 
 /** The config format this code reads and writes. Older files are migrated in memory on load. */
-export const CONFIG_VERSION = 5;
+export const CONFIG_VERSION = 7;
 
 export interface RolesConfig {
   /** Owns priorities, team rules and the owner's decision queue; may re-prioritize and reassign tasks; hands the work itself to others (`leadBoundary`). */
@@ -215,20 +215,52 @@ export interface PushGuardConfig {
   readonly protectedBranches: readonly string[];
   /** What a normal push to a protected branch does. */
   readonly pushToProtected: PushToProtected;
+  /** The team's review gate entries, read on top of teamrig's generic list: adding one narrows, none removes a generic one. */
+  readonly reviewPaths: readonly ReviewPath[];
 }
 
 /**
  * A normal push to a protected branch: `ask` the human, `allow` it with a note, or `lead`: the lead's own goes through
  * with a note, another session's only once the lead approved one of its waiting tasks (`teamrig approve`, T684), else
- * it is refused with how to ask, never asked of the human. None changes a refusal, a `--force-with-lease` push, or a
- * command the guard cannot read, which still asks.
+ * it is refused with how to ask, never asked of the human. `gated` (T800 §2.1, T858) clears a hand push as `lead` does,
+ * and `teamrig merge` merges a change that holds the self-merge gates with no approval, logging it, and holds one
+ * that misses a gate for its session's leader. None changes a refusal, a `--force-with-lease` push, or a command the
+ * guard cannot read, which still asks.
  */
-export type PushToProtected = 'ask' | 'allow' | 'lead';
+export type PushToProtected = 'ask' | 'allow' | 'lead' | 'gated';
 
-export const PUSH_TO_PROTECTED: readonly PushToProtected[] = ['ask', 'allow', 'lead'];
+export const PUSH_TO_PROTECTED: readonly PushToProtected[] = ['ask', 'allow', 'lead', 'gated'];
 
 export function isPushToProtected(value: unknown): value is PushToProtected {
   return PUSH_TO_PROTECTED.some((choice) => choice === value);
+}
+
+/**
+ * How the review gate treats a path a change touches (T800 §2.2): `always` waits on the entry's reviewer; `check` runs
+ * the repo's review check, which clears the change or sends it to a reviewer.
+ */
+export type ReviewPathMode = 'always' | 'check';
+
+export const REVIEW_PATH_MODES: readonly ReviewPathMode[] = ['always', 'check'];
+
+export function isReviewPathMode(value: unknown): value is ReviewPathMode {
+  return REVIEW_PATH_MODES.some((mode) => mode === value);
+}
+
+/** Who reviews a held change: security, or the session's leader (the lead or a sub-lead, T781). */
+export type ReviewClass = 'security' | 'leader';
+
+export const REVIEW_CLASSES: readonly ReviewClass[] = ['security', 'leader'];
+
+export function isReviewClass(value: unknown): value is ReviewClass {
+  return REVIEW_CLASSES.some((reviewer) => reviewer === value);
+}
+
+/** One review gate entry: the paths it covers (see `reviewPathMatcher`), how they are reviewed, and by whom. */
+export interface ReviewPath {
+  readonly glob: string;
+  readonly mode: ReviewPathMode;
+  readonly class: ReviewClass;
 }
 
 export interface PackageGuardConfig {
@@ -286,6 +318,11 @@ export interface SecretGuardConfig {
   /** What a Bash, PowerShell, Read or Grep call that would print a secret does. */
   readonly secretReads: SecretReads;
   /**
+   * What a Bash or PowerShell call whose command line holds a secret as text does, and a file-writing call whose
+   * written text holds one outside a secret file (T1369 R12).
+   */
+  readonly writes: SecretWrites;
+  /**
    * The team's own secret files, globs read after the guard's defaults (`.env`, `~/.npmrc`, `~/.ssh/**`...): `~/`
    * starts at home, a glob without a leading `/` or drive matches at any depth, and the last glob that matches a path
    * decides, so `!glob` keeps a path readable.
@@ -298,14 +335,33 @@ export interface SecretGuardConfig {
    * `!pattern` keeps a variable printable.
    */
   readonly envNames: readonly string[];
+  /**
+   * The team's own commands whose output is a secret whatever they name, regular expressions over a run's line
+   * (`<program> <args>`, case ignored) read after the guard's defaults (`kubectl config view --raw`). The last pattern
+   * that matches a line decides, so `!pattern` lets a command print.
+   */
+  readonly commands: readonly string[];
+  /**
+   * Whether a Bash, PowerShell, Read or Grep result reaches the model and the transcript with each secret it holds
+   * replaced (hooks/secret-redact.ts); turning it off is the owner's call (T1369).
+   */
+  readonly redact: boolean;
 }
 
 /**
  * A call that would print a secret: a secret file's content (`cat .env`, `Get-Content ~/.npmrc`, the Read tool), the
- * whole environment (`env`, `printenv`, `Get-ChildItem Env:`), a secret variable (`echo $GITHUB_TOKEN`), or a
- * Kubernetes secret's data: `deny` refuses it, `ask` asks the human, `allow` lets it run.
+ * whole environment (`env`, `printenv`, `Get-ChildItem Env:`), a secret variable (`echo $GITHUB_TOKEN`), a
+ * Kubernetes secret's data or a dump command's output (`kubectl config view --raw`): `deny` refuses it, `ask` asks the
+ * human, `allow` lets it run.
  */
 export type SecretReads = 'deny' | 'ask' | 'allow';
+
+/**
+ * A call that holds a secret as text: a Bash or PowerShell line with a token, credentials in a URL or an
+ * `Authorization` header in it, or a Write, Edit, MultiEdit or NotebookEdit whose text holds one outside a secret file:
+ * `deny` refuses it, `ask` asks the human, `allow` lets it run.
+ */
+export type SecretWrites = 'deny' | 'ask' | 'allow';
 
 /**
  * The opt-in hook that lets a Bash or PowerShell line run without a permission prompt when every command in it
@@ -363,6 +419,12 @@ export const SECRET_READS: readonly SecretReads[] = ['deny', 'ask', 'allow'];
 
 export function isSecretReads(value: unknown): value is SecretReads {
   return SECRET_READS.some((choice) => choice === value);
+}
+
+export const SECRET_WRITES: readonly SecretWrites[] = ['deny', 'ask', 'allow'];
+
+export function isSecretWrites(value: unknown): value is SecretWrites {
+  return SECRET_WRITES.some((choice) => choice === value);
 }
 
 export const COMMIT_GATES = ['off', 'warn', 'refuse'] as const;
@@ -427,8 +489,8 @@ export interface WakeConfig {
   readonly enabled: boolean;
   /**
    * The least urgent priority that wakes a session: 1 wakes for p0 and p1 only. A session its budget holds (past
-   * its daily budget, the wake's own turn counted, while the team has no room today) wakes for p0 only, and one in
-   * the budget's quiet hours for p0 and p1 only, whatever this says.
+   * its daily budget while the team has no room today, the wake's own turn counted for both) wakes for p0 only, and
+   * one in the budget's quiet hours for p0 and p1 only, whatever this says.
    */
   readonly priority: number;
   /** How long a wake waits after the first new task it is for, so tasks handed together wake the session once. */
@@ -473,6 +535,11 @@ export interface CommitsConfig {
   readonly largeCommitTrailer: string;
   /** Regular expressions over `/`-separated paths; a file that matches one is a test and never counts. */
   readonly testPatterns: readonly string[];
+  /**
+   * Regular expressions over `/`-separated paths; a non-test file that matches one is source. A change of source with
+   * no test changed misses the self-merge gate (`pushToProtected: gated`, T858).
+   */
+  readonly sourcePatterns: readonly string[];
   readonly gate: CommitGate;
 }
 
@@ -658,6 +725,18 @@ export interface CoordinatorRepoConfig {
    * change go, anything else refuses it. Unset: the gate refuses every dependency change.
    */
   readonly dependencyCheck?: readonly string[];
+  /**
+   * Hold a branch (merge) whose changed paths hit a review entry (teamrig's generic list and
+   * `pushGuard.reviewPaths`) until its reviewer approves it, or `reviewCheck` clears its `check` hits (T800 §2.2).
+   */
+  readonly reviewGate: boolean;
+  /**
+   * With `reviewGate`, what a `check` hit runs: a program and its arguments, run without a shell under the host lock in
+   * the branch's checkout after the rebase, with the base commit in `TEAMRIG_REVIEW_BASE`. Exit 0 clears the change, 3
+   * holds it for the entry's reviewer with the findings it prints, anything else for that reviewer too, as a broken
+   * check is no pass. Unset: a `check` hit is held like an `always` one.
+   */
+  readonly reviewCheck?: readonly string[];
   /** After the push, fast-forward the main checkout to it: only a fast-forward, only on the default branch with no tracked changes. */
   readonly followMainCheckout: boolean;
   /**
@@ -852,25 +931,15 @@ export interface RefreshConfig {
 
 /**
  * Who may hire a session onto the team (`teamrig hire`): `off` nobody; `owner` a lead (the lead, or a sub-lead
- * into its own group), once the owner approved (`--approved-by`, kept with the hire); `lead` a lead, within the
- * caps; `automatic` as `lead`, and a hired session whose tasks are all closed may also retire itself (`teamrig retire`).
+ * into its own group), once the owner approved (`--approved-by`, kept with the hire); `lead` a lead; `automatic` as
+ * `lead`, and a hired session whose last open task closes is asked to write its handover (hiring/last-task-ask.ts).
+ * Under every policy only a lead over a session retires it (`teamrig retire`).
  */
 export const HIRING_POLICIES = ['off', 'owner', 'lead', 'automatic'] as const;
 export type HiringPolicy = (typeof HIRING_POLICIES)[number];
 
 export function isHiringPolicy(value: unknown): value is HiringPolicy {
   return HIRING_POLICIES.some((policy) => policy === value);
-}
-
-/**
- * Who raises `hiring.maxSessions` when it blocks a hire a SCALE-OUT calls for: `owner` on the lead's card, as a
- * raised cap spends more of the week; `lead` the lead itself, in the team config, saying so in its next report.
- */
-export const CAP_RAISERS = ['owner', 'lead'] as const;
-export type CapRaiser = (typeof CAP_RAISERS)[number];
-
-export function isCapRaiser(value: unknown): value is CapRaiser {
-  return CAP_RAISERS.some((raiser) => raiser === value);
 }
 
 /** How `check` measures an area against its dated work for a SCALE-OUT flag (src/hiring/scale-out.ts). */
@@ -884,17 +953,13 @@ export interface ScaleOutConfig {
 }
 
 /**
- * Hiring temporary sessions: who decides, the cap every hire stays within, and when an area needs one. A hire has
- * no fixed daily budget: its part of the team's follows its share and queued work, like any session's.
+ * Hiring the workers a team needs: who decides, and when an area needs one. No cap counts hires: the host's room
+ * bounds who is at the office, and the leader decides who is hired. A hire with no task stays hired: the idle pass
+ * deactivates it. A hire has no fixed daily budget: its part of the team's follows its share and queued work, like
+ * any session's.
  */
 export interface HiringConfig {
   readonly policy: HiringPolicy;
-  /** Hired sessions on the team at once. */
-  readonly maxSessions: number;
-  /** Who raises `maxSessions` when it blocks a SCALE-OUT's hire. */
-  readonly capRaisedBy: CapRaiser;
-  /** Hours a hired session may hold no open task before it is due to retire. */
-  readonly idleHours: number;
   /** Days from a hire to its review date, unless the hire names one. */
   readonly reviewDays: number;
   /** The most context tokens a rehired session's last Claude Code session may hold for `open --resume` to resume it. */
@@ -926,7 +991,7 @@ export interface BurstConfig {
   readonly minSparePct: number;
   /** The most helpers each burst session runs at once. */
   readonly maxHelpers: number;
-  /** The most sessions one burst may hire (`hire --burst`); `hiring`'s caps apply as well. */
+  /** The most sessions one burst may hire (`hire --burst`). */
   readonly maxHires: number;
 }
 
@@ -1082,7 +1147,7 @@ export interface KitConfig {
   readonly packageGuard: PackageGuardConfig;
   readonly commitGuard: CommitGuardConfig;
   readonly prompts: PromptsConfig;
-  /** Refuses a call that would print a secret file, the environment or a secret variable (hook-secret-guard). */
+  /** Refuses a call that would print a secret file, the environment or a secret variable, or whose line holds a secret as text (hook-secret-guard). */
   readonly secretGuard: SecretGuardConfig;
   readonly commits: CommitsConfig;
   readonly coordinator: CoordinatorConfig;
