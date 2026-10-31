@@ -13,9 +13,9 @@ import { ACME, TOOLS, retire, treeOf } from './team-fixtures'
 const UTC = TimeZone.UTC
 const GUIDE: Span = { text: '    │ ', dim: true }
 
-/** The facts the tree holds for `team`'s session `id`, the closed group open so a retired one is there too. */
+/** The facts the tree holds for `team`'s session `id`, the retired group open so a retired one is there too. */
 function sessionOf(team: string, id: string): SessionFacts {
-  const row = teamRows(treeOf([ACME, TOOLS], 'acme'), new Set(['closed:acme'])).find(({ node }) => node.key === sessionKey(team, id))
+  const row = teamRows(treeOf([ACME, TOOLS], 'acme'), new Set(['retired:acme'])).find(({ node }) => node.key === sessionKey(team, id))
   if (row?.node.kind !== 'session') throw new Error(`no session ${team}/${id}`)
   return row.node.session
 }
@@ -103,7 +103,7 @@ describe('sessionCard', () => {
     expect(roleWords({ ...ops, roles: ['lead', 'deliveryOwner', 'securityReviewer'] })).toEqual(['lead', 'delivery owner', 'security reviewer'])
   })
 
-  test("a closed session's card is its retire: the day and who retired it, why, its heir and its handover, a press", () => {
+  test("a retired session's card is its retire: the day and who retired it, why, its heir and its handover, a press", () => {
     const qa = sessionOf('acme', 'qa')
     const card = sessionCard(qa, GUIDE, UTC)
     expect(words(card)).toEqual([line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done'), line('Heir', 'web'), line('Handover', 'handover/qa.md')])

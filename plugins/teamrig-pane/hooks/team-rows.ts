@@ -1,9 +1,9 @@
 // The Team tab as blocks of rows (rows.ts): the team tree (team.ts) a node a row, depth first, each indented by its
 // depth behind a mark that says whether it is open (▾), closed (▸) or has nothing under it. A team's row counts its
-// active and closed sessions; a session's row is its mark (● on the team, ○ dim once retired), its id, its name where
+// active and retired sessions; a session's row is its mark (● on the team, ○ dim once retired), its id, its name where
 // it differs, how many sessions it leads in brackets (T1244), its roles, its hire or its retire, how many of its cards wait on the owner now with a
-// [Meet] press that runs `teamrig meet` on it (T1297) and when the next card the owner put off comes back; a closed
-// group's row counts its sessions. A press on a team's or a closed group's row opens or closes what lies under it
+// [Meet] press that runs `teamrig meet` on it (T1297) and when the next card the owner put off comes back; a retired
+// group's row counts its sessions. A press on a team's or a retired group's row opens or closes what lies under it
 // (`folds`). A press on a session's row opens or closes its card (team-card.ts) under it; a
 // leader's row, and docked a row with a [Meet], holds its presses instead, a leader's mark opening or closing the
 // sessions it leads and the id its card (`toggles`), and inline, where a row is one press, its row does the first.
@@ -122,11 +122,11 @@ function decisionSpans(session: SessionFacts): Span[] {
  * cards on the owner; where `marks` says a search's words matched, underlined.
  */
 function sessionSpans(session: SessionFacts, zone: TimeZone, card: string | null, marks: Marks): Span[] {
-  const isClosed = !session.active
-  const idStyle: Omit<Span, 'text'> = isClosed ? { dim: true } : { bold: true }
-  const spans: Span[] = [isClosed ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.id, marks('id'), card === null ? idStyle : { ...idStyle, toggles: card })]
+  const isRetired = !session.active
+  const idStyle: Omit<Span, 'text'> = isRetired ? { dim: true } : { bold: true }
+  const spans: Span[] = [isRetired ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.id, marks('id'), card === null ? idStyle : { ...idStyle, toggles: card })]
   const name = teamFieldText(session, 'name')
-  if (name !== null) spans.push(...prefixedSpans('  ', name, marks('name'), { dim: isClosed }))
+  if (name !== null) spans.push(...prefixedSpans('  ', name, marks('name'), { dim: isRetired }))
   if (session.leads > 0) spans.push({ text: ` (${session.leads})`, dim: true })
   if (session.retire === null) spans.push(...roleSpans(session, marks('role')))
   for (const part of tenureWords(session, zone)) spans.push(SEPARATOR, { text: part, dim: true })
@@ -134,7 +134,7 @@ function sessionSpans(session: SessionFacts, zone: TimeZone, card: string | null
   return spans
 }
 
-/** A team's or a closed group's own words: the team and its counts, or the group and its count. */
+/** A team's or a retired group's own words: the team and its counts, or the group and its count. */
 function groupSpans(node: Exclude<TeamTreeNode, { kind: 'session' }>): Span[] {
   switch (node.kind) {
     case 'team':
@@ -143,10 +143,10 @@ function groupSpans(node: Exclude<TeamTreeNode, { kind: 'session' }>): Span[] {
         SEPARATOR,
         { text: `${node.team.active} active`, dim: true },
         SEPARATOR,
-        { text: `${node.team.closed} closed`, dim: true },
+        { text: `${node.team.retired} retired`, dim: true },
       ]
-    case 'closed':
-      return [{ text: `closed (${node.children.length})`, dim: true }]
+    case 'retired':
+      return [{ text: `retired (${node.children.length})`, dim: true }]
   }
 }
 
@@ -190,7 +190,7 @@ function rowBlock({ node, depth, open }: TeamRow, toggled: ReadonlySet<string>, 
 }
 
 /**
- * One row a search draws: a team or a closed group, open over what it leads to, no press; a session the search names,
+ * One row a search draws: a team or a retired group, open over what it leads to, no press; a session the search names,
  * keyed as its result, its matched words underlined and its matched scope on a dim line under it; a session drawn only
  * to lead to one. A session's row is one press that opens or closes its card, which follows it while open (docked,
  * its id is, on a row that holds a [Meet]).

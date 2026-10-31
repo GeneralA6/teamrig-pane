@@ -6,7 +6,7 @@
 // register. Decisions: its cards waiting on the owner now, and Later: those the owner put off, each with when it comes
 // back, soonest first (owner-cards.ts), each id a press that opens the task's page, when the pane reads its team's
 // register and it has any (T1297). Inbox: its unread lines, a press that opens its inbox at the first of them, when
-// the pane reads its team's inbox and it ever marked it read. A closed session's card is its retire instead: the day
+// the pane reads its team's inbox and it ever marked it read. A retired session's card is its retire instead: the day
 // and who retired it, why, the session its tasks went to (Heir), and its Handover, a press that opens the file, or why
 // it left none. Each line starts with the guide its row hands it. Days print on the team's clock (meta.ts dayWords).
 // Pure.

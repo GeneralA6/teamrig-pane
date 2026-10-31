@@ -6,7 +6,7 @@ import { ACME, OTHER, TOOLS, configOf, treeOf } from './team-fixtures'
 function outline(rows: readonly TeamRow[]): string[] {
   return rows.map(({ node, depth, open }) => {
     const mark = open === null ? '·' : open ? '▾' : '▸'
-    const label = node.kind === 'team' ? `team ${node.team.team}` : node.kind === 'closed' ? 'closed' : node.session.id
+    const label = node.kind === 'team' ? `team ${node.team.team}` : node.kind === 'retired' ? 'retired' : node.session.id
     return `${'  '.repeat(depth)}${mark} ${label}`
   })
 }
@@ -22,7 +22,7 @@ function sessionOf(root: TeamTreeNode, team: string, id: string): SessionFacts {
 const NONE: ReadonlySet<string> = new Set()
 
 describe('teamTree', () => {
-  test('the root team over its lead, each session under its leader, the closed group (closed), then the child team', () => {
+  test('the root team over its lead, each session under its leader, the retired group (closed), then the child team', () => {
     expect(outline(teamRows(treeOf([ACME, TOOLS, OTHER], 'acme'), NONE))).toEqual([
       '▾ team acme',
       '  ▾ lead',
@@ -30,7 +30,7 @@ describe('teamTree', () => {
       '      · api',
       '      · ui',
       '    · ops',
-      '  ▸ closed',
+      '  ▸ retired',
       '  ▾ team tools',
       '    ▾ boss',
       '      · dev',
@@ -44,9 +44,9 @@ describe('teamTree', () => {
 
   test("a team's counts: the sessions on its config, the retired ones no longer on it, and its parent", () => {
     const root = treeOf([ACME, TOOLS], 'acme')
-    expect(root.kind === 'team' ? root.team : null).toEqual({ team: 'acme', parent: null, active: 5, closed: 1 })
+    expect(root.kind === 'team' ? root.team : null).toEqual({ team: 'acme', parent: null, active: 5, retired: 1 })
     const tools = root.children.find(node => node.key === 'team:tools')
-    expect(tools?.kind === 'team' ? tools.team : null).toEqual({ team: 'tools', parent: 'acme', active: 2, closed: 0 })
+    expect(tools?.kind === 'team' ? tools.team : null).toEqual({ team: 'tools', parent: 'acme', active: 2, retired: 0 })
   })
 
   test("a session's name, roles, the sessions it leads and its leaders, its launch, tasks in progress, unread lines and cards on the owner", () => {
@@ -88,9 +88,9 @@ describe('teamTree', () => {
     expect(sessionOf(root, 'acme', 'ops')).toMatchObject({ active: true, roles: ['securityReviewer'], hire: ACME.hires[5], rehiredFrom: ACME.hires[3], retire: null })
   })
 
-  test('the closed group opens on a toggle: a retired session under its last name, with its retire and no roles, leaders, launch, tasks, unread lines or cards on the owner', () => {
+  test('the retired group opens on a toggle: a retired session under its last name, with its retire and no roles, leaders, launch, tasks, unread lines or cards on the owner', () => {
     const root = treeOf([ACME], 'acme')
-    expect(outline(teamRows(root, new Set(['closed:acme']))).slice(-2)).toEqual(['  ▾ closed', '    · qa'])
+    expect(outline(teamRows(root, new Set(['retired:acme']))).slice(-2)).toEqual(['  ▾ retired', '    · qa'])
     expect(sessionOf(root, 'acme', 'qa')).toEqual({
       team: 'acme',
       id: 'qa',
@@ -134,7 +134,7 @@ describe('teamTree', () => {
 describe('teamRows', () => {
   test('a toggled team or leader closes, hiding what is under it; the keys hold across reads', () => {
     const toggled = new Set(['session:acme/web', 'team:tools'])
-    expect(outline(teamRows(treeOf([ACME, TOOLS], 'acme'), toggled))).toEqual(['▾ team acme', '  ▾ lead', '    ▸ web', '    · ops', '  ▸ closed', '  ▸ team tools'])
+    expect(outline(teamRows(treeOf([ACME, TOOLS], 'acme'), toggled))).toEqual(['▾ team acme', '  ▾ lead', '    ▸ web', '    · ops', '  ▸ retired', '  ▸ team tools'])
     expect(outline(teamRows(treeOf([ACME], 'acme'), new Set(['team:acme'])))).toEqual(['▸ team acme'])
   })
 
@@ -149,7 +149,7 @@ describe('foundRows', () => {
     expect(outline(foundRows(root, new Set([sessionKey('acme', 'api')])))).toEqual(['▾ team acme', '  ▾ lead', '    ▾ web', '      · api'])
     expect(outline(foundRows(root, new Set([sessionKey('acme', 'qa'), sessionKey('tools', 'dev')])))).toEqual([
       '▾ team acme',
-      '  ▾ closed',
+      '  ▾ retired',
       '    · qa',
       '  ▾ team tools',
       '    ▾ boss',
