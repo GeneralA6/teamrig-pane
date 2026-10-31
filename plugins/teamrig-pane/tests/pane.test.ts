@@ -238,13 +238,13 @@ test('docks the session area: its tasks, flags and unread inbox', async ($, on) 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox (2)' })
-  expect(keyedProps(await pane.drawn(), 'team')).toMatchObject({ label: 'Team' })
+  expect(keyedProps(await pane.drawn(), 'team')).toMatchObject({ label: 'Teams' })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
   expect(await pane.find({ text: /p2 · due Wed 10-14 · new · asked by owner/ })).toBeDefined()
   expect(await pane.find({ text: /Rotate the local URI/ })).toBeUndefined()
 })
 
-test('the Team button counts the cards waiting on the owner now, not those put off', async ($, on) => {
+test('the Teams button counts the cards waiting on the owner now, not those put off', async ($, on) => {
   const { disk } = await start(on)
   const card = { question: 'Ship it?', options: ['A: now', 'B: later'], recommend: 'A', byDefault: 'B', gate: 'product' }
   disk.write(EVENTS, [
@@ -258,7 +258,7 @@ test('the Team button counts the cards waiting on the owner now, not those put o
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  expect(keyedProps(await pane.drawn(), 'team')).toMatchObject({ label: 'Team (2)' })
+  expect(keyedProps(await pane.drawn(), 'team')).toMatchObject({ label: 'Teams (2)' })
 })
 
 test('the all view lists every owner, a waiting task saying why', async ($, on) => {
@@ -1287,7 +1287,7 @@ test('minimized, the mark after the switch is a group of its own: a dim · befor
   ])
   // In 21 columns `· minimized, press a view` fits beside no button: the mark starts a row, with no `·` before it.
   await pane.redraw({ ...PANE_PROPS, bodyColumns: 23 })
-  expect(rowItems(await pane.drawn(), 'switch')).toEqual([['tasks', 'changes'], ['log', 'inbox'], ['team', 'meetings'], [mark]])
+  expect(rowItems(await pane.drawn(), 'switch')).toEqual([['tasks', 'changes'], ['log', 'inbox'], ['team'], ['meetings'], [mark]])
 })
 
 /** The band above the prompt (AbovePrompt) as the terminal raises it with no survey up. */
@@ -2088,7 +2088,7 @@ test('the Team tab says so when the session has no team', async ($, on) => {
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
   await pane.press({ key: 'team' })
-  expect(await pane.find({ text: /^No team found: the Team tab shows the tree of teams/ })).toBeDefined()
+  expect(await pane.find({ text: /^No team found: the Teams tab shows the tree of teams/ })).toBeDefined()
 })
 
 test('with Claude Code new enough and git there, it draws no requirement line and runs git --version once', async ($, on) => {
@@ -2252,7 +2252,7 @@ test("a task id in an open card opens that task's page: its title and card alone
   expect(screenOf(await pane.drawn())).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team Meetings',
+    ' Teams Meetings',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2384,7 +2384,7 @@ test("a reference file in an open card opens as a page: its name, where it was r
   expect(screenOf(await pane.drawn())).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team Meetings',
+    ' Teams Meetings',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2550,7 +2550,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   expect(screenOf(drawn)).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team Meetings',
+    ' Teams Meetings',
     ' Find  clear',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2782,7 +2782,7 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   expect(screenOf(drawn)).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team Meetings',
+    ' Teams Meetings',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2849,7 +2849,7 @@ test('keys (k) opens the Keys page, every key the pane answers in a grid at the 
   expect(screenOf(await pane.drawn())).toEqual([
     ' po',
     ' Tasks Changes Log Inbox (2)',
-    ' Team Meetings',
+    ' Teams Meetings',
     ' Find',
     ' Keys go to Claude · click the field to search',
     ' mine all · archive › · keys',
@@ -2859,7 +2859,7 @@ test('keys (k) opens the Keys page, every key the pane answers in a grid at the 
     ` ${'─'.repeat(PANE_PROPS.bodyColumns - 2)}`,
     '',
     ` ${'t  Tasks'.padEnd(16)}${'d  Changes'.padEnd(16)}g  Log`,
-    ` ${'u  Inbox'.padEnd(16)}${'e  Team'.padEnd(16)}j  Meetings`,
+    ` ${'u  Inbox'.padEnd(16)}${'e  Teams'.padEnd(16)}j  Meetings`,
     '',
     ` ${'s  Find'.padEnd(16)}${'m  mine'.padEnd(16)}a  all`,
     ` ${'h  archive'.padEnd(16)}${'c  close cards'.padEnd(16)}k  keys`,
