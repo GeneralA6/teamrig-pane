@@ -1,7 +1,7 @@
 // The Team tab as blocks of rows (rows.ts): the team tree (team.ts) a node a row, depth first, each indented by its
 // depth behind a mark that says whether it is open (▾), closed (▸) or has nothing under it. A team's row counts its
 // active and closed sessions; a session's row is its mark (● on the team, ○ dim once retired), its id, its name where
-// it differs, its roles, how many it leads, its hire or its retire, how many of its cards wait on the owner now with a
+// it differs, how many sessions it leads in brackets (T1244), its roles, its hire or its retire, how many of its cards wait on the owner now with a
 // [Meet] press that runs `teamrig meet` on it (T1297) and when the next card the owner put off comes back; a closed
 // group's row counts its sessions. A press on a team's or a closed group's row opens or closes what lies under it
 // (`folds`). A press on a session's row opens or closes its card (team-card.ts) under it; a
@@ -75,7 +75,7 @@ function prefixedSpans(prefix: string, text: string, marks: readonly Mark[], sty
   return markedSpans(`${prefix}${text}`, marks.map(mark => ({ start: mark.start + prefix.length, end: mark.end + prefix.length })), style)
 }
 
-/** Its roles and how many it leads, a part each behind the separator, the role `marks` (of the parts joined as teamFieldText joins them) underlined. */
+/** Its roles, a part each behind the separator, the role `marks` (of the parts joined as teamFieldText joins them) underlined. */
 function roleSpans(session: SessionFacts, marks: readonly Mark[]): Span[] {
   const spans: Span[] = []
   let at = 0
@@ -118,8 +118,8 @@ function decisionSpans(session: SessionFacts): Span[] {
 
 /**
  * A session's row: its mark, its id (bold on the team, a press that opens or closes its card when `card` names it),
- * its name where it is not the id, its roles, its hire or retire, its cards on the owner; where `marks` says a
- * search's words matched, underlined.
+ * its name where it is not the id, how many sessions it leads in brackets, dim, its roles, its hire or retire, its
+ * cards on the owner; where `marks` says a search's words matched, underlined.
  */
 function sessionSpans(session: SessionFacts, zone: TimeZone, card: string | null, marks: Marks): Span[] {
   const isClosed = !session.active
@@ -127,6 +127,7 @@ function sessionSpans(session: SessionFacts, zone: TimeZone, card: string | null
   const spans: Span[] = [isClosed ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.id, marks('id'), card === null ? idStyle : { ...idStyle, toggles: card })]
   const name = teamFieldText(session, 'name')
   if (name !== null) spans.push(...prefixedSpans('  ', name, marks('name'), { dim: isClosed }))
+  if (session.leads > 0) spans.push({ text: ` (${session.leads})`, dim: true })
   if (session.retire === null) spans.push(...roleSpans(session, marks('role')))
   for (const part of tenureWords(session, zone)) spans.push(SEPARATOR, { text: part, dim: true })
   spans.push(...decisionSpans(session))
