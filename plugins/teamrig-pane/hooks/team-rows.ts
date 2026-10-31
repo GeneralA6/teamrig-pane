@@ -234,6 +234,14 @@ function meetBlock(answer: MeetAnswer): Block {
   }
 }
 
+/** What the tab draws besides the tree: the Find field's search, and what the last [Meet] press answered. */
+export type TeamExtras = {
+  /** The Find field's query and the sessions it names; null or absent outside a search. */
+  readonly search?: TeamSearch | null
+  /** What the last [Meet] press answered; null or absent before one. */
+  readonly meet?: MeetAnswer | null
+}
+
 /** The tree's body: the search's while `search` holds a query, else the tree's rows. */
 function treeBlocks(root: TeamTreeNode, toggled: readonly string[], zone: TimeZone, search: TeamSearch | null): Block[] {
   const keys = new Set(toggled)
@@ -243,10 +251,10 @@ function treeBlocks(root: TeamTreeNode, toggled: readonly string[], zone: TimeZo
 
 /**
  * The Teams tab: the tree's rows, with the nodes in `toggled` opened or closed against their default and the sessions
- * whose card key (cardKey) it holds showing their cards, or why none show; while `search` holds the Find field's
- * query, the search's body instead; what the last [Meet] press answered (`meet`) leads either.
+ * whose card key (cardKey) it holds showing their cards, or why none show; while the `extras` search holds the Find
+ * field's query, the search's body instead; what the last [Meet] press answered (`meet`) leads either.
  */
-export function teamBlocks(view: TeamView, toggled: readonly string[], zone: TimeZone, search: TeamSearch | null = null, meet: MeetAnswer | null = null): Block[] {
+export function teamBlocks(view: TeamView, toggled: readonly string[], zone: TimeZone, { search = null, meet = null }: TeamExtras = {}): Block[] {
   switch (view.kind) {
     case 'reading':
       return [note(`${TAB}:note`, 'Reading the team…')]
