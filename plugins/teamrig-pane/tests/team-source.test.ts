@@ -10,7 +10,7 @@ import { teamTree, type TeamRead } from '../hooks/team'
 import type { InboxPaths } from '../hooks/team-inboxes'
 import { LiveTeam, TeamFolder, type OwnReads } from '../hooks/team-source'
 import { HOUR, MemoryFiles, NOW, S1, createLine, iso, markLine, statusLine } from './fixtures'
-import { configOf, hire, rename, tasksOf } from './team-fixtures'
+import { configOf, countsOf, hire, rename, tasksOf } from './team-fixtures'
 
 const TEAMS = 'K/teams'
 const ACME_HOME = `${TEAMS}/acme`
@@ -29,12 +29,15 @@ const API_HIRE = hire('api', NOW - 2 * HOUR)
 const API_HIRE_LINE = JSON.stringify({ v: 2, ...API_HIRE, at: iso(API_HIRE.at) })
 
 /** api works T1 on the own team; dev's T2 is the peer team's work, in no register the pane reads. */
-const TASKS = tasksOf(
+const REGISTER = [
   createLine('T1', { at: NOW - 3 * HOUR, by: 'lead', owner: 'api', title: 'Add the route' }),
   statusLine('T1', 'api', NOW - 2 * HOUR, 'in-progress'),
   createLine('T2', { at: NOW - 3 * HOUR, by: 'boss', owner: 'dev', title: 'Fix the build' }),
   statusLine('T2', 'dev', NOW - 2 * HOUR, 'in-progress'),
-)
+]
+const TASKS = tasksOf(...REGISTER)
+/** The own team's register counted by owner. */
+const TASK_COUNTS = countsOf(...REGISTER)
 /** api's card on the owner, on the own team's register. */
 const OWNER_CARDS: Readonly<Record<string, SessionOwnerCards>> = { api: { due: [{ id: 'T3', title: 'Pick the database' }], later: [] } }
 
@@ -48,10 +51,19 @@ function teamsDisk(): MemoryFiles {
   return disk
 }
 
-const ACME_READ: TeamRead = { team: 'acme', config: configOf(ACME_CONFIG), renames: [API_RENAME], hires: [API_HIRE], tasks: TASKS, unread: null, ownerCards: OWNER_CARDS }
-const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], tasks: null, unread: null, ownerCards: null }
+const ACME_READ: TeamRead = {
+  team: 'acme',
+  config: configOf(ACME_CONFIG),
+  renames: [API_RENAME],
+  hires: [API_HIRE],
+  tasks: TASKS,
+  unread: null,
+  ownerCards: OWNER_CARDS,
+  taskCounts: TASK_COUNTS,
+}
+const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], tasks: null, unread: null, ownerCards: null, taskCounts: null }
 /** What the pane reads of acme beside its folder, with no inboxes found. */
-const OWN: OwnReads = { tasks: TASKS, ownerCards: OWNER_CARDS, inboxes: null }
+const OWN: OwnReads = { tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS, inboxes: null }
 
 /** The message `run` rejects with. */
 async function failure(run: () => Promise<unknown>): Promise<string> {
@@ -76,7 +88,7 @@ describe('TeamFolder', () => {
 
     disk.write(`${ACME_STATE}/hires.jsonl`, '')
     const peer = await folder.read(null)
-    expect([peer?.hires, peer?.tasks, peer?.ownerCards]).toEqual([[], null, null])
+    expect([peer?.hires, peer?.tasks, peer?.ownerCards, peer?.taskCounts]).toEqual([[], null, null, null])
     expect(disk.reads).toEqual([`${ACME_STATE}/hires.jsonl`])
   })
 
@@ -123,7 +135,7 @@ function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
       if (listed.failure !== null) throw new Error(listed.failure)
       return dir === TEAMS ? listed.names : []
     },
-    register: async () => ({ tasks: TASKS, ownerCards: OWNER_CARDS }),
+    register: async () => ({ tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS }),
     isShown: async () => shown.tab,
     publish: async view => {
       if (failWrites) throw new Error('write refused')

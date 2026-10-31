@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { foundRows, sessionKey, teamRows, teamTree, type SessionFacts, type TeamRead, type TeamRow, type TeamTreeNode } from '../hooks/team'
-import { ACME, OTHER, TOOLS, configOf, treeOf } from './team-fixtures'
+import { ACME, ACME_COUNTS, OTHER, TOOLS, configOf, treeOf } from './team-fixtures'
 
 /** One line per row: indented by depth, ▾ open, ▸ closed, · nothing under it, then the node. */
 function outline(rows: readonly TeamRow[]): string[] {
@@ -49,7 +49,7 @@ describe('teamTree', () => {
     expect(tools?.kind === 'team' ? tools.team : null).toEqual({ team: 'tools', parent: 'acme', active: 2, retired: 0 })
   })
 
-  test("a session's name, roles, the sessions it leads and its leaders, its launch, tasks in progress, unread lines and cards on the owner", () => {
+  test("a session's name, roles, the sessions it leads and its leaders, its launch, tasks in progress and counted, unread lines and cards on the owner", () => {
     const root = treeOf([ACME], 'acme')
     expect(sessionOf(root, 'acme', 'api')).toEqual({
       team: 'acme',
@@ -64,14 +64,25 @@ describe('teamTree', () => {
       rehiredFrom: null,
       retire: null,
       now: [{ id: 'T1', title: 'Add the route' }],
+      tasks: { done: 1, verifying: 1, total: 4, archived: false },
       unread: 2,
       decisions: { due: [{ id: 'T4', title: 'Pick the database' }], later: [] },
     })
-    expect(sessionOf(root, 'acme', 'lead')).toMatchObject({ name: 'acme-lead', roles: ['lead'], leads: 2, ledBy: [], now: [], unread: 0, decisions: { due: [], later: [] } })
+    expect(sessionOf(root, 'acme', 'lead')).toMatchObject({
+      name: 'acme-lead',
+      roles: ['lead'],
+      leads: 2,
+      ledBy: [],
+      now: [],
+      tasks: { done: 0, verifying: 0, total: 0, archived: false },
+      unread: 0,
+      decisions: { due: [], later: [] },
+    })
     expect(sessionOf(root, 'acme', 'web')).toMatchObject({
       leads: 2,
       ledBy: ['lead'],
       now: [{ id: 'T3', title: 'Plan the page' }],
+      tasks: { done: 0, verifying: 0, total: 1, archived: false },
       decisions: { due: [], later: [{ id: 'T5', title: 'Name the release', until: 'Mon 11-02' }] },
     })
   })
@@ -104,13 +115,20 @@ describe('teamTree', () => {
       rehiredFrom: null,
       retire: ACME.hires[4],
       now: [],
+      tasks: null,
       unread: null,
       decisions: { due: [], later: [] },
     })
   })
 
   test("a team whose register and inbox the pane does not read knows no session's tasks, unread lines or cards on the owner", () => {
-    expect(sessionOf(treeOf([ACME, TOOLS], 'acme'), 'tools', 'dev')).toMatchObject({ now: null, unread: null, decisions: null })
+    expect(sessionOf(treeOf([ACME, TOOLS], 'acme'), 'tools', 'dev')).toMatchObject({ now: null, tasks: null, unread: null, decisions: null })
+  })
+
+  test("a register a compaction rotated marks each session's counts archived, as it misses the tasks finished long ago", () => {
+    const root = treeOf([{ ...ACME, taskCounts: { ...ACME_COUNTS, archived: true } }], 'acme')
+    expect(sessionOf(root, 'acme', 'api').tasks).toEqual({ done: 1, verifying: 1, total: 4, archived: true })
+    expect(sessionOf(root, 'acme', 'ui').tasks).toEqual({ done: 0, verifying: 0, total: 0, archived: true })
   })
 
   test('a parent with no config: the team is the root of its own tree, its parent still named', () => {

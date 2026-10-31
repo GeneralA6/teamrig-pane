@@ -3,7 +3,7 @@
 // log through teamrig's own readers (TeamTree, LeadTree, Roster, the hire log), never hard-coded, so the tab shows the
 // team as teamrig's commands find it. Pure: the source reads the files, this turns them into nodes, teamRows into the
 // rows a drawing shows.
-import type { SessionOwnerCards, TaskRow } from '../types'
+import type { SessionOwnerCards, SessionTaskCounts, TaskCounts, TaskRow } from '../types'
 import {
   activeHires,
   launchOf,
@@ -39,6 +39,11 @@ export type TeamRead = {
    * does not read the team's register (a peer team's).
    */
   readonly ownerCards: Readonly<Record<string, SessionOwnerCards>> | null
+  /**
+   * Each session's tasks counted (Snapshot.taskCounts), a session with none absent; null when the pane does not read
+   * the team's register (a peer team's).
+   */
+  readonly taskCounts: TaskCounts | null
 }
 
 /** A role a team config gives a session (`roles`), as teamrig's Roster names it. */
@@ -46,6 +51,9 @@ export type Role = ReturnType<Roster['rolesOf']>[number]
 
 /** A task a session has in progress. */
 export type CurrentTask = { readonly id: string; readonly title: string }
+
+/** A session's tasks counted, and whether a compaction archived its team's tasks finished long ago, which they miss. */
+export type SessionTasks = SessionTaskCounts & { readonly archived: boolean }
 
 export type TeamFacts = {
   readonly team: string
@@ -82,6 +90,8 @@ export type SessionFacts = {
   readonly retire: RetireRecord | null
   /** Its tasks in progress, in the register's order; none for a retired session, null when the pane does not read its team's register. */
   readonly now: readonly CurrentTask[] | null
+  /** Its tasks counted, zeros for one that owns none; null for a retired session and when the pane does not read its team's register. */
+  readonly tasks: SessionTasks | null
   /** Its unread inbox lines; null for a retired session, one that never marked its inbox read, or a team whose inbox the pane does not read. */
   readonly unread: number | null
   /** Its cards on the owner, due now and put off; none for a retired session, null when the pane does not read its team's register. */
@@ -90,6 +100,9 @@ export type SessionFacts = {
 
 /** The cards of a session with none on the owner. */
 const NO_CARDS: SessionOwnerCards = { due: [], later: [] }
+
+/** The counts of a session that owns no task. */
+const NO_TASKS: SessionTaskCounts = { done: 0, verifying: 0, total: 0 }
 
 type NodeBase = { readonly key: string; readonly children: readonly TeamTreeNode[] }
 
@@ -121,6 +134,12 @@ function currentTasks(tasks: readonly TaskRow[] | null, id: string): CurrentTask
   return tasks.filter(task => task.owner === id && task.status === 'in-progress').map(({ id: task, title }) => ({ id: task, title }))
 }
 
+/** The tasks `id` owns, counted; zeros for none, null when the register is not read. */
+function countsOf(counts: TaskCounts | null, id: string): SessionTasks | null {
+  if (counts === null) return null
+  return { ...(counts.bySession[id] ?? NO_TASKS), archived: counts.archived }
+}
+
 /** The cards `id` has on the owner; null when the register is not read. */
 function cardsOf(cards: Readonly<Record<string, SessionOwnerCards>> | null, id: string): SessionOwnerCards | null {
   if (cards === null) return null
@@ -147,6 +166,7 @@ function sessionNodes({ read, roster, retired }: TeamPart): TeamTreeNode[] {
       rehiredFrom: hire === null ? null : (rehiredFrom(hires, id) ?? null),
       retire,
       now: retire === null ? currentTasks(read.tasks, id) : [],
+      tasks: retire === null ? countsOf(read.taskCounts, id) : null,
       unread: retire === null ? (read.unread?.get(id) ?? null) : null,
       decisions: retire === null ? cardsOf(read.ownerCards, id) : NO_CARDS,
     }

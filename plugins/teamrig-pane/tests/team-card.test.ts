@@ -1,4 +1,4 @@
-// A session's card on the Teams tab (hooks/team-card.ts): its roles in their colours, leaders, launch, hire, tasks in progress and unread
+// A session's card on the Teams tab (hooks/team-card.ts): its roles in their colours, leaders, launch, hire, tasks in progress and counted, and unread
 // inbox lines, or its retire, a labelled row a fact, each only when it has a value, its task ids, inbox count and
 // handover presses of their own.
 import { describe, expect, test } from 'claude-code/testing'
@@ -33,17 +33,18 @@ function valueOf(rows: readonly Row[], key: string): Span[] {
 }
 
 describe('sessionCard', () => {
-  test("an area owner's card: its role, its leaders nearest first, its launch, its task in progress, its cards on the owner and its unread lines", () => {
+  test("an area owner's card: its role, its leaders nearest first, its launch, its task in progress, its tasks counted, its cards on the owner and its unread lines", () => {
     const card = sessionCard(sessionOf('acme', 'api'), GUIDE, UTC)
     expect(words(card)).toEqual([
       line('Role', 'area owner'),
       line('Led by', 'web, then lead'),
       line('Launch', 'the default model and effort'),
       line('Now', 'T1 Add the route'),
+      line('Tasks', '1 done of 4 · 1 verifying'),
       line('Decisions', 'T4 Pick the database'),
       line('Inbox', '2 unread'),
     ])
-    expect(card.map(row => row.key)).toEqual(['role', 'led-by', 'launch', 'now', 'decisions', 'inbox'].map(field => `team-card:acme/api:${field}`))
+    expect(card.map(row => row.key)).toEqual(['role', 'led-by', 'launch', 'now', 'tasks', 'decisions', 'inbox'].map(field => `team-card:acme/api:${field}`))
     expect(card[0]?.hang).toEqual({ text: `${GUIDE.text}${' '.repeat(LABEL_CELLS)}`, dim: true })
   })
 
@@ -70,8 +71,22 @@ describe('sessionCard', () => {
       line('Role', 'lead · leads 2 sessions'),
       line('Launch', 'model opus at xhigh effort'),
       line('Now', 'nothing in progress'),
+      line('Tasks', 'no tasks'),
       line('Inbox', '0 unread'),
     ])
+  })
+
+  test('its Tasks row: how many it finished of all it owns, how many wait on their proof when any do, and a dim note when the old ones were archived', () => {
+    const web = sessionOf('acme', 'web')
+    expect(valueOf(sessionCard(web, GUIDE, UTC), 'team-card:acme/web:tasks')).toEqual([{ text: '0 done of 1' }])
+    const api = sessionOf('acme', 'api')
+    expect(valueOf(sessionCard(api, GUIDE, UTC), 'team-card:acme/api:tasks')).toEqual([{ text: '1 done of 4' }, SEPARATOR, { text: '1 verifying' }])
+    const rotated = { ...web, tasks: { done: 0, verifying: 0, total: 1, archived: true } }
+    expect(valueOf(sessionCard(rotated, GUIDE, UTC), 'team-card:acme/web:tasks')).toEqual([{ text: '0 done of 1' }, SEPARATOR, { text: 'older ones archived', dim: true }])
+    // One that owns none on a rotated register may have had some archived, so it gives the count and the note.
+    const none = { ...web, tasks: { done: 0, verifying: 0, total: 0, archived: true } }
+    expect(words(sessionCard(none, GUIDE, UTC))).toContain(line('Tasks', '0 done of 0 · older ones archived'))
+    expect(valueOf(sessionCard(sessionOf('acme', 'lead'), GUIDE, UTC), 'team-card:acme/lead:tasks')).toEqual([{ text: 'no tasks', dim: true }])
   })
 
   test("a hired session's card: its hire's day, who hired it and its review day, its job and why; rehired once retired", () => {
@@ -83,6 +98,7 @@ describe('sessionCard', () => {
       line('Scope', "ui's job"),
       line('Reason', 'more hands'),
       line('Now', 'nothing in progress'),
+      line('Tasks', 'no tasks'),
     ])
     expect(words(sessionCard(sessionOf('acme', 'ops'), GUIDE, UTC)).slice(0, 4)).toEqual([
       line('Role', 'security reviewer'),

@@ -1985,6 +1985,7 @@ test("the Teams tab lists the tree of teams the session's team is in; a press on
   await pane.press({ key: 'session:acme/api' })
   expect(await drawsLine(pane, /│ Led by {7}web, then lead$/)).toBe(true)
   expect(await drawsLine(pane, /│ Now {10}nothing in progress$/)).toBe(true)
+  expect(await drawsLine(pane, /│ Tasks {8}0 done of 1$/)).toBe(true)
 })
 
 test("a session's card counts its unread inbox lines, and a press on the count opens that inbox at the first of them", async ($, on) => {

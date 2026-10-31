@@ -1,8 +1,9 @@
 // Teams as teamrig's readers hand them to the Teams tab's model (hooks/team.ts): a root team with a sub-lead, hires,
 // retires and renames, its child team, and another root team.
-import type { TaskRow } from '../types'
+import type { TaskCounts, TaskRow } from '../types'
 import { parseConfigText, readRegister, type HireRecord, type KitConfig, type Rename, type RetireRecord } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
+import { taskCountsOf } from '../hooks/task-counts'
 import { teamTree, type TeamRead, type TeamTreeNode } from '../hooks/team'
 import { HOUR, NOW, createLine, iso, statusLine } from './fixtures'
 
@@ -30,11 +31,35 @@ export function tasksOf(...lines: string[]): TaskRow[] {
   return [...readRegister(lines.join('\n')).state.tasks.values()].map(task => rowOf(task))
 }
 
+/** The register's tasks after `lines`, counted by owner as the pane's snapshot counts them, none archived. */
+export function countsOf(...lines: string[]): TaskCounts {
+  return taskCountsOf(readRegister(lines.join('\n')).state.tasks.values(), false)
+}
+
+/** acme's register: api works T1, has T2 open, finished T8 and shipped T9; web works T3; T10 was web's, dropped. */
+const ACME_REGISTER = [
+  createLine('T1', { at: NOW - 10 * HOUR, by: 'lead', owner: 'api', title: 'Add the route' }),
+  statusLine('T1', 'api', NOW - 9 * HOUR, 'in-progress'),
+  createLine('T2', { at: NOW - 10 * HOUR, by: 'lead', owner: 'api', title: 'Open, not started' }),
+  createLine('T3', { at: NOW - 10 * HOUR, by: 'lead', owner: 'web', title: 'Plan the page' }),
+  statusLine('T3', 'web', NOW - 8 * HOUR, 'in-progress'),
+  createLine('T8', { at: NOW - 20 * HOUR, by: 'lead', owner: 'api', title: 'Set up the repo' }),
+  statusLine('T8', 'api', NOW - 18 * HOUR, 'done'),
+  createLine('T9', { at: NOW - 20 * HOUR, by: 'lead', owner: 'api', title: 'Ship the login' }),
+  statusLine('T9', 'api', NOW - 17 * HOUR, 'verifying'),
+  createLine('T10', { at: NOW - 20 * HOUR, by: 'lead', owner: 'web', title: 'An old idea' }),
+  statusLine('T10', 'web', NOW - 19 * HOUR, 'dropped'),
+]
+
+/** acme's register counted by owner: api 1 done and 1 verifying of 4, web 1, its dropped one counted nowhere. */
+export const ACME_COUNTS = countsOf(...ACME_REGISTER)
+
 /**
  * Team acme: lead over web and ops, web a sub-lead over api and ui; ops the security reviewer. ui was hired, and
  * launches on its own model and effort; qa was hired, renamed and retired; ops was hired, retired and hired again. api
- * was renamed acme-backend. api has 2 unread inbox lines, lead none, ui never marked its inbox read. api has a card
- * due on the owner, web one put off; qa's card stays from before its retire.
+ * was renamed acme-backend. api owns 4 tasks, web 1 and a dropped one (ACME_REGISTER). api has 2 unread inbox lines,
+ * lead none, ui never marked its inbox read. api has a card due on the owner, web one put off; qa's card stays from
+ * before its retire.
  */
 export const ACME: TeamRead = {
   team: 'acme',
@@ -54,13 +79,7 @@ export const ACME: TeamRead = {
     retire('qa', NOW - 60 * HOUR, { handover: 'handover/qa.md', heir: 'web' }),
     hire('ops', NOW - 50 * HOUR, { scope: 'ops again' }),
   ],
-  tasks: tasksOf(
-    createLine('T1', { at: NOW - 10 * HOUR, by: 'lead', owner: 'api', title: 'Add the route' }),
-    statusLine('T1', 'api', NOW - 9 * HOUR, 'in-progress'),
-    createLine('T2', { at: NOW - 10 * HOUR, by: 'lead', owner: 'api', title: 'Open, not started' }),
-    createLine('T3', { at: NOW - 10 * HOUR, by: 'lead', owner: 'web', title: 'Plan the page' }),
-    statusLine('T3', 'web', NOW - 8 * HOUR, 'in-progress'),
-  ),
+  tasks: tasksOf(...ACME_REGISTER),
   unread: new Map([
     ['api', 2],
     ['lead', 0],
@@ -71,6 +90,7 @@ export const ACME: TeamRead = {
     web: { due: [], later: [{ id: 'T5', title: 'Name the release', until: 'Mon 11-02' }] },
     qa: { due: [{ id: 'T6', title: 'Keep the old tests' }], later: [] },
   },
+  taskCounts: ACME_COUNTS,
 }
 
 /** Team tools, a child team of acme: boss over dev. */
@@ -82,6 +102,7 @@ export const TOOLS: TeamRead = {
   tasks: null,
   unread: null,
   ownerCards: null,
+  taskCounts: null,
 }
 
 /** Another root team on the machine: another project. */
@@ -93,6 +114,7 @@ export const OTHER: TeamRead = {
   tasks: null,
   unread: null,
   ownerCards: null,
+  taskCounts: null,
 }
 
 /** The tree that holds `own`, failing the test when there is none. */

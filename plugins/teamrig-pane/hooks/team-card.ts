@@ -2,8 +2,9 @@
 // labelled row per fact (card.ts labelled), each only when it has a value. Role: its roles, each in its role's colour
 // (ROLE_COLORS; a leader that is not the lead is a sub-lead), and how many sessions it leads, or the area it owns. Led by: its leaders, nearest first. Launch: the model and effort teamrig starts it on
 // (describeLaunch). Hired or Rehired: the day, who hired it and the day its hire is reviewed; Scope and Reason: its job
-// and why. Now: its tasks in progress, each id a press that opens the task's page, when the pane reads its team's
-// register. Decisions: its cards waiting on the owner now, and Later: those the owner put off, each with when it comes
+// and why. Now: its tasks in progress, each id a press that opens the task's page, and Tasks: how many it finished of
+// all it owns but the dropped and how many wait on their proof, noting when a compaction archived the old ones, both
+// when the pane reads its team's register. Decisions: its cards waiting on the owner now, and Later: those the owner put off, each with when it comes
 // back, soonest first (owner-cards.ts), each id a press that opens the task's page, when the pane reads its team's
 // register and it has any (T1297). Inbox: its unread lines, a press that opens its inbox at the first of them, when
 // the pane reads its team's inbox and it ever marked it read. A retired session's card is its retire instead: the day
@@ -19,7 +20,7 @@ import type { Row, Span } from './rows'
 import type { Role, SessionFacts } from './team'
 
 /** A fact a session's card shows on its labelled row, named as its row's key ends. */
-export type TeamCardField = 'role' | 'led-by' | 'launch' | 'hire' | 'scope' | 'reason' | 'now' | 'decisions' | 'later' | 'inbox' | 'retired' | 'heir' | 'handover'
+export type TeamCardField = 'role' | 'led-by' | 'launch' | 'hire' | 'scope' | 'reason' | 'now' | 'tasks' | 'decisions' | 'later' | 'inbox' | 'retired' | 'heir' | 'handover'
 
 /** A role the tab names: one a team config gives (`roles`), or a sub-lead, a session its `leads` lists others under. */
 export type TabRole = Role | 'subLead'
@@ -61,6 +62,20 @@ function nowLines(now: SessionFacts['now']): Lines {
   if (now === null) return []
   if (now.length === 0) return [[{ text: 'nothing in progress', dim: true }]]
   return now.map(task => [{ text: task.id, task: task.id }, { text: ` ${task.title}` }])
+}
+
+/**
+ * How many tasks it finished of all it owns but the dropped, then how many wait on their proof when any do, and a dim
+ * note when a compaction archived its team's old tasks, which the counts miss; a dim note for none; nothing when its
+ * team's register is not read.
+ */
+function taskLines(tasks: SessionFacts['tasks']): Lines {
+  if (tasks === null) return []
+  if (tasks.total === 0 && !tasks.archived) return [[{ text: 'no tasks', dim: true }]]
+  const parts: Span[] = [{ text: `${tasks.done} done of ${tasks.total}` }]
+  if (tasks.verifying > 0) parts.push({ text: `${tasks.verifying} verifying` })
+  if (tasks.archived) parts.push({ text: 'older ones archived', dim: true })
+  return [joined(parts)]
 }
 
 /** Its cards waiting on the owner now, an id a press each; nothing for none or when its team's register is not read. */
@@ -115,6 +130,7 @@ export function sessionCard(session: SessionFacts, guide: Span, zone: TimeZone):
           ...field('reason', 'Reason', textLines(hire.reason)),
         ]),
     ...field('now', 'Now', nowLines(session.now)),
+    ...field('tasks', 'Tasks', taskLines(session.tasks)),
     ...field('decisions', 'Decisions', decisionLines(session.decisions)),
     ...field('later', 'Later', laterLines(session.decisions)),
     ...field('inbox', 'Inbox', inboxLines(session)),

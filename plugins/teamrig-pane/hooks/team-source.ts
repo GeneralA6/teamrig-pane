@@ -2,9 +2,9 @@
 // logs in the state folder that config names, each file re-read only when its stamp moves (source.ts WatchedFile). It
 // puts them into the tree (team.ts teamTree) and writes it only when it changed, reading every POLL_MS (live.ts) and
 // only while the tab shows, as the Log view's LiveLog does. The pane's own team's register tasks, its sessions' cards
-// on the owner and their unread inbox lines (team-inboxes.ts) go with its read; a peer team's register and inboxes are
-// not the pane's, so its sessions show none of them.
-import type { SessionOwnerCards, Snapshot, TaskRow, TeamView } from '../types'
+// on the owner, their tasks counted (task-counts.ts) and their unread inbox lines (team-inboxes.ts) go with its read; a
+// peer team's register and inboxes are not the pane's, so its sessions show none of them.
+import type { SessionOwnerCards, Snapshot, TaskCounts, TaskRow, TeamView } from '../types'
 import { parseConfigText, readHiringLog, readRenames, type ConfigRead, type HiringRecord, type Rename } from './core/read/index'
 import { POLL_MS, type Timer } from './live'
 import { teamIds, teamStateDir, type TeamFiles } from './places'
@@ -13,12 +13,13 @@ import { teamTree, type TeamRead } from './team'
 import { TeamInboxes, type InboxPaths } from './team-inboxes'
 
 /**
- * What the pane reads of its own team beside its folder: the register's tasks and each session's cards on the owner,
- * and its inboxes when it found them.
+ * What the pane reads of its own team beside its folder: the register's tasks, each session's cards on the owner and
+ * its tasks counted, and its inboxes when it found them.
  */
 export type OwnReads = {
   readonly tasks: readonly TaskRow[]
   readonly ownerCards: Readonly<Record<string, SessionOwnerCards>>
+  readonly taskCounts: TaskCounts
   readonly inboxes: TeamInboxes | null
 }
 
@@ -42,7 +43,8 @@ export class TeamFolder {
 
   /**
    * The team's files as read now, with `own` for the pane's own team (null for a peer's): its tasks, its sessions'
-   * cards on the owner, and the unread inbox lines of the sessions on its config. Null when it has no config file or teamrig refuses the one there. A
+   * cards on the owner and task counts, and the unread inbox lines of the sessions on its config. Null when it has no
+   * config file or teamrig refuses the one there. A
    * config that moves its state folder reads the logs from the new one. A failed read throws, keeping the stamps of
    * the files read before it, so the next read tries the rest again.
    */
@@ -64,6 +66,7 @@ export class TeamFolder {
       tasks: own?.tasks ?? null,
       unread,
       ownerCards: own?.ownerCards ?? null,
+      taskCounts: own?.taskCounts ?? null,
     }
   }
 
@@ -79,8 +82,8 @@ export class TeamFolder {
 export type TeamPorts = {
   /** The names of the folders right under a folder; none when it is not there. It rejects when it cannot list one. */
   folders: (dir: string) => Promise<readonly string[]>
-  /** The pane's own team's register tasks and its sessions' cards on the owner, as the pane last read them. */
-  register: () => Promise<Pick<Snapshot, 'tasks' | 'ownerCards'>>
+  /** The pane's own team's register tasks, its sessions' cards on the owner and their tasks counted, as the pane last read them. */
+  register: () => Promise<Pick<Snapshot, 'tasks' | 'ownerCards' | 'taskCounts'>>
   /** True while the pane shows the Teams tab, open (not minimized). */
   isShown: () => Promise<boolean>
   publish: (view: TeamView) => Promise<void>
@@ -154,8 +157,8 @@ export class LiveTeam {
     try {
       const ids = teamIds(await this.ports.folders(this.team.teamsDir))
       for (const id of this.teams.keys()) if (!ids.includes(id)) this.teams.delete(id)
-      const { tasks, ownerCards } = await this.ports.register()
-      const own: OwnReads = { tasks, ownerCards, inboxes: this.inboxes }
+      const { tasks, ownerCards, taskCounts } = await this.ports.register()
+      const own: OwnReads = { tasks, ownerCards, taskCounts, inboxes: this.inboxes }
       const reads: TeamRead[] = []
       for (const id of ids) {
         const folder = this.teams.get(id) ?? new TeamFolder(this.files, this.team.teamsDir, id)

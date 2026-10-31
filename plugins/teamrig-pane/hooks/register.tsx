@@ -597,8 +597,8 @@ export const register: Register = on => {
               {
                 folders,
                 register: async () => {
-                  const { tasks, ownerCards } = await read($, snapshot)
-                  return { tasks, ownerCards }
+                  const { tasks, ownerCards, taskCounts } = await read($, snapshot)
+                  return { tasks, ownerCards, taskCounts }
                 },
                 isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
                 publish: async tree => {
