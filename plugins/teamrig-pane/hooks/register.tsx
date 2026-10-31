@@ -22,8 +22,8 @@
 // the last 24 hours and its unread ones, newest first, with a search of its own (inbox-rows.ts, inbox-search.ts), a
 // press on the header's unread count opening it, and the Team tab: the tree of teams the
 // session's team is in, each team's lead over the sessions it leads and its retired ones (team.ts, team-source.ts), a
-// press on a row opening or closing what lies under it, a session's cards on the owner counted on its row, its
-// [Meet] press running `teamrig meet` on it (owner-meet.ts), and the Meetings view: the
+// press on a row opening or closing what lies under it, a session's cards on the owner counted on its row and on the
+// switch (`Team (2)`), its [Meet] press running `teamrig meet` on it (owner-meet.ts), and the Meetings view: the
 // team's scheduled and started meetings by time (meetings.ts, meetings-rows.ts), a press on one opening its card,
 // whose [Start meeting] press starts it. The band above the prompt shows the session's
 // name and the task it works on now
@@ -1365,6 +1365,9 @@ export const register: Register = on => {
     const changesWords = changesLabel(changed)
     // The Inbox button counts the unread lines; none unread, or none known (no read mark yet), it is the word alone.
     const inboxWords = snap.unreadInbox !== null && snap.unreadInbox > 0 ? `Inbox (${snap.unreadInbox})` : 'Inbox'
+    // The Team button counts the cards waiting on the owner now across the team's sessions; none, it is the word alone.
+    const decisions = Object.values(snap.ownerCards).reduce((sum, cards) => sum + cards.due.length, 0)
+    const teamWords = decisions > 0 ? `Team (${decisions})` : 'Team'
     const switchItems = [
       pressed(
         <Button key="tasks" label="Tasks" hotkey="t" variant={current === 'tasks' ? 'primary' : 'secondary'} onPress={() => void switchTo('tasks')} />,
@@ -1390,8 +1393,8 @@ export const register: Register = on => {
         plain: false,
         hotkey: 'u',
       }),
-      pressed(<Button key="team" label="Team" hotkey="e" variant={current === 'team' ? 'primary' : 'secondary'} onPress={() => void switchTo('team')} />, {
-        label: 'Team',
+      pressed(<Button key="team" label={teamWords} hotkey="e" variant={current === 'team' ? 'primary' : 'secondary'} onPress={() => void switchTo('team')} />, {
+        label: teamWords,
         plain: false,
         hotkey: 'e',
       }),
