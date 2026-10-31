@@ -403,11 +403,13 @@ Teams shows the tree of teams the session's team is in, from the top team down, 
 keeps under the kit home (`~/.teamrig/teams/<team>`). A team's row counts its active and retired sessions
 (`▾ acme · 4 active · 1 retired`). Under it come its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a group of their own (`▸ retired (1)`), and each child team (whose config names it as
-`team.parent`). A session's row is a `●` and its id in bold, then its current name where it differs from the id, then,
-dim: how many sessions it leads, when it leads any (`web  acme-web (2)`), its roles (lead, delivery owner, security
-reviewer) and its hire and review day (`hired Fri 10-09 · review 10-25`) or its retire day; then how many of its cards
-wait on the owner now (`? 2 decisions`) with a `[Meet]` press, and when the next card the owner put off comes back
-(`later Mon 11-02`, dim). A retired session's row is a dim `○`.
+`team.parent`). A session's row is a `●` and its id in bold, then its current name where it differs from the id, how
+many sessions it leads, when it leads any, dim (`web  acme-web (2)`), and its roles, each in a colour of its own so the
+eye finds a role without reading it: lead, sub-lead (a leader that is not the lead), delivery owner, security reviewer.
+Then come how many of its cards wait on the owner now (`? 2 decisions`) with a `[Meet]` press, and when the next card the
+owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire days are on its card, keeping the row
+short. The row of the session whose pane it is starts with a green `►`, so you find yourself at a glance. A retired
+session's row is a dim `○`.
 Teams under another top team are left out. Until there is a tree, the tab says why: no team, a team with no config
 file teamrig can read, or a folder it could not read.
 
@@ -426,15 +428,18 @@ later installed in Claude Code (found as for Meetings, below) and `node` on the 
 the cards waiting on the owner now across the team's sessions, `Teams (2)`; a card the owner put off counts again once it
 comes back.
 
-A card has one labelled line per fact the team's files hold, each only when it has a value: Role (its roles and how many
-sessions it leads, `leads 2 sessions`, or the area it owns), Led by (its leaders, nearest first), Launch (the model and effort teamrig starts it on),
-Hired or Rehired (the day, who hired it, the review day), Scope and Reason (its job and why), Now (its tasks in
-progress, each id a press that opens the task's page), Decisions (its cards waiting on the owner now) and Later (those
-the owner put off, soonest back first, each with when it comes back), each id a press that opens the task's page, and
-Inbox (its unread lines, a press that opens its inbox at the first of them, the pane's own area's in the Inbox view). A
-retired session's card is its retire instead: the day and who retired it, why, the session its tasks went to (Heir),
-and its Handover, a press that opens the file, or why it left none. Now, Decisions, Later, Inbox and the counts of cards
-on the owner show only for the pane's own team, whose register and inboxes it reads; a session that never marked its
+A card has one labelled line per fact the team's files hold, each only when it has a value: Role (its roles in their
+colours and how many sessions it leads, `leads 2 sessions`, or the area it owns), Led by (its leaders, nearest first),
+Launch (the model and effort teamrig starts it on), Hired or Rehired (the day, who hired it, the review day), Scope and
+Reason (its job and why), Now (its tasks in progress, each id a press that opens the task's page), Tasks (how many it
+finished of all it owns but the dropped, and how many wait on their proof: `1 done of 4 · 1 verifying`; a dim `older
+ones archived` once a compaction moved the old ones out of the register, so the counts miss them, and a dim `no tasks`
+for none), Decisions (its cards waiting on the owner now) and Later (those the owner put off, soonest back first, each
+with when it comes back), each id a press that opens the task's page, and Inbox (its unread lines, a press that opens
+its inbox at the first of them, the pane's own area's in the Inbox view). A retired session's card is its retire
+instead: the day and who retired it, why, the session its tasks went to (Heir), and its Handover, a press that opens the
+file, or why it left none. Now, Tasks, Decisions, Later, Inbox and the counts of cards on the owner show only for the
+pane's own team, whose register and inboxes it reads; a session that never marked its
 inbox read has no Inbox count. A page a
 card opens shows in the Tasks view, and back from it shows the tasks list.
 
