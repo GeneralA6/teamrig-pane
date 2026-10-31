@@ -3,7 +3,7 @@
 // and the register put together by teamrig's own read entry (hooks/core/read), so the pane shows what
 // teamrig's commands show, on a register never rotated and on a rotated one alike.
 // File access goes through `Files`, which register.tsx backs with $.fs and tests with a fake.
-import type { AreaSource, DrawnSettings, OwnerSettings, SessionOwnerCards, Snapshot, TaskRow, TeamLeads, TeamSettings, WorkMark } from '../types'
+import type { AreaSource, DrawnSettings, OwnerSettings, SessionOwnerCards, Snapshot, TaskCounts, TaskRow, TeamLeads, TeamSettings, WorkMark } from '../types'
 import {
   assemble,
   indexMarks,
@@ -36,6 +36,7 @@ import { teamLeads } from './leads'
 import { rowOf } from './log'
 import { ownerCardsOf } from './owner-cards'
 import type { TeamFiles } from './places'
+import { NO_TASK_COUNTS, taskCountsOf } from './task-counts'
 import { isActive } from './view'
 import { workMarks } from './work'
 import { zoneNamed } from './zone'
@@ -270,6 +271,8 @@ export class TaskRegisterSource {
   private tasks: TaskRow[] = []
   /** The sessions' work on their own tasks over the turn log's kept hours, as the events last folded (work.ts). */
   private work: readonly WorkMark[] = []
+  /** Each session's tasks counted over every task folded, finished long ago or not (task-counts.ts), as the events last folded. */
+  private taskCounts: TaskCounts = NO_TASK_COUNTS
   private inbox: WatchedFile<string[]> | null = null
   private lastArea: string | null = null
   private readonly files: Files
@@ -313,6 +316,7 @@ export class TaskRegisterSource {
       // The working set keeps each live and recently finished task's whole history, so its events cover the window;
       // a task a compaction retired that is touched again marks nothing, its create no longer read.
       this.work = this.keepHours === null ? [] : workMarks(this.register.current.read.events, now - this.keepHours * HOUR_MS)
+      this.taskCounts = taskCountsOf(this.register.current.state.tasks.values(), this.register.current.retired !== null)
     }
     const ownerChanged = this.refreshOwnerCards(registerChanged, now)
     const marksChanged = await this.marks.refresh()
@@ -344,6 +348,7 @@ export class TaskRegisterSource {
       problem: skippedText(this.paths, this.register.current, this.marks.current),
       ...this.drawn,
       ownerCards: this.ownerCards,
+      taskCounts: this.taskCounts,
       now,
     }
   }
