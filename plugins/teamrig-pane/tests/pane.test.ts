@@ -2092,6 +2092,34 @@ test('the Teams tab says so when the session has no team', async ($, on) => {
   expect(await pane.find({ text: /^No team found: the Teams tab shows the tree of teams/ })).toBeDefined()
 })
 
+test('after a hot reload, a team tree an older pane kept without its task counts reads as not read yet, never drawn with a card open', async ($, on) => {
+  await startWithTeam(on)
+  // The pane before the card's Tasks row kept the tree under team-v4, its sessions without their task counts.
+  let isOlderStored = false
+  on('state.get', async ($, e, next) => {
+    const answer = await next(e)
+    if (!isOlderStored || e.key !== 'teamTree' || answer.value === undefined) return answer
+    const older: unknown = JSON.parse(JSON.stringify(answer.value.value, (key: string, value: unknown) => (key === 'tasks' ? undefined : key === 'shape' ? 'team-v4' : value)))
+    return { value: { ...answer.value, value: older } }
+  })
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  await pane.press({ key: 'team' })
+  await pane.press({ key: 'session:acme/api' })
+  expect(await drawsLine(pane, /│ Tasks {8}0 done of 1$/)).toBe(true)
+
+  isOlderStored = true
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  await pane.redraw(WIDE)
+  await pane.press({ key: 'team' })
+
+  expect(await pane.find({ text: /could not draw/ })).toBeUndefined()
+  expect(await pane.find({ text: /^Reading the team…$/ })).toBeDefined()
+  isOlderStored = false
+  await pane.redraw(WIDE)
+  expect(await drawsLine(pane, /│ Tasks {8}0 done of 1$/)).toBe(true)
+})
+
 test('with Claude Code new enough and git there, it draws no requirement line and runs git --version once', async ($, on) => {
   const { clock, runs } = await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
