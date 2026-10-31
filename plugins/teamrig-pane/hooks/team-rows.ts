@@ -1,4 +1,4 @@
-// The Team tab as blocks of rows (rows.ts): the team tree (team.ts) a node a row, depth first, each indented by its
+// The Teams tab as blocks of rows (rows.ts): the team tree (team.ts) a node a row, depth first, each indented by its
 // depth behind a mark that says whether it is open (▾), closed (▸) or has nothing under it. A team's row counts its
 // active and retired sessions; a session's row is its mark (● on the team, ○ dim once retired), its id, its name where
 // it differs, how many sessions it leads in brackets (T1244), its roles, its hire or its retire, how many of its cards wait on the owner now with a
@@ -25,7 +25,7 @@ import { TEAM_SEARCH_VIEW, teamFieldText, type SessionHit, type TeamSearchedFiel
 const TAB = 'team'
 /** The cells each level of the tree indents its rows by, and the open mark's: a child's mark stands under its parent's text. */
 const STEP = 2
-/** What an empty Find field shows on the Team tab. */
+/** What an empty Find field shows on the Teams tab. */
 export const TEAM_SEARCH_HINT = 'Type words to find a session by its id, name, role or hire scope.'
 /** What a query no session matches shows. */
 export const TEAM_NOTHING_FOUND = 'Nothing matches. The Teams tab searches every session in the tree, retired ones too.'
@@ -34,7 +34,7 @@ const SESSION_NOUN: Noun = { one: 'session', many: 'sessions' }
 /** The press on a session's row that brings the owner its cards (`teamrig meet`). */
 export const MEET_TEXT = '[Meet]'
 
-/** The Find field's query on the Team tab and the sessions it names (team-search.ts searchTeam), in the tree's order. */
+/** The Find field's query on the Teams tab and the sessions it names (team-search.ts searchTeam), in the tree's order. */
 export type TeamSearch = { query: string; hits: readonly SessionHit[] }
 
 /** Where a search's words matched in each of a session's fields. */
@@ -242,7 +242,7 @@ function treeBlocks(root: TeamTreeNode, toggled: readonly string[], zone: TimeZo
 }
 
 /**
- * The Team tab: the tree's rows, with the nodes in `toggled` opened or closed against their default and the sessions
+ * The Teams tab: the tree's rows, with the nodes in `toggled` opened or closed against their default and the sessions
  * whose card key (cardKey) it holds showing their cards, or why none show; while `search` holds the Find field's
  * query, the search's body instead; what the last [Meet] press answered (`meet`) leads either.
  */

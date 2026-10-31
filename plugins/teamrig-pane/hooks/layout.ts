@@ -4,7 +4,7 @@
 // pane's edge, and the root Box's gap spaces the blocks. Wrapping here instead of nesting a Box per row
 // keeps a block one element, the cost rows.ts explains; an open card is one more Text, but for each line that
 // holds a press (a task id, a reference file), drawn as a row of its pieces so the press can be one of its own, as a
-// block's own line is when no press opens the block (a Team tab leader's fold mark and id). A
+// block's own line is when no press opens the block (a Teams tab leader's fold mark and id). A
 // row can be cut at a few lines, ending in `…`, and can carry an `end` drawn at its first line's right edge. A link
 // or a press is never split: it starts a fresh line when that gives it more room, and one wider still is
 // shortened to its line, ending in `…`. Inline, above the prompt, each row is one truncated screen row and the rows
@@ -16,7 +16,7 @@ import { cells, graphemes } from './width'
 
 /**
  * A piece of a line that holds a press: a task id and the task it names, a reference file and the file it names, an
- * unread count and the inbox it opens, a Team tab key, a session a press ties the tab to, a meeting a press starts,
+ * unread count and the inbox it opens, a Teams tab key, a session a press ties the tab to, a meeting a press starts,
  * a session a press meets the owner with, or the words between them.
  */
 export type Piece =
@@ -39,10 +39,10 @@ export type CardPart =
   | { kind: 'press'; key: string; spans: Span[]; expands: string }
 /**
  * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, its
- * page when `opens` does (a search result), a conversation's Log page when `reads` does (docked only), the Team tab's
+ * page when `opens` does (a search result), a conversation's Log page when `reads` does (docked only), the Teams tab's
  * key or the meeting's card it opens or closes when `folds` does, or a Changes file's diff when `expands` does (inline a file's row, docked
  * a Changes search result). `card`, set while that card is open, is the card's own parts, drawn under the Button and
- * outside it. `parts`, set docked when no press but a Team tab key's opens the element and a line of its holds a press
+ * outside it. `parts`, set docked when no press but a Teams tab key's opens the element and a line of its holds a press
  * (a leader's fold mark and id), is its lines as parts, drawn in place of its Text and its
  * `folds` press, its open card under them.
  */
@@ -115,7 +115,7 @@ function sameStyle(a: Span, b: Span): boolean {
 
 /**
  * Whether `span` is a press drawn as a piece of its line: a task id or a reference file in a card, an inbox count, a
- * Team tab key, a session to tie the tab to, a meeting to start, a session to meet.
+ * Teams tab key, a session to tie the tab to, a meeting to start, a session to meet.
  */
 function isPress(span: Span): boolean {
   return (
@@ -292,7 +292,7 @@ function joinedLines(lines: Lines): Span[] {
 }
 
 /**
- * A line's spans as pieces: each task id, reference file, inbox count, Team tab key, session to tie the tab to,
+ * A line's spans as pieces: each task id, reference file, inbox count, Teams tab key, session to tie the tab to,
  * meeting to start and session to meet its own, each run of words between them one.
  */
 export function piecesOf(line: readonly Span[]): Piece[] {
@@ -360,7 +360,7 @@ export function rowParts(rows: readonly Row[], wrap: (row: Row) => Lines, first 
  * Each block one Text of its rows wrapped to the body's own width (one column at least, for a body
  * resized below the pane's padding), a block that opens a section led by a blank line; an open card's
  * rows wrapped the same way into its parts, and a block's own lines too when they hold a press and no press but a
- * Team tab key's opens it (Drawn's `parts`). `wraps` carries the rows wrapped by the layout before (WrapCache); by default none are.
+ * Teams tab key's opens it (Drawn's `parts`). `wraps` carries the rows wrapped by the layout before (WrapCache); by default none are.
  */
 export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps: WrapCache = new WrapCache()): Drawn[] {
   const columns = Math.max(1, bodyColumns)

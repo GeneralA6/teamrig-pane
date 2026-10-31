@@ -1,4 +1,4 @@
-// A session's card on the Team tab (hooks/team-card.ts): its role, leaders, launch, hire, tasks in progress and unread
+// A session's card on the Teams tab (hooks/team-card.ts): its role, leaders, launch, hire, tasks in progress and unread
 // inbox lines, or its retire, a labelled row a fact, each only when it has a value, its task ids, inbox count and
 // handover presses of their own.
 import { describe, expect, test } from 'claude-code/testing'

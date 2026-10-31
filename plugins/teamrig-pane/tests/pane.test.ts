@@ -1484,7 +1484,7 @@ function buttonLabel(node: unknown, key: string): string | null {
   return props !== null && 'label' in props && typeof props.label === 'string' ? props.label : null
 }
 
-test('the Tasks / Changes / Log / Inbox / Team / Meetings switch leads the pane in every view, width and placement, wrapping rather than clipping', async ($, on) => {
+test('the Tasks / Changes / Log / Inbox / Teams / Meetings switch leads the pane in every view, width and placement, wrapping rather than clipping', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
@@ -1948,14 +1948,14 @@ async function drawsLine(pane: Mounted<'Pane'>, pattern: RegExp): Promise<boolea
   return screenOf(await pane.drawn()).some(line => pattern.test(line.trim()))
 }
 
-/** The key of the press within a Team tab row that opens or closes the tab's key `toggles`. */
+/** The key of the press within a Teams tab row that opens or closes the tab's key `toggles`. */
 async function pressOn(pane: Mounted<'Pane'>, toggles: string): Promise<string> {
   const key = buttonKeys(await pane.drawn()).find(found => found.startsWith(`team:${toggles}:`))
   if (key === undefined) throw new Error(`no press on ${toggles}`)
   return key
 }
 
-test("the Team tab lists the tree of teams the session's team is in; a press on a row closes or opens what lies under it", async ($, on) => {
+test("the Teams tab lists the tree of teams the session's team is in; a press on a row closes or opens what lies under it", async ($, on) => {
   await startWithTeam(on)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
@@ -2008,7 +2008,7 @@ test("a session's card counts its unread inbox lines, and a press on the count o
   expect(await pane.find({ type: 'Text', text: /^line two\n?$/ })).toMatchObject({ props: { bold: true } })
 })
 
-test("the Team tab's Find field draws the sessions it names under their leaders; Enter on one opens its card, and back from a page the card opens shows the tasks list", async ($, on) => {
+test("the Teams tab's Find field draws the sessions it names under their leaders; Enter on one opens its card, and back from a page the card opens shows the tasks list", async ($, on) => {
   const { disk } = await startWithTeam(on)
   disk.write(`${TEAMS}/acme/state/inbox-marks.jsonl`, [markLine('api', 1, S2, NOW, 'line one')])
   disk.write(`${TEAMS}/acme/state/inbox/api.md`, ['line one', '', 'line two', 'line three'])
@@ -2032,7 +2032,7 @@ test("the Team tab's Find field draws the sessions it names under their leaders;
   await pane.input({ key: 'find', text: 'api' })
   expect(await drawsLine(pane, /│ Led by {7}web, then lead$/)).toBe(true)
 
-  // The card's inbox count opens that inbox in the Tasks view; back shows the tasks list, never the Team tab's search
+  // The card's inbox count opens that inbox in the Tasks view; back shows the tasks list, never the Teams tab's search
   // drawn as one of tasks.
   const toInbox = buttonKeys(await pane.drawn()).find(key => key.startsWith('goto:inbox:'))
   if (toInbox === undefined) throw new Error("no press on api's inbox count")
@@ -2044,7 +2044,7 @@ test("the Team tab's Find field draws the sessions it names under their leaders;
   expect(buttonKeys(await pane.drawn())).toContain('mine')
 })
 
-test("the Team tab and the Tasks view share one search: a switch between them closes it, so neither draws the other's", async ($, on) => {
+test("the Teams tab and the Tasks view share one search: a switch between them closes it, so neither draws the other's", async ($, on) => {
   await startWithTeam(on)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
@@ -2064,7 +2064,7 @@ test("the Team tab and the Tasks view share one search: a switch between them cl
   expect(await drawsLine(pane, /^▾ tools · 1 active · 0 retired$/)).toBe(true)
 })
 
-test('the Team tab reads no team folder while another view shows, and reads what moved when it shows again', async ($, on) => {
+test('the Teams tab reads no team folder while another view shows, and reads what moved when it shows again', async ($, on) => {
   const { clock, disk } = await startWithTeam(on)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
@@ -2082,7 +2082,7 @@ test('the Team tab reads no team folder while another view shows, and reads what
   expect(await drawsLine(pane, /● dev  tools-dev$/)).toBe(true)
 })
 
-test('the Team tab says so when the session has no team', async ($, on) => {
+test('the Teams tab says so when the session has no team', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })

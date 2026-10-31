@@ -1,4 +1,4 @@
-// The Team tab's model (T780): the tree of teams that holds the pane's own team, each team with its lead on top and
+// The Teams tab's model (T780): the tree of teams that holds the pane's own team, each team with its lead on top and
 // every session ever on its roster under it, active or retired. It is read from each team's config, rename log and hire
 // log through teamrig's own readers (TeamTree, LeadTree, Roster, the hire log), never hard-coded, so the tab shows the
 // team as teamrig's commands find it. Pure: the source reads the files, this turns them into nodes, teamRows into the

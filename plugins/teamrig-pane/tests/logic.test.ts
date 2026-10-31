@@ -501,7 +501,7 @@ describe('rows', () => {
     expect(piecesOf([count, { ...count, inbox: { area: 'etl', unread: 2 } }, { ...count, inbox: { area: 'po', unread: 3 } }])).toHaveLength(3)
   })
 
-  test("docked, a Team tab row's own presses draw it as parts in place of its fold press, its open card's parts keyed past them", () => {
+  test("docked, a Teams tab row's own presses draw it as parts in place of its fold press, its open card's parts keyed past them", () => {
     const mark: Span = { text: '▾ ', dim: true, toggles: 'web' }
     const id: Span = { text: 'web', bold: true, toggles: 'card:web' }
     const card = [{ key: 'team:web:role', spans: [{ text: '  │ Role lead' }] }]

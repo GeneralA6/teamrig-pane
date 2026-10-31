@@ -5,7 +5,7 @@ import type { Place, Placed, View } from './frame'
 import type { CardPart, Drawn, Piece } from './layout'
 
 /**
- * A piece of a card's line that is a press: a task id, a reference file, an inbox count, a Team tab key, a session to
+ * A piece of a card's line that is a press: a task id, a reference file, an inbox count, a Teams tab key, a session to
  * tie the tab to, a meeting to start, a session to meet the owner with.
  */
 export type PressPiece = Exclude<Piece, { kind: 'words' }>
@@ -30,7 +30,7 @@ export function diffKey(from: string, partKey: string): string {
 
 /**
  * A press in a card's line: a task id `goto:<id>:`, a reference file `goto:file:`, an inbox count `goto:inbox:`, a
- * Team tab key `team:<key>:`, a session to tie the tab to `pin:<id>:`, a meeting to start `start:<id>:`, a session to
+ * Teams tab key `team:<key>:`, a session to tie the tab to `pin:<id>:`, a meeting to start `start:<id>:`, a session to
  * meet the owner with `meet:<id>:`, then where it is drawn, the line, and the piece's place in it.
  */
 export function pieceKey(piece: PressPiece, from: string, partKey: string, i: number): string {
@@ -55,7 +55,7 @@ export function pieceKey(piece: PressPiece, from: string, partKey: string, i: nu
 
 /**
  * True when an element's head is a press: one that opens its task's card or page, a session's Log page, a file's diff,
- * or opens or closes a Team tab node.
+ * or opens or closes a Teams tab node.
  */
 export function headPresses(drawn: Drawn): boolean {
   return drawn.toggle !== null || drawn.opens !== undefined || drawn.reads !== undefined || drawn.folds !== undefined || drawn.expands !== undefined

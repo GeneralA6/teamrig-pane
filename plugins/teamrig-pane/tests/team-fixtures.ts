@@ -1,4 +1,4 @@
-// Teams as teamrig's readers hand them to the Team tab's model (hooks/team.ts): a root team with a sub-lead, hires,
+// Teams as teamrig's readers hand them to the Teams tab's model (hooks/team.ts): a root team with a sub-lead, hires,
 // retires and renames, its child team, and another root team.
 import type { TaskRow } from '../types'
 import { parseConfigText, readRegister, type HireRecord, type KitConfig, type Rename, type RetireRecord } from '../hooks/core/read/index'

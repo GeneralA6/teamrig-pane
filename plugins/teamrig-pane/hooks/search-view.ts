@@ -1,4 +1,4 @@
-// What any search draws under its Find field (search-rows.ts draws the Tasks view's on it, team-rows.ts the Team tab's,
+// What any search draws under its Find field (search-rows.ts draws the Tasks view's on it, team-rows.ts the Teams tab's,
 // inbox-rows.ts, log-rows.ts and changes-rows.ts the Inbox, Log and Changes views'): the hint while the query has no
 // word, one line that says so when nothing matches, else a dim line counting the matches, then the results' blocks,
 // each result's keyed by the view and its id (resultKey), so the focus ring can be told on a result. A result
@@ -26,7 +26,7 @@ export type SearchView = {
   noun: Noun
   /**
    * The blocks drawn under the count, in order, the search's cap already applied: one per result shown, each keyed
-   * `resultKey(key, <its id>)`, and, for a search drawn as a tree (the Team tab's), the rows that lead to them.
+   * `resultKey(key, <its id>)`, and, for a search drawn as a tree (the Teams tab's), the rows that lead to them.
    */
   results: readonly Block[]
   /** How many results those blocks show. */

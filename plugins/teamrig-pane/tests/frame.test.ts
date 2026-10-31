@@ -34,7 +34,7 @@ const PARTED: Drawn = {
   ],
 }
 
-/** A Team tab leader drawn as parts, its fold mark and its id presses, its card open under them: a line, then a two-line Text. */
+/** A Teams tab leader drawn as parts, its fold mark and its id presses, its card open under them: a line, then a two-line Text. */
 const LED: Drawn = {
   key: 'f',
   spans: [{ text: '▾ f' }],

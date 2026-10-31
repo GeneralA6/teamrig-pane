@@ -1,4 +1,4 @@
-// The Team tab's search (hooks/team-search.ts): the sessions of the team tree a query names by the start of a word in
+// The Teams tab's search (hooks/team-search.ts): the sessions of the team tree a query names by the start of a word in
 // their id, name, role words or hire scope, retired ones too, every match in the tree's order; a name a session no
 // longer runs under names none.
 import { describe, expect, test } from 'claude-code/testing'

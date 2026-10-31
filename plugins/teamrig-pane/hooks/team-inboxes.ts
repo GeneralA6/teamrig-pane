@@ -1,4 +1,4 @@
-// The unread inbox lines of the pane's own team's sessions, for the Team tab (T780): the team's inbox read marks and
+// The unread inbox lines of the pane's own team's sessions, for the Teams tab (T780): the team's inbox read marks and
 // each marked session's inbox file, each re-read only when its stamp moves (source.ts WatchedFile), counted as the
 // header counts the pane's own area (source.ts TaskRegisterSource, teamrig's unreadOf). A session that never marked its
 // inbox read has no count: its count is unknown, not everything.

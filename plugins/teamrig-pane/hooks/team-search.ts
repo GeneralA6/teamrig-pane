@@ -1,4 +1,4 @@
-// The Team tab's search (T780): the sessions of the team tree (team.ts) a query names, on the shared search
+// The Teams tab's search (T780): the sessions of the team tree (team.ts) a query names, on the shared search
 // (search.ts). A word matches the start of a word in a session's id, its name, its role words as its row draws them
 // (team-card.ts roleWords) or its hire's scope; a name it no longer runs under does not, as its row no longer shows
 // one. Every session ever on a team of the tree is searched, the retired ones too, and every match is kept, in the
