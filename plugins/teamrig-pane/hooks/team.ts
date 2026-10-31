@@ -1,5 +1,5 @@
 // The Team tab's model (T780): the tree of teams that holds the pane's own team, each team with its lead on top and
-// every session ever on its roster under it, active or closed. It is read from each team's config, rename log and hire
+// every session ever on its roster under it, active or retired. It is read from each team's config, rename log and hire
 // log through teamrig's own readers (TeamTree, LeadTree, Roster, the hire log), never hard-coded, so the tab shows the
 // team as teamrig's commands find it. Pure: the source reads the files, this turns them into nodes, teamRows into the
 // rows a drawing shows.
@@ -54,37 +54,37 @@ export type TeamFacts = {
   /** The sessions on the team now: the config's `sessions`. */
   readonly active: number
   /** The sessions retired and no longer on the team. */
-  readonly closed: number
+  readonly retired: number
 }
 
 export type SessionFacts = {
   readonly team: string
   readonly id: string
-  /** The name it runs under now; for a closed session, the last name it held. */
+  /** The name it runs under now; for a retired session, the last name it held. */
   readonly name: string
   /** On the team's config now; false for a retired session no longer on it. */
   readonly active: boolean
   readonly roles: readonly Role[]
   /** How many sessions it leads directly, as the lead or a sub-lead; 0 when it leads none. */
   readonly leads: number
-  /** The leaders over it, nearest first, ending at the lead (LeadTree chainOf); none for the lead and a closed session. */
+  /** The leaders over it, nearest first, ending at the lead (LeadTree chainOf); none for the lead and a retired session. */
   readonly ledBy: readonly string[]
   /**
    * The model and effort teamrig launches it on (launchOf: its `launch` entry, and for the lead teamrig's lead defaults
-   * under the keys it leaves unset); null for a closed session, which teamrig no longer launches.
+   * under the keys it leaves unset); null for a retired session, which teamrig no longer launches.
    */
   readonly launch: LaunchConfig | null
   /** Its newest hire, for a hired session; null for one the team was set up with. */
   readonly hire: HireRecord | null
   /** The retire a rehired session came back from; null for a first hire and a session never hired. */
   readonly rehiredFrom: RetireRecord | null
-  /** Its retire, for a closed session; null for an active one. */
+  /** Its retire, for a retired session; null for an active one. */
   readonly retire: RetireRecord | null
-  /** Its tasks in progress, in the register's order; none for a closed session, null when the pane does not read its team's register. */
+  /** Its tasks in progress, in the register's order; none for a retired session, null when the pane does not read its team's register. */
   readonly now: readonly CurrentTask[] | null
-  /** Its unread inbox lines; null for a closed session, one that never marked its inbox read, or a team whose inbox the pane does not read. */
+  /** Its unread inbox lines; null for a retired session, one that never marked its inbox read, or a team whose inbox the pane does not read. */
   readonly unread: number | null
-  /** Its cards on the owner, due now and put off; none for a closed session, null when the pane does not read its team's register. */
+  /** Its cards on the owner, due now and put off; none for a retired session, null when the pane does not read its team's register. */
   readonly decisions: SessionOwnerCards | null
 }
 
@@ -94,25 +94,25 @@ const NO_CARDS: SessionOwnerCards = { due: [], later: [] }
 type NodeBase = { readonly key: string; readonly children: readonly TeamTreeNode[] }
 
 /**
- * A node of the tab's tree: a team (over its lead, its closed group and its child teams), a session (over the sessions
- * it leads), or a team's closed group (over its retired sessions). The key names it across reads, for its open state.
+ * A node of the tab's tree: a team (over its lead, its retired group and its child teams), a session (over the sessions
+ * it leads), or a team's retired group (over its retired sessions). The key names it across reads, for its open state.
  */
 export type TeamTreeNode =
   | (NodeBase & { readonly kind: 'team'; readonly team: TeamFacts })
   | (NodeBase & { readonly kind: 'session'; readonly session: SessionFacts })
-  | (NodeBase & { readonly kind: 'closed'; readonly team: string })
+  | (NodeBase & { readonly kind: 'retired'; readonly team: string })
 
 /** A session's node, the kind of node the tab's search finds (team-search.ts). */
 export type SessionNode = Extract<TeamTreeNode, { kind: 'session' }>
 
 /** A team's own read, with its roster over every session ever on it: the config's sessions, then the retired ones. */
-type TeamPart = { readonly read: TeamRead; readonly roster: Roster; readonly closed: readonly RetireRecord[] }
+type TeamPart = { readonly read: TeamRead; readonly roster: Roster; readonly retired: readonly RetireRecord[] }
 
 function partOf(read: TeamRead): TeamPart {
   const { team, config, renames, hires } = read
-  const closed = retiredSessions(hires).filter(retire => !config.sessions.includes(retire.session))
-  const roster = new Roster({ ...config, sessions: [...config.sessions, ...closed.map(retire => retire.session)] }, team, renames)
-  return { read, roster, closed }
+  const retired = retiredSessions(hires).filter(retire => !config.sessions.includes(retire.session))
+  const roster = new Roster({ ...config, sessions: [...config.sessions, ...retired.map(retire => retire.session)] }, team, renames)
+  return { read, roster, retired }
 }
 
 /** The tasks `id` has in progress; null when the register is not read. */
@@ -127,8 +127,8 @@ function cardsOf(cards: Readonly<Record<string, SessionOwnerCards>> | null, id: 
   return cards[id] ?? NO_CARDS
 }
 
-/** The session nodes of one team: the lead, each session under its leader, and the closed group. */
-function sessionNodes({ read, roster, closed }: TeamPart): TeamTreeNode[] {
+/** The session nodes of one team: the lead, each session under its leader, and the retired group. */
+function sessionNodes({ read, roster, retired }: TeamPart): TeamTreeNode[] {
   const { team, config, hires } = read
   const leads = new LeadTree(config)
   const hired = new Map(activeHires(hires).map(hire => [hire.session, hire]))
@@ -159,9 +159,9 @@ function sessionNodes({ read, roster, closed }: TeamPart): TeamTreeNode[] {
     return { kind: 'session', key: sessionKey(team, id), session: facts(id, null), children: members.map(led) }
   }
   const nodes = [led(leads.lead)]
-  if (closed.length > 0) {
-    const retired = closed.map((retire): TeamTreeNode => ({ kind: 'session', key: sessionKey(team, retire.session), session: facts(retire.session, retire), children: [] }))
-    nodes.push({ kind: 'closed', key: `closed:${team}`, team, children: retired })
+  if (retired.length > 0) {
+    const gone = retired.map((retire): TeamTreeNode => ({ kind: 'session', key: sessionKey(team, retire.session), session: facts(retire.session, retire), children: [] }))
+    nodes.push({ kind: 'retired', key: `retired:${team}`, team, children: gone })
   }
   return nodes
 }
@@ -173,7 +173,7 @@ export function sessionKey(team: string, id: string): string {
 
 /**
  * The tree that holds `own`: its root team, then every team below it, each with its lead on top, the sessions each
- * leader leads under it, the team's closed group, then its child teams by id. Another root team on the machine is
+ * leader leads under it, the team's retired group, then its child teams by id. Another root team on the machine is
  * another project and is left out. A team whose parents go round a loop starts the tree itself, and each team is
  * walked once, so a loop ends. Null when `own` has no config read.
  */
@@ -187,7 +187,7 @@ export function teamTree(reads: readonly TeamRead[], own: string): TeamTreeNode 
     walked.add(team)
     const children = tree.childrenOf(team).flatMap(child => teamNode(child) ?? [])
     const { config } = part.read
-    const facts: TeamFacts = { team, parent: config.team?.parent ?? null, active: config.sessions.length, closed: part.closed.length }
+    const facts: TeamFacts = { team, parent: config.team?.parent ?? null, active: config.sessions.length, retired: part.retired.length }
     return { kind: 'team', key: `team:${team}`, team: facts, children: [...sessionNodes(part), ...children] }
   }
   return parts.has(own) ? teamNode(tree.rootOf(own) ?? own) : null
@@ -196,9 +196,9 @@ export function teamTree(reads: readonly TeamRead[], own: string): TeamTreeNode 
 /** A node as one row of the tab: how deep it sits, and whether it is open; null for a node with nothing under it. */
 export type TeamRow = { readonly node: TeamTreeNode; readonly depth: number; readonly open: boolean | null }
 
-/** Teams and leaders start open; a closed group starts closed, so the open tree stays the size of the active team. */
+/** Teams and leaders start open; a retired group starts closed, so the open tree stays the size of the active team. */
 export function openByDefault(node: TeamTreeNode): boolean {
-  return node.kind !== 'closed'
+  return node.kind !== 'retired'
 }
 
 /**

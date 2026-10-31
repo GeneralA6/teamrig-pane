@@ -1,5 +1,5 @@
 // The Team tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts,
-// a session's name, how many it leads, roles, hire or retire (never a name it no longer runs under), a closed group's count, a
+// a session's name, how many it leads, roles, hire or retire (never a name it no longer runs under), a retired group's count, a
 // press on each row that opens what lies under it or a session's card, a leader's two, and the notes for a tree it
 // cannot show.
 import { describe, expect, test } from 'claude-code/testing'
@@ -27,14 +27,14 @@ function blockOf(blocks: Block[], key: string): Block {
 describe('teamBlocks', () => {
   test('a row a node, depth first: each indented by its depth behind ▾ open, ▸ closed or blank, its words after', () => {
     expect(words(teamBlocks(TREE, [], UTC))).toEqual([
-      ['team:acme', ['▾ acme · 5 active · 1 closed']],
+      ['team:acme', ['▾ acme · 5 active · 1 retired']],
       ['session:acme/lead', ['  ▾ ● lead  acme-lead (2) · lead']],
       ['session:acme/web', ['    ▾ ● web  acme-web (2) · later Mon 11-02']],
       ['session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet]']],
       ['session:acme/ui', ['        ● ui  acme-ui · hired Fri 10-09 · review 10-25']],
       ['session:acme/ops', ['      ● ops  acme-ops · security reviewer · rehired Sun 10-11 · review 10-25']],
-      ['closed:acme', ['  ▸ closed (1)']],
-      ['team:tools', ['  ▾ tools · 2 active · 0 closed']],
+      ['retired:acme', ['  ▸ retired (1)']],
+      ['team:tools', ['  ▾ tools · 2 active · 0 retired']],
       ['session:tools/boss', ['    ▾ ● boss  tools-boss (1) · lead']],
       ['session:tools/dev', ['        ● dev  tools-dev']],
     ])
@@ -49,7 +49,7 @@ describe('teamBlocks', () => {
       cardKey('session:acme/api'),
       cardKey('session:acme/ui'),
       cardKey('session:acme/ops'),
-      'closed:acme',
+      'retired:acme',
       'team:tools',
       'session:tools/boss',
       cardKey('session:tools/dev'),
@@ -125,16 +125,16 @@ describe('teamBlocks', () => {
     expect(blockOf(open, 'session:acme/web').card?.[0]?.spans[0]).toEqual({ text: '      │ ', dim: true })
     // A card open under its leader's closed row is not drawn: the row is not there.
     expect(teamBlocks(TREE, [cardKey('session:acme/api'), 'session:acme/web'], UTC).some(block => block.key === 'session:acme/api')).toBe(false)
-    // A closed session's card is its retire.
-    const qa = blockOf(teamBlocks(TREE, ['closed:acme', cardKey('session:acme/qa')], UTC), 'session:acme/qa')
+    // A retired session's card is its retire.
+    const qa = blockOf(teamBlocks(TREE, ['retired:acme', cardKey('session:acme/qa')], UTC), 'session:acme/qa')
     expect(qa.folds).toBe(cardKey('session:acme/qa'))
     expect(qa.card?.map(row => row.key)[0]).toBe('team-card:acme/qa:retired')
   })
 
-  test('the closed group opens on a toggle: a retired session dim behind ○ under its last name, and its retire day', () => {
-    const blocks = teamBlocks(TREE, ['closed:acme'], UTC)
+  test('the retired group opens on a toggle: a retired session dim behind ○ under its last name, and its retire day', () => {
+    const blocks = teamBlocks(TREE, ['retired:acme'], UTC)
     expect(words(blocks).slice(6, 8)).toEqual([
-      ['closed:acme', ['  ▾ closed (1)']],
+      ['retired:acme', ['  ▾ retired (1)']],
       ['session:acme/qa', ['      ○ qa  acme-tester · retired Sun 10-11']],
     ])
     const [mark, id, name] = blockOf(blocks, 'session:acme/qa').rows[0]?.spans.slice(2) ?? []
@@ -158,7 +158,7 @@ describe('teamBlocks', () => {
     const named = { ...ACME, config: configOf({ team: { id: 'acme' }, sessions: ['lead'], roles: { lead: 'lead' } }), renames: [], hires: [] }
     const renamed = { ...named, renames: [{ v: 1, id: 'lead', from: 'acme-lead', to: 'lead', at: new Date(NOW - HOUR).toISOString(), by: 'lead' }] }
     expect(words(teamBlocks({ kind: 'tree', root: treeOf([renamed], 'acme') }, [], UTC))).toEqual([
-      ['team:acme', ['▾ acme · 1 active · 0 closed']],
+      ['team:acme', ['▾ acme · 1 active · 0 retired']],
       ['session:acme/lead', ['    ● lead · lead']],
     ])
   })
@@ -183,7 +183,7 @@ describe('teamBlocks with a search', () => {
     const blocks = searched('api', ['team:acme', 'session:acme/web'])
     expect(words(blocks)).toEqual([
       ['team-search-count', ['1 session matches']],
-      ['team:acme', ['▾ acme · 5 active · 1 closed']],
+      ['team:acme', ['▾ acme · 5 active · 1 retired']],
       ['session:acme/lead', ['  ▾ ● lead  acme-lead (2) · lead']],
       ['session:acme/web', ['    ▾ ● web  acme-web (2) · later Mon 11-02']],
       ['team-search:session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet]']],
@@ -216,8 +216,8 @@ describe('teamBlocks with a search', () => {
     expect(blockOf(searched('reviewer'), 'team-search:session:acme/ops').rows).toHaveLength(1)
   })
 
-  test("a retired session shows in its open closed group; each session's row is one press that opens its card, which follows it", () => {
-    expect(searched('tester').map(block => block.key)).toEqual(['team-search-count', 'team:acme', 'closed:acme', 'team-search:session:acme/qa'])
+  test("a retired session shows in its open retired group; each session's row is one press that opens its card, which follows it", () => {
+    expect(searched('tester').map(block => block.key)).toEqual(['team-search-count', 'team:acme', 'retired:acme', 'team-search:session:acme/qa'])
     const blocks = searched('lead', [cardKey('session:acme/lead')])
     expect(blocks.map(block => block.folds)).toEqual([undefined, undefined, cardKey('session:acme/lead'), undefined, cardKey('session:tools/boss')])
     expect(blocks.some(block => block.rows.some(row => row.spans.some(span => span.toggles !== undefined)))).toBe(false)
@@ -235,7 +235,7 @@ describe('teamBlocks with a search', () => {
 describe('toggledWith', () => {
   test('a press adds a key not toggled and takes back one that is', () => {
     expect(toggledWith([], 'team:acme')).toEqual(['team:acme'])
-    expect(toggledWith(['closed:acme', 'team:acme'], 'team:acme')).toEqual(['closed:acme'])
+    expect(toggledWith(['retired:acme', 'team:acme'], 'team:acme')).toEqual(['retired:acme'])
   })
 })
 
