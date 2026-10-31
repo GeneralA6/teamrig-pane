@@ -8,7 +8,7 @@
 import type { Meeting, MeetingStart, MeetingStatus, MeetingsView } from '../types'
 import { messageOf } from './errors'
 import { TICK_MS, type Timer } from './live'
-import { cliArgv, type TeamrigCli } from './teamrig-cli'
+import { cliArgv, failureLines, linesOf, type CliRun, type TeamrigCli } from './teamrig-cli'
 
 /** A list read takes no lock: far under this, unless the machine is swamped. */
 export const LIST_TIMEOUT_MS = 30_000
@@ -17,9 +17,6 @@ export const START_TIMEOUT_MS = 60_000
 const STATUSES: readonly MeetingStatus[] = ['scheduled', 'started', 'done', 'dropped']
 /** The line `meeting start` prints first: the meeting as `meeting list` shows it, which the view already draws. */
 const STARTED = 'STARTED '
-
-/** What a CLI run answers: `$.process.run`'s result, the fields read here. */
-export type CliRun = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: boolean }
 
 export type MeetingsPorts = {
   /** Runs `argv`, the teamrig CLI and its words (teamrig-cli.ts cliArgv); rejects when it cannot start or outlasts `timeoutMs`. */
@@ -71,20 +68,6 @@ export function readMeetingList(stdout: string): { meetings: Meeting[]; unreadab
   if (!Array.isArray(rows)) return null
   const meetings = rows.map(parseMeeting).filter(meeting => meeting !== null)
   return { meetings, unreadable: rows.length - meetings.length }
-}
-
-/** A run's non-empty lines of `text`, trimmed. */
-function linesOf(text: string): string[] {
-  return text
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(line => line !== '')
-}
-
-/** Why a run failed: what it wrote to stderr, else its exit code. */
-function failureLines(run: CliRun, command: string): string[] {
-  const said = linesOf(run.stderr)
-  return said.length > 0 ? said : [`teamrig ${command} exited ${run.exitCode}`]
 }
 
 /** The view a list run draws: its meetings, or why there are none to show. */

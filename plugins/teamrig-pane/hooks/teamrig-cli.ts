@@ -1,7 +1,8 @@
 // The teamrig CLI the pane runs (T1359): the installed teamrig plugin's `dist/cli/main.js`, found as teamrig's own
 // status line finds it. Claude Code lists its installed plugins in `plugins/installed_plugins.json` under its config
 // folder (CLAUDE_CONFIG_DIR, else ~/.claude): `{ plugins: { "teamrig@<marketplace>": [{ installPath, ... }] } }`. The
-// first `teamrig@*` install whose main.js is there is the one run, with `node`. Reads two files; runs nothing.
+// first `teamrig@*` install whose main.js is there is the one run, with `node`, and a run's answer read as lines.
+// Reads two files; runs nothing.
 import { messageOf } from './errors'
 import { slashed } from './source'
 
@@ -77,4 +78,21 @@ export async function findTeamrigCli(files: CliFiles, env: CliEnv): Promise<Team
 /** The command line that runs the CLI with `args`. */
 export function cliArgv(main: string, args: readonly string[]): string[] {
   return ['node', main, ...args]
+}
+
+/** What a CLI run answers: `$.process.run`'s result, the fields the pane reads. */
+export type CliRun = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: boolean }
+
+/** A run's non-empty lines of `text`, trimmed. */
+export function linesOf(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line !== '')
+}
+
+/** Why a run of `teamrig <command>` failed: what it wrote to stderr, else its exit code. */
+export function failureLines(run: CliRun, command: string): string[] {
+  const said = linesOf(run.stderr)
+  return said.length > 0 ? said : [`teamrig ${command} exited ${run.exitCode}`]
 }

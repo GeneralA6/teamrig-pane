@@ -4,8 +4,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { MeetingStart, MeetingsView } from '../types'
 import { TICK_MS } from '../hooks/live'
-import { LIST_TIMEOUT_MS, LiveMeetings, START_TIMEOUT_MS, listView, parseMeeting, readMeetingList, startOutcome, type CliRun, type MeetingsPorts } from '../hooks/meetings'
-import { cliArgv, type TeamrigCli } from '../hooks/teamrig-cli'
+import { LIST_TIMEOUT_MS, LiveMeetings, START_TIMEOUT_MS, listView, parseMeeting, readMeetingList, startOutcome, type MeetingsPorts } from '../hooks/meetings'
+import { cliArgv, type CliRun, type TeamrigCli } from '../hooks/teamrig-cli'
 
 const CLI: TeamrigCli = { kind: 'found', main: 'K/teamrig/dist/cli/main.js' }
 const PRINTED = {
