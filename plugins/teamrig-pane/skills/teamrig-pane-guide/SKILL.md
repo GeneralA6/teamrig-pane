@@ -578,10 +578,12 @@ open, so Enter leaves the results as they are; switching views closes the search
 `e`, or Teams on the switch, shows the tree of teams the session's team is in, from the top team down. Each team's row
 counts its active and retired sessions. Under it are its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a group of their own, and its child teams (`team.parent`). A session's row gives its
-id (bold), its current name where it differs, then, dim: how many sessions it leads (`(2)`), its roles, and its hire and
-review day or its retire day; then how many of its cards wait on the owner (the config's `register.ownerSource`) now,
-`? 2 decisions`, with a `[Meet]` press, and when the next card the owner put off comes back (`later Mon 11-02`, dim).
-A retired session is a dim `○`. A press on a team's or retired group's row (a click,
+id (bold), its current name where it differs, how many sessions it leads (`(2)`, dim), its roles, each in a colour of
+its own (lead, `sub-lead` for a leader that is not the lead, delivery owner, security reviewer); then how many of its
+cards wait on the owner (the config's `register.ownerSource`) now, `? 2 decisions`, with a `[Meet]` press, and when the
+next card the owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire days are on its card. The
+row of the session whose pane it is starts with a green `►`. A retired session is a dim `○`. A press on a team's or
+retired group's row (a click,
 Enter or Space) closes it or opens it again; on a session's row it opens or closes its card. A leader's row has two
 presses: its mark folds the sessions it leads, its id opens its card. Teams and leaders start open, a retired group
 closed, and the state stays across a hot reload. There are no ← and → keys: the engine binds keys only to buttons. With
@@ -594,12 +596,14 @@ answered leads the tab: `Asking web for its cards…`, then `Asked web for its c
 presses, its id opening its card; inline, the row opens the card. The switch's Teams button counts the cards waiting on
 the owner now across the team, `Teams (2)`; a card put off counts again once it comes back.
 
-A card lists, each only when known: Role (its roles, and `leads 2 sessions`), Led by, Launch (model and effort), Hired or Rehired (day, by whom, review day),
-Scope, Reason, Now (its tasks in progress, each id opening its page), Decisions (its cards waiting on the owner now),
-Later (those the owner put off, soonest back first, with when each comes back), each id opening its page, and Inbox
-(unread lines, opening its inbox, the pane's own in the Inbox view); a retired session's card gives its retire: day, by
-whom, why, Heir and Handover (a press opens it). Now, Decisions, Later, Inbox and the counts of cards on the owner show
-for the pane's own team only. A page a card opens shows in the Tasks view; back shows the tasks list.
+A card lists, each only when known: Role (its roles in their colours, and `leads 2 sessions`), Led by, Launch (model
+and effort), Hired or Rehired (day, by whom, review day), Scope, Reason, Now (its tasks in progress, each id opening its
+page), Tasks (how many it finished of all it owns but the dropped and how many wait on their proof, `1 done of 4 · 1
+verifying`; dim `older ones archived` once a compaction moved the old ones out of the register, dim `no tasks` for
+none), Decisions (its cards waiting on the owner now), Later (those the owner put off, soonest back first, with when
+each comes back), each id opening its page, and Inbox (unread lines, opening its inbox, the pane's own in the Inbox
+view); a retired session's card gives its retire: day, by whom, why, Heir and Handover (a press opens it). Now, Tasks,
+Decisions, Later, Inbox and the counts of cards on the owner show for the pane's own team only. A page a card opens shows in the Tasks view; back shows the tasks list.
 
 The Find field (`s`) searches the tree: each word matches the start of a word in a session's id, name,
 roles or hire scope, retired ones too. The body counts the matches and draws each under its team and leaders; a press
