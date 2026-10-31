@@ -2092,15 +2092,18 @@ test('the Teams tab says so when the session has no team', async ($, on) => {
   expect(await pane.find({ text: /^No team found: the Teams tab shows the tree of teams/ })).toBeDefined()
 })
 
-test('after a hot reload, a team tree an older pane kept without its task counts reads as not read yet, never drawn with a card open', async ($, on) => {
+/**
+ * After a hot reload the stored team tree is as an older pane kept it, each key and value rewritten by `older`: the tab
+ * reads it as not read yet, never drawing it with a card open, and draws the tree again from the next read.
+ */
+async function olderTreeReadsAsNotRead($: TestEngine, on: On, older: (key: string, value: unknown) => unknown): Promise<void> {
   await startWithTeam(on)
-  // The pane before the card's Tasks row kept the tree under team-v4, its sessions without their task counts.
   let isOlderStored = false
   on('state.get', async ($, e, next) => {
     const answer = await next(e)
     if (!isOlderStored || e.key !== 'teamTree' || answer.value === undefined) return answer
-    const older: unknown = JSON.parse(JSON.stringify(answer.value.value, (key: string, value: unknown) => (key === 'tasks' ? undefined : key === 'shape' ? 'team-v4' : value)))
-    return { value: { ...answer.value, value: older } }
+    const kept: unknown = JSON.parse(JSON.stringify(answer.value.value, older))
+    return { value: { ...answer.value, value: kept } }
   })
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
@@ -2118,6 +2121,16 @@ test('after a hot reload, a team tree an older pane kept without its task counts
   isOlderStored = false
   await pane.redraw(WIDE)
   expect(await drawsLine(pane, /│ Tasks {8}0 done of 1$/)).toBe(true)
+}
+
+test('after a hot reload, a team tree an older pane kept without its task counts reads as not read yet, never drawn with a card open', async ($, on) => {
+  // The pane before the card's Tasks row kept the tree under team-v4, its sessions without their task counts.
+  await olderTreeReadsAsNotRead($, on, (key, value) => (key === 'tasks' ? undefined : key === 'shape' ? 'team-v4' : value))
+})
+
+test('after a hot reload, a team tree an older pane kept without its failed folders reads as not read yet, never drawn', async ($, on) => {
+  // The pane before the WARN line for a team folder it could not read kept the tree under team-v5, with no failures.
+  await olderTreeReadsAsNotRead($, on, (key, value) => (key === 'failures' ? undefined : key === 'shape' ? 'team-v5' : value))
 })
 
 test('with Claude Code new enough and git there, it draws no requirement line and runs git --version once', async ($, on) => {

@@ -1,9 +1,9 @@
 // The Teams tab's source (hooks/team-source.ts): each team folder's config and, in the state folder it names, its rename
 // and hire logs, each re-read only when its stamp moves; the tree of the folders a team id names, written only when it
 // changed and read only while the tab shows; the own team's tasks, cards on the owner and unread inbox lines with it, a
-// peer's none.
+// peer's none; a folder whose read fails drawn as it last read, or left out before one, and named with why.
 import { describe, expect, test } from 'claude-code/testing'
-import type { SessionOwnerCards, TeamView } from '../types'
+import type { SessionOwnerCards, Snapshot, TeamView } from '../types'
 import { POLL_MS } from '../hooks/live'
 import type { TeamFiles } from '../hooks/places'
 import { teamTree, type TeamRead } from '../hooks/team'
@@ -64,6 +64,11 @@ const ACME_READ: TeamRead = {
 const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], tasks: null, unread: null, ownerCards: null, taskCounts: null }
 /** What the pane reads of acme beside its folder, with no inboxes found. */
 const OWN: OwnReads = { tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS, inboxes: null }
+/** The own register later: api took T4 too, and its card on the owner was answered. */
+const GROWN_REGISTER = [...REGISTER, createLine('T4', { at: NOW - HOUR, by: 'lead', owner: 'api', title: 'Test the route' })]
+const GROWN_PARTS: Pick<Snapshot, 'tasks' | 'ownerCards' | 'taskCounts'> = { tasks: tasksOf(...GROWN_REGISTER), ownerCards: {}, taskCounts: countsOf(...GROWN_REGISTER) }
+const GROWN: OwnReads = { ...GROWN_PARTS, inboxes: null }
+const BUSY = 'EBUSY: resource busy or locked'
 
 /** The message `run` rejects with. */
 async function failure(run: () => Promise<unknown>): Promise<string> {
@@ -119,15 +124,34 @@ describe('TeamFolder', () => {
     expect(await failure(() => folder.read(null))).toBe('EBUSY: resource busy or locked')
     expect((await folder.read(null))?.config).toEqual(configOf(ACME_CONFIG))
   })
+
+  test('its last read that worked, for a failed read to fall back on: none before one, its own parts as given now, none once its config is refused', async () => {
+    const disk = teamsDisk()
+    const folder = new TeamFolder(disk, TEAMS, 'acme')
+    expect(folder.lastRead(OWN)).toBeNull()
+    await folder.read(OWN)
+
+    disk.write(ACME_CONFIG_PATH, JSON.stringify({ ...ACME_CONFIG, sessions: ['lead'] }))
+    disk.failNextRead = BUSY
+    expect(await failure(() => folder.read(OWN))).toBe(BUSY)
+    expect(folder.lastRead(GROWN)).toEqual({ ...ACME_READ, ...GROWN_PARTS })
+    expect(folder.lastRead(null)).toEqual({ ...ACME_READ, tasks: null, ownerCards: null, taskCounts: null })
+
+    disk.write(ACME_CONFIG_PATH, '{ not json')
+    expect(await folder.read(OWN)).toBeNull()
+    expect(folder.lastRead(OWN)).toBeNull()
+  })
 })
 
 /**
- * A LiveTeam over the fake disk and a fake folder list, with whether the tab shows set by the test, and each write it
- * made; it counts the own team's inboxes at `inbox`, none when null (a pane that found no register).
+ * A LiveTeam over the fake disk and a fake folder list, with whether the tab shows and the register's answer set by the
+ * test, and each write it made; it counts the own team's inboxes at `inbox`, none when null (a pane that found no
+ * register).
  */
 function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
   const shown = { tab: true }
   const listed: { names: readonly string[]; failure: string | null } = { names: ['acme', 'tools'], failure: null }
+  const register: { answer: Pick<Snapshot, 'tasks' | 'ownerCards' | 'taskCounts'> } = { answer: { tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS } }
   const views: TeamView[] = []
   let failWrites = false
   const live = new LiveTeam(disk, FILES, {
@@ -135,7 +159,7 @@ function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
       if (listed.failure !== null) throw new Error(listed.failure)
       return dir === TEAMS ? listed.names : []
     },
-    register: async () => ({ tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS }),
+    register: async () => register.answer,
     isShown: async () => shown.tab,
     publish: async view => {
       if (failWrites) throw new Error('write refused')
@@ -145,7 +169,7 @@ function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
   const setFailWrites = (fails: boolean) => {
     failWrites = fails
   }
-  return { live, shown, listed, views, failWrites: setFailWrites }
+  return { live, shown, listed, register, views, failWrites: setFailWrites }
 }
 
 describe('LiveTeam', () => {
@@ -154,12 +178,12 @@ describe('LiveTeam', () => {
     const { live, views } = fakeTeam(disk)
     await live.refresh()
     await live.refresh()
-    expect(views).toEqual([{ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme') }])
+    expect(views).toEqual([{ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] }])
 
     const grown = { ...TOOLS_CONFIG, sessions: ['boss', 'dev', 'qa'] }
     disk.write(TOOLS_CONFIG_PATH, JSON.stringify(grown))
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, { ...TOOLS_READ, config: configOf(grown) }], 'acme') })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, { ...TOOLS_READ, config: configOf(grown) }], 'acme'), failures: [] })
     expect(views.length).toBe(2)
   })
 
@@ -170,12 +194,12 @@ describe('LiveTeam', () => {
     disk.write(`${INBOX.inboxDir}/dev.md`, 'boss: fix the build\n')
     const { live, views } = fakeTeam(disk, INBOX)
     await live.refresh()
-    expect(views).toEqual([{ kind: 'tree', root: teamTree([{ ...ACME_READ, unread: new Map([['api', 2]]) }, TOOLS_READ], 'acme') }])
+    expect(views).toEqual([{ kind: 'tree', root: teamTree([{ ...ACME_READ, unread: new Map([['api', 2]]) }, TOOLS_READ], 'acme'), failures: [] }])
     expect(disk.reads).not.toContain(`${INBOX.inboxDir}/dev.md`)
 
     const alone = fakeTeam(disk)
     await alone.live.refresh()
-    expect(alone.views).toEqual([{ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme') }])
+    expect(alone.views).toEqual([{ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] }])
   })
 
   test('a folder that names no team is never read; one no longer listed leaves the tree, and one listed again is read anew', async () => {
@@ -188,16 +212,16 @@ describe('LiveTeam', () => {
 
     listed.names = ['acme']
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ], 'acme') })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ], 'acme'), failures: [] })
 
     listed.names = ['acme', 'tools']
     disk.reads.length = 0
     await live.refresh()
     expect(disk.reads).toEqual([TOOLS_CONFIG_PATH])
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme') })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] })
   })
 
-  test('a folder list or a file read that fails shows why; the next read that works shows the tree again', async () => {
+  test("a folder list, or the own team's folder before any read of it worked, that fails shows why; the next read that works shows the tree again", async () => {
     const disk = teamsDisk()
     const { live, listed, views } = fakeTeam(disk)
     listed.failure = 'EACCES: permission denied, scandir K/teams'
@@ -205,12 +229,46 @@ describe('LiveTeam', () => {
     expect(views).toEqual([{ kind: 'failed', reason: 'EACCES: permission denied, scandir K/teams' }])
 
     listed.failure = null
-    disk.failNextRead = 'EBUSY: resource busy or locked'
+    disk.failNextRead = BUSY
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'failed', reason: 'EBUSY: resource busy or locked' })
+    expect(views.at(-1)).toEqual({ kind: 'failed', reason: BUSY })
 
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme') })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] })
+  })
+
+  test('a peer folder whose read fails is left out before a read of it worked, else drawn as it last read, under a WARN naming it; the next read that works clears it', async () => {
+    const disk = teamsDisk()
+    const { live, listed, views } = fakeTeam(disk)
+    listed.names = ['acme']
+    await live.refresh()
+    listed.names = ['acme', 'tools']
+    disk.failNextRead = BUSY
+    await live.refresh()
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ], 'acme'), failures: [{ team: 'tools', reason: BUSY, isLastRead: false }] })
+
+    await live.refresh()
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] })
+
+    disk.write(TOOLS_CONFIG_PATH, JSON.stringify({ ...TOOLS_CONFIG, sessions: ['boss'] }))
+    disk.failNextRead = BUSY
+    await live.refresh()
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [{ team: 'tools', reason: BUSY, isLastRead: true }] })
+  })
+
+  test("the own team's folder whose read fails after one worked draws as it last read, with the register as read now, under a WARN naming it", async () => {
+    const disk = teamsDisk()
+    const { live, register, views } = fakeTeam(disk)
+    await live.refresh()
+    register.answer = GROWN_PARTS
+    disk.write(ACME_CONFIG_PATH, JSON.stringify(ACME_CONFIG))
+    disk.failNextRead = BUSY
+    await live.refresh()
+    const grown: TeamRead = { ...ACME_READ, ...GROWN_PARTS }
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([grown, TOOLS_READ], 'acme'), failures: [{ team: 'acme', reason: BUSY, isLastRead: true }] })
+
+    await live.refresh()
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([grown, TOOLS_READ], 'acme'), failures: [] })
   })
 
   test('a poll while the tab is hidden reads nothing; once it shows, it reads', async () => {

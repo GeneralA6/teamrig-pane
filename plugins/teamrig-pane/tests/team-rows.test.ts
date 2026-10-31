@@ -1,10 +1,10 @@
 // The Teams tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts,
 // a session's name, how many it leads, roles in their colours (never a name it no longer runs under, nor a hire or
 // retire day: its card has them), a retired group's count, a
-// press on each row that opens what lies under it or a session's card, a leader's two, and the notes for a tree it
-// cannot show.
+// press on each row that opens what lies under it or a session's card, a leader's two, the notes for a tree it cannot
+// show, and a WARN line for each team folder it could not read.
 import { describe, expect, test } from 'claude-code/testing'
-import type { MeetAnswer, TeamView } from '../types'
+import type { MeetAnswer, TeamFolderFailure, TeamView } from '../types'
 import { TimeZone } from '../hooks/core/read/index'
 import { dockLayout, inlineLayout } from '../hooks/layout'
 import { SEPARATOR, type Block } from '../hooks/rows'
@@ -19,7 +19,7 @@ const UTC = TimeZone.UTC
 /** Each block as its key and its rows' words. */
 const words = (blocks: Block[]): [string, string[]][] => blocks.map(block => [block.key, block.rows.map(row => row.spans.map(span => span.text).join(''))])
 const ROOT = treeOf([ACME, TOOLS], 'acme')
-const TREE: TeamView = { kind: 'tree', root: ROOT }
+const TREE: TeamView = { kind: 'tree', root: ROOT, failures: [] }
 
 function blockOf(blocks: Block[], key: string): Block {
   const block = blocks.find(found => found.key === key)
@@ -76,7 +76,7 @@ describe('teamBlocks', () => {
     expect(api.slice(-4)).toEqual([SEPARATOR, { text: '? 1 decision', color: 'suggestion' }, { text: ' ' }, { text: MEET_TEXT, color: 'suggestion', meets: 'api' }])
     expect(blockOf(blocks, 'session:acme/web').rows[0]?.spans.slice(-2)).toEqual([SEPARATOR, { text: 'later Mon 11-02', dim: true }])
     const two = { ...ACME, ownerCards: { api: { due: [{ id: 'T4', title: 'Pick the database' }, { id: 'T7', title: 'Pick the queue' }], later: [] } } }
-    const twice = teamBlocks({ kind: 'tree', root: treeOf([two], 'acme') }, [], UTC)
+    const twice = teamBlocks({ kind: 'tree', root: treeOf([two], 'acme'), failures: [] }, [], UTC)
     expect(words(twice).find(([key]) => key === 'session:acme/api')?.[1]).toEqual(['        ● api  acme-backend · ? 2 decisions [Meet]'])
     // A team whose register the pane does not read shows no cards, and no [Meet].
     expect(blocks.some(block => block.key.startsWith('session:tools/') && block.rows.some(row => row.spans.some(span => span.meets !== undefined)))).toBe(false)
@@ -160,7 +160,7 @@ describe('teamBlocks', () => {
 
   test("a card under its row prints its days on the team's clock; the row prints none", () => {
     const late = { ...ACME, hires: [hire('ui', Date.UTC(2026, 9, 11, 22, 30))] }
-    const tree: TeamView = { kind: 'tree', root: treeOf([late], 'acme') }
+    const tree: TeamView = { kind: 'tree', root: treeOf([late], 'acme'), failures: [] }
     const ui = (zone: TimeZone) => blockOf(teamBlocks(tree, [cardKey('session:acme/ui')], zone), 'session:acme/ui')
     expect(words([ui(UTC)])[0]?.[1]).toEqual(['        ● ui  acme-ui'])
     const hired = (zone: TimeZone) => ui(zone).card?.find(row => row.key === 'team-card:acme/ui:hire')?.spans.map(span => span.text).join('')
@@ -171,7 +171,7 @@ describe('teamBlocks', () => {
   test('a session whose name is its id shows the id alone, and none of the names it ran under before', () => {
     const named = { ...ACME, config: configOf({ team: { id: 'acme' }, sessions: ['lead'], roles: { lead: 'lead' } }), renames: [], hires: [] }
     const renamed = { ...named, renames: [{ v: 1, id: 'lead', from: 'acme-lead', to: 'lead', at: new Date(NOW - HOUR).toISOString(), by: 'lead' }] }
-    expect(words(teamBlocks({ kind: 'tree', root: treeOf([renamed], 'acme') }, [], UTC))).toEqual([
+    expect(words(teamBlocks({ kind: 'tree', root: treeOf([renamed], 'acme'), failures: [] }, [], UTC))).toEqual([
       ['team:acme', ['▾ acme · 1 active · 0 retired']],
       ['session:acme/lead', ['    ● lead · lead']],
     ])
@@ -213,9 +213,30 @@ describe('teamBlocks', () => {
     ])
     const failed = teamBlocks({ kind: 'failed', reason: 'EACCES: permission denied.' }, [], UTC)
     expect(failed[0]?.rows[0]?.spans).toEqual([{ text: 'The team could not be read: EACCES: permission denied.', color: 'warning' }])
-    expect(words(teamBlocks({ kind: 'tree', root: null }, [], UTC))).toEqual([
+    expect(words(teamBlocks({ kind: 'tree', root: null, failures: [] }, [], UTC))).toEqual([
       ['team:note', ['No team tree: the team has no config file teamrig can read, and the tree is read from it.']],
     ])
+  })
+
+  test('a WARN line for each team folder the last read could not read, after the [Meet] answer and before the tree, its search or the no-tree note', () => {
+    const tools: TeamFolderFailure = { team: 'tools', reason: 'EBUSY: resource busy or locked.', isLastRead: true }
+    const docs: TeamFolderFailure = { team: 'docs', reason: 'EACCES: permission denied', isLastRead: false }
+    const warned: TeamView = { kind: 'tree', root: ROOT, failures: [tools, docs] }
+    const blocks = teamBlocks(warned, [], UTC, { meet: { session: 'api', outcome: 'asking', lines: [] } })
+    expect(words(blocks).slice(0, 4)).toEqual([
+      ['team:meet', ['Asking api for its cards…']],
+      ['team:failure:tools', ['WARN team tools could not be read: EBUSY: resource busy or locked; it shows as last read.']],
+      ['team:failure:docs', ['WARN team docs could not be read: EACCES: permission denied; it is left out.']],
+      ['team:acme', ['▾ acme · 5 active · 1 retired']],
+    ])
+    const line = blockOf(blocks, 'team:failure:docs').rows[0]
+    expect(line?.spans.map(span => span.color)).toEqual(['warning'])
+    expect(line?.hang?.text).toBe('  ')
+    // A search draws under them too.
+    const searched = teamBlocks(warned, [], UTC, { search: { query: 'api', hits: searchTeam(ROOT, 'api') } })
+    expect(searched.map(block => block.key).slice(0, 3)).toEqual(['team:failure:tools', 'team:failure:docs', 'team-search-count'])
+    // With no tree, the no-tree note follows them.
+    expect(teamBlocks({ kind: 'tree', root: null, failures: [docs] }, [], UTC).map(block => block.key)).toEqual(['team:failure:docs', 'team:note'])
   })
 })
 
