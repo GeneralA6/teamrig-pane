@@ -1,7 +1,8 @@
 // The Team tab's search (T780): the sessions of the team tree (team.ts) a query names, on the shared search
-// (search.ts). A word matches the start of a word in a session's id, its name, a former name, its role words as its
-// row draws them (team-card.ts roleWords) or its hire's scope. Every session ever on a team of the tree is searched,
-// the retired ones too, and every match is kept, in the tree's order: a roster is small enough to show whole. Pure.
+// (search.ts). A word matches the start of a word in a session's id, its name, its role words as its row draws them
+// (team-card.ts roleWords) or its hire's scope; a name it no longer runs under does not, as its row no longer shows
+// one. Every session ever on a team of the tree is searched, the retired ones too, and every match is kept, in the
+// tree's order: a roster is small enough to show whole. Pure.
 import { SEPARATOR } from './rows'
 import { matchRows, type Hit, type SearchSpec } from './search'
 import type { SessionFacts, SessionNode, TeamTreeNode } from './team'
@@ -11,12 +12,12 @@ import { roleWords } from './team-card'
 export const TEAM_SEARCH_VIEW = 'team-search'
 
 /** The fields a word can match the start of a word in. */
-export const TEAM_SEARCHED = ['id', 'name', 'former', 'role', 'scope'] as const
+export const TEAM_SEARCHED = ['id', 'name', 'role', 'scope'] as const
 export type TeamSearchedField = (typeof TEAM_SEARCHED)[number]
 
 /**
- * A field's text as it is searched and drawn: the former names joined by `, `, the role words by the row's separator;
- * null when the session has none, and for the name when it is the id, which its row does not repeat.
+ * A field's text as it is searched and drawn: the role words joined by the row's separator; null when the session has
+ * none, and for the name when it is the id, which its row does not repeat.
  */
 export function teamFieldText(session: SessionFacts, field: TeamSearchedField): string | null {
   switch (field) {
@@ -24,8 +25,6 @@ export function teamFieldText(session: SessionFacts, field: TeamSearchedField): 
       return session.id
     case 'name':
       return session.name === session.id ? null : session.name
-    case 'former':
-      return session.formerNames.length === 0 ? null : session.formerNames.join(', ')
     case 'role': {
       const words = roleWords(session)
       return words.length === 0 ? null : words.join(SEPARATOR.text)

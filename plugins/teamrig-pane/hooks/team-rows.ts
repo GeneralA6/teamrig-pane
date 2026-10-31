@@ -2,9 +2,9 @@
 // depth behind a mark that says whether it is open (▾), closed (▸) or has nothing under it. A team's row counts its
 // active and closed sessions; a session's row is its mark (● on the team, ○ dim once retired), its id, its name where
 // it differs, its roles, how many it leads, its hire or its retire, how many of its cards wait on the owner now with a
-// [Meet] press that runs `teamrig meet` on it (T1297) and when the next card the owner put off comes back, and its
-// former names, dim; a closed group's row counts its sessions. A press on a team's or a closed group's row opens or
-// closes what lies under it (`folds`). A press on a session's row opens or closes its card (team-card.ts) under it; a
+// [Meet] press that runs `teamrig meet` on it (T1297) and when the next card the owner put off comes back; a closed
+// group's row counts its sessions. A press on a team's or a closed group's row opens or closes what lies under it
+// (`folds`). A press on a session's row opens or closes its card (team-card.ts) under it; a
 // leader's row, and docked a row with a [Meet], holds its presses instead, a leader's mark opening or closing the
 // sessions it leads and the id its card (`toggles`), and inline, where a row is one press, its row does the first.
 // While the Find field holds a query, the tab draws its search (team-search.ts) on the shared search view
@@ -26,12 +26,11 @@ const TAB = 'team'
 /** The cells each level of the tree indents its rows by, and the open mark's: a child's mark stands under its parent's text. */
 const STEP = 2
 /** What an empty Find field shows on the Team tab. */
-export const TEAM_SEARCH_HINT = 'Type words to find a session by its id, name, former names, role or hire scope.'
+export const TEAM_SEARCH_HINT = 'Type words to find a session by its id, name, role or hire scope.'
 /** What a query no session matches shows. */
 export const TEAM_NOTHING_FOUND = 'Nothing matches. The Team tab searches every session in the tree, retired ones too.'
 /** A Team search counts sessions. */
 const SESSION_NOUN: Noun = { one: 'session', many: 'sessions' }
-const FORMERLY = 'formerly '
 /** The press on a session's row that brings the owner its cards (`teamrig meet`). */
 export const MEET_TEXT = '[Meet]'
 
@@ -119,8 +118,8 @@ function decisionSpans(session: SessionFacts): Span[] {
 
 /**
  * A session's row: its mark, its id (bold on the team, a press that opens or closes its card when `card` names it),
- * its name where it is not the id, its roles, its hire or retire, its cards on the owner, its former names; where
- * `marks` says a search's words matched, underlined.
+ * its name where it is not the id, its roles, its hire or retire, its cards on the owner; where `marks` says a
+ * search's words matched, underlined.
  */
 function sessionSpans(session: SessionFacts, zone: TimeZone, card: string | null, marks: Marks): Span[] {
   const isClosed = !session.active
@@ -131,8 +130,6 @@ function sessionSpans(session: SessionFacts, zone: TimeZone, card: string | null
   if (session.retire === null) spans.push(...roleSpans(session, marks('role')))
   for (const part of tenureWords(session, zone)) spans.push(SEPARATOR, { text: part, dim: true })
   spans.push(...decisionSpans(session))
-  const former = teamFieldText(session, 'former')
-  if (former !== null) spans.push(SEPARATOR, ...prefixedSpans(FORMERLY, former, marks('former'), { dim: true }))
   return spans
 }
 
