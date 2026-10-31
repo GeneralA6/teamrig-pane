@@ -3,8 +3,10 @@
 // puts them into the tree (team.ts teamTree) and writes it only when it changed, reading every POLL_MS (live.ts) and
 // only while the tab shows, as the Log view's LiveLog does. The pane's own team's register tasks, its sessions' cards
 // on the owner, their tasks counted (task-counts.ts) and their unread inbox lines (team-inboxes.ts) go with its read; a
-// peer team's register and inboxes are not the pane's, so its sessions show none of them.
-import type { SessionOwnerCards, Snapshot, TaskCounts, TaskRow, TeamView } from '../types'
+// peer team's register and inboxes are not the pane's, so its sessions show none of them. A team folder whose read
+// fails draws as it last read, or is left out before one, and the view names it with why (T1234); the others draw on.
+// The own team's folder, never read yet, holds the tree up: its failure fails the view.
+import type { SessionOwnerCards, Snapshot, TaskCounts, TaskRow, TeamFolderFailure, TeamView } from '../types'
 import { parseConfigText, readHiringLog, readRenames, type ConfigRead, type HiringRecord, type Rename } from './core/read/index'
 import { POLL_MS, type Timer } from './live'
 import { teamIds, teamStateDir, type TeamFiles } from './places'
@@ -23,6 +25,11 @@ export type OwnReads = {
   readonly inboxes: TeamInboxes | null
 }
 
+/** A team's register parts: the own team's from `own`, a peer's (null `own`) none. */
+function ownParts(own: OwnReads | null): Pick<TeamRead, 'tasks' | 'ownerCards' | 'taskCounts'> {
+  return { tasks: own?.tasks ?? null, ownerCards: own?.ownerCards ?? null, taskCounts: own?.taskCounts ?? null }
+}
+
 /** A team's rename and hire logs, in the state folder its config named when they were made. */
 type TeamLogs = { readonly state: string; readonly renames: WatchedFile<readonly Rename[]>; readonly hires: WatchedFile<readonly HiringRecord[]> }
 
@@ -33,6 +40,8 @@ export class TeamFolder {
   private readonly home: string
   private readonly config: WatchedFile<ConfigRead | null>
   private logs: TeamLogs | null = null
+  /** Its last read that worked: null before one, and once that read found no config teamrig takes. */
+  private last: TeamRead | null = null
 
   constructor(files: Files, teamsDir: string, team: string) {
     this.team = team
@@ -44,30 +53,34 @@ export class TeamFolder {
   /**
    * The team's files as read now, with `own` for the pane's own team (null for a peer's): its tasks, its sessions'
    * cards on the owner and task counts, and the unread inbox lines of the sessions on its config. Null when it has no
-   * config file or teamrig refuses the one there. A
-   * config that moves its state folder reads the logs from the new one. A failed read throws, keeping the stamps of
-   * the files read before it, so the next read tries the rest again.
+   * config file or teamrig refuses the one there. A config that moves its state folder reads the logs from the new
+   * one. A failed read throws, keeping the stamps of the files read before it, so the next read tries the rest again,
+   * and keeps the last read that worked (lastRead).
    */
   async read(own: OwnReads | null): Promise<TeamRead | null> {
     await this.config.refresh()
     const config = this.config.current
-    if (config?.status !== 'loaded') return null
+    if (config?.status !== 'loaded') {
+      this.last = null
+      return null
+    }
     const state = teamStateDir(this.home, config.config)
     const logs = this.logs?.state === state ? this.logs : this.logsIn(state)
     this.logs = logs
     await logs.renames.refresh()
     await logs.hires.refresh()
     const unread = own === null || own.inboxes === null ? null : await own.inboxes.unread(config.config.sessions)
-    return {
-      team: this.team,
-      config: config.config,
-      renames: logs.renames.current,
-      hires: logs.hires.current,
-      tasks: own?.tasks ?? null,
-      unread,
-      ownerCards: own?.ownerCards ?? null,
-      taskCounts: own?.taskCounts ?? null,
-    }
+    const read: TeamRead = { team: this.team, config: config.config, renames: logs.renames.current, hires: logs.hires.current, ...ownParts(own), unread }
+    this.last = read
+    return read
+  }
+
+  /**
+   * Its last read that worked, for a read that failed to fall back on, its register parts taken from `own` as they are
+   * now (they are the pane's, not the folder's); null before one, and once a read found no config teamrig takes.
+   */
+  lastRead(own: OwnReads | null): TeamRead | null {
+    return this.last === null ? null : { ...this.last, ...ownParts(own) }
   }
 
   private logsIn(state: string): TeamLogs {
@@ -152,7 +165,11 @@ export class LiveTeam {
     }
   }
 
-  /** The tree the team folders hold now, or why they could not be read. */
+  /**
+   * The tree the team folders hold now, a folder whose read failed drawn as it last read, or left out before one, and
+   * named with why; or why the folders could not be listed, the register read, or the own team's folder read before
+   * any read of it worked.
+   */
   private async read(): Promise<TeamView> {
     try {
       const ids = teamIds(await this.ports.folders(this.team.teamsDir))
@@ -160,13 +177,23 @@ export class LiveTeam {
       const { tasks, ownerCards, taskCounts } = await this.ports.register()
       const own: OwnReads = { tasks, ownerCards, taskCounts, inboxes: this.inboxes }
       const reads: TeamRead[] = []
+      const failures: TeamFolderFailure[] = []
       for (const id of ids) {
         const folder = this.teams.get(id) ?? new TeamFolder(this.files, this.team.teamsDir, id)
         this.teams.set(id, folder)
-        const read = await folder.read(id === this.team.team ? own : null)
-        if (read !== null) reads.push(read)
+        const folderOwn = id === this.team.team ? own : null
+        try {
+          const read = await folder.read(folderOwn)
+          if (read !== null) reads.push(read)
+        } catch (error) {
+          const last = folder.lastRead(folderOwn)
+          // With no read of the own team, there is no tree to draw the others in: the whole read failed.
+          if (last === null && id === this.team.team) throw error
+          if (last !== null) reads.push(last)
+          failures.push({ team: id, reason: reasonOf(error), isLastRead: last !== null })
+        }
       }
-      return { kind: 'tree', root: teamTree(reads, this.team.team) }
+      return { kind: 'tree', root: teamTree(reads, this.team.team), failures }
     } catch (error) {
       return { kind: 'failed', reason: reasonOf(error) }
     }

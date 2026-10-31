@@ -249,7 +249,7 @@ const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, fals
 const SCROLL_SHAPE = 'scroll-v1'
 const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, AT_TOP, { shape: SCROLL_SHAPE })
 /** The Teams tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
-const TEAM_SHAPE = 'team-v5'
+const TEAM_SHAPE = 'team-v6'
 const TEAM_READING: TeamView = { kind: 'reading' }
 const NO_TEAM_TREE: TeamView = { kind: 'no-team' }
 const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, TEAM_READING, { shape: TEAM_SHAPE })

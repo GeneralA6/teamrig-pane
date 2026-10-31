@@ -12,9 +12,9 @@
 // While the Find field holds a query, the tab draws its search (team-search.ts) on the shared search view
 // (search-view.ts) instead: the count, then the sessions it names under their teams and leaders (team.ts foundRows),
 // the words that matched underlined, a matched hire scope on a dim line under its row, and a press on any session's
-// row opening or closing its card. What the last [Meet] press answered leads the tab. A card prints its days on the
-// team's clock. Pure.
-import type { MeetAnswer, TeamView } from '../types'
+// row opening or closing its card. What the last [Meet] press answered leads the tab, then a WARN line for each team
+// folder the last read could not read (T1234). A card prints its days on the team's clock. Pure.
+import type { MeetAnswer, TeamFolderFailure, TeamView } from '../types'
 import type { TimeZone } from './core/read/index'
 import { META_LINES, SEPARATOR, single, type Block, type Row, type Span } from './rows'
 import { marksOf, type Mark } from './search'
@@ -242,6 +242,13 @@ function meetBlock(answer: MeetAnswer): Block {
   }
 }
 
+/** A team folder the last read could not read: a WARN line naming it, why, and whether the tree draws it as last read. */
+function failureBlock(failure: TeamFolderFailure): Block {
+  const shown = failure.isLastRead ? 'it shows as last read' : 'it is left out'
+  const text = `WARN team ${failure.team} could not be read: ${failure.reason.replace(/\.$/, '')}; ${shown}.`
+  return single(`${TAB}:failure:${failure.team}`, [{ text, color: 'warning' }], { text: '  ' })
+}
+
 /** What the tab draws besides the tree: the Find field's search, and what the last [Meet] press answered. */
 export type TeamExtras = {
   /** The Find field's query and the sessions it names; null or absent outside a search. */
@@ -262,8 +269,9 @@ function treeBlocks(root: TeamTreeNode, toggled: readonly string[], zone: TimeZo
 /**
  * The Teams tab: the tree's rows, with the nodes in `toggled` opened or closed against their default and the sessions
  * whose card key (cardKey) it holds showing their cards, or why none show; while the `extras` search holds the Find
- * field's query, the search's body instead; what the last [Meet] press answered (`meet`) leads either. The row of the
- * `own` session, the one whose pane it is, starts with OWN_MARK.
+ * field's query, the search's body instead; what the last [Meet] press answered (`meet`) leads either, then a WARN line
+ * for each team folder the last read could not read, the no-tree note's too. The row of the `own` session, the one
+ * whose pane it is, starts with OWN_MARK.
  */
 export function teamBlocks(view: TeamView, toggled: readonly string[], zone: TimeZone, { search = null, meet = null, own = null }: TeamExtras = {}): Block[] {
   switch (view.kind) {
@@ -274,8 +282,9 @@ export function teamBlocks(view: TeamView, toggled: readonly string[], zone: Tim
     case 'failed':
       return [single(`${TAB}:note`, [{ text: `The team could not be read: ${view.reason.replace(/\.$/, '')}.`, color: 'warning' }])]
     case 'tree': {
-      if (view.root === null) return [note(`${TAB}:note`, 'No team tree: the team has no config file teamrig can read, and the tree is read from it.')]
-      return [...(meet === null ? [] : [meetBlock(meet)]), ...treeBlocks(view.root, toggled, zone, search, own)]
+      const failures = view.failures.map(failureBlock)
+      if (view.root === null) return [...failures, note(`${TAB}:note`, 'No team tree: the team has no config file teamrig can read, and the tree is read from it.')]
+      return [...(meet === null ? [] : [meetBlock(meet)]), ...failures, ...treeBlocks(view.root, toggled, zone, search, own)]
     }
   }
 }

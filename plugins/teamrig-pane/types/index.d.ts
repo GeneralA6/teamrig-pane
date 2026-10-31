@@ -278,12 +278,19 @@ export type RequirementProblem =
 export type PaneView = 'tasks' | 'changes' | 'log' | 'inbox' | 'team' | 'meetings'
 
 /**
+ * A team folder the Teams tab's last read could not read (hooks/team-source.ts): its team id, why, and whether the tree
+ * draws the team as it last read it (true) or leaves it out, never read before (false).
+ */
+export type TeamFolderFailure = { readonly team: string; readonly reason: string; readonly isLastRead: boolean }
+
+/**
  * The Teams tab's tree (hooks/team-source.ts): the tree of teams that holds the pane's team (hooks/team.ts), its root
- * null when the team's config is missing or teamrig refuses it; or that it is not read yet, that the pane found no
- * team, or why the team folders could not be read.
+ * null when the team's config is missing or teamrig refuses it, and the team folders that read failed; or that it is
+ * not read yet, that the pane found no team, or why the team folders could not be listed, the register read, or the
+ * pane's own team folder read before any read of it worked.
  */
 export type TeamView =
-  | { readonly kind: 'tree'; readonly root: import('../hooks/team').TeamTreeNode | null }
+  | { readonly kind: 'tree'; readonly root: import('../hooks/team').TeamTreeNode | null; readonly failures: readonly TeamFolderFailure[] }
   | { readonly kind: 'reading' }
   | { readonly kind: 'no-team' }
   | { readonly kind: 'failed'; readonly reason: string }
