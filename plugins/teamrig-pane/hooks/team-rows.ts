@@ -3,7 +3,8 @@
 // active and retired sessions; a session's row is its mark (● on the team, ○ dim once retired), its id, its name where
 // it differs, how many sessions it leads in brackets (T1244), its roles, its hire or its retire, how many of its cards wait on the owner now with a
 // [Meet] press that runs `teamrig meet` on it (T1297) and when the next card the owner put off comes back; a retired
-// group's row counts its sessions. A press on a team's or a retired group's row opens or closes what lies under it
+// group's row counts its sessions. The row of the session whose pane it is starts with a green ► in the indent's first
+// cell (T1281), so the viewer finds itself at a glance. A press on a team's or a retired group's row opens or closes what lies under it
 // (`folds`). A press on a session's row opens or closes its card (team-card.ts) under it; a
 // leader's row, and docked a row with a [Meet], holds its presses instead, a leader's mark opening or closing the
 // sessions it leads and the id its card (`toggles`), and inline, where a row is one press, its row does the first.
@@ -33,6 +34,11 @@ export const TEAM_NOTHING_FOUND = 'Nothing matches. The Teams tab searches every
 const SESSION_NOUN: Noun = { one: 'session', many: 'sessions' }
 /** The press on a session's row that brings the owner its cards (`teamrig meet`). */
 export const MEET_TEXT = '[Meet]'
+/**
+ * The mark before the row of the session whose pane it is: one cell of plain text in the success colour. The owner
+ * asked for a green ▶, which is an emoji in some terminals; ► is the same arrow as text.
+ */
+export const OWN_MARK: Span = { text: '►', color: 'success' }
 
 /** The Find field's query on the Teams tab and the sessions it names (team-search.ts searchTeam), in the tree's order. */
 export type TeamSearch = { query: string; hits: readonly SessionHit[] }
@@ -150,10 +156,21 @@ function groupSpans(node: Exclude<TeamTreeNode, { kind: 'session' }>): Span[] {
   }
 }
 
-/** A row's lead: the blank its depth indents it by, and where its wrapped lines start, under its words. */
-function leadOf(depth: number): { before: Span[]; hang: Span } {
+/**
+ * A row's lead: the blank its depth indents it by, the own mark in its first cell on the row of the session whose pane
+ * it is (`own`), and where its wrapped lines start, under its words. A session sits a level under its team at least,
+ * so its indent has the cell.
+ */
+function leadOf(depth: number, own = false): { before: Span[]; hang: Span } {
   const indent = depth * STEP
-  return { before: indent === 0 ? [] : [blank(indent)], hang: blank(indent + STEP) }
+  const mark = own ? [OWN_MARK] : []
+  const rest = indent - mark.length
+  return { before: [...mark, ...(rest > 0 ? [blank(rest)] : [])], hang: blank(indent + STEP) }
+}
+
+/** Whether `node` is the session whose pane it is. */
+function isOwn(node: TeamTreeNode, own: string | null): boolean {
+  return node.kind === 'session' && node.key === own
 }
 
 /** The session's card while `toggled` holds its key, each line behind a guide under its mark; else nothing. */
@@ -173,8 +190,8 @@ function idPress(session: SessionFacts, card: string): string | null {
  * One row of the tree: indented by its depth, its open mark, its words; its wrapped lines start under its words. A
  * session's card, while `toggled` holds its key, follows its row.
  */
-function rowBlock({ node, depth, open }: TeamRow, toggled: ReadonlySet<string>, zone: TimeZone): Block {
-  const { before, hang } = leadOf(depth)
+function rowBlock({ node, depth, open }: TeamRow, toggled: ReadonlySet<string>, zone: TimeZone, own: string | null): Block {
+  const { before, hang } = leadOf(depth, isOwn(node, own))
   if (node.kind !== 'session') {
     const block = single(node.key, [...before, foldMark(open), ...groupSpans(node)], hang)
     return open === null ? block : { ...block, folds: node.key }
@@ -195,8 +212,8 @@ function rowBlock({ node, depth, open }: TeamRow, toggled: ReadonlySet<string>, 
  * to lead to one. A session's row is one press that opens or closes its card, which follows it while open (docked,
  * its id is, on a row that holds a [Meet]).
  */
-function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, SessionHit>, toggled: ReadonlySet<string>, zone: TimeZone): Block {
-  const { before, hang } = leadOf(depth)
+function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, SessionHit>, toggled: ReadonlySet<string>, zone: TimeZone, own: string | null): Block {
+  const { before, hang } = leadOf(depth, isOwn(node, own))
   if (node.kind !== 'session') return single(node.key, [...before, foldMark(open), ...groupSpans(node)], hang)
   const hit = hits.get(node.key)
   const marks: Marks = hit === undefined ? NO_MARKS : field => marksOf(hit, field)
@@ -212,9 +229,9 @@ function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, Se
 }
 
 /** The search's body over the tree: the hint, the line that says nothing matched, or the count and the found rows. */
-function foundBlocks(root: TeamTreeNode, search: TeamSearch, toggled: ReadonlySet<string>, zone: TimeZone): Block[] {
+function foundBlocks(root: TeamTreeNode, search: TeamSearch, toggled: ReadonlySet<string>, zone: TimeZone, own: string | null): Block[] {
   const hits = new Map(search.hits.map(hit => [hit.row.key, hit]))
-  const results = foundRows(root, new Set(hits.keys())).map(row => foundBlock(row, hits, toggled, zone))
+  const results = foundRows(root, new Set(hits.keys())).map(row => foundBlock(row, hits, toggled, zone, own))
   const total = search.hits.length
   return searchViewBlocks({ key: TEAM_SEARCH_VIEW, query: search.query, hint: TEAM_SEARCH_HINT, nothing: TEAM_NOTHING_FOUND, noun: SESSION_NOUN, results, shown: total, total })
 }
@@ -240,21 +257,24 @@ export type TeamExtras = {
   readonly search?: TeamSearch | null
   /** What the last [Meet] press answered; null or absent before one. */
   readonly meet?: MeetAnswer | null
+  /** The node key (team.ts sessionKey) of the session whose pane it is, its row marked; null or absent for none. */
+  readonly own?: string | null
 }
 
-/** The tree's body: the search's while `search` holds a query, else the tree's rows. */
-function treeBlocks(root: TeamTreeNode, toggled: readonly string[], zone: TimeZone, search: TeamSearch | null): Block[] {
+/** The tree's body: the search's while `search` holds a query, else the tree's rows; the `own` session's row marked. */
+function treeBlocks(root: TeamTreeNode, toggled: readonly string[], zone: TimeZone, search: TeamSearch | null, own: string | null): Block[] {
   const keys = new Set(toggled)
-  if (search !== null) return foundBlocks(root, search, keys, zone)
-  return teamRows(root, keys).map(row => rowBlock(row, keys, zone))
+  if (search !== null) return foundBlocks(root, search, keys, zone, own)
+  return teamRows(root, keys).map(row => rowBlock(row, keys, zone, own))
 }
 
 /**
  * The Teams tab: the tree's rows, with the nodes in `toggled` opened or closed against their default and the sessions
  * whose card key (cardKey) it holds showing their cards, or why none show; while the `extras` search holds the Find
- * field's query, the search's body instead; what the last [Meet] press answered (`meet`) leads either.
+ * field's query, the search's body instead; what the last [Meet] press answered (`meet`) leads either. The row of the
+ * `own` session, the one whose pane it is, starts with OWN_MARK.
  */
-export function teamBlocks(view: TeamView, toggled: readonly string[], zone: TimeZone, { search = null, meet = null }: TeamExtras = {}): Block[] {
+export function teamBlocks(view: TeamView, toggled: readonly string[], zone: TimeZone, { search = null, meet = null, own = null }: TeamExtras = {}): Block[] {
   switch (view.kind) {
     case 'reading':
       return [note(`${TAB}:note`, 'Reading the team…')]
@@ -264,7 +284,7 @@ export function teamBlocks(view: TeamView, toggled: readonly string[], zone: Tim
       return [single(`${TAB}:note`, [{ text: `The team could not be read: ${view.reason.replace(/\.$/, '')}.`, color: 'warning' }])]
     case 'tree': {
       if (view.root === null) return [note(`${TAB}:note`, 'No team tree: the team has no config file teamrig can read, and the tree is read from it.')]
-      return [...(meet === null ? [] : [meetBlock(meet)]), ...treeBlocks(view.root, toggled, zone, search)]
+      return [...(meet === null ? [] : [meetBlock(meet)]), ...treeBlocks(view.root, toggled, zone, search, own)]
     }
   }
 }
