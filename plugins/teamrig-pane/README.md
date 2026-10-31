@@ -411,7 +411,9 @@ owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire d
 short. The row of the session whose pane it is starts with a green `►`, so you find yourself at a glance. A retired
 session's row is a dim `○`.
 Teams under another top team are left out. Until there is a tree, the tab says why: no team, a team with no config
-file teamrig can read, or a folder it could not read.
+file teamrig can read, or a failed read of the team folder list, or of its own team's folder before one worked. Any
+other team folder it cannot read (a locked or half-written file) never fails the tab: a `WARN team <id> could not be
+read: …` line above the tree names it, and the team draws as it was last read, or is left out until a read of it works.
 
 A press on a team's or a retired group's row (a click, or Enter or Space on it) closes it (`▸`), and a second press opens
 it again (`▾`). Teams and leaders start open, and a retired group starts closed. A press on a session's row opens its card

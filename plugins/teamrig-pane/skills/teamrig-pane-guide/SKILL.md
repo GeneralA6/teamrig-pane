@@ -587,7 +587,9 @@ retired group's row (a click,
 Enter or Space) closes it or opens it again; on a session's row it opens or closes its card. A leader's row has two
 presses: its mark folds the sessions it leads, its id opens its card. Teams and leaders start open, a retired group
 closed, and the state stays across a hot reload. There are no ← and → keys: the engine binds keys only to buttons. With
-no team, no config teamrig can read, or a folder it cannot read, the view says which.
+no team, no config teamrig can read, or a failed read of the team folder list, or of its own team's folder before one
+worked, the view says which. Any other team folder it cannot read gets a `WARN team <id> could not be read: …` line
+above the tree, and that team draws as last read, or is left out until a read of it works.
 
 `[Meet]` runs `teamrig meet <session>`: teamrig wakes a running session with an inbox line asking it to bring the owner
 its cards now, or opens it in a new tab to do so, and refuses one with no card waiting on the owner. What teamrig
