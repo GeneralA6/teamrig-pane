@@ -88,6 +88,26 @@ describe('ownerCardsOf', () => {
     expect(cards['pane']?.later.map(card => card.until)).toEqual(['10-16 12:00 IDT'])
   })
 
+  test('a session’s Later cards come soonest back first, whatever their plan order', () => {
+    const cards = cardsOf([
+      createLine('T1', { owner: 'pane', by: 'lead', at: NOW - 3 * HOUR, priority: 1 }),
+      createLine('T2', { owner: 'pane', by: 'lead', at: NOW - 3 * HOUR, priority: 3 }),
+      waitingLine('T1', 'pane', NOW - 2 * HOUR, [{ kind: 'decision', who: 'owner' }, { kind: 'time', at: '2026-10-20' }], null, GATED),
+      waitingLine('T2', 'pane', NOW - 2 * HOUR, [{ kind: 'decision', who: 'owner' }, { kind: 'time', at: '2026-10-18' }], null, GATED),
+    ])
+    expect(cards['pane']?.later.map(card => card.id)).toEqual(['T2', 'T1'])
+  })
+
+  test('a card put off to a minute of a day comes back before one put off to that whole day', () => {
+    const cards = cardsOf([
+      createLine('T1', { owner: 'pane', by: 'lead', at: NOW - 3 * HOUR, priority: 1 }),
+      createLine('T2', { owner: 'pane', by: 'lead', at: NOW - 3 * HOUR, priority: 3 }),
+      waitingLine('T1', 'pane', NOW - 2 * HOUR, [{ kind: 'decision', who: 'owner' }, { kind: 'time', at: '2026-10-16' }], null, GATED),
+      waitingLine('T2', 'pane', NOW - 2 * HOUR, [{ kind: 'decision', who: 'owner' }, { kind: 'time', at: '2026-10-16 09:00' }], null, GATED),
+    ])
+    expect(cards['pane']?.later.map(card => card.id)).toEqual(['T2', 'T1'])
+  })
+
   test('each session gets its own cards, in plan order', () => {
     const cards = cardsOf([
       createLine('T1', { owner: 'pane', by: 'lead', at: NOW - 3 * HOUR, priority: 3 }),
