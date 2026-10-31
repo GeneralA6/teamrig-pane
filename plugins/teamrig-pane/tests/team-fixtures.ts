@@ -33,7 +33,8 @@ export function tasksOf(...lines: string[]): TaskRow[] {
 /**
  * Team acme: lead over web and ops, web a sub-lead over api and ui; ops the security reviewer. ui was hired, and
  * launches on its own model and effort; qa was hired, renamed and retired; ops was hired, retired and hired again. api
- * was renamed acme-backend. api has 2 unread inbox lines, lead none, ui never marked its inbox read.
+ * was renamed acme-backend. api has 2 unread inbox lines, lead none, ui never marked its inbox read. api has a card
+ * due on the owner, web one put off; qa's card stays from before its retire.
  */
 export const ACME: TeamRead = {
   team: 'acme',
@@ -65,6 +66,11 @@ export const ACME: TeamRead = {
     ['lead', 0],
     ['qa', 1],
   ]),
+  ownerCards: {
+    api: { due: [{ id: 'T4', title: 'Pick the database' }], later: [] },
+    web: { due: [], later: [{ id: 'T5', title: 'Name the release', until: 'Mon 11-02' }] },
+    qa: { due: [{ id: 'T6', title: 'Keep the old tests' }], later: [] },
+  },
 }
 
 /** Team tools, a child team of acme: boss over dev. */
@@ -75,6 +81,7 @@ export const TOOLS: TeamRead = {
   hires: [],
   tasks: null,
   unread: null,
+  ownerCards: null,
 }
 
 /** Another root team on the machine: another project. */
@@ -85,6 +92,7 @@ export const OTHER: TeamRead = {
   hires: [],
   tasks: null,
   unread: null,
+  ownerCards: null,
 }
 
 /** The tree that holds `own`, failing the test when there is none. */

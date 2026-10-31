@@ -1,13 +1,14 @@
 // The Team tab's source (hooks/team-source.ts): each team folder's config and, in the state folder it names, its rename
 // and hire logs, each re-read only when its stamp moves; the tree of the folders a team id names, written only when it
-// changed and read only while the tab shows; the own team's tasks and unread inbox lines with it, a peer's none.
+// changed and read only while the tab shows; the own team's tasks, cards on the owner and unread inbox lines with it, a
+// peer's none.
 import { describe, expect, test } from 'claude-code/testing'
-import type { TeamView } from '../types'
+import type { SessionOwnerCards, TeamView } from '../types'
 import { POLL_MS } from '../hooks/live'
 import type { TeamFiles } from '../hooks/places'
 import { teamTree, type TeamRead } from '../hooks/team'
 import type { InboxPaths } from '../hooks/team-inboxes'
-import { LiveTeam, TeamFolder } from '../hooks/team-source'
+import { LiveTeam, TeamFolder, type OwnReads } from '../hooks/team-source'
 import { HOUR, MemoryFiles, NOW, S1, createLine, iso, markLine, statusLine } from './fixtures'
 import { configOf, hire, rename, tasksOf } from './team-fixtures'
 
@@ -34,6 +35,8 @@ const TASKS = tasksOf(
   createLine('T2', { at: NOW - 3 * HOUR, by: 'boss', owner: 'dev', title: 'Fix the build' }),
   statusLine('T2', 'dev', NOW - 2 * HOUR, 'in-progress'),
 )
+/** api's card on the owner, on the own team's register. */
+const OWNER_CARDS: Readonly<Record<string, SessionOwnerCards>> = { api: { due: [{ id: 'T3', title: 'Pick the database' }], later: [] } }
 
 /** acme's config and its rename and hire logs in its state folder; tools' config, with no logs. */
 function teamsDisk(): MemoryFiles {
@@ -45,8 +48,10 @@ function teamsDisk(): MemoryFiles {
   return disk
 }
 
-const ACME_READ: TeamRead = { team: 'acme', config: configOf(ACME_CONFIG), renames: [API_RENAME], hires: [API_HIRE], tasks: TASKS, unread: null }
-const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], tasks: null, unread: null }
+const ACME_READ: TeamRead = { team: 'acme', config: configOf(ACME_CONFIG), renames: [API_RENAME], hires: [API_HIRE], tasks: TASKS, unread: null, ownerCards: OWNER_CARDS }
+const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], tasks: null, unread: null, ownerCards: null }
+/** What the pane reads of acme beside its folder, with no inboxes found. */
+const OWN: OwnReads = { tasks: TASKS, ownerCards: OWNER_CARDS, inboxes: null }
 
 /** The message `run` rejects with. */
 async function failure(run: () => Promise<unknown>): Promise<string> {
@@ -59,18 +64,19 @@ async function failure(run: () => Promise<unknown>): Promise<string> {
 }
 
 describe('TeamFolder', () => {
-  test('reads the config, then the rename and hire logs in its state folder; again only the files whose stamp moved', async () => {
+  test("reads the config, then the rename and hire logs in its state folder; again only the files whose stamp moved; a peer's read has no tasks or cards", async () => {
     const disk = teamsDisk()
     const folder = new TeamFolder(disk, TEAMS, 'acme')
-    expect(await folder.read({ tasks: TASKS, inboxes: null })).toEqual(ACME_READ)
+    expect(await folder.read(OWN)).toEqual(ACME_READ)
     expect(disk.reads).toEqual([ACME_CONFIG_PATH, `${ACME_STATE}/renames.jsonl`, `${ACME_STATE}/hires.jsonl`])
 
     disk.reads.length = 0
-    expect(await folder.read({ tasks: TASKS, inboxes: null })).toEqual(ACME_READ)
+    expect(await folder.read(OWN)).toEqual(ACME_READ)
     expect(disk.reads).toEqual([])
 
     disk.write(`${ACME_STATE}/hires.jsonl`, '')
-    expect((await folder.read(null))?.hires).toEqual([])
+    const peer = await folder.read(null)
+    expect([peer?.hires, peer?.tasks, peer?.ownerCards]).toEqual([[], null, null])
     expect(disk.reads).toEqual([`${ACME_STATE}/hires.jsonl`])
   })
 
@@ -117,7 +123,7 @@ function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
       if (listed.failure !== null) throw new Error(listed.failure)
       return dir === TEAMS ? listed.names : []
     },
-    tasks: async () => TASKS,
+    register: async () => ({ tasks: TASKS, ownerCards: OWNER_CARDS }),
     isShown: async () => shown.tab,
     publish: async view => {
       if (failWrites) throw new Error('write refused')
@@ -131,7 +137,7 @@ function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
 }
 
 describe('LiveTeam', () => {
-  test("a refresh writes the tree of the team folders, the own team's tasks with it, a peer's none; again only when it changed", async () => {
+  test("a refresh writes the tree of the team folders, the own team's tasks and cards on the owner with it, a peer's none; again only when it changed", async () => {
     const disk = teamsDisk()
     const { live, views } = fakeTeam(disk)
     await live.refresh()
