@@ -1,6 +1,6 @@
 // The card a session's row opens on the Teams tab (team-rows.ts, T780): what the team's files say of the session, one
-// labelled row per fact (card.ts labelled), each only when it has a value. Role: its roles and how many sessions it
-// leads, or the area it owns. Led by: its leaders, nearest first. Launch: the model and effort teamrig starts it on
+// labelled row per fact (card.ts labelled), each only when it has a value. Role: its roles, each in its role's colour
+// (ROLE_COLORS; a leader that is not the lead is a sub-lead), and how many sessions it leads, or the area it owns. Led by: its leaders, nearest first. Launch: the model and effort teamrig starts it on
 // (describeLaunch). Hired or Rehired: the day, who hired it and the day its hire is reviewed; Scope and Reason: its job
 // and why. Now: its tasks in progress, each id a press that opens the task's page, when the pane reads its team's
 // register. Decisions: its cards waiting on the owner now, and Later: those the owner put off, each with when it comes
@@ -10,6 +10,7 @@
 // and who retired it, why, the session its tasks went to (Heir), and its Handover, a press that opens the file, or why
 // it left none. Each line starts with the guide its row hands it. Days print on the team's clock (meta.ts dayWords).
 // Pure.
+import type { ThemeKey } from 'claude-code'
 import { describeLaunch, type TimeZone } from './core/read/index'
 import { joined, labelled, textLines, type Lines } from './card'
 import { fileLabel } from './details'
@@ -20,21 +21,38 @@ import type { Role, SessionFacts } from './team'
 /** A fact a session's card shows on its labelled row, named as its row's key ends. */
 export type TeamCardField = 'role' | 'led-by' | 'launch' | 'hire' | 'scope' | 'reason' | 'now' | 'decisions' | 'later' | 'inbox' | 'retired' | 'heir' | 'handover'
 
-/** How the tab names each role a team config gives. */
-const ROLE_WORDS: Readonly<Record<Role, string>> = { lead: 'lead', deliveryOwner: 'delivery owner', securityReviewer: 'security reviewer' }
+/** A role the tab names: one a team config gives (`roles`), or a sub-lead, a session its `leads` lists others under. */
+export type TabRole = Role | 'subLead'
+
+/** How the tab names each role. */
+const ROLE_WORDS: Readonly<Record<TabRole, string>> = { lead: 'lead', subLead: 'sub-lead', deliveryOwner: 'delivery owner', securityReviewer: 'security reviewer' }
+
+/** Each role's colour on the tab, a different one each, so the eye finds a role without reading it (T1245). */
+export const ROLE_COLORS: Readonly<Record<TabRole, ThemeKey>> = { lead: 'claude', subLead: 'warning', deliveryOwner: 'success', securityReviewer: 'error' }
 
 /** A card names no task by its words: its tasks are the Now row's, each a span of its own. */
 const NO_IDS = (): boolean => false
 
-/** A session's roles in the tab's words; none for a session the team config gives no role. */
-export function roleWords(session: SessionFacts): string[] {
-  return session.roles.map(role => ROLE_WORDS[role])
+/** A session's roles: sub-lead first for one that leads sessions and is not the lead, then those its team config gives. */
+function tabRoles(session: SessionFacts): TabRole[] {
+  const subLead: TabRole[] = session.leads > 0 && !session.roles.includes('lead') ? ['subLead'] : []
+  return [...subLead, ...session.roles]
 }
 
-/** Its Role row's parts: its roles, then how many sessions it leads when it leads any. */
-function roleParts(session: SessionFacts): string[] {
-  const parts = roleWords(session)
-  if (session.leads > 0) parts.push(`leads ${session.leads} ${session.leads === 1 ? 'session' : 'sessions'}`)
+/** A session's roles in the tab's words, each in its role's colour; none for an area owner, which has no role. */
+export function roleSpans(session: SessionFacts): Span[] {
+  return tabRoles(session).map(role => ({ text: ROLE_WORDS[role], color: ROLE_COLORS[role] }))
+}
+
+/** A session's roles in the tab's words, as its row draws them and the Teams search finds them; none for an area owner. */
+export function roleWords(session: SessionFacts): string[] {
+  return roleSpans(session).map(span => span.text)
+}
+
+/** Its Role row's parts: its roles in their colours, then how many sessions it leads when it leads any. */
+function roleParts(session: SessionFacts): Span[] {
+  const parts = roleSpans(session)
+  if (session.leads > 0) parts.push({ text: `leads ${session.leads} ${session.leads === 1 ? 'session' : 'sessions'}` })
   return parts
 }
 
@@ -84,7 +102,7 @@ export function sessionCard(session: SessionFacts, guide: Span, zone: TimeZone):
   const roles = roleParts(session)
   const hire = session.hire
   return [
-    ...field('role', 'Role', [roles.length === 0 ? [{ text: 'area owner' }] : joined(roles.map(text => ({ text })))]),
+    ...field('role', 'Role', [roles.length === 0 ? [{ text: 'area owner' }] : joined(roles)]),
     ...field('led-by', 'Led by', session.ledBy.length === 0 ? [] : [[{ text: session.ledBy.join(', then ') }]]),
     ...field('launch', 'Launch', session.launch === null ? [] : [[{ text: describeLaunch(session.launch) }]]),
     ...(hire === null

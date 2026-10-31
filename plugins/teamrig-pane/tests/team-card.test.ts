@@ -1,12 +1,12 @@
-// A session's card on the Teams tab (hooks/team-card.ts): its role, leaders, launch, hire, tasks in progress and unread
+// A session's card on the Teams tab (hooks/team-card.ts): its roles in their colours, leaders, launch, hire, tasks in progress and unread
 // inbox lines, or its retire, a labelled row a fact, each only when it has a value, its task ids, inbox count and
 // handover presses of their own.
 import { describe, expect, test } from 'claude-code/testing'
 import { TimeZone } from '../hooks/core/read/index'
 import { LABEL_CELLS } from '../hooks/card'
-import type { Row, Span } from '../hooks/rows'
+import { SEPARATOR, type Row, type Span } from '../hooks/rows'
 import { sessionKey, teamRows, type SessionFacts } from '../hooks/team'
-import { roleWords, sessionCard } from '../hooks/team-card'
+import { ROLE_COLORS, roleSpans, roleWords, sessionCard } from '../hooks/team-card'
 import { HOUR, JERUSALEM, NOW } from './fixtures'
 import { ACME, TOOLS, retire, treeOf } from './team-fixtures'
 
@@ -92,15 +92,30 @@ describe('sessionCard', () => {
     ])
   })
 
-  test("a leader's Role row says how many sessions it leads, one in the singular, after its roles or alone", () => {
+  test("a leader's Role row says how many sessions it leads, one in the singular, after its roles; one not the lead is a sub-lead", () => {
     expect(words(sessionCard(sessionOf('tools', 'boss'), GUIDE, UTC))[0]).toBe(line('Role', 'lead · leads 1 session'))
-    expect(words(sessionCard(sessionOf('acme', 'web'), GUIDE, UTC))[0]).toBe(line('Role', 'leads 2 sessions'))
-    expect(roleWords(sessionOf('acme', 'web'))).toEqual([])
+    expect(words(sessionCard(sessionOf('acme', 'web'), GUIDE, UTC))[0]).toBe(line('Role', 'sub-lead · leads 2 sessions'))
+    expect(roleWords(sessionOf('acme', 'web'))).toEqual(['sub-lead'])
+    expect(roleWords(sessionOf('acme', 'api'))).toEqual([])
   })
 
-  test("each role a team config gives reads in teamrig's words, the delivery owner too", () => {
+  test("each role a team config gives reads in teamrig's words, the delivery owner too; a sub-lead's word comes first", () => {
     const ops = sessionOf('acme', 'ops')
     expect(roleWords({ ...ops, roles: ['lead', 'deliveryOwner', 'securityReviewer'] })).toEqual(['lead', 'delivery owner', 'security reviewer'])
+    expect(roleWords({ ...ops, leads: 1 })).toEqual(['sub-lead', 'security reviewer'])
+  })
+
+  test('each role in a colour of its own, on the Role row too; how many it leads and an area owner in plain text', () => {
+    const ops = sessionOf('acme', 'ops')
+    expect(roleSpans({ ...ops, leads: 1, roles: ['deliveryOwner', 'securityReviewer'] })).toEqual([
+      { text: 'sub-lead', color: 'warning' },
+      { text: 'delivery owner', color: 'success' },
+      { text: 'security reviewer', color: 'error' },
+    ])
+    const colors = Object.values(ROLE_COLORS)
+    expect(new Set(colors).size).toBe(colors.length)
+    expect(valueOf(sessionCard(sessionOf('acme', 'lead'), GUIDE, UTC), 'team-card:acme/lead:role')).toEqual([{ text: 'lead', color: 'claude' }, SEPARATOR, { text: 'leads 2 sessions' }])
+    expect(valueOf(sessionCard(sessionOf('acme', 'api'), GUIDE, UTC), 'team-card:acme/api:role')).toEqual([{ text: 'area owner' }])
   })
 
   test("a retired session's card is its retire: the day and who retired it, why, its heir and its handover, a press", () => {

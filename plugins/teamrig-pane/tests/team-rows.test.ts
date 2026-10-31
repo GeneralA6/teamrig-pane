@@ -1,5 +1,6 @@
 // The Teams tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts,
-// a session's name, how many it leads, roles, hire or retire (never a name it no longer runs under), a retired group's count, a
+// a session's name, how many it leads, roles in their colours (never a name it no longer runs under, nor a hire or
+// retire day: its card has them), a retired group's count, a
 // press on each row that opens what lies under it or a session's card, a leader's two, and the notes for a tree it
 // cannot show.
 import { describe, expect, test } from 'claude-code/testing'
@@ -31,10 +32,10 @@ describe('teamBlocks', () => {
     expect(words(teamBlocks(TREE, [], UTC))).toEqual([
       ['team:acme', ['▾ acme · 5 active · 1 retired']],
       ['session:acme/lead', ['  ▾ ● lead  acme-lead (2) · lead']],
-      ['session:acme/web', ['    ▾ ● web  acme-web (2) · later Mon 11-02']],
+      ['session:acme/web', ['    ▾ ● web  acme-web (2) · sub-lead · later Mon 11-02']],
       ['session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet]']],
-      ['session:acme/ui', ['        ● ui  acme-ui · hired Fri 10-09 · review 10-25']],
-      ['session:acme/ops', ['      ● ops  acme-ops · security reviewer · rehired Sun 10-11 · review 10-25']],
+      ['session:acme/ui', ['        ● ui  acme-ui']],
+      ['session:acme/ops', ['      ● ops  acme-ops · security reviewer']],
       ['retired:acme', ['  ▸ retired (1)']],
       ['team:tools', ['  ▾ tools · 2 active · 0 retired']],
       ['session:tools/boss', ['    ▾ ● boss  tools-boss (1) · lead']],
@@ -133,11 +134,11 @@ describe('teamBlocks', () => {
     expect(qa.card?.map(row => row.key)[0]).toBe('team-card:acme/qa:retired')
   })
 
-  test('the retired group opens on a toggle: a retired session dim behind ○ under its last name, and its retire day', () => {
+  test('the retired group opens on a toggle: a retired session dim behind ○ under its last name, its retire day on its card', () => {
     const blocks = teamBlocks(TREE, ['retired:acme'], UTC)
     expect(words(blocks).slice(6, 8)).toEqual([
       ['retired:acme', ['  ▾ retired (1)']],
-      ['session:acme/qa', ['      ○ qa  acme-tester · retired Sun 10-11']],
+      ['session:acme/qa', ['      ○ qa  acme-tester']],
     ])
     const [mark, id, name] = blockOf(blocks, 'session:acme/qa').rows[0]?.spans.slice(2) ?? []
     expect([mark, id, name]).toEqual([
@@ -148,12 +149,23 @@ describe('teamBlocks', () => {
     expect(blockOf(blocks, 'session:acme/lead').rows[0]?.spans.slice(2, 4)).toEqual([{ text: '● ' }, { text: 'lead', bold: true, toggles: cardKey('session:acme/lead') }])
   })
 
-  test("days print on the team's clock", () => {
+  test("a row's roles each in its role's colour, a leader not the lead a sub-lead; an area owner's row shows no role", () => {
+    const blocks = teamBlocks(TREE, [], UTC)
+    const spansOf = (key: string) => blockOf(blocks, key).rows[0]?.spans ?? []
+    expect(spansOf('session:acme/lead').slice(-2)).toEqual([SEPARATOR, { text: 'lead', color: 'claude' }])
+    expect(spansOf('session:acme/web').slice(-4, -2)).toEqual([SEPARATOR, { text: 'sub-lead', color: 'warning' }])
+    expect(spansOf('session:acme/ops').slice(-2)).toEqual([SEPARATOR, { text: 'security reviewer', color: 'error' }])
+    expect(spansOf('session:acme/ui').some(span => span.color !== undefined)).toBe(false)
+  })
+
+  test("a card under its row prints its days on the team's clock; the row prints none", () => {
     const late = { ...ACME, hires: [hire('ui', Date.UTC(2026, 9, 11, 22, 30))] }
     const tree: TeamView = { kind: 'tree', root: treeOf([late], 'acme') }
-    const ui = (zone: TimeZone) => words(teamBlocks(tree, [], zone)).find(([key]) => key === 'session:acme/ui')?.[1]
-    expect(ui(UTC)).toEqual(['        ● ui  acme-ui · hired Sun 10-11 · review 10-25'])
-    expect(ui(JERUSALEM)).toEqual(['        ● ui  acme-ui · hired Mon 10-12 · review 10-25'])
+    const ui = (zone: TimeZone) => blockOf(teamBlocks(tree, [cardKey('session:acme/ui')], zone), 'session:acme/ui')
+    expect(words([ui(UTC)])[0]?.[1]).toEqual(['        ● ui  acme-ui'])
+    const hired = (zone: TimeZone) => ui(zone).card?.find(row => row.key === 'team-card:acme/ui:hire')?.spans.map(span => span.text).join('')
+    expect(hired(UTC)).toContain('Sun 10-11 by lead')
+    expect(hired(JERUSALEM)).toContain('Mon 10-12 by lead')
   })
 
   test('a session whose name is its id shows the id alone, and none of the names it ran under before', () => {
@@ -170,7 +182,7 @@ describe('teamBlocks', () => {
     const marked = (shown: Block[]) => shown.filter(block => block.rows.some(row => row.spans.includes(OWN_MARK))).map(block => block.key)
     expect(marked(blocks)).toEqual(['session:acme/web'])
     expect(blockOf(blocks, 'session:acme/web').rows[0]?.spans.slice(0, 2)).toEqual([OWN_MARK, { text: '   ' }])
-    expect(words(blocks).find(([key]) => key === 'session:acme/web')?.[1]).toEqual(['►   ▾ ● web  acme-web (2) · later Mon 11-02'])
+    expect(words(blocks).find(([key]) => key === 'session:acme/web')?.[1]).toEqual(['►   ▾ ● web  acme-web (2) · sub-lead · later Mon 11-02'])
     // The words stay where an unmarked row has them, and its wrapped lines and card under them.
     expect(blockOf(blocks, 'session:acme/web').rows[0]?.hang?.text).toBe('      ')
     // At the top level of sessions, the lead's, the mark still leaves a blank before the open mark.
@@ -216,7 +228,7 @@ describe('teamBlocks with a search', () => {
       ['team-search-count', ['1 session matches']],
       ['team:acme', ['▾ acme · 5 active · 1 retired']],
       ['session:acme/lead', ['  ▾ ● lead  acme-lead (2) · lead']],
-      ['session:acme/web', ['    ▾ ● web  acme-web (2) · later Mon 11-02']],
+      ['session:acme/web', ['    ▾ ● web  acme-web (2) · sub-lead · later Mon 11-02']],
       ['team-search:session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet]']],
     ])
     const api = blockOf(blocks, 'team-search:session:acme/api').rows[0]?.spans ?? []
@@ -229,8 +241,8 @@ describe('teamBlocks with a search', () => {
   test('its name and role words underlined where they matched; a query no one session holds every word of names none', () => {
     expect(searched('reviewer backend').map(block => block.key)).toEqual(['team-search-none'])
     const ops = blockOf(searched('reviewer'), 'team-search:session:acme/ops').rows[0]?.spans ?? []
-    expect(ops.filter(span => span.underline === true)).toEqual([{ text: 'reviewer', dim: true, underline: true }])
-    expect(ops.slice(5, 8)).toEqual([SEPARATOR, { text: 'security ', dim: true }, { text: 'reviewer', dim: true, underline: true }])
+    expect(ops.filter(span => span.underline === true)).toEqual([{ text: 'reviewer', color: 'error', underline: true }])
+    expect(ops.slice(5, 8)).toEqual([SEPARATOR, { text: 'security ', color: 'error' }, { text: 'reviewer', color: 'error', underline: true }])
     const named = blockOf(searched('backend'), 'team-search:session:acme/api').rows[0]?.spans ?? []
     expect(named.filter(span => span.underline === true)).toEqual([{ text: 'backend', dim: false, underline: true }])
   })
@@ -250,10 +262,17 @@ describe('teamBlocks with a search', () => {
   test("a retired session shows in its open retired group; each session's row is one press that opens its card, which follows it", () => {
     expect(searched('tester').map(block => block.key)).toEqual(['team-search-count', 'team:acme', 'retired:acme', 'team-search:session:acme/qa'])
     const blocks = searched('lead', [cardKey('session:acme/lead')])
-    expect(blocks.map(block => block.folds)).toEqual([undefined, undefined, cardKey('session:acme/lead'), undefined, cardKey('session:tools/boss')])
+    expect(blocks.map(block => block.folds)).toEqual([
+      undefined,
+      undefined,
+      cardKey('session:acme/lead'),
+      cardKey('session:acme/web'),
+      undefined,
+      cardKey('session:tools/boss'),
+    ])
     expect(blocks.some(block => block.rows.some(row => row.spans.some(span => span.toggles !== undefined)))).toBe(false)
     expect(blockOf(blocks, 'team-search:session:acme/lead').card?.[0]?.key).toBe('team-card:acme/lead:role')
-    expect(blocks[0]?.rows[0]?.spans[0]?.text).toBe('2 sessions match')
+    expect(blocks[0]?.rows[0]?.spans[0]?.text).toBe('3 sessions match')
   })
 
   test('the session whose pane it is keeps its mark on its row among the results', () => {
