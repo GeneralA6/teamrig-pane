@@ -39,6 +39,7 @@ describe('teamFieldText', () => {
     expect(teamFieldText(lead, 'role')).toBe('lead')
     const ops = sessionAt(ROOT, sessionKey('acme', 'ops'))
     expect(teamFieldText({ ...ops, roles: ['lead', 'securityReviewer'] }, 'role')).toBe(`lead${SEPARATOR.text}security reviewer`)
+    expect(teamFieldText(sessionAt(ROOT, sessionKey('acme', 'web')), 'role')).toBe('sub-lead')
     expect(teamFieldText(lead, 'scope')).toBeNull()
     const named = sessionAt(treeOf([{ ...ACME, renames: [rename('lead', 'acme-lead', 'lead')] }], 'acme'), sessionKey('acme', 'lead'))
     expect(teamFieldText(named, 'name')).toBeNull()
@@ -60,6 +61,7 @@ describe('searchTeam', () => {
 
   test('a session by its role words or its hire scope, each word of the query in some field', () => {
     expect(keysOf(searchTeam(ROOT, 'reviewer'))).toEqual([sessionKey('acme', 'ops')])
+    expect(keysOf(searchTeam(ROOT, 'sub-lead'))).toEqual([sessionKey('acme', 'web')])
     const ops = hitOf(searchTeam(ROOT, 'ops again'), sessionKey('acme', 'ops'))
     expect(marksOf(ops, 'id')).toEqual([{ start: 0, end: 3 }])
     expect(marksOf(ops, 'scope')).toEqual([{ start: 0, end: 3 }, { start: 4, end: 9 }])
@@ -67,7 +69,8 @@ describe('searchTeam', () => {
   })
 
   test('every session it names, in the tree order, retired ones and the child team too', () => {
-    expect(keysOf(searchTeam(ROOT, 'lead'))).toEqual([sessionKey('acme', 'lead'), sessionKey('tools', 'boss')])
+    // A sub-lead is a lead's word too.
+    expect(keysOf(searchTeam(ROOT, 'lead'))).toEqual([sessionKey('acme', 'lead'), sessionKey('acme', 'web'), sessionKey('tools', 'boss')])
     expect(keysOf(searchTeam(ROOT, 'qa'))).toEqual([sessionKey('acme', 'qa')])
     expect(keysOf(searchTeam(ROOT, 'tester'))).toEqual([sessionKey('acme', 'qa')])
   })

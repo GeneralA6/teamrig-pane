@@ -1,8 +1,9 @@
 // The Teams tab as blocks of rows (rows.ts): the team tree (team.ts) a node a row, depth first, each indented by its
 // depth behind a mark that says whether it is open (▾), closed (▸) or has nothing under it. A team's row counts its
 // active and retired sessions; a session's row is its mark (● on the team, ○ dim once retired), its id, its name where
-// it differs, how many sessions it leads in brackets (T1244), its roles, its hire or its retire, how many of its cards wait on the owner now with a
-// [Meet] press that runs `teamrig meet` on it (T1297) and when the next card the owner put off comes back; a retired
+// it differs, how many sessions it leads in brackets (T1244), its roles each in its role's colour (team-card.ts
+// ROLE_COLORS, T1245), how many of its cards wait on the owner now with a [Meet] press that runs `teamrig meet` on it
+// (T1297) and when the next card the owner put off comes back; its hire and retire days are its card's. A retired
 // group's row counts its sessions. The row of the session whose pane it is starts with a green ► in the indent's first
 // cell (T1281), so the viewer finds itself at a glance. A press on a team's or a retired group's row opens or closes what lies under it
 // (`folds`). A press on a session's row opens or closes its card (team-card.ts) under it; a
@@ -11,16 +12,15 @@
 // While the Find field holds a query, the tab draws its search (team-search.ts) on the shared search view
 // (search-view.ts) instead: the count, then the sessions it names under their teams and leaders (team.ts foundRows),
 // the words that matched underlined, a matched hire scope on a dim line under its row, and a press on any session's
-// row opening or closing its card. What the last [Meet] press answered leads the tab. Days print on the team's clock
-// (meta.ts dayWords). Pure.
+// row opening or closing its card. What the last [Meet] press answered leads the tab. A card prints its days on the
+// team's clock. Pure.
 import type { MeetAnswer, TeamView } from '../types'
 import type { TimeZone } from './core/read/index'
-import { dayWords } from './meta'
 import { META_LINES, SEPARATOR, single, type Block, type Row, type Span } from './rows'
 import { marksOf, type Mark } from './search'
 import { excerpt, markedSpans, resultKey, searchViewBlocks, type Noun } from './search-view'
 import { foundRows, teamRows, type SessionFacts, type SessionNode, type TeamRow, type TeamTreeNode } from './team'
-import { roleWords, sessionCard } from './team-card'
+import { roleSpans, sessionCard } from './team-card'
 import { TEAM_SEARCH_VIEW, teamFieldText, type SessionHit, type TeamSearchedField } from './team-search'
 
 const TAB = 'team'
@@ -81,22 +81,15 @@ function prefixedSpans(prefix: string, text: string, marks: readonly Mark[], sty
   return markedSpans(`${prefix}${text}`, marks.map(mark => ({ start: mark.start + prefix.length, end: mark.end + prefix.length })), style)
 }
 
-/** Its roles, a part each behind the separator, the role `marks` (of the parts joined as teamFieldText joins them) underlined. */
-function roleSpans(session: SessionFacts, marks: readonly Mark[]): Span[] {
+/** Its roles, each behind the separator in its role's colour, the role `marks` (of the words joined as teamFieldText joins them) underlined. */
+function markedRoles(session: SessionFacts, marks: readonly Mark[]): Span[] {
   const spans: Span[] = []
   let at = 0
-  for (const part of roleWords(session)) {
-    spans.push(SEPARATOR, ...markedSpans(part, within(marks, at, part.length), { dim: true }))
-    at += part.length + SEPARATOR.text.length
+  for (const { text, color } of roleSpans(session)) {
+    spans.push(SEPARATOR, ...markedSpans(text, within(marks, at, text.length), { color }))
+    at += text.length + SEPARATOR.text.length
   }
   return spans
-}
-
-/** How it came to the team: its hire and the day it is reviewed, or its retire. */
-function tenureWords(session: SessionFacts, zone: TimeZone): string[] {
-  if (session.retire !== null) return [`retired ${dayWords(session.retire.at, zone)}`]
-  if (session.hire === null) return []
-  return [`${session.rehiredFrom === null ? 'hired' : 'rehired'} ${dayWords(session.hire.at, zone)}`, `review ${session.hire.reviewBy.slice(5)}`]
 }
 
 /** Whether the session's row holds a [Meet] press: a card of it waits on the owner now. */
@@ -124,19 +117,17 @@ function decisionSpans(session: SessionFacts): Span[] {
 
 /**
  * A session's row: its mark, its id (bold on the team, a press that opens or closes its card when `card` names it),
- * its name where it is not the id, how many sessions it leads in brackets, dim, its roles, its hire or retire, its
- * cards on the owner; where `marks` says a search's words matched, underlined.
+ * its name where it is not the id, how many sessions it leads in brackets, dim, its roles in their colours, its cards
+ * on the owner; where `marks` says a search's words matched, underlined. Its hire and retire are its card's.
  */
-function sessionSpans(session: SessionFacts, zone: TimeZone, card: string | null, marks: Marks): Span[] {
+function sessionSpans(session: SessionFacts, card: string | null, marks: Marks): Span[] {
   const isRetired = !session.active
   const idStyle: Omit<Span, 'text'> = isRetired ? { dim: true } : { bold: true }
   const spans: Span[] = [isRetired ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.id, marks('id'), card === null ? idStyle : { ...idStyle, toggles: card })]
   const name = teamFieldText(session, 'name')
   if (name !== null) spans.push(...prefixedSpans('  ', name, marks('name'), { dim: isRetired }))
   if (session.leads > 0) spans.push({ text: ` (${session.leads})`, dim: true })
-  if (session.retire === null) spans.push(...roleSpans(session, marks('role')))
-  for (const part of tenureWords(session, zone)) spans.push(SEPARATOR, { text: part, dim: true })
-  spans.push(...decisionSpans(session))
+  spans.push(...markedRoles(session, marks('role')), ...decisionSpans(session))
   return spans
 }
 
@@ -199,10 +190,10 @@ function rowBlock({ node, depth, open }: TeamRow, toggled: ReadonlySet<string>, 
   const card = cardKey(node.key)
   const opened = openCard(node, hang, toggled, zone)
   if (open === null) {
-    const spans = [...before, foldMark(open), ...sessionSpans(node.session, zone, idPress(node.session, card), NO_MARKS)]
+    const spans = [...before, foldMark(open), ...sessionSpans(node.session, idPress(node.session, card), NO_MARKS)]
     return { ...single(node.key, spans, hang), folds: card, ...opened }
   }
-  const spans = [...before, { ...foldMark(open), toggles: node.key }, ...sessionSpans(node.session, zone, card, NO_MARKS)]
+  const spans = [...before, { ...foldMark(open), toggles: node.key }, ...sessionSpans(node.session, card, NO_MARKS)]
   return { ...single(node.key, spans, hang), folds: node.key, ...opened }
 }
 
@@ -218,7 +209,7 @@ function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, Se
   const hit = hits.get(node.key)
   const marks: Marks = hit === undefined ? NO_MARKS : field => marksOf(hit, field)
   const key = hit === undefined ? node.key : resultKey(TEAM_SEARCH_VIEW, node.key)
-  const rows: Row[] = [{ key, spans: [...before, foldMark(open), ...sessionSpans(node.session, zone, idPress(node.session, cardKey(node.key)), marks)], hang }]
+  const rows: Row[] = [{ key, spans: [...before, foldMark(open), ...sessionSpans(node.session, idPress(node.session, cardKey(node.key)), marks)], hang }]
   const scope = teamFieldText(node.session, 'scope')
   if (scope !== null && marks('scope').length > 0) {
     const shown = excerpt(scope, marks('scope'))
