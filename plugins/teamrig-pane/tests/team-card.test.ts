@@ -67,7 +67,7 @@ describe('sessionCard', () => {
 
   test("the lead's card: its roles and the sessions it leads, no leaders, the lead's launch defaults, nothing in progress", () => {
     expect(words(sessionCard(sessionOf('acme', 'lead'), GUIDE, UTC))).toEqual([
-      line('Role', 'lead · leads 2'),
+      line('Role', 'lead · leads 2 sessions'),
       line('Launch', 'model opus at xhigh effort'),
       line('Now', 'nothing in progress'),
       line('Inbox', '0 unread'),
@@ -90,6 +90,12 @@ describe('sessionCard', () => {
       line('Launch', 'the default model and effort'),
       line('Rehired', 'Sun 10-11 by lead · review Sun 10-25'),
     ])
+  })
+
+  test("a leader's Role row says how many sessions it leads, one in the singular, after its roles or alone", () => {
+    expect(words(sessionCard(sessionOf('tools', 'boss'), GUIDE, UTC))[0]).toBe(line('Role', 'lead · leads 1 session'))
+    expect(words(sessionCard(sessionOf('acme', 'web'), GUIDE, UTC))[0]).toBe(line('Role', 'leads 2 sessions'))
+    expect(roleWords(sessionOf('acme', 'web'))).toEqual([])
   })
 
   test("each role a team config gives reads in teamrig's words, the delivery owner too", () => {

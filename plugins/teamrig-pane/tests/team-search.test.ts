@@ -36,7 +36,9 @@ describe('teamFieldText', () => {
     const lead = sessionAt(ROOT, sessionKey('acme', 'lead'))
     expect(teamFieldText(lead, 'id')).toBe('lead')
     expect(teamFieldText(lead, 'name')).toBe('acme-lead')
-    expect(teamFieldText(lead, 'role')).toBe(`lead${SEPARATOR.text}leads 2`)
+    expect(teamFieldText(lead, 'role')).toBe('lead')
+    const ops = sessionAt(ROOT, sessionKey('acme', 'ops'))
+    expect(teamFieldText({ ...ops, roles: ['lead', 'securityReviewer'] }, 'role')).toBe(`lead${SEPARATOR.text}security reviewer`)
     expect(teamFieldText(lead, 'scope')).toBeNull()
     const named = sessionAt(treeOf([{ ...ACME, renames: [rename('lead', 'acme-lead', 'lead')] }], 'acme'), sessionKey('acme', 'lead'))
     expect(teamFieldText(named, 'name')).toBeNull()
@@ -65,13 +67,17 @@ describe('searchTeam', () => {
   })
 
   test('every session it names, in the tree order, retired ones and the child team too', () => {
-    expect(keysOf(searchTeam(ROOT, 'lead'))).toEqual([sessionKey('acme', 'lead'), sessionKey('acme', 'web'), sessionKey('tools', 'boss')])
+    expect(keysOf(searchTeam(ROOT, 'lead'))).toEqual([sessionKey('acme', 'lead'), sessionKey('tools', 'boss')])
     expect(keysOf(searchTeam(ROOT, 'qa'))).toEqual([sessionKey('acme', 'qa')])
     expect(keysOf(searchTeam(ROOT, 'tester'))).toEqual([sessionKey('acme', 'qa')])
   })
 
   test('a word matches the start of a word only, never inside one', () => {
     expect(searchTeam(ROOT, 'end')).toEqual([])
+  })
+
+  test('how many sessions a leader leads is no word to search by: its row draws it as a bare count', () => {
+    expect(searchTeam(ROOT, 'leads')).toEqual([])
   })
 
   test('a blank query, or no tree: no sessions', () => {

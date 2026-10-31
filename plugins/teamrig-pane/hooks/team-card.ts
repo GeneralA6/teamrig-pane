@@ -1,6 +1,6 @@
 // The card a session's row opens on the Team tab (team-rows.ts, T780): what the team's files say of the session, one
-// labelled row per fact (card.ts labelled), each only when it has a value. Role: its roles and how many it leads, or
-// the area it owns. Led by: its leaders, nearest first. Launch: the model and effort teamrig starts it on
+// labelled row per fact (card.ts labelled), each only when it has a value. Role: its roles and how many sessions it
+// leads, or the area it owns. Led by: its leaders, nearest first. Launch: the model and effort teamrig starts it on
 // (describeLaunch). Hired or Rehired: the day, who hired it and the day its hire is reviewed; Scope and Reason: its job
 // and why. Now: its tasks in progress, each id a press that opens the task's page, when the pane reads its team's
 // register. Decisions: its cards waiting on the owner now, and Later: those the owner put off, each with when it comes
@@ -26,10 +26,15 @@ const ROLE_WORDS: Readonly<Record<Role, string>> = { lead: 'lead', deliveryOwner
 /** A card names no task by its words: its tasks are the Now row's, each a span of its own. */
 const NO_IDS = (): boolean => false
 
-/** A session's roles and how many it leads, in the tab's words; none for a session that only owns its area. */
+/** A session's roles in the tab's words; none for a session the team config gives no role. */
 export function roleWords(session: SessionFacts): string[] {
-  const parts = session.roles.map(role => ROLE_WORDS[role])
-  if (session.leads > 0) parts.push(`leads ${session.leads}`)
+  return session.roles.map(role => ROLE_WORDS[role])
+}
+
+/** Its Role row's parts: its roles, then how many sessions it leads when it leads any. */
+function roleParts(session: SessionFacts): string[] {
+  const parts = roleWords(session)
+  if (session.leads > 0) parts.push(`leads ${session.leads} ${session.leads === 1 ? 'session' : 'sessions'}`)
   return parts
 }
 
@@ -76,7 +81,7 @@ export function sessionCard(session: SessionFacts, guide: Span, zone: TimeZone):
       ...field('handover', 'Handover', handoverLines(retire)),
     ]
   }
-  const roles = roleWords(session)
+  const roles = roleParts(session)
   const hire = session.hire
   return [
     ...field('role', 'Role', [roles.length === 0 ? [{ text: 'area owner' }] : joined(roles.map(text => ({ text })))]),

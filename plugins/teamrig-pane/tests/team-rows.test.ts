@@ -1,5 +1,5 @@
 // The Team tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts,
-// a session's name, roles, leads, hire or retire (never a name it no longer runs under), a closed group's count, a
+// a session's name, how many it leads, roles, hire or retire (never a name it no longer runs under), a closed group's count, a
 // press on each row that opens what lies under it or a session's card, a leader's two, and the notes for a tree it
 // cannot show.
 import { describe, expect, test } from 'claude-code/testing'
@@ -28,14 +28,14 @@ describe('teamBlocks', () => {
   test('a row a node, depth first: each indented by its depth behind ▾ open, ▸ closed or blank, its words after', () => {
     expect(words(teamBlocks(TREE, [], UTC))).toEqual([
       ['team:acme', ['▾ acme · 5 active · 1 closed']],
-      ['session:acme/lead', ['  ▾ ● lead  acme-lead · lead · leads 2']],
-      ['session:acme/web', ['    ▾ ● web  acme-web · leads 2 · later Mon 11-02']],
+      ['session:acme/lead', ['  ▾ ● lead  acme-lead (2) · lead']],
+      ['session:acme/web', ['    ▾ ● web  acme-web (2) · later Mon 11-02']],
       ['session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet]']],
       ['session:acme/ui', ['        ● ui  acme-ui · hired Fri 10-09 · review 10-25']],
       ['session:acme/ops', ['      ● ops  acme-ops · security reviewer · rehired Sun 10-11 · review 10-25']],
       ['closed:acme', ['  ▸ closed (1)']],
       ['team:tools', ['  ▾ tools · 2 active · 0 closed']],
-      ['session:tools/boss', ['    ▾ ● boss  tools-boss · lead · leads 1']],
+      ['session:tools/boss', ['    ▾ ● boss  tools-boss (1) · lead']],
       ['session:tools/dev', ['        ● dev  tools-dev']],
     ])
   })
@@ -59,6 +59,12 @@ describe('teamBlocks', () => {
     const holdsPresses = (block: Block) => block.rows.some(row => row.spans.some(span => span.toggles !== undefined))
     // A row with a [Meet] holds its id's press too, docked: its card's (see below).
     expect(blocks.filter(holdsPresses).map(block => block.key)).toEqual(['session:acme/lead', 'session:acme/web', 'session:acme/api', 'session:tools/boss'])
+  })
+
+  test("a leader's row counts the sessions it leads in brackets after its name, dim; one that leads none shows none", () => {
+    const blocks = teamBlocks(TREE, [], UTC)
+    expect(blockOf(blocks, 'session:acme/web').rows[0]?.spans.slice(4, 6)).toEqual([{ text: '  acme-web', dim: false }, { text: ' (2)', dim: true }])
+    expect(blockOf(blocks, 'session:acme/ui').rows[0]?.spans.some(span => span.text.startsWith(' ('))).toBe(false)
   })
 
   test("a session's row counts its cards waiting on the owner, with a [Meet] press, and names when the next put off comes back", () => {
@@ -178,8 +184,8 @@ describe('teamBlocks with a search', () => {
     expect(words(blocks)).toEqual([
       ['team-search-count', ['1 session matches']],
       ['team:acme', ['▾ acme · 5 active · 1 closed']],
-      ['session:acme/lead', ['  ▾ ● lead  acme-lead · lead · leads 2']],
-      ['session:acme/web', ['    ▾ ● web  acme-web · leads 2 · later Mon 11-02']],
+      ['session:acme/lead', ['  ▾ ● lead  acme-lead (2) · lead']],
+      ['session:acme/web', ['    ▾ ● web  acme-web (2) · later Mon 11-02']],
       ['team-search:session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet]']],
     ])
     const api = blockOf(blocks, 'team-search:session:acme/api').rows[0]?.spans ?? []
@@ -212,11 +218,11 @@ describe('teamBlocks with a search', () => {
 
   test("a retired session shows in its open closed group; each session's row is one press that opens its card, which follows it", () => {
     expect(searched('tester').map(block => block.key)).toEqual(['team-search-count', 'team:acme', 'closed:acme', 'team-search:session:acme/qa'])
-    const blocks = searched('lead', [cardKey('session:acme/web')])
-    expect(blocks.map(block => block.folds)).toEqual([undefined, undefined, cardKey('session:acme/lead'), cardKey('session:acme/web'), undefined, cardKey('session:tools/boss')])
+    const blocks = searched('lead', [cardKey('session:acme/lead')])
+    expect(blocks.map(block => block.folds)).toEqual([undefined, undefined, cardKey('session:acme/lead'), undefined, cardKey('session:tools/boss')])
     expect(blocks.some(block => block.rows.some(row => row.spans.some(span => span.toggles !== undefined)))).toBe(false)
-    expect(blockOf(blocks, 'team-search:session:acme/web').card?.[0]?.key).toBe('team-card:acme/web:role')
-    expect(blocks[0]?.rows[0]?.spans[0]?.text).toBe('3 sessions match')
+    expect(blockOf(blocks, 'team-search:session:acme/lead').card?.[0]?.key).toBe('team-card:acme/lead:role')
+    expect(blocks[0]?.rows[0]?.spans[0]?.text).toBe('2 sessions match')
   })
 
   test('the hint for a query with no word, the nothing line for one that names no session, the notes before a tree', () => {
