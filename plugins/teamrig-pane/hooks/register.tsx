@@ -927,13 +927,10 @@ export const register: Register = on => {
               : current === 'changes'
                 ? changesBlocks(changed, isGitMissing(missing), await read($, diffs), place.kind === 'search' ? { query: place.query, hits: changesFound } : null)
                 : current === 'team'
-                  ? teamBlocks(
-                      team,
-                      await read($, teamToggled),
-                      clockOf(snap).zone,
-                      place.kind === 'search' ? { query: place.query, hits: teamFound } : null,
-                      await read($, ownerMeet),
-                    )
+                  ? teamBlocks(team, await read($, teamToggled), clockOf(snap).zone, {
+                      search: place.kind === 'search' ? { query: place.query, hits: teamFound } : null,
+                      meet: await read($, ownerMeet),
+                    })
                   : current === 'meetings'
                   ? meetingsBlocks(await read($, meetings), await read($, meetingsOpen), await read($, meetingStart), snap.tasks, snap.now)
                   : current === 'inbox'

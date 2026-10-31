@@ -89,7 +89,7 @@ describe('teamBlocks', () => {
   })
 
   test('what the last [Meet] press answered leads the tab: asking, asked with what teamrig printed, or why it was refused', () => {
-    const led = (answer: MeetAnswer) => teamBlocks(TREE, [], UTC, null, answer)[0]
+    const led = (answer: MeetAnswer) => teamBlocks(TREE, [], UTC, { meet: answer })[0]
     const asking = led({ session: 'api', outcome: 'asking', lines: [] })
     expect(asking === undefined ? [] : words([asking])).toEqual([['team:meet', ['Asking api for its cards…']]])
     const asked = led({ session: 'api', outcome: 'asked', lines: ['WOKE acme-backend (session api)'] })
@@ -102,9 +102,9 @@ describe('teamBlocks', () => {
       [{ text: '  api has no card waiting on owner now', color: 'warning' }],
     ])
     // It leads a search too, and the tree follows it.
-    const searched = teamBlocks(TREE, [], UTC, { query: 'api', hits: searchTeam(ROOT, 'api') }, { session: 'api', outcome: 'asking', lines: [] })
+    const searched = teamBlocks(TREE, [], UTC, { search: { query: 'api', hits: searchTeam(ROOT, 'api') }, meet: { session: 'api', outcome: 'asking', lines: [] } })
     expect(searched.map(block => block.key).slice(0, 2)).toEqual(['team:meet', 'team-search-count'])
-    expect(teamBlocks(TREE, [], UTC, null, null)[0]?.key).toBe('team:acme')
+    expect(teamBlocks(TREE, [], UTC, { search: null, meet: null })[0]?.key).toBe('team:acme')
   })
 
   test("a leader's row holds two presses, docked: its mark opens or closes the sessions it leads, its id its card", () => {
@@ -177,7 +177,7 @@ describe('teamBlocks', () => {
 })
 
 describe('teamBlocks with a search', () => {
-  const searched = (query: string, toggled: readonly string[] = []) => teamBlocks(TREE, toggled, UTC, { query, hits: searchTeam(ROOT, query) })
+  const searched = (query: string, toggled: readonly string[] = []) => teamBlocks(TREE, toggled, UTC, { search: { query, hits: searchTeam(ROOT, query) } })
 
   test('the count, then each session it names under its team and leaders, whatever is toggled, its matched words underlined', () => {
     const blocks = searched('api', ['team:acme', 'session:acme/web'])
@@ -228,7 +228,7 @@ describe('teamBlocks with a search', () => {
   test('the hint for a query with no word, the nothing line for one that names no session, the notes before a tree', () => {
     expect(words(searched(' '))).toEqual([['team-search-hint', [TEAM_SEARCH_HINT]]])
     expect(words(searched('nobody'))).toEqual([['team-search-none', [TEAM_NOTHING_FOUND]]])
-    expect(words(teamBlocks({ kind: 'reading' }, [], UTC, { query: 'api', hits: [] }))).toEqual([['team:note', ['Reading the team…']]])
+    expect(words(teamBlocks({ kind: 'reading' }, [], UTC, { search: { query: 'api', hits: [] } }))).toEqual([['team:note', ['Reading the team…']]])
   })
 })
 
