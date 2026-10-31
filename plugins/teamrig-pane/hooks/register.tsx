@@ -20,7 +20,7 @@
 // keeps them (the team config's turnLog.keepHours) from the turn logs it writes (turn-log.ts), a press on a session
 // opening its page at its newest lines, back (b) returning to the list, the Inbox view: the session's inbox lines of
 // the last 24 hours and its unread ones, newest first, with a search of its own (inbox-rows.ts, inbox-search.ts), a
-// press on the header's unread count opening it, and the Team tab: the tree of teams the
+// press on the header's unread count opening it, and the Teams tab: the tree of teams the
 // session's team is in, each team's lead over the sessions it leads and its retired ones (team.ts, team-source.ts), a
 // press on a row opening or closing what lies under it, a session's cards on the owner counted on its row and on the
 // switch (`Teams (2)`), its [Meet] press running `teamrig meet` on it (owner-meet.ts), and the Meetings view: the
@@ -245,13 +245,13 @@ const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, fals
 /** Where the docked body's window is to stand (body-scroll.ts), kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when BodyScroll or ScrollTarget changes shape. */
 const SCROLL_SHAPE = 'scroll-v1'
 const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, AT_TOP, { shape: SCROLL_SHAPE })
-/** The Team tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
+/** The Teams tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
 const TEAM_SHAPE = 'team-v4'
 const TEAM_READING: TeamView = { kind: 'reading' }
 const NO_TEAM_TREE: TeamView = { kind: 'no-team' }
 const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, TEAM_READING, { shape: TEAM_SHAPE })
 const NOTHING_TOGGLED: readonly string[] = []
-/** The Team tab's nodes the person opened or closed against their default (team.ts teamRows), by key: a press flips one. */
+/** The Teams tab's nodes the person opened or closed against their default (team.ts teamRows), by key: a press flips one. */
 const teamToggled = atom({ plugin: 'teamrig-pane', key: 'teamToggled' } as const, NOTHING_TOGGLED)
 /** The Meetings view's list (meetings.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when MeetingsView or Meeting changes shape. */
 const MEETINGS_SHAPE = 'meetings-v1'
@@ -264,7 +264,7 @@ const NO_START: MeetingStart | null = null
 /** What the last [Start meeting] press answered (meetings.ts): cleared at each session start and each switch to the view. */
 const meetingStart = atom({ plugin: 'teamrig-pane', key: 'meetingStart' } as const, NO_START)
 const NO_MEET: MeetAnswer | null = null
-/** What the last [Meet] press on the Team tab answered (owner-meet.ts): cleared at each session start and each switch to the tab. */
+/** What the last [Meet] press on the Teams tab answered (owner-meet.ts): cleared at each session start and each switch to the tab. */
 const ownerMeet = atom({ plugin: 'teamrig-pane', key: 'ownerMeet' } as const, NO_MEET)
 
 /** The open cards less one. */
@@ -448,11 +448,11 @@ export const register: Register = on => {
   let diffing: LiveDiffs | null = null
   /** Reads the Log view's list or page again while it shows; set when the session starts. */
   let logging: LiveLog | null = null
-  /** Reads the Team tab's tree again while it shows; set when the session starts, null with no team. */
+  /** Reads the Teams tab's tree again while it shows; set when the session starts, null with no team. */
   let teaming: LiveTeam | null = null
   /** Reads the Meetings view's list again while it shows and starts a meeting on a press; set when the session starts, null with no team. */
   let scheduling: LiveMeetings | null = null
-  /** Runs `teamrig meet` on a Team tab row's [Meet] press; set when the session starts, null with no team. */
+  /** Runs `teamrig meet` on a Teams tab row's [Meet] press; set when the session starts, null with no team. */
   let meeting: OwnerMeet | null = null
   /** Looks for the register again while the project is not set up for teamrig; set when the session starts in one. */
   let watch: SetupWatch | null = null
@@ -526,7 +526,7 @@ export const register: Register = on => {
     }
     /**
      * Reads the register `places` names, in place of any read before: its tasks, a task's refs and goals, the Log
-     * view's turn logs and the Team tab's team folders. Places with a problem show it in place of the tasks.
+     * view's turn logs and the Teams tab's team folders. Places with a problem show it in place of the tasks.
      */
     const bind = async (places: Exclude<Places, { kind: 'unset' }>): Promise<void> => {
       live?.stop()
@@ -851,7 +851,7 @@ export const register: Register = on => {
     let scroll: BodyScroll = AT_TOP
     /** The tasks the search shown matched, read once for its body, the Find field's Enter and the line under it; none off a search. */
     let found: SearchResults = NO_RESULTS
-    /** The sessions the Team tab's search shown names (team-search.ts), read once for its body, Enter and the line under the field; none off it. */
+    /** The sessions the Teams tab's search shown names (team-search.ts), read once for its body, Enter and the line under the field; none off it. */
     let teamFound: readonly SessionHit[] = []
     /** The inbox lines the Inbox view's search shown matches (inbox-search.ts), read once for its body and the line under the field; none off it. */
     let inboxFound: readonly InboxHit[] = []
@@ -965,7 +965,7 @@ export const register: Register = on => {
     }
     // A press on the switch's buttons. The Tasks button shows the list, from a page too,
     // scrolled back to where the page was opened from; the Log button shows the sessions, from a session's page too;
-    // the Team button reads the team tree at once; the Meetings button reads the meetings at once, leaving the last
+    // the Teams button reads the team tree at once; the Meetings button reads the meetings at once, leaving the last
     // start's answer behind. Every button closes a search, which the views share: one typed in
     // one view is never found shown in another.
     const switchTo = async (target: PaneView) => {
@@ -983,7 +983,7 @@ export const register: Register = on => {
         await scheduling?.refresh()
       }
     }
-    // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Team tab session's
+    // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Teams tab session's
     // card, or another area's inbox count on it) shows the Tasks view at it, over its list: back shows the list, never the Team
     // tab's search; from the Tasks view's list, the list remembers `from`, the element the press was in, to scroll back to.
     const openPlace = async (place: Place, from: string) => {
@@ -1010,7 +1010,7 @@ export const register: Register = on => {
       await readFilePage(file.file)
       await openPlace({ kind: 'file', file: file.file, line: file.line }, from)
     }
-    // A press on a Team tab card's inbox count opens that inbox: the session's own in the Inbox view, another area's as
+    // A press on a Teams tab card's inbox count opens that inbox: the session's own in the Inbox view, another area's as
     // a file's page, landing on its first unread line (unreadLine). Reading it marks nothing read:
     // the pane writes no inbox, the session's `teamrig inbox read` does.
     const openInbox = async (press: InboxPress, from: string) => {
@@ -1050,7 +1050,7 @@ export const register: Register = on => {
       await openPage(top.id, fieldKey(field))
       await focusOn($, 'back')
     }
-    // Enter in the Find field on the Team tab: with one match it opens that session's card too (openedWith, never
+    // Enter in the Find field on the Teams tab: with one match it opens that session's card too (openedWith, never
     // closing it), and either way moves the ring onto the first match drawn, where Enter opens or closes its card.
     const submitTeam = async (query: string) => {
       const tree = await read($, teamTree)
@@ -1101,7 +1101,7 @@ export const register: Register = on => {
     /**
      * A card's lines with no press as one Text; a line with one as a row of its pieces, each id a press that opens
      * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, an inbox count
-     * one that opens the inbox's, keyed `goto:inbox:`, each Team tab key one that opens or closes it in its span's
+     * one that opens the inbox's, keyed `goto:inbox:`, each Teams tab key one that opens or closes it in its span's
      * style, keyed `team:`, each session of a tab tied to none one that ties the tab to it as `/teamrig-pane
      * <session>` does, keyed `pin:`, a scheduled meeting's [Start meeting] one that starts it, keyed `start:`, a Team
      * tab row's [Meet] one that runs `teamrig meet` on its session, keyed `meet:`, then where it is drawn (`from`, the
@@ -1177,13 +1177,13 @@ export const register: Register = on => {
         </Box>
       )
     }
-    // A Team tab key, or a meeting's card in the Meetings view, opened or closed.
+    // A Teams tab key, or a meeting's card in the Meetings view, opened or closed.
     const fold = (key: string) =>
       current === 'meetings'
         ? update($, meetingsOpen, opened => toggledWith(opened, key))
         : update($, teamToggled, toggled => toggledWith(toggled, key))
     // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
-    // conversation's Log page (`reads`), opens or closes a Team tab key or a meeting's card (`folds`), or a Changes
+    // conversation's Log page (`reads`), opens or closes a Teams tab key or a meeting's card (`folds`), or a Changes
     // file's diff (`expands`: inline a file's row, docked a Changes search result), else words alone.
     const headOf = (drawn: Drawn) => {
       const id = drawn.toggle
@@ -1223,7 +1223,7 @@ export const register: Register = on => {
       )
     }
     // A Button holds strings and Texts alone, so an open card (its links, its ids) draws under the task's Button, not
-    // in it. A page's title is no press: its card is always open. An element drawn as parts (a Team tab leader, its
+    // in it. A page's title is no press: its card is always open. An element drawn as parts (a Teams tab leader, its
     // fold mark and id presses) is a column Box of them and its open card's, under its key.
     const drawBlock = (drawn: Drawn) => {
       if (drawn.parts !== undefined)
@@ -1477,7 +1477,7 @@ export const register: Register = on => {
     // The Find field, under the switch in the dock in the Tasks view whatever it shows, in the Inbox, Team and Changes
     // views and over the Log view's list, never in the Meetings view (a few rows, nothing to search): the first change
     // opens a search (a place, so back from a result's page
-    // returns to it), each change shows the results for its words, Enter opens the one match's page (on the Team tab
+    // returns to it), each change shows the results for its words, Enter opens the one match's page (on the Teams tab
     // its card, on the Changes view its diff) or moves the ring onto the first of more (in the Inbox view, whose lines
     // open nothing, it does nothing), and an empty field or clear closes the search. It is drawn under its round's key,
     // holding what the round started with (find-field.ts): the query of the search shown, else nothing; never the

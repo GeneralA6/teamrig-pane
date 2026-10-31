@@ -1,8 +1,8 @@
-// The Team tab's [Meet] press (T1297): runs `teamrig meet <session>`, which wakes a running session with an inbox line
+// The Teams tab's [Meet] press (T1297): runs `teamrig meet <session>`, which wakes a running session with an inbox line
 // asking it to bring the owner its cards, or opens it fresh in a new tab to do so, and refuses a session with no card
 // waiting on the owner now. One run at a time: it tells that it asks, then what the CLI answered, its lines on
 // success and its refusal verbatim. The CLI finds the team from the tab's folder, the team whose register the pane
-// reads, as the Team tab's cards are that team's alone. Runs the CLI only; no model calls.
+// reads, as the Teams tab's cards are that team's alone. Runs the CLI only; no model calls.
 import type { MeetAnswer } from '../types'
 import { messageOf } from './errors'
 import { cliArgv, failureLines, linesOf, type CliRun, type TeamrigCli } from './teamrig-cli'

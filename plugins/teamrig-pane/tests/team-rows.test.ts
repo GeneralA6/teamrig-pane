@@ -1,4 +1,4 @@
-// The Team tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts,
+// The Teams tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts,
 // a session's name, how many it leads, roles, hire or retire (never a name it no longer runs under), a retired group's count, a
 // press on each row that opens what lies under it or a session's card, a leader's two, and the notes for a tree it
 // cannot show.

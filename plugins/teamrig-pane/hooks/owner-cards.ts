@@ -1,4 +1,4 @@
-// Each session's cards on the owner, as the Team tab counts them and `teamrig meet` asks them (T1297): those the lead
+// Each session's cards on the owner, as the Teams tab counts them and `teamrig meet` asks them (T1297): those the lead
 // asks the owner now, and those the owner put off (Later) with when they come back, in teamrig's words. teamrig's
 // reader groups them (ownerCardsBySession); this keeps only what the pane draws, the Later ones soonest back first so
 // a session's row names the next. Pure: the clock decides when a Later card comes back, so a poll recomputes them as

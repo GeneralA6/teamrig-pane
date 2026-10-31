@@ -267,7 +267,7 @@ export type RequirementProblem =
 export type PaneView = 'tasks' | 'changes' | 'log' | 'inbox' | 'team' | 'meetings'
 
 /**
- * The Team tab's tree (hooks/team-source.ts): the tree of teams that holds the pane's team (hooks/team.ts), its root
+ * The Teams tab's tree (hooks/team-source.ts): the tree of teams that holds the pane's team (hooks/team.ts), its root
  * null when the team's config is missing or teamrig refuses it; or that it is not read yet, that the pane found no
  * team, or why the team folders could not be read.
  */
@@ -319,7 +319,7 @@ export type MeetingsView =
 export type MeetingStart = { readonly id: string; readonly outcome: 'starting' | 'started' | 'refused'; readonly lines: readonly string[] }
 
 /**
- * What the last [Meet] press on the Team tab answered (hooks/owner-meet.ts): the session, whether teamrig is still
+ * What the last [Meet] press on the Teams tab answered (hooks/owner-meet.ts): the session, whether teamrig is still
  * asking it, asked it to bring the owner its cards, or refused, and the lines it printed (the tab it woke or opened),
  * or why it refused.
  */
@@ -494,9 +494,9 @@ declare module 'claude-code' {
       setup: Shaped<SetupView | null>
       /** Where the docked body's window is to stand: the last step that moved it (hooks/body-scroll.ts). */
       bodyScroll: Shaped<BodyScroll>
-      /** The team tree the Team tab shows (hooks/team-source.ts), as last read. */
+      /** The team tree the Teams tab shows (hooks/team-source.ts), as last read. */
       teamTree: Shaped<TeamView>
-      /** The Team tab's nodes the person opened or closed against their default (hooks/team.ts teamRows), by key. */
+      /** The Teams tab's nodes the person opened or closed against their default (hooks/team.ts teamRows), by key. */
       teamToggled: readonly string[]
       /** The team's meetings the Meetings view shows (hooks/meetings.ts), as last read. */
       meetings: Shaped<MeetingsView>
@@ -504,7 +504,7 @@ declare module 'claude-code' {
       meetingsOpen: readonly string[]
       /** What the last [Start meeting] press answered; null before one, and after a session start or a switch to the view. */
       meetingStart: MeetingStart | null
-      /** What the last [Meet] press on the Team tab answered; null before one, and after a session start or a switch to the tab. */
+      /** What the last [Meet] press on the Teams tab answered; null before one, and after a session start or a switch to the tab. */
       ownerMeet: MeetAnswer | null
     }
   }

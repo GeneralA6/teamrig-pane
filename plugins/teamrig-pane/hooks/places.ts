@@ -48,7 +48,7 @@ type DirKey = Exclude<SettingKey, 'goalsDoc'>
 
 /**
  * The session's team and where teamrig keeps it: its folder (which holds the team's notes, read for a card's
- * reference files), the kit home's teams folder that holds it and its peers (the Team tab, team-source.ts), the files
+ * reference files), the kit home's teams folder that holds it and its peers (the Teams tab, team-source.ts), the files
  * that name its sessions, its config and its rename log, and its sessions' turn log (turn-log.ts): its folder and the
  * config's `turnLog.keepHours`, null with no config file, a team teamrig refuses and writes no turn log for; any file
  * may not be there.

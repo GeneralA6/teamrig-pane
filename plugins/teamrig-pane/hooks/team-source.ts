@@ -1,4 +1,4 @@
-// The Team tab's source (T780): the kit home's team folders and, in each, the team's config and the rename and hire
+// The Teams tab's source (T780): the kit home's team folders and, in each, the team's config and the rename and hire
 // logs in the state folder that config names, each file re-read only when its stamp moves (source.ts WatchedFile). It
 // puts them into the tree (team.ts teamTree) and writes it only when it changed, reading every POLL_MS (live.ts) and
 // only while the tab shows, as the Log view's LiveLog does. The pane's own team's register tasks, its sessions' cards
@@ -81,7 +81,7 @@ export type TeamPorts = {
   folders: (dir: string) => Promise<readonly string[]>
   /** The pane's own team's register tasks and its sessions' cards on the owner, as the pane last read them. */
   register: () => Promise<Pick<Snapshot, 'tasks' | 'ownerCards'>>
-  /** True while the pane shows the Team tab, open (not minimized). */
+  /** True while the pane shows the Teams tab, open (not minimized). */
   isShown: () => Promise<boolean>
   publish: (view: TeamView) => Promise<void>
 }
@@ -91,7 +91,7 @@ function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** Reads the team tree again while the Team tab shows, and writes it when it changed. */
+/** Reads the team tree again while the Teams tab shows, and writes it when it changed. */
 export class LiveTeam {
   private readonly files: Files
   private readonly team: TeamFiles

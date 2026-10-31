@@ -1,4 +1,4 @@
-// The card a session's row opens on the Team tab (team-rows.ts, T780): what the team's files say of the session, one
+// The card a session's row opens on the Teams tab (team-rows.ts, T780): what the team's files say of the session, one
 // labelled row per fact (card.ts labelled), each only when it has a value. Role: its roles and how many sessions it
 // leads, or the area it owns. Led by: its leaders, nearest first. Launch: the model and effort teamrig starts it on
 // (describeLaunch). Hired or Rehired: the day, who hired it and the day its hire is reviewed; Scope and Reason: its job

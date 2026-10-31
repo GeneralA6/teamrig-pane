@@ -1,4 +1,4 @@
-// The Team tab's source (hooks/team-source.ts): each team folder's config and, in the state folder it names, its rename
+// The Teams tab's source (hooks/team-source.ts): each team folder's config and, in the state folder it names, its rename
 // and hire logs, each re-read only when its stamp moves; the tree of the folders a team id names, written only when it
 // changed and read only while the tab shows; the own team's tasks, cards on the owner and unread inbox lines with it, a
 // peer's none.

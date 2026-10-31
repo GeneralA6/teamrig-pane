@@ -20,13 +20,13 @@ import { cells } from './width'
  * text color. With `href` the text is a link to that address (a card's Links row), never split across lines. With
  * `task` the text is that task's id in an open card (ids.ts), which a press on opens as a page; never split either.
  * With `file` the text names a file a card's Reference row lists (ref-file.ts), which a press on opens as a page too
- * (file-page.ts); never split. With `inbox` the text is an unread count (a Team tab card's), which a press
- * on opens: the session's own in the Inbox view, another area's as a file's page at its first unread line; never split. With `toggles` the text is a press that opens or closes that Team tab key
+ * (file-page.ts); never split. With `inbox` the text is an unread count (a Teams tab card's), which a press
+ * on opens: the session's own in the Inbox view, another area's as a file's page at its first unread line; never split. With `toggles` the text is a press that opens or closes that Teams tab key
  * (team-rows.ts): a leader's fold mark its node, its id its card; never split. With `pins` the text is a session's id
  * a press on ties the tab to, as `/teamrig-pane <session>` does (a tab tied to no session, noSessionBlock); never split.
  * With `starts` the text is a press that starts that meeting (a scheduled meeting's card, meetings-rows.ts); never
  * split. With `meets` the text is a press that runs `teamrig meet` on that session, which brings the owner its cards
- * (a Team tab row's [Meet], team-rows.ts); never split. `underline` marks the words a search matched (search-view.ts).
+ * (a Teams tab row's [Meet], team-rows.ts); never split. `underline` marks the words a search matched (search-view.ts).
  */
 export type Span = {
   text: string
@@ -67,7 +67,7 @@ export type Row = {
  * that card's rows (card.ts) while it is open, drawn under the block's rows and outside its press (a repo's files in
  * the Changes view are its header's card too, each a press of its own: changes-rows.ts); `opens` names
  * the task a press on it opens the page of (a search result, search-rows.ts); `reads` names the conversation a press
- * on it opens the Log page of (log-rows.ts); `folds` names the key a press on it opens or closes: on the Team tab a
+ * on it opens the Log page of (log-rows.ts); `folds` names the key a press on it opens or closes: on the Teams tab a
  * node or a session's card (team-rows.ts), on the Meetings view a meeting's card (meetings-rows.ts); docked only
  * while its rows hold no press of their own (`toggles`), which take its place there; `expands` names the Changes file whose diff a press on it opens or closes, docked (a Changes search
  * result, changes-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.

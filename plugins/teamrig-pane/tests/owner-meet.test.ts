@@ -1,4 +1,4 @@
-// The Team tab's [Meet] press (hooks/owner-meet.ts): runs `teamrig meet <session>` from the tab's folder, one at a
+// The Teams tab's [Meet] press (hooks/owner-meet.ts): runs `teamrig meet <session>` from the tab's folder, one at a
 // time, and tells that it asks, then what the CLI printed, or why it refused, verbatim.
 import { describe, expect, test } from 'claude-code/testing'
 import type { MeetAnswer } from '../types'
