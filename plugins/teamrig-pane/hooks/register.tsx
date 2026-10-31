@@ -91,6 +91,7 @@ import { logResultKey, searchLog, type LogHit } from './log-search'
 import { inboxBlocks } from './inbox-rows'
 import { searchInbox, type InboxHit } from './inbox-search'
 import { LiveTeam } from './team-source'
+import { sessionKey } from './team'
 import { cardKey, openedWith, teamBlocks, toggledWith } from './team-rows'
 import { searchTeam, TEAM_SEARCH_VIEW, type SessionHit } from './team-search'
 import { SetupWatch } from './setup'
@@ -930,6 +931,7 @@ export const register: Register = on => {
                   ? teamBlocks(team, await read($, teamToggled), clockOf(snap).zone, {
                       search: place.kind === 'search' ? { query: place.query, hits: teamFound } : null,
                       meet: await read($, ownerMeet),
+                      own: snap.team === null || snap.area === null ? null : sessionKey(snap.team, snap.area),
                     })
                   : current === 'meetings'
                   ? meetingsBlocks(await read($, meetings), await read($, meetingsOpen), await read($, meetingStart), snap.tasks, snap.now)
