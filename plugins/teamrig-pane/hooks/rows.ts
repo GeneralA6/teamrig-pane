@@ -25,7 +25,8 @@ import { cells } from './width'
  * (team-rows.ts): a leader's fold mark its node, its id its card; never split. With `pins` the text is a session's id
  * a press on ties the tab to, as `/teamrig-pane <session>` does (a tab tied to no session, noSessionBlock); never split.
  * With `starts` the text is a press that starts that meeting (a scheduled meeting's card, meetings-rows.ts); never
- * split. `underline` marks the words a search matched (search-view.ts).
+ * split. With `meets` the text is a press that runs `teamrig meet` on that session, which brings the owner its cards
+ * (a Team tab row's [Meet], team-rows.ts); never split. `underline` marks the words a search matched (search-view.ts).
  */
 export type Span = {
   text: string
@@ -40,6 +41,7 @@ export type Span = {
   toggles?: string
   pins?: string
   starts?: string
+  meets?: string
 }
 
 /** What an unread count's press opens: the area whose inbox it is, and how many of its newest lines are unread. */

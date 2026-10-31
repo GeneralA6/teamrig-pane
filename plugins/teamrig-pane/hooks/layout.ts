@@ -17,7 +17,7 @@ import { cells, graphemes } from './width'
 /**
  * A piece of a line that holds a press: a task id and the task it names, a reference file and the file it names, an
  * unread count and the inbox it opens, a Team tab key, a session a press ties the tab to, a meeting a press starts,
- * or the words between them.
+ * a session a press meets the owner with, or the words between them.
  */
 export type Piece =
   | { kind: 'id'; span: Span; task: string }
@@ -26,6 +26,7 @@ export type Piece =
   | { kind: 'toggle'; span: Span; toggles: string }
   | { kind: 'pin'; span: Span; pins: string }
   | { kind: 'start'; span: Span; starts: string }
+  | { kind: 'meet'; span: Span; meets: string }
   | { kind: 'words'; spans: Span[] }
 /**
  * A run of a card's lines: a Text of the lines that hold no press (`text`), one line that holds one (`line`), its
@@ -107,13 +108,14 @@ function sameStyle(a: Span, b: Span): boolean {
     a.inbox?.unread === b.inbox?.unread &&
     a.toggles === b.toggles &&
     a.pins === b.pins &&
-    a.starts === b.starts
+    a.starts === b.starts &&
+    a.meets === b.meets
   )
 }
 
 /**
  * Whether `span` is a press drawn as a piece of its line: a task id or a reference file in a card, an inbox count, a
- * Team tab key, a session to tie the tab to, a meeting to start.
+ * Team tab key, a session to tie the tab to, a meeting to start, a session to meet.
  */
 function isPress(span: Span): boolean {
   return (
@@ -122,7 +124,8 @@ function isPress(span: Span): boolean {
     span.inbox !== undefined ||
     span.toggles !== undefined ||
     span.pins !== undefined ||
-    span.starts !== undefined
+    span.starts !== undefined ||
+    span.meets !== undefined
   )
 }
 
@@ -289,8 +292,8 @@ function joinedLines(lines: Lines): Span[] {
 }
 
 /**
- * A line's spans as pieces: each task id, reference file, inbox count, Team tab key, session to tie the tab to and
- * meeting to start its own, each run of words between them one.
+ * A line's spans as pieces: each task id, reference file, inbox count, Team tab key, session to tie the tab to,
+ * meeting to start and session to meet its own, each run of words between them one.
  */
 export function piecesOf(line: readonly Span[]): Piece[] {
   const pieces: Piece[] = []
@@ -302,6 +305,7 @@ export function piecesOf(line: readonly Span[]): Piece[] {
     else if (span.toggles !== undefined) pieces.push({ kind: 'toggle', span, toggles: span.toggles })
     else if (span.pins !== undefined) pieces.push({ kind: 'pin', span, pins: span.pins })
     else if (span.starts !== undefined) pieces.push({ kind: 'start', span, starts: span.starts })
+    else if (span.meets !== undefined) pieces.push({ kind: 'meet', span, meets: span.meets })
     else if (last?.kind === 'words') last.spans.push(span)
     else pieces.push({ kind: 'words', spans: [span] })
   }

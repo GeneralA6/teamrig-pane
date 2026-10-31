@@ -47,6 +47,7 @@ describe('press-keys', () => {
     expect(pieceKey({ kind: 'start', span: { text: '[Start meeting]' }, starts: 'M3' }, 'meeting:M3', 'meeting:M3:card:start', 1)).toBe(
       'start:M3:meeting:M3:meeting:M3:card:start:1',
     )
+    expect(pieceKey({ kind: 'meet', span: { text: '[Meet]' }, meets: 'api' }, 'session:acme/api', 'row', 9)).toBe('meet:api:session:acme/api:row:9')
     expect(diffKey('C1-open', 'f1')).toBe('diff:C1-open:f1')
   })
 

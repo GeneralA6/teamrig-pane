@@ -22,14 +22,15 @@
 // the last 24 hours and its unread ones, newest first, with a search of its own (inbox-rows.ts, inbox-search.ts), a
 // press on the header's unread count opening it, and the Team tab: the tree of teams the
 // session's team is in, each team's lead over the sessions it leads and its retired ones (team.ts, team-source.ts), a
-// press on a row opening or closing what lies under it, and the Meetings view: the team's scheduled and started
-// meetings by time (meetings.ts, meetings-rows.ts), a press on one opening its card, whose [Start meeting] press
-// starts it. The band above the prompt shows the session's
+// press on a row opening or closing what lies under it, a session's cards on the owner counted on its row, its
+// [Meet] press running `teamrig meet` on it (owner-meet.ts), and the Meetings view: the
+// team's scheduled and started meetings by time (meetings.ts, meetings-rows.ts), a press on one opening its card,
+// whose [Start meeting] press starts it. The band above the prompt shows the session's
 // name and the task it works on now
 // (banner.ts), a press opening its card and a button beside it the pane at the task's page, whether the pane is
 // open, minimized or never drawn. Reads
-// files and runs git (status, diff, grep) and the teamrig CLI (meeting list and start; no model calls); /teamrig-pane
-// steers it.
+// files and runs git (status, diff, grep) and the teamrig CLI (meeting list and start, meet; no model calls);
+// /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
 import type { Components, Context, Register } from 'claude-code'
 import type {
@@ -41,6 +42,7 @@ import type {
   LogList,
   LogPage,
   LogRead,
+  MeetAnswer,
   MeetingStart,
   MeetingsView,
   Nav,
@@ -94,6 +96,7 @@ import { searchTeam, TEAM_SEARCH_VIEW, type SessionHit } from './team-search'
 import { SetupWatch } from './setup'
 import { setupBlocks } from './setup-rows'
 import { LiveMeetings } from './meetings'
+import { OwnerMeet } from './owner-meet'
 import { meetingsBlocks } from './meetings-rows'
 import { findTeamrigCli } from './teamrig-cli'
 import {
@@ -260,6 +263,9 @@ const meetingsOpen = atom({ plugin: 'teamrig-pane', key: 'meetingsOpen' } as con
 const NO_START: MeetingStart | null = null
 /** What the last [Start meeting] press answered (meetings.ts): cleared at each session start and each switch to the view. */
 const meetingStart = atom({ plugin: 'teamrig-pane', key: 'meetingStart' } as const, NO_START)
+const NO_MEET: MeetAnswer | null = null
+/** What the last [Meet] press on the Team tab answered (owner-meet.ts): cleared at each session start and each switch to the tab. */
+const ownerMeet = atom({ plugin: 'teamrig-pane', key: 'ownerMeet' } as const, NO_MEET)
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -446,6 +452,8 @@ export const register: Register = on => {
   let teaming: LiveTeam | null = null
   /** Reads the Meetings view's list again while it shows and starts a meeting on a press; set when the session starts, null with no team. */
   let scheduling: LiveMeetings | null = null
+  /** Runs `teamrig meet` on a Team tab row's [Meet] press; set when the session starts, null with no team. */
+  let meeting: OwnerMeet | null = null
   /** Looks for the register again while the project is not set up for teamrig; set when the session starts in one. */
   let watch: SetupWatch | null = null
   /** The tab title last asked for: `Tasks · 3 changed` (changes-rows.ts paneTitle). */
@@ -475,6 +483,7 @@ export const register: Register = on => {
     await update($, barFilter, () => null)
     // A start's answer is to its press: a new session, or a hot reload, shows none.
     await update($, meetingStart, () => NO_START)
+    await update($, ownerMeet, () => NO_MEET)
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
     // The teamrig CLI the Meetings view runs: the installed plugin's (teamrig-cli.ts), found once.
     const cli = await findTeamrigCli(
@@ -614,6 +623,16 @@ export const register: Register = on => {
             })
       scheduling = meetingsLive
       if (meetingsLive === null) await update($, meetings, () => NO_TEAM_MEETINGS)
+      // `teamrig meet` finds the team from the tab's folder, the team whose register the pane reads.
+      meeting =
+        team === null
+          ? null
+          : new OwnerMeet(cli, {
+              run: (argv, timeoutMs) => $.process.run(argv, { cwd: e.cwd, timeoutMs }),
+              tell: async answer => {
+                await update($, ownerMeet, () => answer)
+              },
+            })
       await started.refresh()
       started.startTimers((ms, fn) => $.clock.every(ms, fn))
       logLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
@@ -673,6 +692,7 @@ export const register: Register = on => {
       logging = null
       teaming = null
       scheduling = null
+      meeting = null
       await update($, logList, () => NO_TEAM_LOG)
       await update($, logPage, () => AT_LOG_LIST)
       await update($, teamTree, () => NO_TEAM_TREE)
@@ -907,7 +927,13 @@ export const register: Register = on => {
               : current === 'changes'
                 ? changesBlocks(changed, isGitMissing(missing), await read($, diffs), place.kind === 'search' ? { query: place.query, hits: changesFound } : null)
                 : current === 'team'
-                  ? teamBlocks(team, await read($, teamToggled), clockOf(snap).zone, place.kind === 'search' ? { query: place.query, hits: teamFound } : null)
+                  ? teamBlocks(
+                      team,
+                      await read($, teamToggled),
+                      clockOf(snap).zone,
+                      place.kind === 'search' ? { query: place.query, hits: teamFound } : null,
+                      await read($, ownerMeet),
+                    )
                   : current === 'meetings'
                   ? meetingsBlocks(await read($, meetings), await read($, meetingsOpen), await read($, meetingStart), snap.tasks, snap.now)
                   : current === 'inbox'
@@ -948,7 +974,10 @@ export const register: Register = on => {
       await go($, current => reset(current, true))
       if (target === 'changes') await tracked?.refresh()
       if (target === 'log') await logging?.close()
-      if (target === 'team') await teaming?.refresh()
+      if (target === 'team') {
+        await update($, ownerMeet, () => NO_MEET)
+        await teaming?.refresh()
+      }
       if (target === 'meetings') {
         await update($, meetingStart, () => NO_START)
         await scheduling?.refresh()
@@ -1074,9 +1103,10 @@ export const register: Register = on => {
      * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, an inbox count
      * one that opens the inbox's, keyed `goto:inbox:`, each Team tab key one that opens or closes it in its span's
      * style, keyed `team:`, each session of a tab tied to none one that ties the tab to it as `/teamrig-pane
-     * <session>` does, keyed `pin:`, a scheduled meeting's [Start meeting] one that starts it, keyed `start:`, then
-     * where it is drawn (`from`, the card's element); a Changes file's row one press that opens or closes its diff,
-     * keyed `diff:`, then where it is drawn and the row.
+     * <session>` does, keyed `pin:`, a scheduled meeting's [Start meeting] one that starts it, keyed `start:`, a Team
+     * tab row's [Meet] one that runs `teamrig meet` on its session, keyed `meet:`, then where it is drawn (`from`, the
+     * card's element); a Changes file's row one press that opens or closes its diff, keyed `diff:`, then where it is
+     * drawn and the row.
      */
     const drawPart = (part: CardPart, wrap: Drawn['wrap'], from: string) => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
@@ -1131,6 +1161,14 @@ export const register: Register = on => {
                 return (
                   <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void scheduling?.start(id)}>
                     {drawPress(piece.span, 'start')}
+                  </Button>
+                )
+              }
+              case 'meet': {
+                const id = piece.meets
+                return (
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void meeting?.meet(id)}>
+                    {drawPress(piece.span, 'meet')}
                   </Button>
                 )
               }

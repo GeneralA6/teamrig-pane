@@ -33,17 +33,28 @@ function valueOf(rows: readonly Row[], key: string): Span[] {
 }
 
 describe('sessionCard', () => {
-  test("an area owner's card: its role, its leaders nearest first, its launch, its task in progress and its unread lines", () => {
+  test("an area owner's card: its role, its leaders nearest first, its launch, its task in progress, its cards on the owner and its unread lines", () => {
     const card = sessionCard(sessionOf('acme', 'api'), GUIDE, UTC)
     expect(words(card)).toEqual([
       line('Role', 'area owner'),
       line('Led by', 'web, then lead'),
       line('Launch', 'the default model and effort'),
       line('Now', 'T1 Add the route'),
+      line('Decisions', 'T4 Pick the database'),
       line('Inbox', '2 unread'),
     ])
-    expect(card.map(row => row.key)).toEqual(['role', 'led-by', 'launch', 'now', 'inbox'].map(field => `team-card:acme/api:${field}`))
+    expect(card.map(row => row.key)).toEqual(['role', 'led-by', 'launch', 'now', 'decisions', 'inbox'].map(field => `team-card:acme/api:${field}`))
     expect(card[0]?.hang).toEqual({ text: `${GUIDE.text}${' '.repeat(LABEL_CELLS)}`, dim: true })
+  })
+
+  test('the cards the owner put off show under Later with when each comes back; each card id opens its task’s page', () => {
+    const web = sessionCard(sessionOf('acme', 'web'), GUIDE, UTC)
+    expect(words(web).filter(text => text.includes('T5'))).toEqual([line('Later', 'T5 Name the release until Mon 11-02')])
+    expect(web.some(row => row.key === 'team-card:acme/web:decisions')).toBe(false)
+    expect(valueOf(web, 'team-card:acme/web:later')).toEqual([{ text: 'T5', task: 'T5' }, { text: ' Name the release' }, { text: ' until Mon 11-02', dim: true }])
+    expect(valueOf(sessionCard(sessionOf('acme', 'api'), GUIDE, UTC), 'team-card:acme/api:decisions')).toEqual([{ text: 'T4', task: 'T4' }, { text: ' Pick the database' }])
+    // A retired session's card is its retire: a card left on the owner from before shows nowhere.
+    expect(words(sessionCard(sessionOf('acme', 'qa'), GUIDE, UTC)).some(text => text.includes('T6'))).toBe(false)
   })
 
   test("its task id opens the task's page, its count the session's inbox at the first unread line", () => {
