@@ -165,7 +165,7 @@ export type OwnerCard = { readonly id: string; readonly title: string }
 /** A card the owner put off (Later), with when the lead asks it again, in teamrig's words (`Mon 11-02`). */
 export type LaterOwnerCard = OwnerCard & { readonly until: string }
 
-/** One session's cards on the owner, as `teamrig meet` asks them: those the lead asks now, then those put off. */
+/** One session's cards on the owner, as `teamrig meet` asks them: those the lead asks now, then those put off, soonest back first. */
 export type SessionOwnerCards = { readonly due: readonly OwnerCard[]; readonly later: readonly LaterOwnerCard[] }
 
 /** Lines quoted for a task (hooks/details.ts) from one part of its ref; `ref` names that part. */
