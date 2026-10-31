@@ -8,7 +8,7 @@ import { POLL_MS } from '../hooks/live'
 import { openKey } from '../hooks/press-keys'
 import { cells } from '../hooks/width'
 import { EVENT_VERSION, type HireRecord, type RetireRecord } from '../hooks/core/read/index'
-import { HOUR, NOW, S1, S2, bigRegister, createLine, iso, markLine, statusLine, updateLine, verifyingLine } from './fixtures'
+import { HOUR, NOW, S1, S2, bigRegister, createLine, iso, markLine, statusLine, updateLine, verifyingLine, waitingLine } from './fixtures'
 import { hire, retire } from './team-fixtures'
 
 const HOME = '\\Homes\\tester'
@@ -238,9 +238,27 @@ test('docks the session area: its tasks, flags and unread inbox', async ($, on) 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox (2)' })
+  expect(keyedProps(await pane.drawn(), 'team')).toMatchObject({ label: 'Team' })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
   expect(await pane.find({ text: /p2 · due Wed 10-14 · new · asked by owner/ })).toBeDefined()
   expect(await pane.find({ text: /Rotate the local URI/ })).toBeUndefined()
+})
+
+test('the Team button counts the cards waiting on the owner now, not those put off', async ($, on) => {
+  const { disk } = await start(on)
+  const card = { question: 'Ship it?', options: ['A: now', 'B: later'], recommend: 'A', byDefault: 'B', gate: 'product' }
+  disk.write(EVENTS, [
+    createLine('T1', { owner: 'po', by: 'lead', at: NOW - 2 * HOUR, title: 'Ship the tab?' }),
+    waitingLine('T1', 'po', NOW - HOUR, [{ kind: 'decision', who: 'owner' }], null, card),
+    createLine('T2', { owner: 'security', by: 'lead', at: NOW - 2 * HOUR, title: 'Rotate the key?' }),
+    waitingLine('T2', 'security', NOW - HOUR, [{ kind: 'decision', who: 'owner' }], null, card),
+    createLine('T3', { owner: 'po', by: 'lead', at: NOW - 2 * HOUR, title: 'Name the release?' }),
+    waitingLine('T3', 'po', NOW - HOUR, [{ kind: 'decision', who: 'owner' }, { kind: 'time', at: '2026-10-20' }], null, card),
+  ])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  expect(keyedProps(await pane.drawn(), 'team')).toMatchObject({ label: 'Team (2)' })
 })
 
 test('the all view lists every owner, a waiting task saying why', async ($, on) => {
