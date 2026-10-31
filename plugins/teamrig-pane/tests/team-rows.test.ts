@@ -2,10 +2,11 @@
 // a session's name, roles, leads, hire or retire and former names, a closed group's count, a press on each row that
 // opens what lies under it or a session's card, a leader's two, and the notes for a tree it cannot show.
 import { describe, expect, test } from 'claude-code/testing'
-import type { TeamView } from '../types'
+import type { MeetAnswer, TeamView } from '../types'
 import { TimeZone } from '../hooks/core/read/index'
+import { dockLayout } from '../hooks/layout'
 import { SEPARATOR, type Block } from '../hooks/rows'
-import { TEAM_NOTHING_FOUND, TEAM_SEARCH_HINT, cardKey, openedWith, teamBlocks, toggledWith } from '../hooks/team-rows'
+import { MEET_TEXT, TEAM_NOTHING_FOUND, TEAM_SEARCH_HINT, cardKey, openedWith, teamBlocks, toggledWith } from '../hooks/team-rows'
 import { searchTeam } from '../hooks/team-search'
 import { HOUR, JERUSALEM, NOW } from './fixtures'
 import { ACME, TOOLS, configOf, hire, treeOf } from './team-fixtures'
@@ -27,8 +28,8 @@ describe('teamBlocks', () => {
     expect(words(teamBlocks(TREE, [], UTC))).toEqual([
       ['team:acme', ['▾ acme · 5 active · 1 closed']],
       ['session:acme/lead', ['  ▾ ● lead  acme-lead · lead · leads 2']],
-      ['session:acme/web', ['    ▾ ● web  acme-web · leads 2']],
-      ['session:acme/api', ['        ● api  acme-backend · formerly acme-api']],
+      ['session:acme/web', ['    ▾ ● web  acme-web · leads 2 · later Mon 11-02']],
+      ['session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet] · formerly acme-api']],
       ['session:acme/ui', ['        ● ui  acme-ui · hired Fri 10-09 · review 10-25']],
       ['session:acme/ops', ['      ● ops  acme-ops · security reviewer · rehired Sun 10-11 · review 10-25']],
       ['closed:acme', ['  ▸ closed (1)']],
@@ -55,7 +56,48 @@ describe('teamBlocks', () => {
     expect(blockOf(blocks, 'team:acme').rows[0]?.hang?.text).toBe('  ')
     expect(blockOf(blocks, 'session:acme/api').rows[0]?.hang?.text).toBe('        ')
     const holdsPresses = (block: Block) => block.rows.some(row => row.spans.some(span => span.toggles !== undefined))
-    expect(blocks.filter(holdsPresses).map(block => block.key)).toEqual(['session:acme/lead', 'session:acme/web', 'session:tools/boss'])
+    // A row with a [Meet] holds its id's press too, docked: its card's (see below).
+    expect(blocks.filter(holdsPresses).map(block => block.key)).toEqual(['session:acme/lead', 'session:acme/web', 'session:acme/api', 'session:tools/boss'])
+  })
+
+  test("a session's row counts its cards waiting on the owner, with a [Meet] press, and names when the next put off comes back", () => {
+    const blocks = teamBlocks(TREE, [], UTC)
+    const api = blockOf(blocks, 'session:acme/api').rows[0]?.spans ?? []
+    expect(api.slice(-6, -2)).toEqual([SEPARATOR, { text: '? 1 decision', color: 'suggestion' }, { text: ' ' }, { text: MEET_TEXT, color: 'suggestion', meets: 'api' }])
+    expect(blockOf(blocks, 'session:acme/web').rows[0]?.spans.slice(-2)).toEqual([SEPARATOR, { text: 'later Mon 11-02', dim: true }])
+    const two = { ...ACME, ownerCards: { api: { due: [{ id: 'T4', title: 'Pick the database' }, { id: 'T7', title: 'Pick the queue' }], later: [] } } }
+    const twice = teamBlocks({ kind: 'tree', root: treeOf([two], 'acme') }, [], UTC)
+    expect(words(twice).find(([key]) => key === 'session:acme/api')?.[1]).toEqual(['        ● api  acme-backend · ? 2 decisions [Meet] · formerly acme-api'])
+    // A team whose register the pane does not read shows no cards, and no [Meet].
+    expect(blocks.some(block => block.key.startsWith('session:tools/') && block.rows.some(row => row.spans.some(span => span.meets !== undefined)))).toBe(false)
+  })
+
+  test('docked, a row with a [Meet] draws its id as the press that opens its card and the [Meet] as a press of its own', () => {
+    const [drawn] = dockLayout([blockOf(teamBlocks(TREE, [], UTC), 'session:acme/api')], 80)
+    const pieces = drawn?.parts?.flatMap(part => (part.kind === 'line' ? part.pieces : [])) ?? []
+    expect(pieces.filter(piece => piece.kind !== 'words')).toEqual([
+      { kind: 'toggle', span: { text: 'api', bold: true, toggles: cardKey('session:acme/api') }, toggles: cardKey('session:acme/api') },
+      { kind: 'meet', span: { text: MEET_TEXT, color: 'suggestion', meets: 'api' }, meets: 'api' },
+    ])
+  })
+
+  test('what the last [Meet] press answered leads the tab: asking, asked with what teamrig printed, or why it was refused', () => {
+    const led = (answer: MeetAnswer) => teamBlocks(TREE, [], UTC, null, answer)[0]
+    const asking = led({ session: 'api', outcome: 'asking', lines: [] })
+    expect(asking === undefined ? [] : words([asking])).toEqual([['team:meet', ['Asking api for its cards…']]])
+    const asked = led({ session: 'api', outcome: 'asked', lines: ['WOKE acme-backend (session api)'] })
+    expect(asked === undefined ? [] : words([asked])).toEqual([['team:meet', ['Asked api for its cards:', '  WOKE acme-backend (session api)']]])
+    expect(asked?.rows.map(row => row.key)).toEqual(['team:meet', 'team:meet:0'])
+    expect(asked?.rows[0]?.spans).toEqual([{ text: 'Asked api for its cards:', color: 'success' }])
+    const refused = led({ session: 'api', outcome: 'refused', lines: ['api has no card waiting on owner now'] })
+    expect(refused?.rows.map(row => row.spans)).toEqual([
+      [{ text: 'api was not asked:', color: 'warning' }],
+      [{ text: '  api has no card waiting on owner now', color: 'warning' }],
+    ])
+    // It leads a search too, and the tree follows it.
+    const searched = teamBlocks(TREE, [], UTC, { query: 'api', hits: searchTeam(ROOT, 'api') }, { session: 'api', outcome: 'asking', lines: [] })
+    expect(searched.map(block => block.key).slice(0, 2)).toEqual(['team:meet', 'team-search-count'])
+    expect(teamBlocks(TREE, [], UTC, null, null)[0]?.key).toBe('team:acme')
   })
 
   test("a leader's row holds two presses, docked: its mark opens or closes the sessions it leads, its id its card", () => {
@@ -136,12 +178,13 @@ describe('teamBlocks with a search', () => {
       ['team-search-count', ['1 session matches']],
       ['team:acme', ['▾ acme · 5 active · 1 closed']],
       ['session:acme/lead', ['  ▾ ● lead  acme-lead · lead · leads 2']],
-      ['session:acme/web', ['    ▾ ● web  acme-web · leads 2']],
-      ['team-search:session:acme/api', ['        ● api  acme-backend · formerly acme-api']],
+      ['session:acme/web', ['    ▾ ● web  acme-web · leads 2 · later Mon 11-02']],
+      ['team-search:session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet] · formerly acme-api']],
     ])
     const api = blockOf(blocks, 'team-search:session:acme/api').rows[0]?.spans ?? []
+    // Its row holds a [Meet], so its id is the press that opens its card.
     expect(api.filter(span => span.underline === true)).toEqual([
-      { text: 'api', bold: true, underline: true },
+      { text: 'api', bold: true, underline: true, toggles: cardKey('session:acme/api') },
       { text: 'api', dim: true, underline: true },
     ])
     expect(api.slice(-2)).toEqual([

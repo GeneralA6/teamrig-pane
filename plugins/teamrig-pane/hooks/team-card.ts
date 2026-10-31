@@ -3,10 +3,13 @@
 // the area it owns. Led by: its leaders, nearest first. Launch: the model and effort teamrig starts it on
 // (describeLaunch). Hired or Rehired: the day, who hired it and the day its hire is reviewed; Scope and Reason: its job
 // and why. Now: its tasks in progress, each id a press that opens the task's page, when the pane reads its team's
-// register. Inbox: its unread lines, a press that opens its inbox at the first of them, when the pane reads its team's
-// inbox and it ever marked it read. A closed session's card is its retire instead: the day and who retired it, why,
-// the session its tasks went to (Heir), and its Handover, a press that opens the file, or why it left none. Each line
-// starts with the guide its row hands it. Days print on the team's clock (meta.ts dayWords). Pure.
+// register. Decisions: its cards waiting on the owner now, and Later: those the owner put off, each with when it comes
+// back, soonest first (owner-cards.ts), each id a press that opens the task's page, when the pane reads its team's
+// register and it has any (T1297). Inbox: its unread lines, a press that opens its inbox at the first of them, when
+// the pane reads its team's inbox and it ever marked it read. A closed session's card is its retire instead: the day
+// and who retired it, why, the session its tasks went to (Heir), and its Handover, a press that opens the file, or why
+// it left none. Each line starts with the guide its row hands it. Days print on the team's clock (meta.ts dayWords).
+// Pure.
 import { describeLaunch, type TimeZone } from './core/read/index'
 import { joined, labelled, textLines, type Lines } from './card'
 import { fileLabel } from './details'
@@ -15,7 +18,7 @@ import type { Row, Span } from './rows'
 import type { Role, SessionFacts } from './team'
 
 /** A fact a session's card shows on its labelled row, named as its row's key ends. */
-export type TeamCardField = 'role' | 'led-by' | 'launch' | 'hire' | 'scope' | 'reason' | 'now' | 'inbox' | 'retired' | 'heir' | 'handover'
+export type TeamCardField = 'role' | 'led-by' | 'launch' | 'hire' | 'scope' | 'reason' | 'now' | 'decisions' | 'later' | 'inbox' | 'retired' | 'heir' | 'handover'
 
 /** How the tab names each role a team config gives. */
 const ROLE_WORDS: Readonly<Record<Role, string>> = { lead: 'lead', deliveryOwner: 'delivery owner', securityReviewer: 'security reviewer' }
@@ -35,6 +38,16 @@ function nowLines(now: SessionFacts['now']): Lines {
   if (now === null) return []
   if (now.length === 0) return [[{ text: 'nothing in progress', dim: true }]]
   return now.map(task => [{ text: task.id, task: task.id }, { text: ` ${task.title}` }])
+}
+
+/** Its cards waiting on the owner now, an id a press each; nothing for none or when its team's register is not read. */
+function decisionLines(decisions: SessionFacts['decisions']): Lines {
+  return (decisions?.due ?? []).map(card => [{ text: card.id, task: card.id }, { text: ` ${card.title}` }])
+}
+
+/** The cards the owner put off, soonest back first, an id a press each and when it comes back; nothing for none. */
+function laterLines(decisions: SessionFacts['decisions']): Lines {
+  return (decisions?.later ?? []).map(card => [{ text: card.id, task: card.id }, { text: ` ${card.title}` }, { text: ` until ${card.until}`, dim: true }])
 }
 
 /** Its unread inbox lines as a press that opens its inbox at the first of them; nothing when the count is unknown. */
@@ -79,6 +92,8 @@ export function sessionCard(session: SessionFacts, guide: Span, zone: TimeZone):
           ...field('reason', 'Reason', textLines(hire.reason)),
         ]),
     ...field('now', 'Now', nowLines(session.now)),
+    ...field('decisions', 'Decisions', decisionLines(session.decisions)),
+    ...field('later', 'Later', laterLines(session.decisions)),
     ...field('inbox', 'Inbox', inboxLines(session)),
   ]
 }

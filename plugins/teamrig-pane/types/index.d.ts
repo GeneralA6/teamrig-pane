@@ -504,6 +504,8 @@ declare module 'claude-code' {
       meetingsOpen: readonly string[]
       /** What the last [Start meeting] press answered; null before one, and after a session start or a switch to the view. */
       meetingStart: MeetingStart | null
+      /** What the last [Meet] press on the Team tab answered; null before one, and after a session start or a switch to the tab. */
+      ownerMeet: MeetAnswer | null
     }
   }
 }
