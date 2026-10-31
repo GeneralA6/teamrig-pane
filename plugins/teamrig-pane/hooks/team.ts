@@ -3,7 +3,7 @@
 // log through teamrig's own readers (TeamTree, LeadTree, Roster, the hire log), never hard-coded, so the tab shows the
 // team as teamrig's commands find it. Pure: the source reads the files, this turns them into nodes, teamRows into the
 // rows a drawing shows.
-import type { TaskRow } from '../types'
+import type { SessionOwnerCards, TaskRow } from '../types'
 import {
   activeHires,
   launchOf,
@@ -34,6 +34,11 @@ export type TeamRead = {
    * not read the team's inbox (a peer team's).
    */
   readonly unread: ReadonlyMap<string, number> | null
+  /**
+   * Each session's cards on the owner, by id (Snapshot.ownerCards), a session with none absent; null when the pane
+   * does not read the team's register (a peer team's).
+   */
+  readonly ownerCards: Readonly<Record<string, SessionOwnerCards>> | null
 }
 
 /** A role a team config gives a session (`roles`), as teamrig's Roster names it. */
@@ -80,7 +85,12 @@ export type SessionFacts = {
   readonly now: readonly CurrentTask[] | null
   /** Its unread inbox lines; null for a closed session, one that never marked its inbox read, or a team whose inbox the pane does not read. */
   readonly unread: number | null
+  /** Its cards on the owner, due now and put off; none for a closed session, null when the pane does not read its team's register. */
+  readonly decisions: SessionOwnerCards | null
 }
+
+/** The cards of a session with none on the owner. */
+const NO_CARDS: SessionOwnerCards = { due: [], later: [] }
 
 type NodeBase = { readonly key: string; readonly children: readonly TeamTreeNode[] }
 
@@ -112,6 +122,12 @@ function currentTasks(tasks: readonly TaskRow[] | null, id: string): CurrentTask
   return tasks.filter(task => task.owner === id && task.status === 'in-progress').map(({ id: task, title }) => ({ id: task, title }))
 }
 
+/** The cards `id` has on the owner; null when the register is not read. */
+function cardsOf(cards: Readonly<Record<string, SessionOwnerCards>> | null, id: string): SessionOwnerCards | null {
+  if (cards === null) return null
+  return cards[id] ?? NO_CARDS
+}
+
 /** The session nodes of one team: the lead, each session under its leader, and the closed group. */
 function sessionNodes({ read, roster, closed }: TeamPart): TeamTreeNode[] {
   const { team, config, hires } = read
@@ -134,6 +150,7 @@ function sessionNodes({ read, roster, closed }: TeamPart): TeamTreeNode[] {
       retire,
       now: retire === null ? currentTasks(read.tasks, id) : [],
       unread: retire === null ? (read.unread?.get(id) ?? null) : null,
+      decisions: retire === null ? cardsOf(read.ownerCards, id) : NO_CARDS,
     }
   }
   // The parser keeps the lead tree whole; the seen set only keeps a hand-built config from looping.

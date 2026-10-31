@@ -243,7 +243,7 @@ const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, fals
 const SCROLL_SHAPE = 'scroll-v1'
 const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, AT_TOP, { shape: SCROLL_SHAPE })
 /** The Team tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
-const TEAM_SHAPE = 'team-v2'
+const TEAM_SHAPE = 'team-v3'
 const TEAM_READING: TeamView = { kind: 'reading' }
 const NO_TEAM_TREE: TeamView = { kind: 'no-team' }
 const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, TEAM_READING, { shape: TEAM_SHAPE })
@@ -584,7 +584,10 @@ export const register: Register = on => {
               team.paths,
               {
                 folders,
-                tasks: async () => (await read($, snapshot)).tasks,
+                register: async () => {
+                  const { tasks, ownerCards } = await read($, snapshot)
+                  return { tasks, ownerCards }
+                },
                 isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
                 publish: async tree => {
                   await update($, teamTree, () => tree)
