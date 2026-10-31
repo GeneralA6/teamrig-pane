@@ -82,7 +82,8 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
 - **Team:** the tree of teams the session's team is in, read from teamrig's team folders: each team's counts of
   active and closed sessions, its lead over the sessions each leader leads, the retired ones in a closed group and the
   child teams under their parent; each session's row gives its id, its name, its roles, how many it leads and its hire
-  or retire. A press on a row closes or opens what lies under it.
+  or retire, and how many of its cards wait on the owner, with a `[Meet]` press that has teamrig ask it to bring them
+  now; the switch's button counts them, `Team (2)`. A press on a row closes or opens what lies under it.
 - **Meetings:** the meetings booked for the session's team, by time: each one's time, length, who meets and what it
   settles, the next one marked and a missed one red. A press opens its card (what it is about, who joins, its tasks
   with their status, its brief), and a scheduled one's `[Start meeting]` runs `teamrig meeting start` for you.
@@ -93,8 +94,9 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
 - **The same reader.** teamrig's own read modules are copied into the plugin at a pinned commit, and
   a golden test holds the pane's rows to what `teamrig list` prints.
 - **Files only.** A stat every 3 s re-reads a file only when its size or time moved, plus a tick every
-  60 s. The Meetings view is the one exception: it runs the CLI of the teamrig plugin installed in Claude Code
-  (`teamrig meeting list` every 60 s while it shows, `teamrig meeting start` on a press). No model calls, so no tokens.
+  60 s. The exceptions run the CLI of the teamrig plugin installed in Claude Code: the Meetings view
+  (`teamrig meeting list` every 60 s while it shows, `teamrig meeting start` on a press) and the Team tab's `[Meet]`
+  (`teamrig meet` on a press). No model calls, so no tokens.
 - **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; a project
   with none shows how to set it up. See [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
 

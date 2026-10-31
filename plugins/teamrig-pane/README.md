@@ -7,7 +7,7 @@ an older one:
 
 Docks the session's tasks from teamrig's task register (its tasks folder: `events.jsonl`, with the
 `inbox-marks.jsonl` that `teamrig inbox read` writes; see Where the register is, below) on the right of
-Claude Code's fullscreen UI. It reads files only (the Meetings view aside, which runs teamrig's CLI): a stat poll
+Claude Code's fullscreen UI. It reads files only (the Meetings view and the Team tab's `[Meet]` aside, which run teamrig's CLI): a stat poll
 every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick moves the due/age
 labels on. No model calls, so no tokens. Every time is on the team's clock and zone-marked
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
@@ -405,7 +405,9 @@ keeps under the kit home (`~/.teamrig/teams/<team>`). A team's row counts its ac
 `leads`), the retired sessions in a closed group (`▸ closed (1)`), and each child team (whose config names it as
 `team.parent`). A session's row is a `●` and its id in bold, then its current name where it differs from the id, then,
 dim: its roles (lead, delivery owner, security reviewer), how many it leads, and its hire and review day
-(`hired Fri 10-09 · review 10-25`) or its retire day, then its former names. A retired session's row is a dim `○`.
+(`hired Fri 10-09 · review 10-25`) or its retire day; then how many of its cards wait on the owner now (`? 2 decisions`)
+with a `[Meet]` press, and when the next card the owner put off comes back (`later Mon 11-02`, dim); then its former
+names. A retired session's row is a dim `○`.
 Teams under another top team are left out. Until there is a tree, the tab says why: no team, a team with no config
 file teamrig can read, or a folder it could not read.
 
@@ -415,13 +417,25 @@ under it, and a second closes it. A leader's row holds two presses: its mark clo
 id opens its card; inline, where a row is one press, the row does the first. What was opened or closed stays so across a
 hot reload. ↑ and ↓ move between rows. There are no ← and → keys, since the engine binds keys only to buttons.
 
+`[Meet]` runs `teamrig meet <session>`: teamrig wakes a running session with an inbox line asking it to bring the owner
+its cards now, or opens it in a new tab to do so, and refuses a session with no card waiting on the owner. What teamrig
+answered leads the tab: `Asking web for its cards…`, then `Asked web for its cards:` with teamrig's lines (the tab it
+woke or opened), or `web was not asked:` and why. One meet runs at a time, given 60 s. Docked, a row with a `[Meet]`
+holds two presses, its id opening its card; inline, the row opens the card. It needs the teamrig plugin 0.209.0 or
+later installed in Claude Code (found as for Meetings, below) and `node` on the PATH. The switch's Team button counts
+the cards waiting on the owner now across the team's sessions, `Team (2)`; a card the owner put off counts again once it
+comes back.
+
 A card has one labelled line per fact the team's files hold, each only when it has a value: Role (its roles and how many
 it leads, or the area it owns), Led by (its leaders, nearest first), Launch (the model and effort teamrig starts it on),
 Hired or Rehired (the day, who hired it, the review day), Scope and Reason (its job and why), Now (its tasks in
-progress, each id a press that opens the task's page) and Inbox (its unread lines, a press that opens its inbox at the
-first of them, the pane's own area's in the Inbox view). A retired session's card is its retire instead: the day and who retired it, why, the session its tasks
-went to (Heir), and its Handover, a press that opens the file, or why it left none. Now and Inbox show only for the pane's
-own team, whose register and inboxes it reads; a session that never marked its inbox read has no Inbox count. A page a
+progress, each id a press that opens the task's page), Decisions (its cards waiting on the owner now) and Later (those
+the owner put off, soonest back first, each with when it comes back), each id a press that opens the task's page, and
+Inbox (its unread lines, a press that opens its inbox at the first of them, the pane's own area's in the Inbox view). A
+retired session's card is its retire instead: the day and who retired it, why, the session its tasks went to (Heir),
+and its Handover, a press that opens the file, or why it left none. Now, Decisions, Later, Inbox and the counts of cards
+on the owner show only for the pane's own team, whose register and inboxes it reads; a session that never marked its
+inbox read has no Inbox count. A page a
 card opens shows in the Tasks view, and back from it shows the tasks list.
 
 The Find field searches the tree here. Each word must match, case aside, the start of a word in a session's id, name,
@@ -434,7 +448,8 @@ open.
 
 It reads each team's config and, in the state folder that config names, its rename log and hire log, and for the pane's
 own team its register and inbox read marks and each marked session's inbox, with teamrig's own readers. It reads files
-only, and only while it shows: on each 3 s poll a file is read again only when its size or time moved. No model calls,
+only (`[Meet]` aside), and only while it shows: on each 3 s poll a file is read again only when its size or time moved.
+No model calls,
 no tokens.
 
 ### Meetings

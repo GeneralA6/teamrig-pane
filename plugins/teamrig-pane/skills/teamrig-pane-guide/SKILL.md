@@ -7,8 +7,9 @@ description: Use when running the teamrig task pane, or to learn what it shows, 
 
 teamrig-pane is a Claude Code plugin that shows a session's teamrig tasks, and the files it changed in git,
 beside the conversation. It only reads: the [teamrig](https://github.com/GeneralA6/teamrig) CLI writes the task
-register and the inboxes, and the pane draws what is there. The Meetings view is the one exception: it runs teamrig's
-CLI to list the team's meetings and to start one. It makes no model calls and uses no tokens.
+register and the inboxes, and the pane draws what is there. Two places run teamrig's CLI instead: the Meetings view, to
+list the team's meetings and to start one, and the Team view's `[Meet]`, to have a session bring the owner its cards.
+It makes no model calls and uses no tokens.
 
 The pane is pre-release: it runs on Claude Code's function hooks (`hooks/hooks.json` loads `./register.tsx` as a
 module in Claude Code's own runtime), an early-access plugin surface that may change between releases.
@@ -26,9 +27,9 @@ module in Claude Code's own runtime), an early-access plugin surface that may ch
 | Claude Code | 2.1.295 or later | CI runs the plugin's tests on 2.1.295, the oldest release they pass on; earlier test kits cannot draw a pane. On an older one the pane draws a `WARN` line with the fix. |
 | Fullscreen layout | `"tui": "fullscreen"` in `~/.claude/settings.json` | Only the fullscreen layout docks the pane on the right. Without it the pane sits above the prompt. |
 | Terminal width | 110 columns to dock, 144 to open by itself | Narrower, the pane sits above the prompt; `/teamrig-pane` opens it at any width. |
-| teamrig | a team with a register; for the Meetings view, the teamrig plugin 0.208.0 or later installed in Claude Code | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). The Meetings view runs the CLI of the teamrig plugin it finds in Claude Code's plugin list. |
+| teamrig | a team with a register; for the Meetings view, the teamrig plugin 0.208.0 or later installed in Claude Code, and for the Team view's `[Meet]`, 0.209.0 or later | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). The Meetings view and `[Meet]` run the CLI of the teamrig plugin it finds in Claude Code's plugin list. |
 | git | on the PATH | Only for the Changes tab, which runs `git status` per repo, `git diff` and `git grep` to count the changed lines, and `git diff` for each file's diff you open. Without it the pane draws a `WARN` line with the fix. |
-| Node.js | `node` on the PATH for the Meetings view, as teamrig needs; 22.18 or later to develop it | The pane runs inside Claude Code; the Meetings view runs teamrig's CLI with `node`. The repository's tools and tests run on Node (`engines` in `package.json`). |
+| Node.js | `node` on the PATH for the Meetings view and `[Meet]`, as teamrig needs; 22.18 or later to develop it | The pane runs inside Claude Code; the Meetings view and `[Meet]` run teamrig's CLI with `node`. The repository's tools and tests run on Node (`engines` in `package.json`). |
 | Operating system | Linux, Windows or macOS | CI runs the tests on ubuntu, windows and macos, each on Node 22 and 24, and the plugin tests in Claude Code on each. CI checks only once the repository is public: until then each change is tested before it is pushed on one machine, Node and Claude Code release, so the others go unchecked. |
 
 The pane checks the Claude Code version and git once a session, when it starts, and draws one `WARN` line
@@ -578,17 +579,27 @@ open, so Enter leaves the results as they are; switching views closes the search
 counts its active and closed sessions. Under it are its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a closed group, and its child teams (`team.parent`). A session's row gives its id
 (bold), its current name where it differs, then, dim: its roles, how many it leads, and its hire and review day or its
-retire day, then its former names. A retired session is a dim `○`. A press on a team's or closed group's row (a click,
+retire day; then how many of its cards wait on the owner (the config's `register.ownerSource`) now, `? 2 decisions`,
+with a `[Meet]` press, and when the next card the owner put off comes back (`later Mon 11-02`, dim); then its former
+names. A retired session is a dim `○`. A press on a team's or closed group's row (a click,
 Enter or Space) closes it or opens it again; on a session's row it opens or closes its card. A leader's row has two
 presses: its mark folds the sessions it leads, its id opens its card. Teams and leaders start open, a closed group
 closed, and the state stays across a hot reload. There are no ← and → keys: the engine binds keys only to buttons. With
 no team, no config teamrig can read, or a folder it cannot read, the view says which.
 
+`[Meet]` runs `teamrig meet <session>`: teamrig wakes a running session with an inbox line asking it to bring the owner
+its cards now, or opens it in a new tab to do so, and refuses one with no card waiting on the owner. What teamrig
+answered leads the tab: `Asking web for its cards…`, then `Asked web for its cards:` with teamrig's lines, or
+`web was not asked:` and why. One meet runs at a time, given 60 seconds. Docked, a row with a `[Meet]` holds two
+presses, its id opening its card; inline, the row opens the card. The switch's Team button counts the cards waiting on
+the owner now across the team, `Team (2)`; a card put off counts again once it comes back.
+
 A card lists, each only when known: Role, Led by, Launch (model and effort), Hired or Rehired (day, by whom, review day),
-Scope, Reason, Now (its tasks in progress, each id opening its page) and Inbox (unread lines, opening its inbox, the pane's own in
-the Inbox view); a
-retired session's card gives its retire: day, by whom, why, Heir and Handover (a press opens it). Now and Inbox show for
-the pane's own team only. A page a card opens shows in the Tasks view; back shows the tasks list.
+Scope, Reason, Now (its tasks in progress, each id opening its page), Decisions (its cards waiting on the owner now),
+Later (those the owner put off, soonest back first, with when each comes back), each id opening its page, and Inbox
+(unread lines, opening its inbox, the pane's own in the Inbox view); a retired session's card gives its retire: day, by
+whom, why, Heir and Handover (a press opens it). Now, Decisions, Later, Inbox and the counts of cards on the owner show
+for the pane's own team only. A page a card opens shows in the Tasks view; back shows the tasks list.
 
 The Find field (`s`) searches the tree: each word matches the start of a word in a session's id, name, former names,
 roles or hire scope, retired ones too. The body counts the matches and draws each under its team and leaders; a press
@@ -630,7 +641,8 @@ plugin, one older than 0.208.0, or a list that fails, it says why
 
 ## How it relates to the teamrig CLI
 
-The pane never writes, but for the Meetings view's `[Start meeting]`, which runs `teamrig meeting start`. To change
+The pane never writes, but for the Meetings view's `[Start meeting]`, which runs `teamrig meeting start`, and the Team
+view's `[Meet]`, which runs `teamrig meet`. To change
 what it shows, run teamrig (see the
 [teamrig guide](https://github.com/GeneralA6/teamrig/blob/main/plugins/teamrig/skills/teamrig-guide/commands.md)):
 
@@ -644,7 +656,7 @@ what it shows, run teamrig (see the
 | book a meeting (shows in Meetings) | `teamrig meeting schedule --meets <session> --at <time> --about "..." --session <you>` |
 
 The pane reads the register with teamrig's own read modules, copied into the plugin at a pinned teamrig commit,
-and a golden test holds its rows to what `teamrig list` prints. Besides the Meetings view, which runs teamrig's CLI, it
+and a golden test holds its rows to what `teamrig list` prints. Besides the Meetings view and `[Meet]`, which run teamrig's CLI, it
 reads files only: a stat every 3 seconds
 re-reads a file when its size or time moved, and a 60 second tick moves the due and age labels on. Its state
 (the size, a pin) lives in the plugin's own store, never in the register.
