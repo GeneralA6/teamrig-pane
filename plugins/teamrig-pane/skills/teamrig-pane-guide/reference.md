@@ -103,5 +103,5 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | Archive | 50 rows a week, a dim line counting the rest; the tasks finished in the last 8 days, teamrig's own retention |
 
 The pane never writes the register, the inboxes or any repo itself: the Meetings view's `[Start meeting]` runs
-`teamrig meeting start`, and teamrig writes what that changes. It keeps only its size and the pins in the plugin's own
+`teamrig meeting start` and the Team view's `[Meet]` runs `teamrig meet`, and teamrig writes what they change. It keeps only its size and the pins in the plugin's own
 store.
