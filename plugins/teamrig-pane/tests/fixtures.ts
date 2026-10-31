@@ -3,6 +3,7 @@ import { DEFAULT_REGISTER, EVENT_VERSION, MARK_VERSION, TimeZone } from '../hook
 import { lineHash } from '../hooks/line-hash'
 import { treeOf, type PaneTree } from '../hooks/meta'
 import type { FileStamp, Files } from '../hooks/source'
+import { NO_TASK_COUNTS } from '../hooks/task-counts'
 import { zoneNamed, type Clock } from '../hooks/zone'
 import type { DrawnSettings, Snapshot, TaskRow, TeamLeads, TeamSettings, WaitRow } from '../types'
 
@@ -20,10 +21,17 @@ export const TEAM_SETTINGS: TeamSettings = {
   requireDecisionCard: DEFAULT_REGISTER.requireDecisionCard,
 }
 /**
- * A snapshot's team fields when the pane found no team: no team name, no session name, no leads, no work marks and no
- * cards on the owner.
+ * A snapshot's team fields when the pane found no team, on an empty register: no team name, no session name, no leads,
+ * no work marks, no cards on the owner and no tasks counted.
  */
-export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work' | 'ownerCards'> = { team: null, areaName: null, leads: null, work: [], ownerCards: {} }
+export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work' | 'ownerCards' | 'taskCounts'> = {
+  team: null,
+  areaName: null,
+  leads: null,
+  work: [],
+  ownerCards: {},
+  taskCounts: NO_TASK_COUNTS,
+}
 
 /** A team zone ahead of UTC, three hours on NOW (Israel's summer time, `IDT`): what a UTC clock cannot tell apart. */
 export const JERUSALEM = zoneNamed('Asia/Jerusalem')

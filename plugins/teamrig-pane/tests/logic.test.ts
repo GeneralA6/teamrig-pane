@@ -304,6 +304,10 @@ describe('view', () => {
     const cards = { po: { due: [{ id: 'T1', title: 'Ship it?' }], later: [] } }
     expect(sameView({ ...base, ownerCards: cards }, { ...base, ownerCards: { po: { due: [{ id: 'T1', title: 'Ship it?' }], later: [] } } })).toBe(true)
     expect(sameView(base, { ...base, ownerCards: cards })).toBe(false)
+    const counted = { bySession: { po: { done: 1, verifying: 0, total: 2 } }, archived: false }
+    expect(sameView({ ...base, taskCounts: counted }, { ...base, taskCounts: { bySession: { po: { done: 1, verifying: 0, total: 2 } }, archived: false } })).toBe(true)
+    expect(sameView(base, { ...base, taskCounts: counted })).toBe(false)
+    expect(sameView({ ...base, taskCounts: counted }, { ...base, taskCounts: { ...counted, archived: true } })).toBe(false)
     const leads = { lead: 'lead', leaderOf: { po: 'lead' } }
     expect(sameView({ ...base, leads }, { ...base, leads: { lead: 'lead', leaderOf: { po: 'lead' } } })).toBe(true)
     expect(sameView(base, { ...base, leads })).toBe(false)

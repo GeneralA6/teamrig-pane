@@ -97,6 +97,11 @@ describe('a rotated register', () => {
     expect(files.reads.slice(before)).toEqual([PATHS.events])
   })
 
+  test('counts the tasks it folded and says a compaction archived older ones, which the counts miss', async () => {
+    const snap = await poll(new TaskRegisterSource(rotated(), PATHS, TEAM_SETTINGS, null))
+    expect(snap?.taskCounts).toEqual({ bySession: { po: { done: 1, verifying: 0, total: 2 } }, archived: true })
+  })
+
   test('a snapshot it cannot use is counted as teamrig counts it, and the segments are folded instead, each read once', async () => {
     const files = rotated(DAMAGED)
     const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null)

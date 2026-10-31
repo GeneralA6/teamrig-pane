@@ -146,6 +146,8 @@ export type Snapshot = {
    * session with none is absent.
    */
   ownerCards: Readonly<Record<string, SessionOwnerCards>>
+  /** Each session's tasks counted, as the register last folded (hooks/task-counts.ts): recounted when it moves. */
+  taskCounts: TaskCounts
   /** When it was built, so due and age labels move on without a file change. */
   now: number
 }
@@ -167,6 +169,15 @@ export type LaterOwnerCard = OwnerCard & { readonly until: string }
 
 /** One session's cards on the owner, as `teamrig meet` asks them: those the lead asks now, then those put off, soonest back first. */
 export type SessionOwnerCards = { readonly due: readonly OwnerCard[]; readonly later: readonly LaterOwnerCard[] }
+
+/** One session's tasks (hooks/task-counts.ts): those done, those verifying, and every one it owns but the dropped. */
+export type SessionTaskCounts = { readonly done: number; readonly verifying: number; readonly total: number }
+
+/**
+ * The register's tasks counted by owner (hooks/task-counts.ts), an owner of none absent, and whether a compaction
+ * archived the tasks finished long ago, which the counts then miss.
+ */
+export type TaskCounts = { readonly bySession: Readonly<Record<string, SessionTaskCounts>>; readonly archived: boolean }
 
 /** Lines quoted for a task (hooks/details.ts) from one part of its ref; `ref` names that part. */
 export type RefQuote = { ref: string; lines: string[] }

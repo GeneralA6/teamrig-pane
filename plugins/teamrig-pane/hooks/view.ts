@@ -208,7 +208,8 @@ export function sameView(a: Snapshot, b: Snapshot): boolean {
     a.problem !== b.problem ||
     a.notPickedUpAfterHours !== b.notPickedUpAfterHours ||
     a.timeZone !== b.timeZone ||
-    JSON.stringify(a.ownerCards) !== JSON.stringify(b.ownerCards)
+    JSON.stringify(a.ownerCards) !== JSON.stringify(b.ownerCards) ||
+    JSON.stringify(a.taskCounts) !== JSON.stringify(b.taskCounts)
   )
     return false
   if (a.tasks.length !== b.tasks.length) return false
