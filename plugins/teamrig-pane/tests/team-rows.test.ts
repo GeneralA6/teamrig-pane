@@ -166,7 +166,7 @@ describe('teamBlocks', () => {
   test('the notes for a tree not read yet, no team, a read that failed and a team with no config', () => {
     expect(words(teamBlocks({ kind: 'reading' }, [], UTC))).toEqual([['team:note', ['Reading the team…']]])
     expect(words(teamBlocks({ kind: 'no-team' }, [], UTC))).toEqual([
-      ['team:note', ["No team found: the Team tab shows the tree of teams the session's team is in."]],
+      ['team:note', ["No team found: the Teams tab shows the tree of teams the session's team is in."]],
     ])
     const failed = teamBlocks({ kind: 'failed', reason: 'EACCES: permission denied.' }, [], UTC)
     expect(failed[0]?.rows[0]?.spans).toEqual([{ text: 'The team could not be read: EACCES: permission denied.', color: 'warning' }])

@@ -28,7 +28,7 @@ export const KEY_GROUPS: readonly KeyGroup[] = [
       { key: 'd', what: 'Changes' },
       { key: 'g', what: 'Log' },
       { key: 'u', what: 'Inbox' },
-      { key: 'e', what: 'Team' },
+      { key: 'e', what: 'Teams' },
       { key: 'j', what: 'Meetings' },
     ],
   },

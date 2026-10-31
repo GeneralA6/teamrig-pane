@@ -28,7 +28,7 @@ const STEP = 2
 /** What an empty Find field shows on the Team tab. */
 export const TEAM_SEARCH_HINT = 'Type words to find a session by its id, name, role or hire scope.'
 /** What a query no session matches shows. */
-export const TEAM_NOTHING_FOUND = 'Nothing matches. The Team tab searches every session in the tree, retired ones too.'
+export const TEAM_NOTHING_FOUND = 'Nothing matches. The Teams tab searches every session in the tree, retired ones too.'
 /** A Team search counts sessions. */
 const SESSION_NOUN: Noun = { one: 'session', many: 'sessions' }
 /** The press on a session's row that brings the owner its cards (`teamrig meet`). */
@@ -251,7 +251,7 @@ export function teamBlocks(view: TeamView, toggled: readonly string[], zone: Tim
     case 'reading':
       return [note(`${TAB}:note`, 'Reading the team…')]
     case 'no-team':
-      return [note(`${TAB}:note`, "No team found: the Team tab shows the tree of teams the session's team is in.")]
+      return [note(`${TAB}:note`, "No team found: the Teams tab shows the tree of teams the session's team is in.")]
     case 'failed':
       return [single(`${TAB}:note`, [{ text: `The team could not be read: ${view.reason.replace(/\.$/, '')}.`, color: 'warning' }])]
     case 'tree': {
