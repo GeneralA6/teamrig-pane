@@ -318,6 +318,13 @@ export type MeetingsView =
  */
 export type MeetingStart = { readonly id: string; readonly outcome: 'starting' | 'started' | 'refused'; readonly lines: readonly string[] }
 
+/**
+ * What the last [Meet] press on the Team tab answered (hooks/owner-meet.ts): the session, whether teamrig is still
+ * asking it, asked it to bring the owner its cards, or refused, and the lines it printed (the tab it woke or opened),
+ * or why it refused.
+ */
+export type MeetAnswer = { readonly session: string; readonly outcome: 'asking' | 'asked' | 'refused'; readonly lines: readonly string[] }
+
 /** What a turn log line records: a prompt the person sent, a reply the session showed, or a clear or compaction of its context. */
 export type TurnKind = 'prompt' | 'reply' | 'clear'
 
