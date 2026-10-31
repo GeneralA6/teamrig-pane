@@ -60,11 +60,11 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   goals, who asked, when it was added and by whom, where its ask is written, its evidence and its links. `c` closes every card. A click on a task
   id in a card opens that task's page, and a click on a file it references opens the file at the line it names, with
   back and forward (`b`, `f`) and a trail of where you went.
-- **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log, Inbox, Team and Meetings switch (`s` or a click puts the cursor in it) that lists, as you type, the
+- **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log, Inbox, Teams and Meetings switch (`s` or a click puts the cursor in it) that lists, as you type, the
   tasks the pane holds whose id, title, owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.
   On the Inbox view the same field finds lines by sender or words, over the Log view's list conversations by their
-  tasks, how they opened or their session, on the Changes view changed files by path, repo or branch, and on the Team
-  tab sessions by id, name, former names, roles or hire scope.
+  tasks, how they opened or their session, on the Changes view changed files by path, repo or branch, and on the Teams
+  tab sessions by id, name, roles or hire scope.
   A line under it says where your keys go: into the search, to the pane's keys, or to Claude's prompt.
 - **Archive:** `h` lists the tasks finished this week, a day at a time; `p` and `l` step a week back
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.
@@ -79,11 +79,12 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
 - **Inbox:** the session's own inbox lines of the last 24 hours and every unread one, the newest first, each with
   its sender and time and the unread ones marked `●`; the switch's button counts them, `Inbox (2)`. Reading them
   there marks nothing read: `teamrig inbox read` does.
-- **Team:** the tree of teams the session's team is in, read from teamrig's team folders: each team's counts of
-  active and closed sessions, its lead over the sessions each leader leads, the retired ones in a closed group and the
-  child teams under their parent; each session's row gives its id, its name, its roles, how many it leads and its hire
-  or retire, and how many of its cards wait on the owner, with a `[Meet]` press that has teamrig ask it to bring them
-  now; the switch's button counts them, `Team (2)`. A press on a row closes or opens what lies under it.
+- **Teams:** the tree of teams the session's team is in, read from teamrig's team folders: each team's counts of
+  active and retired sessions, its lead over the sessions each leader leads, the retired ones in a group of their own
+  and the child teams under their parent; each session's row gives its id, its name, how many sessions it leads
+  (`(2)`), its roles and its hire or retire, and how many of its cards wait on the owner, with a `[Meet]` press that
+  has teamrig ask it to bring them now; the switch's button counts them, `Teams (2)`. A press on a row closes or opens
+  what lies under it.
 - **Meetings:** the meetings booked for the session's team, by time: each one's time, length, who meets and what it
   settles, the next one marked and a missed one red. A press opens its card (what it is about, who joins, its tasks
   with their status, its brief), and a scheduled one's `[Start meeting]` runs `teamrig meeting start` for you.
@@ -95,7 +96,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   a golden test holds the pane's rows to what `teamrig list` prints.
 - **Files only.** A stat every 3 s re-reads a file only when its size or time moved, plus a tick every
   60 s. The exceptions run the CLI of the teamrig plugin installed in Claude Code: the Meetings view
-  (`teamrig meeting list` every 60 s while it shows, `teamrig meeting start` on a press) and the Team tab's `[Meet]`
+  (`teamrig meeting list` every 60 s while it shows, `teamrig meeting start` on a press) and the Teams tab's `[Meet]`
   (`teamrig meet` on a press). No model calls, so no tokens.
 - **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; a project
   with none shows how to set it up. See [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
