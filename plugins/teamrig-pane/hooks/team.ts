@@ -62,7 +62,6 @@ export type SessionFacts = {
   readonly id: string
   /** The name it runs under now; for a closed session, the last name it held. */
   readonly name: string
-  readonly formerNames: readonly string[]
   /** On the team's config now; false for a retired session no longer on it. */
   readonly active: boolean
   readonly roles: readonly Role[]
@@ -139,7 +138,6 @@ function sessionNodes({ read, roster, closed }: TeamPart): TeamTreeNode[] {
       team,
       id,
       name: roster.nameOf(id) ?? id,
-      formerNames: roster.formerNamesOf(id),
       active: retire === null,
       roles: retire === null ? roster.rolesOf(id) : [],
       leads: retire === null ? leads.membersOf(id).length : 0,

@@ -1,6 +1,7 @@
 // The Team tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts,
-// a session's name, roles, leads, hire or retire and former names, a closed group's count, a press on each row that
-// opens what lies under it or a session's card, a leader's two, and the notes for a tree it cannot show.
+// a session's name, roles, leads, hire or retire (never a name it no longer runs under), a closed group's count, a
+// press on each row that opens what lies under it or a session's card, a leader's two, and the notes for a tree it
+// cannot show.
 import { describe, expect, test } from 'claude-code/testing'
 import type { MeetAnswer, TeamView } from '../types'
 import { TimeZone } from '../hooks/core/read/index'
@@ -29,7 +30,7 @@ describe('teamBlocks', () => {
       ['team:acme', ['▾ acme · 5 active · 1 closed']],
       ['session:acme/lead', ['  ▾ ● lead  acme-lead · lead · leads 2']],
       ['session:acme/web', ['    ▾ ● web  acme-web · leads 2 · later Mon 11-02']],
-      ['session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet] · formerly acme-api']],
+      ['session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet]']],
       ['session:acme/ui', ['        ● ui  acme-ui · hired Fri 10-09 · review 10-25']],
       ['session:acme/ops', ['      ● ops  acme-ops · security reviewer · rehired Sun 10-11 · review 10-25']],
       ['closed:acme', ['  ▸ closed (1)']],
@@ -63,11 +64,11 @@ describe('teamBlocks', () => {
   test("a session's row counts its cards waiting on the owner, with a [Meet] press, and names when the next put off comes back", () => {
     const blocks = teamBlocks(TREE, [], UTC)
     const api = blockOf(blocks, 'session:acme/api').rows[0]?.spans ?? []
-    expect(api.slice(-6, -2)).toEqual([SEPARATOR, { text: '? 1 decision', color: 'suggestion' }, { text: ' ' }, { text: MEET_TEXT, color: 'suggestion', meets: 'api' }])
+    expect(api.slice(-4)).toEqual([SEPARATOR, { text: '? 1 decision', color: 'suggestion' }, { text: ' ' }, { text: MEET_TEXT, color: 'suggestion', meets: 'api' }])
     expect(blockOf(blocks, 'session:acme/web').rows[0]?.spans.slice(-2)).toEqual([SEPARATOR, { text: 'later Mon 11-02', dim: true }])
     const two = { ...ACME, ownerCards: { api: { due: [{ id: 'T4', title: 'Pick the database' }, { id: 'T7', title: 'Pick the queue' }], later: [] } } }
     const twice = teamBlocks({ kind: 'tree', root: treeOf([two], 'acme') }, [], UTC)
-    expect(words(twice).find(([key]) => key === 'session:acme/api')?.[1]).toEqual(['        ● api  acme-backend · ? 2 decisions [Meet] · formerly acme-api'])
+    expect(words(twice).find(([key]) => key === 'session:acme/api')?.[1]).toEqual(['        ● api  acme-backend · ? 2 decisions [Meet]'])
     // A team whose register the pane does not read shows no cards, and no [Meet].
     expect(blocks.some(block => block.key.startsWith('session:tools/') && block.rows.some(row => row.spans.some(span => span.meets !== undefined)))).toBe(false)
   })
@@ -124,11 +125,11 @@ describe('teamBlocks', () => {
     expect(qa.card?.map(row => row.key)[0]).toBe('team-card:acme/qa:retired')
   })
 
-  test('the closed group opens on a toggle: a retired session dim behind ○, its retire day and its former names', () => {
+  test('the closed group opens on a toggle: a retired session dim behind ○ under its last name, and its retire day', () => {
     const blocks = teamBlocks(TREE, ['closed:acme'], UTC)
     expect(words(blocks).slice(6, 8)).toEqual([
       ['closed:acme', ['  ▾ closed (1)']],
-      ['session:acme/qa', ['      ○ qa  acme-tester · retired Sun 10-11 · formerly acme-qa']],
+      ['session:acme/qa', ['      ○ qa  acme-tester · retired Sun 10-11']],
     ])
     const [mark, id, name] = blockOf(blocks, 'session:acme/qa').rows[0]?.spans.slice(2) ?? []
     expect([mark, id, name]).toEqual([
@@ -147,12 +148,12 @@ describe('teamBlocks', () => {
     expect(ui(JERUSALEM)).toEqual(['        ● ui  acme-ui · hired Mon 10-12 · review 10-25'])
   })
 
-  test('a session whose name is its id shows the id alone', () => {
+  test('a session whose name is its id shows the id alone, and none of the names it ran under before', () => {
     const named = { ...ACME, config: configOf({ team: { id: 'acme' }, sessions: ['lead'], roles: { lead: 'lead' } }), renames: [], hires: [] }
     const renamed = { ...named, renames: [{ v: 1, id: 'lead', from: 'acme-lead', to: 'lead', at: new Date(NOW - HOUR).toISOString(), by: 'lead' }] }
     expect(words(teamBlocks({ kind: 'tree', root: treeOf([renamed], 'acme') }, [], UTC))).toEqual([
       ['team:acme', ['▾ acme · 1 active · 0 closed']],
-      ['session:acme/lead', ['    ● lead · lead · formerly acme-lead']],
+      ['session:acme/lead', ['    ● lead · lead']],
     ])
   })
 
@@ -179,18 +180,11 @@ describe('teamBlocks with a search', () => {
       ['team:acme', ['▾ acme · 5 active · 1 closed']],
       ['session:acme/lead', ['  ▾ ● lead  acme-lead · lead · leads 2']],
       ['session:acme/web', ['    ▾ ● web  acme-web · leads 2 · later Mon 11-02']],
-      ['team-search:session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet] · formerly acme-api']],
+      ['team-search:session:acme/api', ['        ● api  acme-backend · ? 1 decision [Meet]']],
     ])
     const api = blockOf(blocks, 'team-search:session:acme/api').rows[0]?.spans ?? []
     // Its row holds a [Meet], so its id is the press that opens its card.
-    expect(api.filter(span => span.underline === true)).toEqual([
-      { text: 'api', bold: true, underline: true, toggles: cardKey('session:acme/api') },
-      { text: 'api', dim: true, underline: true },
-    ])
-    expect(api.slice(-2)).toEqual([
-      { text: 'formerly acme-', dim: true },
-      { text: 'api', dim: true, underline: true },
-    ])
+    expect(api.filter(span => span.underline === true)).toEqual([{ text: 'api', bold: true, underline: true, toggles: cardKey('session:acme/api') }])
     const web = blockOf(blocks, 'session:acme/web').rows[0]?.spans ?? []
     expect(web.some(span => span.underline === true)).toBe(false)
   })

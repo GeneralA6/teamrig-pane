@@ -49,13 +49,12 @@ describe('teamTree', () => {
     expect(tools?.kind === 'team' ? tools.team : null).toEqual({ team: 'tools', parent: 'acme', active: 2, closed: 0 })
   })
 
-  test("a session's name, former names, roles, the sessions it leads and its leaders, its launch, tasks in progress, unread lines and cards on the owner", () => {
+  test("a session's name, roles, the sessions it leads and its leaders, its launch, tasks in progress, unread lines and cards on the owner", () => {
     const root = treeOf([ACME], 'acme')
     expect(sessionOf(root, 'acme', 'api')).toEqual({
       team: 'acme',
       id: 'api',
       name: 'acme-backend',
-      formerNames: ['acme-api'],
       active: true,
       roles: [],
       leads: 0,
@@ -96,7 +95,6 @@ describe('teamTree', () => {
       team: 'acme',
       id: 'qa',
       name: 'acme-tester',
-      formerNames: ['acme-qa'],
       active: false,
       roles: [],
       leads: 0,
