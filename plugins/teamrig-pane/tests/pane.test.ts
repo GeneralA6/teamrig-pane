@@ -1683,6 +1683,33 @@ test('a file the session writes adds its repo on the next poll; a failed write a
   expect(titles.at(-1)).toBe('Tasks · 1 changed')
 })
 
+test('a press on a file written outside git opens its diff against its copy from before the first write, and a second press closes it', async ($, on) => {
+  const { clock, disk } = await start(on)
+  on('tool.call', { tool: 'Write' }, async ($, e) => {
+    disk.write(e.file_path, [e.content])
+    return { result: 'written' }
+  })
+  disk.write('/notes/plan.md', ['old'])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'changes' })
+
+  await $.tool.call({ tool: 'Write', file_path: '/notes/plan.md', content: 'new' })
+  await clock.advance(3_000)
+  expect(await pane.find({ text: /written outside git \(1\)/ })).toBeDefined()
+  // The file's row is a press in the outside files' card: keyed by the card (`outside-open`) and the row.
+  const file = 'diff:outside-open:outside:/notes/plan.md'
+  await pane.press({ key: file })
+  await clock.settle()
+  expect(await pane.find({ text: /-old/ })).toBeDefined()
+  expect(await pane.find({ text: /\+new/ })).toBeDefined()
+
+  await pane.press({ key: file })
+  await clock.settle()
+  expect(await pane.find({ text: /[-+](old|new)/ })).toBeUndefined()
+})
+
 test('a worktree removed while the session works leaves the Changes view, with no warning and no git run in it', async ($, on) => {
   const { clock, disk, runs, titles } = await start(on, {}, { roots: { '/work': '/work' }, statuses: { '/work': REPO_STATUS } })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })

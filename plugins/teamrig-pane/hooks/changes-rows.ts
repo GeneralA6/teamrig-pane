@@ -1,17 +1,18 @@
 // The Changes view as blocks of rows (rows.ts): per repo a ruled header (its folder, `branch <name>` unless
 // the folder bears its name, and how many files changed; only the folder while git can't read it),
 // its files under it as its card, each row what git's two-letter code says in words (`changed`, `renamed`, `new`…,
-// a staged change marked `(staged)`), the path and its lines added and removed (`binary` for a binary file), the
-// first repo with a diff to open led by a dim line that says a press opens one; then the files written outside any
-// repo. Each file's row is a press of its own that opens its diff (diff.ts) under it, `+` lines green and `-` red,
-// each cut at DIFF_LINE_ROWS screen lines; an untracked folder has no diff to open. The switch's badge and the tab
+// a staged change marked `(staged)`), the path and its lines added and removed (`binary` for a binary file); then
+// the files written outside any repo, by path, as the card of their own ruled header. A dim line that says a press
+// opens a diff leads the first repo with one to open, or the outside files when no repo has one. Each file's row is a
+// press of its own that opens its diff (diff.ts) under it, `+` lines green and `-` red, each cut at DIFF_LINE_ROWS
+// screen lines; an untracked folder has no diff to open. The switch's badge and the tab
 // title count the same files. While the Find field holds a query, the view draws its search (changes-search.ts) on
 // the shared search view (search-view.ts) instead: the count, then each file it names as its row draws it, over its
 // repo and branch, the words that matched underlined; a press on one opens its diff under it.
 import type { ChangesSnapshot, DiffLine, FileChange, FileDiff, LineCount, OpenDiffs, RepoChanges } from '../types'
 import { changeCount, repoName } from './changes'
 import { CHANGES_SEARCH_VIEW, changesResultKey, diffKeyOf, type ChangeHit } from './changes-search'
-import { NO_DIFFS } from './diff'
+import { NO_DIFFS, OUTSIDE, type DiffFile } from './diff'
 import { heading, single, type Block, type Row, type Span } from './rows'
 import { marksOf, type Mark } from './search'
 import { markedSpans, searchViewBlocks, type Noun } from './search-view'
@@ -142,14 +143,17 @@ function moreWords(more: number, isCut: boolean): string | null {
   return more > 0 ? `… ${more} more lines` : null
 }
 
-/** An open diff's rows, under its file's (`key`): `Reading the diff…` while git reads it, why git could not, or its lines and how many more it has. */
-export function diffRows(key: string, diff: FileDiff): Row[] {
+/**
+ * An open diff's rows, under its file's (`key`): `Reading the diff…` while it is read, why it could not be (git for
+ * a repo's file, the file or its copy for one outside git: `from`), or its lines and how many more it has.
+ */
+export function diffRows(key: string, diff: FileDiff, from: DiffFile['kind']): Row[] {
   const note = (spans: Span[]): Row[] => [{ key: `diff:${key}`, spans: [UNDER_ROW, ...spans], hang: UNDER_ROW }]
   switch (diff.kind) {
     case 'reading':
       return note([{ text: 'Reading the diff…', dim: true }])
     case 'failed':
-      return note([{ text: `WARN git could not read the diff: ${diff.problem}`, color: 'warning' }])
+      return note([{ text: `WARN ${from === 'repo' ? 'git ' : ''}could not read the diff: ${diff.problem}`, color: 'warning' }])
     case 'read': {
       const more = moreWords(diff.more, diff.isCut)
       if (diff.lines.length === 0 && more === null) return note([{ text: 'No line changed: a mode change, a rename or an empty file.', dim: true }])
@@ -187,7 +191,7 @@ function repoBlocks(repo: RepoChanges, index: number, diffs: OpenDiffs, isHinted
     ...repo.files.items.flatMap(file => {
       const row = fileRow(repo, file)
       const diff = row.expands === undefined ? undefined : diffs[row.expands]
-      return diff === undefined ? [row] : [row, ...diffRows(row.key, diff)]
+      return diff === undefined ? [row] : [row, ...diffRows(row.key, diff, 'repo')]
     }),
   ]
   if (repo.files.more > 0) rows.push({ key: `${repo.root}:more`, spans: [{ text: `… ${repo.files.more} more`, dim: true }] })
@@ -220,7 +224,7 @@ function resultBlock(hit: ChangeHit, diffs: OpenDiffs): Block {
   const expands = diffKeyOf(row)
   if (expands === null) return { key, rows }
   const diff = diffs[expands]
-  return { key, rows, expands, ...(diff === undefined ? {} : { card: diffRows(key, diff) }) }
+  return { key, rows, expands, ...(diff === undefined ? {} : { card: diffRows(key, diff, row.kind) }) }
 }
 
 /** The search's body: the hint, the line that says nothing matched, or the count and the files it names. */
@@ -242,11 +246,22 @@ export function changesBlocks(changes: ChangesSnapshot, isGitMissing = false, di
   if (search !== null) return foundBlocks(search, diffs)
   if (changes.repos.length === 0 && changes.outside.length === 0)
     return [single('no-repo', [{ text: 'No git repo yet: the session folder is in none, and no file the session or its agents edited (Edit, Write) is in one.' }])]
-  // The hint shows once, over the first files a press opens a diff of.
+  // The hint shows once, over the first files a press opens a diff of: a repo's, else those outside git.
   const hinted = changes.repos.findIndex(hasDiffs)
   const blocks = changes.repos.flatMap((repo, i) => repoBlocks(repo, i, diffs, i === hinted))
   if (changes.outside.length === 0) return blocks
-  const outside = heading('outside', [{ text: `written outside git (${changes.outside.length})`, dim: true }])
-  const rows: Row[] = changes.outside.map(path => ({ key: `outside:${path}`, spans: [{ text: path }], hang: { text: '  ' } }))
-  return [...blocks, { ...outside, opensSection: blocks.length > 0 }, { key: 'outside-files', rows }]
+  return [...blocks, outsideBlock(changes.outside, diffs, hinted === -1, blocks.length > 0)]
+}
+
+/** The files written outside git under their ruled header, as its card (repoBlocks' pattern), each a press that opens its diff under it; led by DIFF_HINT when `isHinted`. */
+function outsideBlock(outside: readonly string[], diffs: OpenDiffs, isHinted: boolean, opensSection: boolean): Block {
+  const head = heading('outside', [{ text: `written outside git (${outside.length})`, dim: true }])
+  const hint: Row[] = isHinted ? [{ key: 'outside-hint', spans: [{ text: DIFF_HINT, dim: true }] }] : []
+  const rows = outside.flatMap(path => {
+    const key = `${OUTSIDE}${path}`
+    const row: Row = { key, spans: [{ text: path }], hang: { text: '  ' }, expands: key }
+    const diff = diffs[key]
+    return diff === undefined ? [row] : [row, ...diffRows(key, diff, 'outside')]
+  })
+  return { ...head, opensSection, card: [...hint, ...rows] }
 }
