@@ -2,7 +2,8 @@
 // of the fullscreen UI. `mine` shows the session's area: a status bar of its tasks (status-bar.ts),
 // then its tasks in sections (rows.ts): Verifying, Working on, Up next, Waiting (its own waiting tasks), Asked of
 // others (those it asked of another session) and Done today (the team zone's day, as the bar counts it), each task a
-// row with a dim meta line (meta.ts); `all` shows every owner's active tasks, its own first. A press on a task row opens its card in
+// row with a dim meta line (meta.ts); `all` shows every owner's active tasks, its own first. A press on a section's or
+// an owner's heading folds its tasks away, a second shows them again (tasksFolded). A press on a task row opens its card in
 // place of the meta line (card.ts): its status and note, plan, the ask quoted where its refs still point, who
 // asked, the tasks planned first, its goals' roadmap items, evidence and links. A press on a task id in a card opens
 // that task's page (page.ts), the card with the body to itself, under back and forward (b, f) and a trail of the
@@ -77,7 +78,7 @@ import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, 
 import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
 import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, bannerBlock, currentRowKey, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
-import { NOTHING_EXPANDED, paneBlocks, type Block, type InboxPress, type Span } from './rows'
+import { NOTHING_EXPANDED, NOTHING_FOLDED, paneBlocks, type Block, type InboxPress, type Span } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
 import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
@@ -195,6 +196,8 @@ const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */
 const CARDS_SHAPE = 'cards-v1'
 const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, NOTHING_EXPANDED, { shape: CARDS_SHAPE })
+/** The Tasks view's headings whose tasks are folded away (rows.ts paneBlocks), by block key: a press on one flips it. */
+const tasksFolded = atom({ plugin: 'teamrig-pane', key: 'tasksFolded' } as const, NOTHING_FOLDED)
 const size = atom({ plugin: 'teamrig-pane', key: 'size' } as const, 'open')
 const view = atom({ plugin: 'teamrig-pane', key: 'view' } as const, 'tasks')
 /** The changes are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when ChangesSnapshot changes shape. */
@@ -918,7 +921,7 @@ export const register: Register = on => {
                   ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
                   : place.kind === 'keys'
                     ? keysBlocks(columns)
-                    : paneBlocks(snap, shown, open, bar?.filter ?? null)
+                    : paneBlocks(snap, shown, open, bar?.filter ?? null, await read($, tasksFolded))
         // Inline, the Log view shows its list alone: a page opens in the dock.
         const logShown = setupShown === null && current === 'log' && !inline ? await read($, logPage) : null
         logTitle = logShown === null ? null : logPageTitle(logShown, logs, snap)
@@ -1178,11 +1181,13 @@ export const register: Register = on => {
         </Box>
       )
     }
-    // A Teams tab key, or a meeting's card in the Meetings view, opened or closed.
+    // A Teams tab key, a meeting's card in the Meetings view, or a Tasks view heading's tasks, opened or closed.
     const fold = (key: string) =>
       current === 'meetings'
         ? update($, meetingsOpen, opened => toggledWith(opened, key))
-        : update($, teamToggled, toggled => toggledWith(toggled, key))
+        : current === 'tasks'
+          ? update($, tasksFolded, folded => toggledWith(folded, key))
+          : update($, teamToggled, toggled => toggledWith(toggled, key))
     // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
     // conversation's Log page (`reads`), opens or closes a Teams tab key or a meeting's card (`folds`), or a Changes
     // file's diff (`expands`: inline a file's row, docked a Changes search result), else words alone.

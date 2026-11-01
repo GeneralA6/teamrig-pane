@@ -68,7 +68,8 @@ export type Row = {
  * the Changes view are its header's card too, each a press of its own: changes-rows.ts); `opens` names
  * the task a press on it opens the page of (a search result, search-rows.ts); `reads` names the conversation a press
  * on it opens the Log page of (log-rows.ts); `folds` names the key a press on it opens or closes: on the Teams tab a
- * node or a session's card (team-rows.ts), on the Meetings view a meeting's card (meetings-rows.ts); docked only
+ * node or a session's card (team-rows.ts), on the Meetings view a meeting's card (meetings-rows.ts), on the Tasks
+ * view a section's or an owner's tasks under its heading (sectionHeading); docked only
  * while its rows hold no press of their own (`toggles`), which take its place there; `expands` names the Changes file whose diff a press on it opens or closes, docked (a Changes search
  * result, changes-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.
  */
@@ -85,6 +86,10 @@ export type Block = {
 }
 
 export const NOTHING_EXPANDED: ExpandedTasks = {}
+/** The Tasks view's headings whose tasks are folded away, by block key: none, every section and owner shows its tasks. */
+export const NOTHING_FOLDED: readonly string[] = []
+/** Leads a folded heading: its tasks lie under it, a press shows them. */
+export const FOLDED_MARK: Span = { text: '▸ ', dim: true }
 /** Between a task's id and its title. */
 export const TITLE_GAP = '  '
 /** A task's title and its meta line are cut at this many lines each; with its card open, the title shows whole. */
@@ -195,9 +200,13 @@ export function heading(key: string, label: Span[]): Block {
   return { key, opensSection: true, rows: [{ key, spans: [{ text: '── ', dim: true }, ...label], rule: true }] }
 }
 
-/** `Working on (2)`: a task section's name, bold, and how many it holds, dim, a blank line above it. */
-function sectionHeading(key: string, name: Span, count: string): Block {
-  return { key, opensSection: true, rows: [{ key, spans: [{ ...name, bold: true }, { text: count, dim: true }] }] }
+/**
+ * `Working on (2)`: a task section's name, bold, and how many it holds, dim, a blank line above it; a press on it folds
+ * its tasks away and a second shows them again (`folds` its key). Folded, `▸ ` leads it.
+ */
+function sectionHeading(key: string, name: Span, count: string, folded: ReadonlySet<string>): Block {
+  const spans = [{ ...name, bold: true }, { text: count, dim: true }]
+  return { key, opensSection: true, folds: key, rows: [{ key, spans: folded.has(key) ? [FOLDED_MARK, ...spans] : spans }] }
 }
 
 /** The key of each status's section: its tasks' blocks are keyed by it in the full list and in the status's filter. */
@@ -222,13 +231,16 @@ export function listRowKey(task: TaskRow, mode: ViewMode, status: BarStatus): st
 
 /**
  * A section of the tasks at `status`: its heading, keyed `key`, with how many it holds (`total`, view.ts areaView), its
- * blocks, and a dim line naming how many the cap left out (moreText). An empty section draws nothing.
+ * blocks, and a dim line naming how many the cap left out (moreText); in `folded`, its heading alone. An empty section
+ * draws nothing.
  */
-function section(status: BarStatus, name: Span, total: number, blocks: Block[], key = SECTION_KEY[status]): Block[] {
+function section(status: BarStatus, name: Span, total: number, blocks: Block[], folded: ReadonlySet<string>, key = SECTION_KEY[status]): Block[] {
   if (total === 0) return []
+  const head = sectionHeading(key, name, ` (${total})`, folded)
+  if (folded.has(key)) return [head]
   const left = total - blocks.length
   const rest = left > 0 ? [single(`${key}-more`, [{ text: moreText(status, left), dim: true }])] : []
-  return [sectionHeading(key, name, ` (${total})`), ...blocks, ...rest]
+  return [head, ...blocks, ...rest]
 }
 
 /** The area's tasks at the status the bar filters to, under no heading: what the filter's line names. */
@@ -254,9 +266,10 @@ export function noneActiveText(asked: number, pinned: string | null): string {
 
 /**
  * The area's tasks in sections: Verifying (the ones to close first), Working on, Up next, Waiting (its own), Asked
- * of others (its asks still active, which the bar counts as waiting too) and Done today, each heading its count.
+ * of others (its asks still active, which the bar counts as waiting too) and Done today, each heading its count, those
+ * in `folded` their heading alone.
  */
-function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null): Block[] {
+function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null, folded: ReadonlySet<string>): Block[] {
   if (snap.area === null) return [noSessionBlock('no-area', snap)]
   const tree = treeOf(snap)
   const view = areaView(snap.tasks, snap.area, tree)
@@ -276,20 +289,20 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   // An ask keeps its block key under the waiting status's (listRowKey), as the bar's waiting filter lists it so too.
   return [
     ...blocks,
-    ...section('verifying', { text: 'Verifying', color: 'success' }, counts.verifying, tasks('verifying', view.verifying)),
-    ...section('working', { text: 'Working on' }, counts.working, tasks('working', view.working)),
-    ...section('not-started', { text: 'Up next' }, counts['not-started'], tasks('not-started', view.upNext)),
-    ...section('waiting', { text: 'Waiting' }, view.waiting.length, tasks('waiting', view.waiting)),
-    ...section('waiting', { text: 'Asked of others' }, view.askedTotal, tasks('waiting', view.asked), 'asked'),
-    ...section('done-today', { text: 'Done today' }, counts['done-today'], done),
+    ...section('verifying', { text: 'Verifying', color: 'success' }, counts.verifying, tasks('verifying', view.verifying), folded),
+    ...section('working', { text: 'Working on' }, counts.working, tasks('working', view.working), folded),
+    ...section('not-started', { text: 'Up next' }, counts['not-started'], tasks('not-started', view.upNext), folded),
+    ...section('waiting', { text: 'Waiting' }, view.waiting.length, tasks('waiting', view.waiting), folded),
+    ...section('waiting', { text: 'Asked of others' }, view.askedTotal, tasks('waiting', view.asked), folded, 'asked'),
+    ...section('done-today', { text: 'Done today' }, counts['done-today'], done, folded),
   ]
 }
 
 /**
  * Every owner with active tasks under a heading with its counts, the session's own area first and marked: `(you)`,
- * or `(pinned)` for an area a pin shows.
+ * or `(pinned)` for an area a pin shows; an owner in `folded` (`owner:<id>`) its heading alone.
  */
-function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
+function allBlocks(snap: Snapshot, expanded: ExpandedTasks, folded: ReadonlySet<string>): Block[] {
   const tree = treeOf(snap)
   const groups = ownerGroups(snap.tasks, tree, snap.area)
   if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
@@ -299,8 +312,10 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
     const isOwn = group.owner === snap.area
     const owner: Span = { text: group.owner, color: isOwn ? 'claude' : undefined }
     const mark = !isOwn ? '' : snap.areaSource === 'pinned' ? ' (pinned)' : ' (you)'
+    const key = `owner:${group.owner}`
     // The first group sits under the buttons, already a gap away.
-    const head = { ...sectionHeading(`owner:${group.owner}`, owner, `${mark} · ${group.active.length} active${waiting}${verifying}`), opensSection: i > 0 }
+    const head = { ...sectionHeading(key, owner, `${mark} · ${group.active.length} active${waiting}${verifying}`, folded), opensSection: i > 0 }
+    if (folded.has(key)) return [head]
     return [head, ...group.active.map(task => taskBlock(group.owner, task, expanded, tree, null))]
   })
 }
@@ -309,17 +324,20 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks): Block[] {
  * The body under the buttons: the register's problem, if any, then the mode's view, the tasks in `expanded` with their cards open.
  * A snapshot never read (`now` 0: the pane's first moments, or a hot reload's until its first poll) says so, instead of
  * an empty list or a missing area it has not yet looked for. `filter`, the status bar's (status-bar.ts),
- * narrows the mine view to the area's tasks at that status; null shows them all.
+ * narrows the mine view to the area's tasks at that status; null shows them all. The headings in `folded` (a section's
+ * key in mine, `owner:<id>` in all) show without their tasks.
  */
 export function paneBlocks(
   snap: Snapshot,
   mode: ViewMode,
   expanded: ExpandedTasks = NOTHING_EXPANDED,
   filter: BarStatus | null = null,
+  folded: readonly string[] = NOTHING_FOLDED,
 ): Block[] {
   const reading = readingBlock(snap)
   if (reading !== null) return [reading]
-  return [...problemBlocks(snap), ...(mode === 'mine' ? mineBlocks(snap, expanded, filter) : allBlocks(snap, expanded))]
+  const keys = new Set(folded)
+  return [...problemBlocks(snap), ...(mode === 'mine' ? mineBlocks(snap, expanded, filter, keys) : allBlocks(snap, expanded, keys))]
 }
 
 /**
