@@ -581,7 +581,11 @@ open, so Enter leaves the results as they are; switching views closes the search
 ## The Teams tab
 
 `e`, or Teams on the switch, shows the tree of teams the session's team is in, from the top team down. Each team's row
-counts its active and retired sessions. Under it are its lead, each leader over the sessions it leads (the config's
+counts its active and retired sessions, then gives its week with its child teams' (`week ███████░░░ 35% of 52%`): ten
+cells for the part of the account's week planned for it, filled as far as it used it, green up to how far the week has
+gone, amber past that (ahead of plan); behind its plan, a dim `│` marks how far the week has gone (`████░│░░░░`). The
+percents are its used and planned parts of the account's week. A team planned no part of the week draws an empty bar
+until it uses some, then an amber one; one with no week file for the running week draws no week. Under it are its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a group of their own, and its child teams (`team.parent`). A session's row gives its
 id (bold), its current name where it differs, how many sessions it leads (`(2)`, dim), its roles, each in a colour of
 its own (lead, `sub-lead` for a leader that is not the lead, delivery owner, security reviewer); then how many of its
@@ -617,7 +621,8 @@ roles or hire scope, retired ones too. The body counts the matches and draws eac
 opens or closes its card, and Enter with one match opens it. Switching to Tasks closes the search, as Teams does a Tasks
 search. Cleared, the tree draws as before: a match under a closed row stays hidden there.
 
-It reads each team folder's config, rename log and hire log (`~/.teamrig/teams/<team>`) with teamrig's own readers.
+It reads each team folder's config, rename log, hire log and the week file teamrig's budget hooks write
+(`usage/team.week.json` in its state folder) under `~/.teamrig/teams/<team>`, with teamrig's own readers.
 While the view shows, it reads a file again on a 3 second poll only when its size or time moved; on another view, or
 minimized, it reads nothing.
 
