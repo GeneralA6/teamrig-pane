@@ -7,7 +7,7 @@
 // role's colour (team-card.ts
 // ROLE_COLORS, T1245), how many of its cards wait on the owner now with a [Meet] press that runs `teamrig meet` on it
 // (T1297) and when the next card the owner put off comes back; its hire and retire days are its card's. A retired
-// group's row counts its sessions. The row of the session whose pane it is starts with a green ► in the indent's first
+// group's row counts its sessions. The row of the session whose pane it is starts with a green ▶ in the indent's first
 // cell (T1281), so the viewer finds itself at a glance. A press on a team's or a retired group's row opens or closes what lies under it
 // (`folds`). A press on a session's row opens or closes its card (team-card.ts) under it; a
 // leader's row, and docked a row with a [Meet], holds its presses instead, a leader's mark opening or closing the
@@ -38,10 +38,12 @@ const SESSION_NOUN: Noun = { one: 'session', many: 'sessions' }
 /** The press on a session's row that brings the owner its cards (`teamrig meet`). */
 export const MEET_TEXT = '[Meet]'
 /**
- * The mark before the row of the session whose pane it is: one cell of plain text in the success colour. The owner
- * asked for a green ▶, which is an emoji in some terminals; ► is the same arrow as text.
+ * The mark before the row of the session whose pane it is: one cell of plain text in the success colour, a triangle as
+ * tall as it is wide (T1793). ▶ (U+25B6) is that triangle, and an emoji in some terminals, so VS15 (U+FE0E) asks for
+ * its text form. ► (U+25BA), the mark before, is a pointer drawn half as tall as wide (JetBrains Mono: 610 by 300
+ * units, where ▶ is 610 by 620).
  */
-export const OWN_MARK: Span = { text: '►', color: 'success' }
+export const OWN_MARK: Span = { text: '\u{25b6}\u{fe0e}', color: 'success' }
 
 /** The Find field's query on the Teams tab and the sessions it names (team-search.ts searchTeam), in the tree's order. */
 export type TeamSearch = { query: string; hits: readonly SessionHit[] }
