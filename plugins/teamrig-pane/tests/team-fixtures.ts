@@ -1,7 +1,7 @@
 // Teams as teamrig's readers hand them to the Teams tab's model (hooks/team.ts): a root team with a sub-lead, hires,
-// retires and renames, its child team, and another root team.
+// retires and renames, its child team, and another root team; none with a week file, which weekFile makes.
 import type { TaskCounts, TaskRow } from '../types'
-import { parseConfigText, readRegister, type HireRecord, type KitConfig, type Rename, type RetireRecord } from '../hooks/core/read/index'
+import { parseConfigText, readRegister, type HireRecord, type KitConfig, type Rename, type RetireRecord, type TeamWeekSummary } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { taskCountsOf } from '../hooks/task-counts'
 import { teamTree, type TeamRead, type TeamTreeNode } from '../hooks/team'
@@ -24,6 +24,14 @@ export function retire(session: string, at: number, extra: Partial<RetireRecord>
 
 export function rename(id: string, from: string, to: string): Rename {
   return { v: 1, id, from, to, at: iso(NOW - 48 * HOUR), by: id }
+}
+
+/** The account's week resets three days after NOW, so NOW is 4 days into it: 57% of the week. */
+export const WEEK_RESET = NOW + 72 * HOUR
+
+/** A team's week file: its used and planned part of the account's week, for the week that resets at `resetsAt`. */
+export function weekFile(usedPct: number, plannedPct: number, resetsAt = WEEK_RESET): TeamWeekSummary {
+  return { usedPct, plannedPct, accountUsedPct: 70, resetsAt, at: NOW - HOUR }
 }
 
 /** The register's tasks after `lines`, as the pane lists them. */
@@ -79,6 +87,7 @@ export const ACME: TeamRead = {
     retire('qa', NOW - 60 * HOUR, { handover: 'handover/qa.md', heir: 'web' }),
     hire('ops', NOW - 50 * HOUR, { scope: 'ops again' }),
   ],
+  week: null,
   tasks: tasksOf(...ACME_REGISTER),
   unread: new Map([
     ['api', 2],
@@ -99,6 +108,7 @@ export const TOOLS: TeamRead = {
   config: configOf({ team: { id: 'tools', parent: 'acme' }, sessions: ['boss', 'dev'], roles: { lead: 'boss' } }),
   renames: [],
   hires: [],
+  week: null,
   tasks: null,
   unread: null,
   ownerCards: null,
@@ -111,15 +121,16 @@ export const OTHER: TeamRead = {
   config: configOf({ team: { id: 'other' }, sessions: ['lead'], roles: { lead: 'lead' } }),
   renames: [],
   hires: [],
+  week: null,
   tasks: null,
   unread: null,
   ownerCards: null,
   taskCounts: null,
 }
 
-/** The tree that holds `own`, failing the test when there is none. */
-export function treeOf(reads: readonly TeamRead[], own: string): TeamTreeNode {
-  const tree = teamTree(reads, own)
+/** The tree that holds `own` at `now`, failing the test when there is none. */
+export function treeOf(reads: readonly TeamRead[], own: string, now = NOW): TeamTreeNode {
+  const tree = teamTree(reads, own, now)
   if (tree === null) throw new Error(`no tree for ${own}`)
   return tree
 }

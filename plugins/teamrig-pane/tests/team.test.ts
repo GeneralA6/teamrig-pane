@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { foundRows, sessionKey, teamRows, teamTree, type SessionFacts, type TeamRead, type TeamRow, type TeamTreeNode } from '../hooks/team'
-import { ACME, ACME_COUNTS, OTHER, TOOLS, configOf, treeOf } from './team-fixtures'
+import { HOUR, NOW } from './fixtures'
+import { ACME, ACME_COUNTS, OTHER, TOOLS, WEEK_RESET, configOf, treeOf, weekFile } from './team-fixtures'
 
 /** One line per row: indented by depth, ▾ open, ▸ closed, · nothing under it, then the node. */
 function outline(rows: readonly TeamRow[]): string[] {
@@ -44,9 +45,9 @@ describe('teamTree', () => {
 
   test("a team's counts: the sessions on its config, the retired ones no longer on it, and its parent", () => {
     const root = treeOf([ACME, TOOLS], 'acme')
-    expect(root.kind === 'team' ? root.team : null).toEqual({ team: 'acme', parent: null, active: 5, retired: 1 })
+    expect(root.kind === 'team' ? root.team : null).toEqual({ team: 'acme', parent: null, active: 5, retired: 1, week: null })
     const tools = root.children.find(node => node.key === 'team:tools')
-    expect(tools?.kind === 'team' ? tools.team : null).toEqual({ team: 'tools', parent: 'acme', active: 2, retired: 0 })
+    expect(tools?.kind === 'team' ? tools.team : null).toEqual({ team: 'tools', parent: 'acme', active: 2, retired: 0, week: null })
   })
 
   test("a session's name, roles, the sessions it leads and its leaders, its launch, tasks in progress and counted, unread lines and cards on the owner", () => {
@@ -144,8 +145,52 @@ describe('teamTree', () => {
   })
 
   test('no config read for the own team: no tree, and no rows', () => {
-    expect(teamTree([TOOLS], 'acme')).toBe(null)
+    expect(teamTree([TOOLS], 'acme', NOW)).toBe(null)
     expect(teamRows(null, NONE)).toEqual([])
+  })
+})
+
+/** The week of the team `team` in the tree. */
+function weekIn(root: TeamTreeNode, team: string): unknown {
+  const find = (node: TeamTreeNode): TeamTreeNode | undefined => (node.key === `team:${team}` ? node : node.children.map(find).find(found => found !== undefined))
+  const found = find(root)
+  if (found?.kind !== 'team') throw new Error(`no team ${team}`)
+  return found.team.week
+}
+
+describe("a team's week", () => {
+  test("a team's own week file with its child teams', summed to hundredths; how far the week is, in whole percent", () => {
+    const root = treeOf([{ ...ACME, week: weekFile(35.28, 51.91) }, { ...TOOLS, week: weekFile(3.84, 5.66) }], 'acme')
+    // The week began 96 hours before NOW, of 168: 57%.
+    expect(weekIn(root, 'acme')).toEqual({ usedPct: 39.12, plannedPct: 57.57, elapsedPct: 57 })
+    expect(weekIn(root, 'tools')).toEqual({ usedPct: 3.84, plannedPct: 5.66, elapsedPct: 57 })
+    const tenths = treeOf([{ ...ACME, week: weekFile(0.1, 0.1) }, { ...TOOLS, week: weekFile(0.2, 0.2) }], 'acme')
+    expect(weekIn(tenths, 'acme')).toEqual({ usedPct: 0.3, plannedPct: 0.3, elapsedPct: 57 })
+  })
+
+  test("a child team's file on another reset is another account's: its parent leaves it out, its own row shows it", () => {
+    const later = WEEK_RESET + 48 * HOUR
+    const root = treeOf([{ ...ACME, week: weekFile(35.28, 51.91) }, { ...TOOLS, week: weekFile(3.84, 5.66, later) }], 'acme')
+    expect(weekIn(root, 'acme')).toEqual({ usedPct: 35.28, plannedPct: 51.91, elapsedPct: 57 })
+    expect(weekIn(root, 'tools')).toEqual({ usedPct: 3.84, plannedPct: 5.66, elapsedPct: 29 })
+  })
+
+  test("a file from a week gone by is left out: the team's week is its child teams', or none", () => {
+    const root = treeOf([{ ...ACME, week: weekFile(80, 90, NOW - HOUR) }, { ...TOOLS, week: weekFile(3.84, 5.66) }], 'acme')
+    expect(weekIn(root, 'acme')).toEqual({ usedPct: 3.84, plannedPct: 5.66, elapsedPct: 57 })
+    expect(weekIn(treeOf([{ ...ACME, week: weekFile(80, 90, NOW) }], 'acme'), 'acme')).toBe(null)
+  })
+
+  test('no week file in the team or under it: no week', () => {
+    const root = treeOf([ACME, { ...TOOLS, week: weekFile(3.84, 5.66) }], 'acme')
+    expect(weekIn(treeOf([ACME, TOOLS], 'acme'), 'acme')).toBe(null)
+    expect(weekIn(treeOf([{ ...ACME, week: weekFile(1, 2) }, TOOLS], 'acme'), 'tools')).toBe(null)
+    expect(weekIn(root, 'acme')).toEqual({ usedPct: 3.84, plannedPct: 5.66, elapsedPct: 57 })
+  })
+
+  test("how far the week is stays within 0 and 100: a file whose reset is over a week off reads 0; at its reset's eve, 100", () => {
+    expect(weekIn(treeOf([{ ...ACME, week: weekFile(0, 10, NOW + 200 * HOUR) }], 'acme'), 'acme')).toEqual({ usedPct: 0, plannedPct: 10, elapsedPct: 0 })
+    expect(weekIn(treeOf([{ ...ACME, week: weekFile(10, 10, NOW + 1) }], 'acme'), 'acme')).toEqual({ usedPct: 10, plannedPct: 10, elapsedPct: 100 })
   })
 })
 
