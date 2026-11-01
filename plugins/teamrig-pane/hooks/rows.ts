@@ -7,7 +7,8 @@
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
 import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
-import { cardRows } from './card'
+import { actRows, type CardActs } from './act-rows'
+import { cardRows, GUIDE } from './card'
 import { COMMAND } from './command'
 import { teamSessions } from './leads'
 import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
@@ -161,16 +162,16 @@ export function titleRow(key: string, task: TaskRow, maxLines?: number): Row {
 
 /**
  * `◐ T12  title`, the title cut at TITLE_LINES lines, and under it one dim meta line (meta.ts) cut at META_LINES;
- * with its card open, the title shows whole and the card (card.ts) takes the meta line's place. `tree` is the
- * snapshot's (meta.ts treeOf); `viewer` is the area whose list it is (null in the all view): a task it does not
- * own says whose it is.
+ * with its card open, the title shows whole and the card (card.ts) takes the meta line's place, the owner's acts
+ * (act-rows.ts, drawn from `acts`) at its bottom. `tree` is the snapshot's (meta.ts treeOf); `viewer` is the area
+ * whose list it is (null in the all view): a task it does not own says whose it is.
  */
-function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, tree: PaneTree, viewer: string | null): Block {
+function taskBlock(section: string, task: TaskRow, expanded: ExpandedTasks, tree: PaneTree, viewer: string | null, acts: CardActs | null): Block {
   const detail = expanded[task.id]
   const indent = indentOf(task)
   const key = taskKey(section, task.id)
   const title = titleRow(key, task, detail === undefined ? TITLE_LINES : undefined)
-  if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: cardRows(section, task, detail, tree) }
+  if (detail !== undefined) return { key, toggle: task.id, rows: [title], card: [...cardRows(section, task, detail, tree), ...actRows(section, task, acts, GUIDE)] }
   const meta: Row = { key: `${section}-meta:${task.id}`, spans: [indent, ...metaSpans(task, tree, viewer)], hang: indent, maxLines: META_LINES }
   return { key, toggle: task.id, rows: [title, meta] }
 }
@@ -252,12 +253,12 @@ function section(status: BarStatus, name: Span, total: number, blocks: Block[], 
 }
 
 /** The area's tasks at the status the bar filters to, under no heading: what the filter's line names. */
-function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expanded: ExpandedTasks): Block[] {
+function filteredBlocks(snap: Snapshot, area: string, filter: BarStatus, expanded: ExpandedTasks, acts: CardActs | null): Block[] {
   const tree = treeOf(snap)
   const tasks = statusLines(snap.tasks, area, tree, filter)
   if (tasks.length === 0) return [single('none-filtered', [{ text: BAR_LOOK[filter].none, dim: true }])]
   if (filter === 'done-today') return tasks.map(task => doneBlock(task, expanded, tree))
-  return tasks.map(task => taskBlock(SECTION_KEY[filter], task, expanded, tree, area))
+  return tasks.map(task => taskBlock(SECTION_KEY[filter], task, expanded, tree, area, acts))
 }
 
 /**
@@ -277,7 +278,7 @@ export function noneActiveText(asked: number, pinned: string | null): string {
  * of others (its asks still active, which the bar counts as waiting too) and Done today, each heading its count, those
  * in `folded` their heading alone.
  */
-function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null, folded: ReadonlySet<string>): Block[] {
+function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null, folded: ReadonlySet<string>, acts: CardActs | null): Block[] {
   if (snap.area === null) return [noSessionBlock('no-area', snap)]
   const tree = treeOf(snap)
   const view = areaView(snap.tasks, snap.area, tree)
@@ -288,10 +289,10 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
   header.push({ text: `${activeTotal} active`, dim: true })
   const blocks: Block[] = [{ key: 'header', rows: [{ key: 'header', spans: header, rule: true }] }]
   // Filtered from the status bar, the header leads that status's tasks alone.
-  if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded)]
+  if (filter !== null) return [...blocks, ...filteredBlocks(snap, view.area, filter, expanded, acts)]
   const pinned = snap.areaSource === 'pinned' ? view.area : null
   if (activeTotal === 0) blocks.push(single('none-active', [{ text: noneActiveText(view.askedTotal, pinned), dim: true }]))
-  const tasks = (status: BarStatus, list: readonly TaskRow[]) => list.map(task => taskBlock(SECTION_KEY[status], task, expanded, tree, view.area))
+  const tasks = (status: BarStatus, list: readonly TaskRow[]) => list.map(task => taskBlock(SECTION_KEY[status], task, expanded, tree, view.area, acts))
   const done = view.doneToday.map(task => doneBlock(task, expanded, tree))
   const { counts } = view
   // An ask keeps its block key under the waiting status's (listRowKey), as the bar's waiting filter lists it so too.
@@ -310,7 +311,7 @@ function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus |
  * Every owner with active tasks under a heading with its counts, the session's own area first and marked: `(you)`,
  * or `(pinned)` for an area a pin shows; an owner in `folded` (`owner:<id>`) its heading alone.
  */
-function allBlocks(snap: Snapshot, expanded: ExpandedTasks, folded: ReadonlySet<string>): Block[] {
+function allBlocks(snap: Snapshot, expanded: ExpandedTasks, folded: ReadonlySet<string>, acts: CardActs | null): Block[] {
   const tree = treeOf(snap)
   const groups = ownerGroups(snap.tasks, tree, snap.area)
   if (groups.length === 0) return [single('none-active', [{ text: 'No active tasks.', dim: true }])]
@@ -324,7 +325,7 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks, folded: ReadonlySet<
     // The first group sits under the buttons, already a gap away.
     const head = { ...sectionHeading(key, owner, `${mark} · ${group.active.length} active${waiting}${verifying}`, folded), opensSection: i > 0 }
     if (folded.has(key)) return [head]
-    return [head, ...group.active.map(task => taskBlock(group.owner, task, expanded, tree, null))]
+    return [head, ...group.active.map(task => taskBlock(group.owner, task, expanded, tree, null, acts))]
   })
 }
 
@@ -333,7 +334,8 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks, folded: ReadonlySet<
  * A snapshot never read (`now` 0: the pane's first moments, or a hot reload's until its first poll) says so, instead of
  * an empty list or a missing area it has not yet looked for. `filter`, the status bar's (status-bar.ts),
  * narrows the mine view to the area's tasks at that status; null shows them all. The headings in `folded` (a section's
- * key in mine, `owner:<id>` in all) show without their tasks.
+ * key in mine, `owner:<id>` in all) show without their tasks. An open card ends in the owner's acts drawn from `acts`
+ * (act-rows.ts); none with `acts` null.
  */
 export function paneBlocks(
   snap: Snapshot,
@@ -341,11 +343,12 @@ export function paneBlocks(
   expanded: ExpandedTasks = NOTHING_EXPANDED,
   filter: BarStatus | null = null,
   folded: readonly string[] = NOTHING_FOLDED,
+  acts: CardActs | null = null,
 ): Block[] {
   const reading = readingBlock(snap)
   if (reading !== null) return [reading]
   const keys = new Set(folded)
-  return [...problemBlocks(snap), ...(mode === 'mine' ? mineBlocks(snap, expanded, filter, keys) : allBlocks(snap, expanded, keys))]
+  return [...problemBlocks(snap), ...(mode === 'mine' ? mineBlocks(snap, expanded, filter, keys, acts) : allBlocks(snap, expanded, keys, acts))]
 }
 
 /**

@@ -28,7 +28,7 @@ import type { Row, Span } from './rows'
 import { weekAfter, weekOf, type Clock } from './zone'
 
 /** Starts each card line in the list: the guide that ties the card to its task's title. */
-const GUIDE: Span = { text: '    │ ', dim: true }
+export const GUIDE: Span = { text: '    │ ', dim: true }
 /** The label column, in cells: the longest label (`Description`) and the gap before the value. */
 export const LABEL_CELLS = 13
 /** Between the parts of one value line. */
