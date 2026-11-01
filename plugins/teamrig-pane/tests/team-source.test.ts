@@ -1,16 +1,18 @@
 // The Teams tab's source (hooks/team-source.ts): each team folder's config and, in the state folder it names, its rename
-// and hire logs, each re-read only when its stamp moves; the tree of the folders a team id names, written only when it
-// changed and read only while the tab shows; the own team's tasks, cards on the owner and unread inbox lines with it, a
-// peer's none; a folder whose read fails drawn as it last read, or left out before one, and named with why.
+// and hire logs and its week file, each re-read only when its stamp moves; the tree of the folders a team id names at
+// the clock's now, written only when it changed and read only while the tab shows; the own team's tasks, cards on the
+// owner and unread inbox lines with it, a peer's none; a folder whose read fails drawn as it last read, or left out
+// before one, and named with why.
 import { describe, expect, test } from 'claude-code/testing'
 import type { SessionOwnerCards, Snapshot, TeamView } from '../types'
+import { TEAM_WEEK_FORMAT } from '../hooks/core/read/index'
 import { POLL_MS } from '../hooks/live'
 import type { TeamFiles } from '../hooks/places'
-import { teamTree, type TeamRead } from '../hooks/team'
+import { teamTree, type TeamRead, type TeamWeek } from '../hooks/team'
 import type { InboxPaths } from '../hooks/team-inboxes'
 import { LiveTeam, TeamFolder, type OwnReads } from '../hooks/team-source'
 import { HOUR, MemoryFiles, NOW, S1, createLine, iso, markLine, statusLine } from './fixtures'
-import { configOf, countsOf, hire, rename, tasksOf } from './team-fixtures'
+import { WEEK_RESET, configOf, countsOf, hire, rename, tasksOf, weekFile } from './team-fixtures'
 
 const TEAMS = 'K/teams'
 const ACME_HOME = `${TEAMS}/acme`
@@ -56,12 +58,17 @@ const ACME_READ: TeamRead = {
   config: configOf(ACME_CONFIG),
   renames: [API_RENAME],
   hires: [API_HIRE],
+  week: null,
   tasks: TASKS,
   unread: null,
   ownerCards: OWNER_CARDS,
   taskCounts: TASK_COUNTS,
 }
-const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], tasks: null, unread: null, ownerCards: null, taskCounts: null }
+const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], week: null, tasks: null, unread: null, ownerCards: null, taskCounts: null }
+/** acme's week as teamrig's budget hooks write it. */
+const ACME_WEEK = weekFile(35.28, 51.91)
+/** A week file's text: its format, then the summary's fields. */
+const weekText = (format: number) => JSON.stringify({ v: format, ...ACME_WEEK })
 /** What the pane reads of acme beside its folder, with no inboxes found. */
 const OWN: OwnReads = { tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS, inboxes: null }
 /** The own register later: api took T4 too, and its card on the owner was answered. */
@@ -110,6 +117,28 @@ describe('TeamFolder', () => {
     expect([read?.renames, read?.hires]).toEqual([[], [API_HIRE]])
   })
 
+  test("reads the week file in its state folder, again only when its stamp moves, from the new state folder when the config moves it; a damaged one, or one in a format it cannot read, as none", async () => {
+    const disk = teamsDisk()
+    const week = `${ACME_STATE}/usage/team.week.json`
+    disk.write(week, weekText(TEAM_WEEK_FORMAT))
+    const folder = new TeamFolder(disk, TEAMS, 'acme')
+    expect((await folder.read(null))?.week).toEqual(ACME_WEEK)
+    expect(disk.reads).toContain(week)
+
+    disk.reads.length = 0
+    expect((await folder.read(null))?.week).toEqual(ACME_WEEK)
+    expect(disk.reads).toEqual([])
+
+    disk.write(week, '{ not json')
+    expect((await folder.read(null))?.week).toBe(null)
+    disk.write(week, weekText(TEAM_WEEK_FORMAT + 1))
+    expect((await folder.read(null))?.week).toBe(null)
+
+    disk.write(ACME_CONFIG_PATH, JSON.stringify({ ...ACME_CONFIG, paths: { state: 'kept' } }))
+    disk.write(`${ACME_HOME}/kept/usage/team.week.json`, weekText(TEAM_WEEK_FORMAT))
+    expect((await folder.read(null))?.week).toEqual(ACME_WEEK)
+  })
+
   test('no config file, or one teamrig refuses, reads as no team; a read that fails throws, and the next one tries again', async () => {
     const disk = new MemoryFiles()
     const folder = new TeamFolder(disk, TEAMS, 'acme')
@@ -143,13 +172,20 @@ describe('TeamFolder', () => {
   })
 })
 
+/** The week of a written tree's root team; undefined for a view that holds no team tree. */
+function rootWeek(view: TeamView | undefined): TeamWeek | null | undefined {
+  if (view?.kind !== 'tree' || view.root?.kind !== 'team') return undefined
+  return view.root.team.week
+}
+
 /**
- * A LiveTeam over the fake disk and a fake folder list, with whether the tab shows and the register's answer set by the
- * test, and each write it made; it counts the own team's inboxes at `inbox`, none when null (a pane that found no
- * register).
+ * A LiveTeam over the fake disk and a fake folder list, with whether the tab shows, the register's answer and the
+ * clock's now set by the test, and each write it made; it counts the own team's inboxes at `inbox`, none when null (a
+ * pane that found no register).
  */
 function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
   const shown = { tab: true }
+  const clock = { now: NOW }
   const listed: { names: readonly string[]; failure: string | null } = { names: ['acme', 'tools'], failure: null }
   const register: { answer: Pick<Snapshot, 'tasks' | 'ownerCards' | 'taskCounts'> } = { answer: { tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS } }
   const views: TeamView[] = []
@@ -165,11 +201,12 @@ function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
       if (failWrites) throw new Error('write refused')
       views.push(view)
     },
+    now: async () => clock.now,
   }, inbox)
   const setFailWrites = (fails: boolean) => {
     failWrites = fails
   }
-  return { live, shown, listed, register, views, failWrites: setFailWrites }
+  return { live, shown, listed, register, clock, views, failWrites: setFailWrites }
 }
 
 describe('LiveTeam', () => {
@@ -178,12 +215,12 @@ describe('LiveTeam', () => {
     const { live, views } = fakeTeam(disk)
     await live.refresh()
     await live.refresh()
-    expect(views).toEqual([{ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] }])
+    expect(views).toEqual([{ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme', NOW), failures: [] }])
 
     const grown = { ...TOOLS_CONFIG, sessions: ['boss', 'dev', 'qa'] }
     disk.write(TOOLS_CONFIG_PATH, JSON.stringify(grown))
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, { ...TOOLS_READ, config: configOf(grown) }], 'acme'), failures: [] })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, { ...TOOLS_READ, config: configOf(grown) }], 'acme', NOW), failures: [] })
     expect(views.length).toBe(2)
   })
 
@@ -194,12 +231,12 @@ describe('LiveTeam', () => {
     disk.write(`${INBOX.inboxDir}/dev.md`, 'boss: fix the build\n')
     const { live, views } = fakeTeam(disk, INBOX)
     await live.refresh()
-    expect(views).toEqual([{ kind: 'tree', root: teamTree([{ ...ACME_READ, unread: new Map([['api', 2]]) }, TOOLS_READ], 'acme'), failures: [] }])
+    expect(views).toEqual([{ kind: 'tree', root: teamTree([{ ...ACME_READ, unread: new Map([['api', 2]]) }, TOOLS_READ], 'acme', NOW), failures: [] }])
     expect(disk.reads).not.toContain(`${INBOX.inboxDir}/dev.md`)
 
     const alone = fakeTeam(disk)
     await alone.live.refresh()
-    expect(alone.views).toEqual([{ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] }])
+    expect(alone.views).toEqual([{ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme', NOW), failures: [] }])
   })
 
   test('a folder that names no team is never read; one no longer listed leaves the tree, and one listed again is read anew', async () => {
@@ -212,13 +249,13 @@ describe('LiveTeam', () => {
 
     listed.names = ['acme']
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ], 'acme'), failures: [] })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ], 'acme', NOW), failures: [] })
 
     listed.names = ['acme', 'tools']
     disk.reads.length = 0
     await live.refresh()
     expect(disk.reads).toEqual([TOOLS_CONFIG_PATH])
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme', NOW), failures: [] })
   })
 
   test("a folder list, or the own team's folder before any read of it worked, that fails shows why; the next read that works shows the tree again", async () => {
@@ -234,7 +271,7 @@ describe('LiveTeam', () => {
     expect(views.at(-1)).toEqual({ kind: 'failed', reason: BUSY })
 
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme', NOW), failures: [] })
   })
 
   test('a peer folder whose read fails is left out before a read of it worked, else drawn as it last read, under a WARN naming it; the next read that works clears it', async () => {
@@ -245,15 +282,15 @@ describe('LiveTeam', () => {
     listed.names = ['acme', 'tools']
     disk.failNextRead = BUSY
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ], 'acme'), failures: [{ team: 'tools', reason: BUSY, isLastRead: false }] })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ], 'acme', NOW), failures: [{ team: 'tools', reason: BUSY, isLastRead: false }] })
 
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [] })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme', NOW), failures: [] })
 
     disk.write(TOOLS_CONFIG_PATH, JSON.stringify({ ...TOOLS_CONFIG, sessions: ['boss'] }))
     disk.failNextRead = BUSY
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme'), failures: [{ team: 'tools', reason: BUSY, isLastRead: true }] })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([ACME_READ, TOOLS_READ], 'acme', NOW), failures: [{ team: 'tools', reason: BUSY, isLastRead: true }] })
   })
 
   test("the own team's folder whose read fails after one worked draws as it last read, with the register as read now, under a WARN naming it", async () => {
@@ -265,10 +302,24 @@ describe('LiveTeam', () => {
     disk.failNextRead = BUSY
     await live.refresh()
     const grown: TeamRead = { ...ACME_READ, ...GROWN_PARTS }
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([grown, TOOLS_READ], 'acme'), failures: [{ team: 'acme', reason: BUSY, isLastRead: true }] })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([grown, TOOLS_READ], 'acme', NOW), failures: [{ team: 'acme', reason: BUSY, isLastRead: true }] })
 
     await live.refresh()
-    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([grown, TOOLS_READ], 'acme'), failures: [] })
+    expect(views.at(-1)).toEqual({ kind: 'tree', root: teamTree([grown, TOOLS_READ], 'acme', NOW), failures: [] })
+  })
+
+  test("the own team's week file gives the tree its week at the clock's now; once the clock reaches the week's reset, the next refresh writes the tree without it", async () => {
+    const disk = teamsDisk()
+    disk.write(`${ACME_STATE}/usage/team.week.json`, weekText(TEAM_WEEK_FORMAT))
+    const { live, clock, views } = fakeTeam(disk)
+    await live.refresh()
+    expect(views).toEqual([{ kind: 'tree', root: teamTree([{ ...ACME_READ, week: ACME_WEEK }, TOOLS_READ], 'acme', NOW), failures: [] }])
+    expect(rootWeek(views[0])).toEqual({ usedPct: 35.28, plannedPct: 51.91, elapsedPct: 57 })
+
+    clock.now = WEEK_RESET
+    await live.refresh()
+    expect(views.length).toBe(2)
+    expect(rootWeek(views[1])).toBe(null)
   })
 
   test('a poll while the tab is hidden reads nothing; once it shows, it reads', async () => {

@@ -2154,6 +2154,11 @@ test('after a hot reload, a team tree an older pane kept without its failed fold
   await olderTreeReadsAsNotRead($, on, (key, value) => (key === 'failures' ? undefined : key === 'shape' ? 'team-v5' : value))
 })
 
+test("after a hot reload, a team tree an older pane kept without its teams' weeks reads as not read yet, never drawn", async ($, on) => {
+  // The pane before the team week kept the tree under team-v6, its teams without their week.
+  await olderTreeReadsAsNotRead($, on, (key, value) => (key === 'week' ? undefined : key === 'shape' ? 'team-v6' : value))
+})
+
 test('with Claude Code new enough and git there, it draws no requirement line and runs git --version once', async ($, on) => {
   const { clock, runs } = await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })

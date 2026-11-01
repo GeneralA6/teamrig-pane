@@ -1,8 +1,9 @@
 // The Teams tab's model (T780): the tree of teams that holds the pane's own team, each team with its lead on top and
 // every session ever on its roster under it, active or retired. It is read from each team's config, rename log and hire
 // log through teamrig's own readers (TeamTree, LeadTree, Roster, the hire log), never hard-coded, so the tab shows the
-// team as teamrig's commands find it. Pure: the source reads the files, this turns them into nodes, teamRows into the
-// rows a drawing shows.
+// team as teamrig's commands find it. Each team's week (T1713) is its own week file's and its child teams', summed while
+// they share one reset. Pure: the source reads the files, this turns them into nodes, teamRows into the rows a drawing
+// shows.
 import type { SessionOwnerCards, SessionTaskCounts, TaskCounts, TaskRow } from '../types'
 import {
   activeHires,
@@ -19,14 +20,17 @@ import {
   type LaunchConfig,
   type Rename,
   type RetireRecord,
+  type TeamWeekSummary,
 } from './core/read/index'
 
-/** One team's files as read: its id (its folder name), its config, its rename log and its hire log. */
+/** One team's files as read: its id (its folder name), its config, its rename log, its hire log and its week file. */
 export type TeamRead = {
   readonly team: string
   readonly config: KitConfig
   readonly renames: readonly Rename[]
   readonly hires: readonly HiringRecord[]
+  /** Its own week as teamrig's budget hooks last wrote it (team.week.json), its child teams' apart; null for none or one teamrig cannot read. */
+  readonly week: TeamWeekSummary | null
   /** The team's register tasks, for each session's current tasks; null when the pane does not read that register. */
   readonly tasks: readonly TaskRow[] | null
   /**
@@ -63,6 +67,38 @@ export type TeamFacts = {
   readonly active: number
   /** The sessions retired and no longer on the team. */
   readonly retired: number
+  /** Its week with its child teams', in percent of the account's week; null when none of them has a week file for this week. */
+  readonly week: TeamWeek | null
+}
+
+/** A team's week with its child teams': used and planned to the week's end, in percent of the account's week (hundredths), and how far the week is, in whole percent. */
+export type TeamWeek = { readonly usedPct: number; readonly plannedPct: number; readonly elapsedPct: number }
+
+/** The account's week, from its reset to the next. */
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+
+/** A percent to hundredths, as the week file keeps it, so a sum reads as its parts do. */
+function hundredths(pct: number): number {
+  return Math.round(pct * 100) / 100
+}
+
+/**
+ * The week of a team and its child teams from their week files, the team's first: those for the week still running at
+ * `now` that share the first one's reset, summed. A file on another reset is another account's (stopgap T1777: the
+ * file names no account yet) and is left out; one from a week gone by too. Null when no file is left. How far the week
+ * is goes in whole percent, so the tree changes about every 1.7 hours, not at every read.
+ */
+function weekOf(weeks: readonly TeamWeekSummary[], now: number): TeamWeek | null {
+  const running = weeks.filter(week => week.resetsAt > now)
+  const first = running[0]
+  if (first === undefined) return null
+  const same = running.filter(week => week.resetsAt === first.resetsAt)
+  const elapsed = Math.min(1, Math.max(0, (now - (first.resetsAt - WEEK_MS)) / WEEK_MS))
+  return {
+    usedPct: hundredths(same.reduce((sum, week) => sum + week.usedPct, 0)),
+    plannedPct: hundredths(same.reduce((sum, week) => sum + week.plannedPct, 0)),
+    elapsedPct: Math.round(elapsed * 100),
+  }
 }
 
 export type SessionFacts = {
@@ -195,22 +231,26 @@ export function sessionKey(team: string, id: string): string {
  * The tree that holds `own`: its root team, then every team below it, each with its lead on top, the sessions each
  * leader leads under it, the team's retired group, then its child teams by id. Another root team on the machine is
  * another project and is left out. A team whose parents go round a loop starts the tree itself, and each team is
- * walked once, so a loop ends. Null when `own` has no config read.
+ * walked once, so a loop ends. Each team's week is its own and its child teams' at `now` (weekOf). Null when `own` has
+ * no config read.
  */
-export function teamTree(reads: readonly TeamRead[], own: string): TeamTreeNode | null {
+export function teamTree(reads: readonly TeamRead[], own: string, now: number): TeamTreeNode | null {
   const parts = new Map(reads.map(read => [read.team, partOf(read)]))
   const tree = new TeamTree([...parts.values()].map(({ read, roster }) => teamNodeOf(read.team, read.config, roster)))
   const walked = new Set<string>()
-  const teamNode = (team: string): TeamTreeNode | null => {
+  /** The team's node, and the week files of it and every team under it, its own first, then depth first. */
+  const teamNode = (team: string): { node: TeamTreeNode; weeks: TeamWeekSummary[] } | null => {
     const part = parts.get(team)
     if (part === undefined || walked.has(team)) return null
     walked.add(team)
-    const children = tree.childrenOf(team).flatMap(child => teamNode(child) ?? [])
-    const { config } = part.read
-    const facts: TeamFacts = { team, parent: config.team?.parent ?? null, active: config.sessions.length, retired: part.retired.length }
-    return { kind: 'team', key: `team:${team}`, team: facts, children: [...sessionNodes(part), ...children] }
+    const below = tree.childrenOf(team).flatMap(child => teamNode(child) ?? [])
+    const { config, week } = part.read
+    const weeks = [...(week === null ? [] : [week]), ...below.flatMap(child => child.weeks)]
+    const facts: TeamFacts = { team, parent: config.team?.parent ?? null, active: config.sessions.length, retired: part.retired.length, week: weekOf(weeks, now) }
+    const node: TeamTreeNode = { kind: 'team', key: `team:${team}`, team: facts, children: [...sessionNodes(part), ...below.map(child => child.node)] }
+    return { node, weeks }
   }
-  return parts.has(own) ? teamNode(tree.rootOf(own) ?? own) : null
+  return parts.has(own) ? (teamNode(tree.rootOf(own) ?? own)?.node ?? null) : null
 }
 
 /** A node as one row of the tab: how deep it sits, and whether it is open; null for a node with nothing under it. */

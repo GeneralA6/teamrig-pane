@@ -1,13 +1,23 @@
-// The Teams tab's source (T780): the kit home's team folders and, in each, the team's config and the rename and hire
-// logs in the state folder that config names, each file re-read only when its stamp moves (source.ts WatchedFile). It
-// puts them into the tree (team.ts teamTree) and writes it only when it changed, reading every POLL_MS (live.ts) and
+// The Teams tab's source (T780): the kit home's team folders and, in each, the team's config and, in the state folder
+// that config names, the rename and hire logs and the week file teamrig's budget hooks write (T1713), each file re-read
+// only when its stamp moves (source.ts WatchedFile). It puts them into the tree (team.ts teamTree, at the pane's clock's
+// now) and writes it only when it changed, reading every POLL_MS (live.ts) and
 // only while the tab shows, as the Log view's LiveLog does. The pane's own team's register tasks, its sessions' cards
 // on the owner, their tasks counted (task-counts.ts) and their unread inbox lines (team-inboxes.ts) go with its read; a
 // peer team's register and inboxes are not the pane's, so its sessions show none of them. A team folder whose read
 // fails draws as it last read, or is left out before one, and the view names it with why (T1234); the others draw on.
 // The own team's folder, never read yet, holds the tree up: its failure fails the view.
 import type { SessionOwnerCards, Snapshot, TaskCounts, TaskRow, TeamFolderFailure, TeamView } from '../types'
-import { parseConfigText, readHiringLog, readRenames, type ConfigRead, type HiringRecord, type Rename } from './core/read/index'
+import {
+  parseConfigText,
+  parseTeamWeek,
+  readHiringLog,
+  readRenames,
+  type ConfigRead,
+  type HiringRecord,
+  type Rename,
+  type TeamWeekSummary,
+} from './core/read/index'
 import { POLL_MS, type Timer } from './live'
 import { teamIds, teamStateDir, type TeamFiles } from './places'
 import { WatchedFile, type Files } from './source'
@@ -30,16 +40,21 @@ function ownParts(own: OwnReads | null): Pick<TeamRead, 'tasks' | 'ownerCards' |
   return { tasks: own?.tasks ?? null, ownerCards: own?.ownerCards ?? null, taskCounts: own?.taskCounts ?? null }
 }
 
-/** A team's rename and hire logs, in the state folder its config named when they were made. */
-type TeamLogs = { readonly state: string; readonly renames: WatchedFile<readonly Rename[]>; readonly hires: WatchedFile<readonly HiringRecord[]> }
+/** A team's rename and hire logs and its week file, in the state folder its config named when they were made. */
+type StateFiles = {
+  readonly state: string
+  readonly renames: WatchedFile<readonly Rename[]>
+  readonly hires: WatchedFile<readonly HiringRecord[]>
+  readonly week: WatchedFile<TeamWeekSummary | null>
+}
 
-/** One team's folder: its config, then the rename and hire logs in the state folder that config names. */
+/** One team's folder: its config, then the rename and hire logs and the week file in the state folder that config names. */
 export class TeamFolder {
   readonly team: string
   private readonly files: Files
   private readonly home: string
   private readonly config: WatchedFile<ConfigRead | null>
-  private logs: TeamLogs | null = null
+  private stateFiles: StateFiles | null = null
   /** Its last read that worked: null before one, and once that read found no config teamrig takes. */
   private last: TeamRead | null = null
 
@@ -53,9 +68,9 @@ export class TeamFolder {
   /**
    * The team's files as read now, with `own` for the pane's own team (null for a peer's): its tasks, its sessions'
    * cards on the owner and task counts, and the unread inbox lines of the sessions on its config. Null when it has no
-   * config file or teamrig refuses the one there. A config that moves its state folder reads the logs from the new
-   * one. A failed read throws, keeping the stamps of the files read before it, so the next read tries the rest again,
-   * and keeps the last read that worked (lastRead).
+   * config file or teamrig refuses the one there. A config that moves its state folder reads the logs and the week file
+   * from the new one. A failed read throws, keeping the stamps of the files read before it, so the next read tries the
+   * rest again, and keeps the last read that worked (lastRead).
    */
   async read(own: OwnReads | null): Promise<TeamRead | null> {
     await this.config.refresh()
@@ -65,12 +80,21 @@ export class TeamFolder {
       return null
     }
     const state = teamStateDir(this.home, config.config)
-    const logs = this.logs?.state === state ? this.logs : this.logsIn(state)
-    this.logs = logs
-    await logs.renames.refresh()
-    await logs.hires.refresh()
+    const files = this.stateFiles?.state === state ? this.stateFiles : this.filesIn(state)
+    this.stateFiles = files
+    await files.renames.refresh()
+    await files.hires.refresh()
+    await files.week.refresh()
     const unread = own === null || own.inboxes === null ? null : await own.inboxes.unread(config.config.sessions)
-    const read: TeamRead = { team: this.team, config: config.config, renames: logs.renames.current, hires: logs.hires.current, ...ownParts(own), unread }
+    const read: TeamRead = {
+      team: this.team,
+      config: config.config,
+      renames: files.renames.current,
+      hires: files.hires.current,
+      week: files.week.current,
+      ...ownParts(own),
+      unread,
+    }
     this.last = read
     return read
   }
@@ -83,11 +107,13 @@ export class TeamFolder {
     return this.last === null ? null : { ...this.last, ...ownParts(own) }
   }
 
-  private logsIn(state: string): TeamLogs {
+  private filesIn(state: string): StateFiles {
     return {
       state,
       renames: new WatchedFile<readonly Rename[]>(this.files, `${state}/renames.jsonl`, text => readRenames(text).renames, []),
       hires: new WatchedFile<readonly HiringRecord[]>(this.files, `${state}/hires.jsonl`, text => readHiringLog(text).records, []),
+      // A damaged file, or one in a format this pane cannot read, shows no week, as a missing one does.
+      week: new WatchedFile<TeamWeekSummary | null>(this.files, `${state}/usage/team.week.json`, text => parseTeamWeek(text) ?? null, null),
     }
   }
 }
@@ -100,6 +126,8 @@ export type TeamPorts = {
   /** True while the pane shows the Teams tab, open (not minimized). */
   isShown: () => Promise<boolean>
   publish: (view: TeamView) => Promise<void>
+  /** The time now, epoch ms: which week files are for the week still running, and how far it is. */
+  now: () => Promise<number>
 }
 
 /** Why a read failed, as one line. */
@@ -193,7 +221,7 @@ export class LiveTeam {
           failures.push({ team: id, reason: reasonOf(error), isLastRead: last !== null })
         }
       }
-      return { kind: 'tree', root: teamTree(reads, this.team.team), failures }
+      return { kind: 'tree', root: teamTree(reads, this.team.team, await this.ports.now()), failures }
     } catch (error) {
       return { kind: 'failed', reason: reasonOf(error) }
     }
