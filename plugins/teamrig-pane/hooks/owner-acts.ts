@@ -5,7 +5,7 @@
 // pane and one run at a time: a press while a run goes does nothing. After a run the card says what the CLI answered,
 // its lines on success, its refusal verbatim. The CLI finds the team from the tab's folder, the team whose register
 // the pane reads. Runs the CLI only; no model calls.
-import type { OwnerAct, OwnerActName } from '../types'
+import type { OwnerAct, OwnerActName, OwnerActPress } from '../types'
 import { messageOf } from './errors'
 import { actKey, noteKey } from './press-keys'
 import { cliArgv, failureLines, linesOf, type CliRun, type TeamrigCli } from './teamrig-cli'
@@ -59,6 +59,22 @@ export class OwnerActs {
   constructor(cli: TeamrigCli, ports: ActPorts) {
     this.cli = cli
     this.ports = ports
+  }
+
+  /** A press of an owner act on `task`'s card (press-keys.ts actKey), to its step. */
+  async press(press: OwnerActPress, task: string): Promise<void> {
+    switch (press) {
+      case 'note':
+        return this.openNote(task)
+      case 'next':
+        return this.askNext(task)
+      case 'send':
+        return this.sendNote(task)
+      case 'cancel':
+        return this.cancel(task)
+      case 'confirm':
+        return this.confirmNext(task)
+    }
   }
 
   /** Opens a new, empty Note field on `task`'s card, closing any other act, and moves the ring into it. */

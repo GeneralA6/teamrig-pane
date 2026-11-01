@@ -7,7 +7,7 @@ import type { CardPart, Drawn, Piece } from './layout'
 
 /**
  * A piece of a card's line that is a press: a task id, a reference file, an inbox count, a Teams tab key, a session to
- * tie the tab to, a meeting to start, a session to meet the owner with.
+ * tie the tab to, a meeting to start, a session to meet the owner with, an owner act on a task.
  */
 export type PressPiece = Exclude<Piece, { kind: 'words' }>
 
@@ -45,7 +45,8 @@ export function diffKey(from: string, partKey: string): string {
 /**
  * A press in a card's line: a task id `goto:<id>:`, a reference file `goto:file:`, an inbox count `goto:inbox:`, a
  * Teams tab key `team:<key>:`, a session to tie the tab to `pin:<id>:`, a meeting to start `start:<id>:`, a session to
- * meet the owner with `meet:<id>:`, then where it is drawn, the line, and the piece's place in it.
+ * meet the owner with `meet:<id>:`, then where it is drawn, the line, and the piece's place in it; an owner act on a
+ * task its actKey alone, wherever it is drawn.
  */
 export function pieceKey(piece: PressPiece, from: string, partKey: string, i: number): string {
   const at = `${from}:${partKey}:${i}`
@@ -64,6 +65,8 @@ export function pieceKey(piece: PressPiece, from: string, partKey: string, i: nu
       return `start:${piece.starts}:${at}`
     case 'meet':
       return `meet:${piece.meets}:${at}`
+    case 'act':
+      return actKey(piece.acts.press, piece.acts.task)
   }
 }
 
@@ -75,10 +78,11 @@ export function headPresses(drawn: Drawn): boolean {
   return drawn.toggle !== null || drawn.opens !== undefined || drawn.reads !== undefined || drawn.folds !== undefined || drawn.expands !== undefined
 }
 
-/** A card part's presses' keys, in the order drawn: a row press's own, a line's pieces' but its words. */
+/** A card part's presses' keys, in the order drawn: a row press's own, a Note field's, a line's pieces' but its words. */
 function partKeys(part: CardPart, from: string): string[] {
   if (part.kind === 'text') return []
   if (part.kind === 'press') return [diffKey(from, part.key)]
+  if (part.kind === 'field') return [noteKey(part.field.task, part.field.round)]
   return part.pieces.flatMap((piece, i) => (piece.kind === 'words' ? [] : [pieceKey(piece, from, part.key, i)]))
 }
 

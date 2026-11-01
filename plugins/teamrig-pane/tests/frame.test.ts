@@ -74,6 +74,7 @@ function pieceText(piece: Piece): string {
 }
 
 function partLines(part: CardPart): string[] {
+  if (part.kind === 'field') return [`[${part.key}]`]
   return part.kind === 'line' ? [part.pieces.map(pieceText).join('')] : textLines(part.spans)
 }
 
@@ -106,6 +107,13 @@ describe('rowsOf', () => {
     const pressed: Drawn['card'] = [{ kind: 'press', key: 'C:/r:a.ts', spans: [{ text: ' M a-long\n' }, { text: '   name.ts' }], expands: 'C:/r:a.ts' }]
     expect(rowsOf({ ...element('a', 1), card: pressed })).toBe(3)
     expect(rowsOf(LED)).toBe(3)
+  })
+
+  test('counts a Note field one row, and a cut through its card keeps it whole', () => {
+    const field: CardPart = { kind: 'field', key: 'T1:field', field: { task: 'T1', round: 1 } }
+    const noted: Drawn = { ...element('a', 2), card: [{ kind: 'text', key: 't', spans: [{ text: 't0' }] }, field] }
+    expect(rowsOf(noted)).toBe(4)
+    expect(cutDrawn(noted, 3, 1).drawn.card).toEqual([field])
   })
 })
 

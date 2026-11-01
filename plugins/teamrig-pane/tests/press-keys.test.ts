@@ -56,6 +56,28 @@ describe('press-keys', () => {
     )
     expect(pieceKey({ kind: 'meet', span: { text: '[Meet]' }, meets: 'api' }, 'session:acme/api', 'row', 9)).toBe('meet:api:session:acme/api:row:9')
     expect(diffKey('C1-open', 'f1')).toBe('diff:C1-open:f1')
+    expect(pieceKey({ kind: 'act', span: { text: '[Next]' }, acts: { task: 'T5', press: 'next' } }, 'T5-open', 'card:3', 2)).toBe(actKey('next', 'T5'))
+  })
+
+  test("a task card's Note field and act presses are ring stops keyed by their task alone, each on its row", () => {
+    const field: CardPart = { kind: 'field', key: 'T5:field', field: { task: 'T5', round: 2 } }
+    const acts: CardPart = {
+      kind: 'line',
+      key: 'card:2',
+      pieces: [
+        { kind: 'act', span: { text: '[Send]' }, acts: { task: 'T5', press: 'send' } },
+        { kind: 'words', spans: [{ text: ' ' }] },
+        { kind: 'act', span: { text: '[Cancel]' }, acts: { task: 'T5', press: 'cancel' } },
+      ],
+    }
+    const places = placesOf([drawn('T5', { toggle: 'T5', card: [WORDS, field, acts] })], 1)
+    expect(places.flatMap(pressesOf)).toEqual([
+      { key: 'T5', top: 0, rows: 1 },
+      { key: noteKey('T5', 2), top: 2, rows: 1 },
+      { key: actKey('send', 'T5'), top: 3, rows: 1 },
+      { key: actKey('cancel', 'T5'), top: 3, rows: 1 },
+    ])
+    expect(placeOf(places, noteKey('T5', 2))).toEqual({ top: 2, rows: 1 })
   })
 
   test('a head is a press when it opens a card, a page, a Log page or a diff', () => {

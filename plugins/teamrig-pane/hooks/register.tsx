@@ -47,6 +47,7 @@ import type {
   MeetingStart,
   MeetingsView,
   Nav,
+  OwnerAct,
   PageDetails,
   PaneView,
   Place,
@@ -71,7 +72,7 @@ import { RefFileReader } from './ref-file'
 import { DEFAULT_REGISTER, TimeZone } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
-import { diffKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
+import { diffKey, noteKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
 import { buttonCells, packGroups, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
 import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, type FrameSlot, type Placed, type View } from './frame'
@@ -100,6 +101,7 @@ import { SetupWatch } from './setup'
 import { setupBlocks } from './setup-rows'
 import { NO_TASK_COUNTS } from './task-counts'
 import { LiveMeetings } from './meetings'
+import { OwnerActs } from './owner-acts'
 import { OwnerMeet } from './owner-meet'
 import { meetingsBlocks } from './meetings-rows'
 import { findTeamrigCli } from './teamrig-cli'
@@ -276,6 +278,9 @@ const meetingStart = atom({ plugin: 'teamrig-pane', key: 'meetingStart' } as con
 const NO_MEET: MeetAnswer | null = null
 /** What the last [Meet] press on the Teams tab answered (owner-meet.ts): cleared at each session start and each switch to the tab. */
 const ownerMeet = atom({ plugin: 'teamrig-pane', key: 'ownerMeet' } as const, NO_MEET)
+const NO_ACT: OwnerAct | null = null
+/** Where the owner's Note or Next on a task's card stands (owner-acts.ts): cleared at each session start. */
+const ownerAct = atom({ plugin: 'teamrig-pane', key: 'ownerAct' } as const, NO_ACT)
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
@@ -466,6 +471,8 @@ export const register: Register = on => {
   let scheduling: LiveMeetings | null = null
   /** Runs `teamrig meet` on a Teams tab row's [Meet] press; set when the session starts, null with no team. */
   let meeting: OwnerMeet | null = null
+  /** Runs the owner's Note and Next on a task's card; set when the session starts, null with no team. */
+  let acting: OwnerActs | null = null
   /** Looks for the register again while the project is not set up for teamrig; set when the session starts in one. */
   let watch: SetupWatch | null = null
   /** The tab title last asked for: `Tasks · 3 changed` (changes-rows.ts paneTitle). */
@@ -496,6 +503,7 @@ export const register: Register = on => {
     // A start's answer is to its press: a new session, or a hot reload, shows none.
     await update($, meetingStart, () => NO_START)
     await update($, ownerMeet, () => NO_MEET)
+    await update($, ownerAct, () => NO_ACT)
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
     // The teamrig CLI the Meetings view runs: the installed plugin's (teamrig-cli.ts), found once.
     const cli = await findTeamrigCli(
@@ -646,6 +654,17 @@ export const register: Register = on => {
                 await update($, ownerMeet, () => answer)
               },
             })
+      // `teamrig owner note` and `next` find the team from the tab's folder too.
+      acting =
+        team === null
+          ? null
+          : new OwnerActs(cli, {
+              run: (argv, timeoutMs) => $.process.run(argv, { cwd: e.cwd, timeoutMs }),
+              tell: async act => {
+                await update($, ownerAct, () => act)
+              },
+              focus: key => focusOn($, key),
+            })
       await started.refresh()
       started.startTimers((ms, fn) => $.clock.every(ms, fn))
       logLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
@@ -725,6 +744,7 @@ export const register: Register = on => {
       teaming = null
       scheduling = null
       meeting = null
+      acting = null
       await update($, logList, () => NO_TEAM_LOG)
       await update($, logPage, () => AT_LOG_LIST)
       await update($, teamTree, () => NO_TEAM_TREE)
@@ -1140,7 +1160,9 @@ export const register: Register = on => {
      * <session>` does, keyed `pin:`, a scheduled meeting's [Start meeting] one that starts it, keyed `start:`, a Team
      * tab row's [Meet] one that runs `teamrig meet` on its session, keyed `meet:`, then where it is drawn (`from`, the
      * card's element); a Changes file's row one press that opens or closes its diff, keyed `diff:`, then where it is
-     * drawn and the row.
+     * drawn and the row; a task card's owner act (Note, Next, Send, Cancel, Confirm) one press keyed `act:`, the task's
+     * Note field an Input keyed `note:`, each by its task alone (press-keys.ts). The field draws no value, ever: the
+     * engine drops typed text when the drawn value changes, so what is typed stays with the acts.
      */
     const drawPart = (part: CardPart, wrap: Drawn['wrap'], from: string) => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
@@ -1150,6 +1172,19 @@ export const register: Register = on => {
             {drawText(part.spans, wrap)}
           </Button>
         )
+      if (part.kind === 'field') {
+        const { task, round } = part.field
+        return (
+          <components.Input
+            key={noteKey(task, round)}
+            placeholder={`a Note to ${task}'s session`}
+            value=""
+            submitLabel="Send"
+            onInput={text => acting?.typed(text)}
+            onSubmit={text => void acting?.sendNote(task, text)}
+          />
+        )
+      }
       return (
         <Box key={part.key} flexDirection="row">
           {part.pieces.map((piece, i) => {
@@ -1203,6 +1238,14 @@ export const register: Register = on => {
                 return (
                   <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void meeting?.meet(id)}>
                     {drawPress(piece.span, 'meet')}
+                  </Button>
+                )
+              }
+              case 'act': {
+                const { press, task } = piece.acts
+                return (
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void acting?.press(press, task)}>
+                    {drawPress(piece.span, 'act')}
                   </Button>
                 )
               }
