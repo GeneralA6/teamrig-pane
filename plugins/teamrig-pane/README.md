@@ -403,8 +403,14 @@ has nothing to open, so Enter leaves the results as they are. A switch to anothe
 ### Teams
 
 Teams shows the tree of teams the session's team is in, from the top team down, read from the team folders teamrig
-keeps under the kit home (`~/.teamrig/teams/<team>`). A team's row counts its active and retired sessions
-(`▾ acme · 4 active · 1 retired`). Under it come its lead, each leader over the sessions it leads (the config's
+keeps under the kit home (`~/.teamrig/teams/<team>`). A team's row counts its active and retired sessions, then gives
+its week with its child teams' (`▾ acme · 4 active · 1 retired · week ███████░░░ 35% of 52%`): a bar of ten cells for
+the part of the account's week planned for it, filled as far as it used it, green up to how far the week has gone and
+amber past that, as it runs ahead of its plan. Behind its plan, a dim `│` marks how far the week has gone
+(`████░│░░░░`). The percents are its used and planned parts of the account's week. A team planned no part of the week
+draws an empty bar until it uses some, then an amber one. The week comes from the week file teamrig's budget hooks
+write in each team's state folder (`usage/team.week.json`); a team with none for the running week draws no week. Under
+it come its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a group of their own (`▸ retired (1)`), and each child team (whose config names it as
 `team.parent`). A session's row is a `●` and its id in bold, then its current name where it differs from the id, how
 many sessions it leads, when it leads any, dim (`web  acme-web (2)`), and its roles, each in a colour of its own so the
@@ -456,9 +462,10 @@ its card too. The Tasks view and the Teams tab share the search, so a switch bet
 tree draws as it stood: a session found under a closed row stays hidden there, though a card the search opened stays
 open.
 
-It reads each team's config and, in the state folder that config names, its rename log and hire log, and for the pane's
-own team its register and inbox read marks and each marked session's inbox, with teamrig's own readers. It reads files
-only (`[Meet]` aside), and only while it shows: on each 3 s poll a file is read again only when its size or time moved.
+It reads each team's config and, in the state folder that config names, its rename log, hire log and week file, and
+for the pane's own team its register and inbox read marks and each marked session's inbox, with teamrig's own readers.
+It reads files only (`[Meet]` aside), and only while it shows: on each 3 s poll a file is read again only when its size
+or time moved.
 No model calls,
 no tokens.
 
