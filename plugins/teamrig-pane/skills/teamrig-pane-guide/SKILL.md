@@ -299,8 +299,8 @@ is never kept across a reload: a new session, `/reload-plugins` or a restart sho
 ### A task's card
 
 A press on a task (Enter, or a click) opens its card: the title shows whole and the card takes the meta line's
-place; another press closes it, as the card's dim last line says, and `c` closes every card. A done-today row opens
-the same card. The card shows
+place; another press on the title closes it, and `c` closes every card. A done-today row opens the same card. The
+card shows
 what teamrig recorded for the task, one labelled row per fact in a task tracker's words, each only when it has a
 value:
 
@@ -320,7 +320,6 @@ value:
     │ Reference    inbox/api.md
     │ Evidence     abc1234
     │ Links        https://github.com/acme/app/pull/7
-    │ press the title again to close
 ```
 
 | Row | What it holds |

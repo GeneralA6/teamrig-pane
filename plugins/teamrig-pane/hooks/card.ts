@@ -29,8 +29,6 @@ import { weekAfter, weekOf, type Clock } from './zone'
 
 /** Starts each card line in the list: the guide that ties the card to its task's title. */
 const GUIDE: Span = { text: '    │ ', dim: true }
-/** The last line of a card open in the list: nothing else on it says how it closes. */
-export const CLOSE_TEXT = 'press the title again to close'
 /** The label column, in cells: the longest label (`Description`) and the gap before the value. */
 export const LABEL_CELLS = 13
 /** Between the parts of one value line. */
@@ -226,12 +224,4 @@ export function cardRows(
     ...field('evidence', 'Evidence', textLines(task.evidence)),
     ...field('links', 'Links', linkLines(task)),
   ]
-}
-
-/**
- * A card opened in the list (rows.ts): its rows (cardRows, behind the guide), then a dim last row saying a second press
- * on the title closes it, keyed `<section>-card:<id>:close`. A task's page and the band have no title to press.
- */
-export function listCardRows(section: string, task: TaskRow, detail: TaskDetail, tree: PaneTree): Row[] {
-  return [...cardRows(section, task, detail, tree), { key: `${section}-card:${task.id}:close`, spans: [GUIDE, { text: CLOSE_TEXT, dim: true }] }]
 }

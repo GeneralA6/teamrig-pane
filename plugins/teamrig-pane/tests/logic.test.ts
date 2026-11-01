@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow, TaskStatus, TeamLeads } from '../types'
-import { CLOSE_TEXT, LABEL_CELLS } from '../hooks/card'
+import { LABEL_CELLS } from '../hooks/card'
 import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { EVENT_VERSION, indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
@@ -377,8 +377,6 @@ describe('rows', () => {
   const CARD_UNDER = `    │ ${' '.repeat(LABEL_CELLS)}`
   /** A card row's first line in the list: the guide, the label padded to the value column, the value. */
   const cardLine = (label: string, value: string) => `    │ ${label.padEnd(LABEL_CELLS)}${value}`
-  /** The last line of a card open in the list. */
-  const closeLine = `    │ ${CLOSE_TEXT}`
   const cardText = (blocks: readonly Block[], key: string) => {
     const row = blocks.flatMap(b => b.card ?? []).find(r => r.key === key)
     return row ? textOf(row) : undefined
@@ -696,7 +694,6 @@ describe('rows', () => {
       'waiting-card:T1:reference',
       'waiting-card:T1:reference:1',
       'waiting-card:T1:evidence',
-      'waiting-card:T1:close',
     ])
     expect(blockAt(blocks, 'waiting:T1')?.card?.map(textOf)).toEqual([
       cardLine('Description', '2026-10-13 lead: ship the pane'),
@@ -711,7 +708,6 @@ describe('rows', () => {
       cardLine('Reference', 'inbox/po.md'),
       `${CARD_UNDER}docs/x.md`,
       cardLine('Evidence', 'abc123'),
-      closeLine,
     ])
     expect(blockAt(blocks, 'next:T2')?.card?.map(textOf)).toEqual([
       cardLine('Status', 'not started since 13:00 UTC by po'),
@@ -721,16 +717,10 @@ describe('rows', () => {
       cardLine('Goal', 'G10.2'),
       cardLine('Origin', 'Asked and added by po 13:00 UTC'),
       cardLine('Reference', 'quote'),
-      closeLine,
     ])
-    // The last row says how the card closes, dim on the guide: a second press on the title.
-    expect(blockAt(blocks, 'next:T2')?.card?.at(-1)).toEqual({
-      key: 'next-card:T2:close',
-      spans: [
-        { text: '    │ ', dim: true },
-        { text: 'press the title again to close', dim: true },
-      ],
-    })
+    // The card ends on its last fact: no row says how it closes, a second press on the title does that.
+    expect(blockAt(blocks, 'next:T2')?.card?.at(-1)?.key).toBe('next-card:T2:reference')
+    expect(blocks.flatMap(b => b.card ?? []).some(r => r.key.endsWith(':close') || r.spans.some(span => span.text.includes('to close')))).toBe(false)
     expect(blocks.flatMap(b => b.rows).some(r => r.key.includes('-meta:'))).toBe(false)
   })
 
@@ -747,7 +737,6 @@ describe('rows', () => {
       cardLine('Priority', '2'),
       cardLine('Planned', 'not in a week plan'),
       cardLine('Origin', 'Asked by owner, added by lead 13:00 UTC'),
-      closeLine,
     ])
     expect(blockAt(blocks, 'working:T2')?.card?.map(r => r.key)).toEqual([
       'working-card:T2:status',
@@ -758,7 +747,6 @@ describe('rows', () => {
       'working-card:T2:goal',
       'working-card:T2:origin',
       'working-card:T2:reference',
-      'working-card:T2:close',
     ])
     expect(cardText(blocks, 'working-card:T2:priority')).toBe(cardLine('Priority', '7'))
     expect(cardText(blocks, 'working-card:T2:note')).toBe(cardLine('Note', 'halfway'))
@@ -797,7 +785,6 @@ describe('rows', () => {
       cardLine('Origin', 'Asked and added by po 13:00 UTC'),
       cardLine('Reference', 'docs/x.md'),
       cardLine('Evidence', 'abc123'),
-      closeLine,
     ])
     expect(blockAt(paneBlocks(snapshotOf(tasks, 'po'), 'mine', open, 'done-today'), 'done:T4')?.card?.[0]?.key).toBe('done-card:T4:status')
     expect(blockAt(paneBlocks(snapshotOf(tasks, 'po'), 'mine'), 'done:T4')?.card).toBe(undefined)
