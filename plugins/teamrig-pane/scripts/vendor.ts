@@ -13,6 +13,7 @@ export const READ_ENTRY = 'read/index.ts'
  */
 export const CORE_FILES: readonly string[] = [
   READ_ENTRY,
+  'budget/team-week-summary.ts',
   'config/defaults.ts',
   'config/launch.ts',
   'config/lead-tree.ts',
