@@ -297,7 +297,7 @@ is in none, and no file the session or its agents edited (Edit, Write) is in one
 git never runs in a folder that is gone. Each repo gets a ruled header (`mods-pane-v2 · branch pane-v2 ·
 3 files`, `1 file`, or `clean`; `no branch` while detached; the branch is left out when the folder bears its
 name, as a worktree's often does), then its files, the first repo with a diff to open led by a dim
-`click a file for its diff`. Each file's row says what git's two-letter code means, in a column of its own so
+`click a file for its diff` (the files written outside git, when no repo has one). Each file's row says what git's two-letter code means, in a column of its own so
 the paths line up: `changed`, `added`, `deleted`, `renamed` or `copied`, green when the change is staged and
 yellow when it is in the work tree alone, `new` dim for a file not in git yet, `conflict` red for one a merge
 left in conflict. Then the path from the repo root, its lines (`+12` added in green, `-3` removed in red;
@@ -320,6 +320,13 @@ can't read a `WARN` line with git's first error line. An untracked folder opens 
 again with each read of the changes below, one git run per open file, so it follows the edits; a file that
 leaves the list (committed, say) closes its diff. The open diffs stay open across a hot reload.
 
+A file written outside any repo opens its diff the same way. git keeps no earlier version of it, so the pane keeps
+one: just before the session's first Edit, Write or NotebookEdit of the file it reads the file (one not there yet as
+empty, so a new file's every line shows added) and keeps that copy while the file is listed. The diff is the file as
+it is now against its copy, drawn as git draws one and read again with each read of the changes, no git run. A file
+over 64 KiB, or not text, shows a note in place of its lines; one the session wrote before the pane kept a copy says
+`No copy from before its first write`, and one with no line changed says so. The copies stay across a hot reload.
+
 The Find field in the dock searches the listed files: each word must match, case aside, the start of a word in a
 file's path, the path it was renamed from, or its repo's folder name or branch (a file written outside any repo by its
 path alone). The body counts the files it names (`2 files match`) and draws each as its row does, over its repo and
@@ -332,7 +339,7 @@ blocks a commit; 10 s timeout), and while it has changed files one `git diff HEA
 to two `git grep --untracked -c` runs for their lines (also lock-free; a count git can't give is left
 out, with no warning): on the next 3 s poll after a write or a shell call (Bash, PowerShell; a burst of
 edits costs one run), every 60 s for changes made from elsewhere, and at once on a switch to Changes;
-each open diff is one more run then. Git only, no model calls. After a hot reload the repos and files already found stay known, also after a
+each open diff of a repo's file is one more run then (one outside git reads the file). Git only, no model calls. After a hot reload the repos and files already found stay known, also after a
 version that changes how the drawn changes are kept.
 
 The number on the Changes button, `Changes 3`, counts the files the view lists, and so does the pane's tab title
@@ -542,7 +549,8 @@ plugin's own work per draw at 100, 500 and 2,000 tasks fell from 11, 53 and 212 
 reads what the older code wrote as not yet read, drawing `Reading the register…` until its first poll
 (at most 3 s), instead of rows with fields missing or a `not tied to a session` line it has not looked for yet. The
 drawn changes are kept the same way (`CHANGES_SHAPE`), the open diffs too (`DIFFS_SHAPE`, bumped when
-`FileDiff` or `DiffLine` changes), and the repos and files found apart from them
+`FileDiff` or `DiffLine` changes), the copies of files written outside git too (`COPIES_SHAPE`, bumped when
+`OutsideCopy` changes), and the repos and files found apart from them
 under a shape of their own (`KNOWN_SHAPE`, bumped only when `KnownChanges` changes), so a bump of
 `CHANGES_SHAPE` never makes a reloaded pane forget the repos the session found.
 
