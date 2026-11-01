@@ -103,6 +103,7 @@ import { NO_TASK_COUNTS } from './task-counts'
 import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
 import type { CardActs } from './act-rows'
+import { NoteHold } from './note-hold'
 import { OwnerMeet } from './owner-meet'
 import { meetingsBlocks } from './meetings-rows'
 import { findTeamrigCli } from './teamrig-cli'
@@ -474,6 +475,8 @@ export const register: Register = on => {
   let meeting: OwnerMeet | null = null
   /** Runs the owner's Note and Next on a task's card; set when the session starts, null with no team. */
   let acting: OwnerActs | null = null
+  /** The snapshot drawn docked while the Note field is open: the one of its opening (note-hold.ts). */
+  const noteHold = new NoteHold<Snapshot>()
   /** Looks for the register again while the project is not set up for teamrig; set when the session starts in one. */
   let watch: SetupWatch | null = null
   /** The tab title last asked for: `Tasks · 3 changed` (changes-rows.ts paneTitle). */
@@ -895,6 +898,8 @@ export const register: Register = on => {
     let current: PaneView = 'tasks'
     let changed = EMPTY_CHANGES
     let snap = EMPTY_SNAPSHOT
+    /** Where the owner's act stands, which an open card's act rows draw from (act-rows.ts); null inline or with no team. */
+    let acts: CardActs | null = null
     let shown: ViewMode = 'mine'
     let open: ExpandedTasks = NOTHING_EXPANDED
     /** Where the tasks view is, or the Inbox, Team, Log or Changes view's search; the list inline, where a page never shows. */
@@ -930,8 +935,11 @@ export const register: Register = on => {
       isMinimized = (await read($, size)) === 'minimized'
       current = await read($, view)
       changed = await read($, changes)
-      // Minimized too: the strip's Inbox button counts the unread lines.
-      snap = await read($, snapshot)
+      // An open card ends in the owner's acts, docked only (inline draws none) and with a team to run them through.
+      acts = inline || acting === null ? null : { act: await read($, ownerAct) }
+      // Minimized too: the strip's Inbox button counts the unread lines. While the Note field is open, the snapshot of
+      // its opening: the engine keeps the ring at an index, and a task added above the card would move it off the field.
+      snap = noteHold.drawn(await read($, snapshot), acts?.act ?? null)
       if (!isMinimized) {
         shown = await read($, mode)
         open = await read($, expanded)
@@ -960,12 +968,10 @@ export const register: Register = on => {
           current === 'tasks' && setupShown === null && shown === 'mine' && place.kind === 'list'
             ? statusBar(snap, await read($, barFilter), columns)
             : null
-        // An open card ends in the owner's acts, docked only (inline draws none) and with a team to run them through.
-        const acts = async (): Promise<CardActs | null> => (inline || acting === null ? null : { act: await read($, ownerAct) })
         // With no bar there is nothing to filter by, and the list shows every task.
         const tasksBlocks = async (): Promise<Block[]> =>
           place.kind === 'task'
-            ? pageBlocks(snap, place.id, await read($, pages), await acts())
+            ? pageBlocks(snap, place.id, await read($, pages), acts)
             : place.kind === 'search'
               ? searchBlocks(snap, place.query, found)
               : place.kind === 'done'
@@ -974,7 +980,7 @@ export const register: Register = on => {
                   ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
                   : place.kind === 'keys'
                     ? keysBlocks(columns)
-                    : paneBlocks(snap, shown, open, bar?.filter ?? null, await read($, tasksFolded), await acts())
+                    : paneBlocks(snap, shown, open, bar?.filter ?? null, await read($, tasksFolded), acts)
         // Inline, the Log view shows its list alone: a page opens in the dock.
         const logShown = setupShown === null && current === 'log' && !inline ? await read($, logPage) : null
         logTitle = logShown === null ? null : logPageTitle(logShown, logs, snap)
