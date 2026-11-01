@@ -3062,3 +3062,89 @@ test("the switch's Meetings button lists the team's meetings through the teamrig
   expect(await drawsLine(pane, /^◐ M3  Tue 10-13 15:00 UTC · 30 min · web with lead · started$/)).toBe(true)
   expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('start:'))).toEqual([])
 })
+
+/** What `teamrig owner` prints for the acts on T1 in the tests below, by its words. */
+const OWNER_ANSWERS: Readonly<Record<string, string>> = {
+  'owner next T1 --preview': "PREVIEW po next T1: goes to the top of po's list; nothing written\n",
+  'owner next T1': 'NEXT ○ T1 Ship the pricing page\n',
+  'owner note T1 --text ship it today': 'NOTED ○ T1 Ship the pricing page\n',
+}
+
+/** A session po of team web, its pointer file in /work, its register `lines`, and the teamrig plugin's CLI installed. */
+async function startActing(on: On, lines: readonly string[]) {
+  const teamrig = (args: readonly string[]): string => OWNER_ANSWERS[args.join(' ')] ?? JSON.stringify({ meetings: [] })
+  const started = await start(on, {}, { roots: {}, statuses: {}, teamrig }, { USERPROFILE: HOME, CLAUDE_CONFIG_DIR: CLAUDE_DIR, TEAMRIG_SESSION: 'po' })
+  started.disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  started.disk.write(`${TEAMS}/web/config.json`, ['{}'])
+  started.disk.write(`${TEAMS}/web/state/events.jsonl`, [...lines])
+  started.disk.write(`${CLAUDE_DIR}/plugins/installed_plugins.json`, [JSON.stringify({ version: 2, plugins: { 'teamrig@teamrig': [{ installPath: TEAMRIG_INSTALL }] } })])
+  started.disk.write(`${TEAMRIG_INSTALL}/dist/cli/main.js`, [''])
+  return started
+}
+
+/** The owner-act presses drawn (press-keys.ts actKey), in drawing order. */
+async function actKeys(pane: Mounted<'Pane'>): Promise<string[]> {
+  return buttonKeys(await pane.drawn()).filter(key => key.startsWith('act:'))
+}
+
+test("an open card ends in the owner's Note and Next: Note sends the typed text through teamrig owner note, Next runs owner next after its preview's confirm", async ($, on) => {
+  const T1 = createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the pricing page' })
+  const { clock, disk, runs } = await startActing(on, [T1])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  const ownerRuns = () => runs.filter(run => run.startsWith('teamrig owner '))
+  const RESTING = ['act:note:T1', 'act:next:T1']
+
+  // A closed card draws no act; the open one ends in Note and Next.
+  await pane.press({ key: 'all' })
+  expect(await actKeys(pane)).toEqual([])
+  await pane.press({ key: 'po:T1' })
+  expect(await actKeys(pane)).toEqual(RESTING)
+
+  // Note opens an empty field, Send and Cancel in place of the presses; typing runs nothing, Enter sends it.
+  await pane.press({ key: 'act:note:T1' })
+  expect(keyedProps(await pane.drawn(), 'note:T1:1')).toMatchObject({ value: '', submitLabel: 'Send' })
+  expect(await actKeys(pane)).toEqual(['act:send:T1', 'act:cancel:T1'])
+  await pane.input({ key: 'note:T1:1', text: 'ship it today', kind: 'change' })
+  expect(ownerRuns()).toEqual([])
+  // While the field is open the pane draws the register as it stood at the opening: a task added above the card
+  // would move the ring off the field (note-hold.ts).
+  disk.write(`${TEAMS}/web/state/events.jsonl`, [T1, createLine('T2', { owner: 'po', by: 'lead', at: NOW, priority: 1, title: 'Rotate the key' })])
+  await clock.advance(POLL_MS)
+  expect(await drawsLine(pane, /T2 +Rotate the key/)).toBe(false)
+  await pane.input({ key: 'note:T1:1', text: 'ship it today' })
+  expect(ownerRuns()).toEqual(['teamrig owner note T1 --text ship it today'])
+  expect(await drawsLine(pane, /^│ NOTED ○ T1 Ship the pricing page$/)).toBe(true)
+  expect(keyedProps(await pane.drawn(), 'note:T1:1')).toBeNull()
+  expect(await actKeys(pane)).toEqual(RESTING)
+  expect(await drawsLine(pane, /T2 +Rotate the key/)).toBe(true)
+
+  // Next reads the preview into a confirm and writes nothing; Cancel closes it, Confirm runs owner next.
+  const PREVIEW = /^│ PREVIEW po next T1: goes to the top of po's list; nothing written$/
+  await pane.press({ key: 'act:next:T1' })
+  expect(ownerRuns().slice(1)).toEqual(['teamrig owner next T1 --preview'])
+  expect(await drawsLine(pane, PREVIEW)).toBe(true)
+  expect(await actKeys(pane)).toEqual(['act:confirm:T1', 'act:cancel:T1'])
+  await pane.press({ key: 'act:cancel:T1' })
+  expect(await drawsLine(pane, PREVIEW)).toBe(false)
+  expect(await actKeys(pane)).toEqual(RESTING)
+  await pane.press({ key: 'act:next:T1' })
+  await pane.press({ key: 'act:confirm:T1' })
+  expect(ownerRuns().slice(1)).toEqual(['teamrig owner next T1 --preview', 'teamrig owner next T1 --preview', 'teamrig owner next T1'])
+  expect(await drawsLine(pane, /^│ NEXT ○ T1 Ship the pricing page$/)).toBe(true)
+  expect(await actKeys(pane)).toEqual(RESTING)
+
+  // Inline the card draws its presses as words, so no act at all.
+  await pane.redraw({ ...WIDE, placement: 'inline' })
+  expect(await drawsLine(pane, /│ Status /)).toBe(true)
+  expect(await actKeys(pane)).toEqual([])
+})
+
+test('an open card draws no owner act with no team to run it through', async ($, on) => {
+  await start(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  await pane.press({ key: 'next:T1' })
+  expect(await pane.find({ text: /│ Status/ })).toBeDefined()
+  expect(await actKeys(pane)).toEqual([])
+})
