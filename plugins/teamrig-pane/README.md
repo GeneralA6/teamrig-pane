@@ -35,6 +35,9 @@ its buttons, whose header would take over half its rows, scrolls as one.
   out (`api · 4 active · 1 waiting · 1 verifying`), and the verifying tasks first in
   each group.
 
+A press on a heading in either (a click, Enter or Space) folds its tasks away under `▸ Done today (8)`;
+a second shows them again.
+
 A task is two lines: its status mark, bold id and title (cut at two lines, whole while its card is open), then a dim meta line under
 the title. The mark is its status as `teamrig list` names it: `○` open, `◐` in progress, `◑` verifying,
 `■` waiting, `✓` done, `✗` dropped. The meta line reads `p2 · due Sat 10-17 · in progress since 11:55 IDT`:

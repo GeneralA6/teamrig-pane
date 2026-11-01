@@ -114,6 +114,7 @@ groups (the views, the list's own, a page's steps, the status bar's) and how the
 | `c` | `close cards`: closes every open card (shown while one is open, after a dim `·` on the mode row) |
 | `k` | In the dock: `k: keys`, the last of the mode row, opens the Keys page, every key in this table on one page |
 | Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
+| Enter on a Tasks view heading, or a click on it | Folds its tasks away, `▸` leading the heading; again shows them |
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
@@ -226,6 +227,11 @@ title line above names the session. The area's unread inbox lines are counted on
 (`(pinned)` for the area a pin shows), then the others by name. Each heading has its counts
 (`api · 4 active · 1 waiting · 1 verifying`, a count with none left out), and the verifying tasks come first
 in each group.
+
+A press on a heading (a click, Enter or Space), a section's in mine or an owner's in all, folds its tasks away, the
+dim line counting the rest too, and leaves the heading alone with `▸` before it (`▸ Done today (8)`); a second press
+shows them again. Each heading folds by itself, the folds stay across a switch between mine and all and across a hot
+reload, and a status bar filter lists its status's tasks whether its section is folded or not.
 
 A task is two lines, its title and a dim meta line under it:
 
