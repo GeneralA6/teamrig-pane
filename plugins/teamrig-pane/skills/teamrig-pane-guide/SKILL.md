@@ -116,6 +116,7 @@ groups (the views, the list's own, a page's steps, the status bar's) and how the
 | Enter on a task, or a click on it | Opens its card in place of its meta line; again closes it |
 | Enter on a Tasks view heading, or a click on it | Folds its tasks away, `▸` leading the heading; again shows them |
 | A click on a task id in a card | Opens that task's page (see [A task's page](#a-tasks-page)) |
+| A click on a card's `[Note]` or `[Next]`, or Enter on it | In the dock: the owner's Note to the task's session, or its Next after a confirm (see [Note and Next](#note-and-next)) |
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
 | A click on the banner's `open in pane` | Opens the pane, minimized or never opened too, at the current task's page; back shows the list at its row |
@@ -348,6 +349,24 @@ holds, in any row, is underlined and opens that task's page; one inside a web ad
 
 A line is quoted only while something still ties it to the task (an inbox line by its date, another line when it
 is a goal's roadmap item or names the task id), because boards and docs are rewritten and line numbers drift.
+
+#### Note and Next
+
+In the dock, with a team to run them through, a card ends in the owner's acts: `[Note]`, and `[Next]` on a task not
+in progress yet; a task done or dropped has none, and none show above the prompt. They run the teamrig CLI the
+Meetings view runs, and teamrig writes what they change:
+
+| Press | What it does |
+| --- | --- |
+| `[Note]` | Opens an empty field under the card, the cursor in it, over `[Send]` and `[Cancel]`. Enter or `[Send]` runs `teamrig owner note <task> --text "<what you typed>"`, which keeps the Note in the task's history and sends it to the task's session; an empty field sends nothing |
+| `[Next]` | Runs `teamrig owner next <task> --preview`, which writes nothing, and shows what it would do over `[Confirm]` and `[Cancel]`, the cursor on `[Cancel]`. `[Confirm]` runs `teamrig owner next <task>`: the task goes atop its session's list, the session is woken and the lead told |
+| `[Cancel]` | Closes the field or the confirm, the cursor back on the press that opened it |
+
+Esc in the Note field only hands the keys back to Claude's prompt, the field staying open (Claude Code tells the
+pane nothing of it): `[Cancel]` closes it. While the field is open the list holds still as it stood when the field
+opened, so a task added above the card cannot move the cursor out of the field; it catches up once the field closes.
+teamrig's answer shows over the presses, its lines as printed: green when it was done, red with why when refused. One
+act runs at a time, and a press while one runs does nothing.
 
 ### A task's page
 
@@ -659,8 +678,9 @@ plugin, one older than 0.208.0, or a list that fails, it says why
 
 ## How it relates to the teamrig CLI
 
-The pane never writes, but for the Meetings view's `[Start meeting]`, which runs `teamrig meeting start`, and the Teams
-tab's `[Meet]`, which runs `teamrig meet`. To change
+The pane never writes, but for the Meetings view's `[Start meeting]`, which runs `teamrig meeting start`, the Teams
+tab's `[Meet]`, which runs `teamrig meet`, and a card's `[Note]` and `[Next]`, which run `teamrig owner note` and
+`teamrig owner next` (see [Note and Next](#note-and-next)). To change
 what it shows, run teamrig (see the
 [teamrig guide](https://github.com/GeneralA6/teamrig/blob/main/plugins/teamrig/skills/teamrig-guide/commands.md)):
 

@@ -117,6 +117,15 @@ the value column, and shows only when it has a value:
 
 The card has no row for a parent, sub-tasks or history: the register keeps none of them for a task.
 
+In the side dock, with a team, a card ends in the owner's acts, run through the teamrig CLI as Meetings runs it:
+`[Note]` opens an empty field, and Enter or `[Send]` runs `teamrig owner note <task> --text "..."`, which keeps the
+Note in the task's history and sends it to the task's session; `[Next]`, on a task not in progress yet, shows what
+`teamrig owner next <task> --preview` says it would do, and `[Confirm]` runs `teamrig owner next <task>`, which puts
+the task atop its session's list. `[Cancel]` closes the field or the confirm; Esc only hands the keys back to the
+prompt. While the field is open the list holds still, so the cursor stays in it. teamrig's answer shows over the
+presses, green when done, red with why when refused. A task done or dropped has none, nor does a card above the
+prompt.
+
 A click on a task id in a card (in its `After` or `Needed by` row, or written in a note) opens that task's page: its
 title whole and its card, the body to itself. Over it, `‹ back` and `forward ›` (`b`, `f`; dim words when
 there is nowhere to go) step through the places you went, as a browser does, and a trail under them names
