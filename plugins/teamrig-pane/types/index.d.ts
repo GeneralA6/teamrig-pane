@@ -485,6 +485,8 @@ declare module 'claude-code' {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
       expanded: Shaped<ExpandedTasks>
+      /** The Tasks view's headings whose tasks are folded away (hooks/rows.ts paneBlocks): a section's key in mine, `owner:<id>` in all. */
+      tasksFolded: readonly string[]
       size: PaneSize
       view: PaneView
       changes: Shaped<ChangesSnapshot>

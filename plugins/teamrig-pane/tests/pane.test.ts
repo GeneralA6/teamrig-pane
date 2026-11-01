@@ -271,6 +271,27 @@ test('the all view lists every owner, a waiting task saying why', async ($, on) 
   expect(await pane.find({ text: /p1 · waiting since 14:00 UTC: needs owner paste/ })).toBeDefined()
 })
 
+test('a press on a Tasks view heading folds its tasks away, ▸ marking it, and a second shows them; the fold holds across mine and all', async ($, on) => {
+  await start(on)
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+
+  await pane.press({ key: 'next' })
+  expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
+  expect(await drawsLine(pane, /^▸ Up next \(1\)$/)).toBe(true)
+  // The all view keys its headings by owner: po's task shows there, and a press on security's heading folds its alone.
+  await pane.press({ key: 'all' })
+  expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
+  await pane.press({ key: 'owner:security' })
+  expect(await pane.find({ text: /Rotate the local URI/ })).toBeUndefined()
+  expect(await drawsLine(pane, /^▸ security · 1 active · 1 waiting$/)).toBe(true)
+  await pane.press({ key: 'mine' })
+  expect(await drawsLine(pane, /^▸ Up next \(1\)$/)).toBe(true)
+  await pane.press({ key: 'next' })
+  expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
+  expect(await drawsLine(pane, /^Up next \(1\)$/)).toBe(true)
+})
+
 test("with no team config, the session's TZ is the team's zone: every time prints on its clock, as teamrig's would", async ($, on) => {
   await start(on, {}, { roots: {}, statuses: {} }, { ...REGISTER_ENV, TZ: 'Asia/Jerusalem' })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
@@ -2363,6 +2384,7 @@ test('back, forward and the trail step through the places; the list keeps the he
     'crumb:2',
     'bar:not-started',
     'count:not-started',
+    'next',
     'next:T52',
     gotoKey(drawn, 'T50'),
     fileKey(drawn),

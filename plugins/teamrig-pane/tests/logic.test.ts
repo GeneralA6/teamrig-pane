@@ -630,6 +630,34 @@ describe('rows', () => {
     expect(filtered.map(b => b.key)).toEqual(['header', ...Array.from({ length: 10 }, (_, i) => `waiting:T${i + 10}`)])
   })
 
+  test('a folded section shows its heading alone, ▸ leading it, no tasks and no more line; the others stay whole', () => {
+    const done = Array.from({ length: 8 }, (_, i) => [
+      createLine(`T${i + 30}`, { owner: 'po', by: 'po', at: NOW - 2 * HOUR, source: 'po' }),
+      statusLine(`T${i + 30}`, 'po', NOW - i * 60_000, 'done'),
+    ]).flat()
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', title: 'Working' }),
+      statusLine('T1', 'po', NOW, 'in-progress'),
+      ...done,
+    )
+    const snap = snapshotOf(tasks, 'po')
+    // Open, each heading is a press that folds its own key, and draws no mark.
+    const open = paneBlocks(snap, 'mine')
+    expect(open.filter(b => b.key === 'working' || b.key === 'done').map(b => [b.key, b.folds])).toEqual([['working', 'working'], ['done', 'done']])
+    expect(textAt(open, 'working')).toBe('Working on (1)')
+    expect(open.map(b => b.key)).toContain('done-more')
+
+    const folded = paneBlocks(snap, 'mine', NOTHING_EXPANDED, null, ['working', 'done'])
+    expect(folded.map(b => b.key)).toEqual(['header', 'working', 'done'])
+    expect(rowAt(folded, 'working')?.spans).toEqual([{ text: '▸ ', dim: true }, { text: 'Working on', bold: true }, { text: ' (1)', dim: true }])
+    expect(textAt(folded, 'done')).toBe('▸ Done today (8)')
+    expect(blockAt(folded, 'done')?.folds).toBe('done')
+    expect(paneBlocks(snap, 'mine', NOTHING_EXPANDED, null, ['done']).map(b => b.key)).toEqual(['header', 'working', 'working:T1', 'done'])
+    // The bar's filter lists its status's tasks under no heading, a fold or not.
+    const filtered = paneBlocks(snap, 'mine', NOTHING_EXPANDED, 'working', ['working'])
+    expect(filtered.map(b => b.key)).toEqual(['header', 'working:T1'])
+  })
+
   test('a snapshot never read says the register is being read, not that the session has no area; a failed first read shows why', () => {
     const unread = { ...snapshotOf([], null), now: 0 }
     expect(paneBlocks(unread, 'mine').map(b => b.key)).toEqual(['reading'])
@@ -804,6 +832,14 @@ describe('rows', () => {
     const pinned = paneBlocks({ ...snapshotOf(tasks, 'etl'), areaSource: 'pinned' }, 'all')
     expect(pinned.filter(b => b.key.startsWith('owner:')).map(b => b.key)).toEqual(['owner:etl', 'owner:api', 'owner:security'])
     expect(textAt(pinned, 'owner:etl')).toBe('etl (pinned) · 1 active')
+  })
+
+  test("the all view folds an owner's tasks under its heading by owner:<id>, ▸ leading it; the other owners stay whole", () => {
+    const tasks = fold(createLine('T1', { owner: 'security', by: 'lead', at: NOW }), createLine('T2', { owner: 'etl', by: 'etl', at: NOW, source: 'etl' }))
+    const blocks = paneBlocks(snapshotOf(tasks, 'etl'), 'all', NOTHING_EXPANDED, null, ['owner:etl'])
+    expect(blocks.map(b => b.key)).toEqual(['owner:etl', 'owner:security', 'security:T1'])
+    expect(rowAt(blocks, 'owner:etl')?.spans).toEqual([{ text: '▸ ', dim: true }, { text: 'etl', color: 'claude', bold: true }, { text: ' (you) · 1 active', dim: true }])
+    expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => [b.folds, b.opensSection])).toEqual([['owner:etl', false], ['owner:security', true]])
   })
 
   test('with nothing of its own active, the list says what it still holds: the tasks it asked of others', async () => {
