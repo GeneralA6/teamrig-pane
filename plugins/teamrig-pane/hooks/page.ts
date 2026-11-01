@@ -4,6 +4,7 @@
 // today) draws one dim line saying so, and back still leads off it. Pure: blocks that layout.ts wraps and
 // register.tsx draws under the page's back, forward and trail.
 import type { PageDetails, Snapshot } from '../types'
+import { actRows, type CardActs } from './act-rows'
 import { cardRows } from './card'
 import { HELD_DAYS } from './done'
 import { treeOf } from './meta'
@@ -11,15 +12,16 @@ import { problemBlocks, readingBlock, single, titleRow, type Block } from './row
 
 /**
  * The body of task `id`'s page: the register's problem, if any, then the task's title and card, `details` holding
- * what was read for it (its refs named unquoted, its goals by id, when nothing was).
+ * what was read for it (its refs named unquoted, its goals by id, when nothing was), the card ending in the owner's
+ * acts drawn from `acts` (act-rows.ts; none with `acts` null).
  */
-export function pageBlocks(snap: Snapshot, id: string, details: PageDetails): Block[] {
+export function pageBlocks(snap: Snapshot, id: string, details: PageDetails, acts: CardActs | null = null): Block[] {
   const reading = readingBlock(snap)
   if (reading !== null) return [reading]
   const key = `page:${id}`
   const task = snap.tasks.find(each => each.id === id)
   if (task === undefined) return [...problemBlocks(snap), single(key, [{ text: `${id} left the pane's tasks: it closed over ${HELD_DAYS} days ago.`, dim: true }])]
   const detail = details[id] ?? { ref: task.ref, quotes: [], goals: [] }
-  const card = cardRows('page', task, detail, treeOf(snap), null)
+  const card = [...cardRows('page', task, detail, treeOf(snap), null), ...actRows('page', task, acts, null)]
   return [...problemBlocks(snap), { key, rows: [titleRow(key, task)], card }]
 }

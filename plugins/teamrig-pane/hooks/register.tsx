@@ -102,6 +102,7 @@ import { setupBlocks } from './setup-rows'
 import { NO_TASK_COUNTS } from './task-counts'
 import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
+import type { CardActs } from './act-rows'
 import { OwnerMeet } from './owner-meet'
 import { meetingsBlocks } from './meetings-rows'
 import { findTeamrigCli } from './teamrig-cli'
@@ -959,10 +960,12 @@ export const register: Register = on => {
           current === 'tasks' && setupShown === null && shown === 'mine' && place.kind === 'list'
             ? statusBar(snap, await read($, barFilter), columns)
             : null
+        // An open card ends in the owner's acts, docked only (inline draws none) and with a team to run them through.
+        const acts = async (): Promise<CardActs | null> => (inline || acting === null ? null : { act: await read($, ownerAct) })
         // With no bar there is nothing to filter by, and the list shows every task.
         const tasksBlocks = async (): Promise<Block[]> =>
           place.kind === 'task'
-            ? pageBlocks(snap, place.id, await read($, pages))
+            ? pageBlocks(snap, place.id, await read($, pages), await acts())
             : place.kind === 'search'
               ? searchBlocks(snap, place.query, found)
               : place.kind === 'done'
@@ -971,7 +974,7 @@ export const register: Register = on => {
                   ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
                   : place.kind === 'keys'
                     ? keysBlocks(columns)
-                    : paneBlocks(snap, shown, open, bar?.filter ?? null, await read($, tasksFolded))
+                    : paneBlocks(snap, shown, open, bar?.filter ?? null, await read($, tasksFolded), await acts())
         // Inline, the Log view shows its list alone: a page opens in the dock.
         const logShown = setupShown === null && current === 'log' && !inline ? await read($, logPage) : null
         logTitle = logShown === null ? null : logPageTitle(logShown, logs, snap)
