@@ -492,7 +492,7 @@ session works in: the repo of the session's folder and the repo of each file it 
 `No git repo yet` and why. A worktree is its own repo; once its folder is removed it leaves the view. Each repo has a header
 (`<folder> · branch <branch> · 3 files`, `1 file` or `clean`; `no branch` while detached; the branch is left out
 when the folder bears its name, as a worktree's often does), the first repo with a diff to open led by a dim
-`click a file for its diff`. Each file's row says in words what git's two-letter code means: `changed`, `added`,
+`click a file for its diff` (the files written outside git, when no repo has one). Each file's row says in words what git's two-letter code means: `changed`, `added`,
 `deleted`, `renamed`, `copied` (green when staged, yellow when in the work tree alone), `new` (dim, not in git yet)
 or `conflict` (red); then its path from the repo root, its lines added and removed (`+12 -3`; `+0 -0` for none,
 `binary` for a binary file; an untracked folder sums its files), a rename's source (`← old.ts`) and, dim,
@@ -502,7 +502,9 @@ A click on a file's row, or Enter on it, opens its diff under it and a second on
 dim, `+` lines green, `-` lines red, the lines around them plain. It is git's diff of the file against the last
 commit (its staged and unstaged edits, as the row counts them; an untracked file's every line added), the first 200
 lines shown and the rest counted, each line cut at 3 screen lines. An open diff follows the file's edits and closes
-when the file leaves the list; an untracked folder opens none.
+when the file leaves the list; an untracked folder opens none. A file written outside any repo opens its diff the
+same way, against a copy the pane kept just before the session first wrote it (a new file's every line added); a file
+over 64 KiB or not text shows a note, and one written before the pane kept a copy says so.
 
 The Find field (`s`) in the dock searches the listed files: each word matches the start of a word in a file's path, the
 path it was renamed from, or its repo's folder name or branch. The body counts the matches (`2 files match`) and draws
@@ -517,7 +519,7 @@ the diff under a file is the pane's own.
 Each repo costs one `git --no-optional-locks status --porcelain=v1 -b -z` (it takes no index lock, so it never
 blocks a commit), and while it has changed files one `git diff HEAD --numstat -z` and up to two
 `git grep --untracked -c` runs to count their lines: on the next 3 second poll after a write or a Bash or
-PowerShell call, every 60 seconds, and at once on a switch to Changes; each open diff is one more `git diff` then.
+PowerShell call, every 60 seconds, and at once on a switch to Changes; each open diff of a repo's file is one more `git diff` then.
 A count git can't give is left out, with no warning, and git never runs in a folder that is gone.
 
 ## The Log view
