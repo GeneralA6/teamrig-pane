@@ -261,6 +261,20 @@ export type FileDiff =
 /** The Changes files whose diffs are open, by their row's key (`<repo root>:<path>`, hooks/changes-rows.ts). */
 export type OpenDiffs = { readonly [file: string]: FileDiff }
 
+/**
+ * A file written outside git as it was before the session first wrote it (hooks/outside-copies.ts), what its diff is
+ * drawn against: not there yet; its text; too big to keep (its size); not text; or why it could not be read.
+ */
+export type OutsideCopy =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'large'; readonly bytes: number }
+  | { readonly kind: 'binary' }
+  | { readonly kind: 'unread'; readonly problem: string }
+
+/** The copies kept of the files written outside git, by path as the tool call named it. */
+export type OutsideCopies = { readonly [path: string]: OutsideCopy }
+
 /** A version's three numbers: `2.1.295` is major 2, minor 1, patch 295. */
 export type Version = { major: number; minor: number; patch: number }
 
@@ -480,7 +494,7 @@ export type BodyScroll = { readonly seq: number; readonly to: ScrollTarget }
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the Log view's list and page, the focus ring's landings, the setup, the body's window, the team tree and the meetings are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE, TEAM_SHAPE, MEETINGS_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the outside files' copies, the Log view's list and page, the focus ring's landings, the setup, the body's window, the team tree and the meetings are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, COPIES_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE, TEAM_SHAPE, MEETINGS_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -493,6 +507,8 @@ declare module 'claude-code' {
       known: Shaped<KnownChanges>
       /** The Changes files whose diffs are open (hooks/diff.ts), as git last read them. */
       diffs: Shaped<OpenDiffs>
+      /** The files written outside git as they were before the session first wrote them (hooks/outside-copies.ts). */
+      copies: Shaped<OutsideCopies>
       /** The conversations the Log view lists (hooks/turn-log.ts), as last read. */
       logList: Shaped<LogList>
       /** The conversation page the Log view shows, as last read; null while it shows the list. */

@@ -12,7 +12,8 @@
 // a change made from elsewhere), and at once when the person switches to the view; after each read the
 // open diffs are read again (diff.ts). Runs git only; no model calls. The repos and outside files found
 // are kept apart from the drawn snapshot (KnownChanges), so a reload that bumps the snapshot's shape
-// still knows them.
+// still knows them. Before each write the tool hooks also ask whether its file is outside every repo
+// (isOutsideGit, the same one rev-parse a folder), so outside-copies.ts keeps such a file's copy.
 import type { ChangesSnapshot, Cut, FileChange, KnownChanges, LineCount, RepoChanges } from '../types'
 import { messageOf } from './errors'
 import { POLL_MS, TICK_MS, type Timer } from './live'
@@ -232,6 +233,14 @@ export class LiveChanges {
     if (root === undefined) return
     if (root === null) this.outside = [path, ...this.outside.filter(known => known !== path)].slice(0, OUTSIDE_KEPT)
     else this.repos.add(root)
+  }
+
+  /**
+   * Whether `path` is outside every repo: its folder is in none, or not there yet, or git cannot be asked (so far
+   * outside; the read that finds it in a repo leaves it off the outside list). Never rejects.
+   */
+  async isOutsideGit(path: string): Promise<boolean> {
+    return typeof (await this.rootOf(folderOf(path))) !== 'string'
   }
 
   /** A shell call may have committed, staged or written files: read again on the next poll. */

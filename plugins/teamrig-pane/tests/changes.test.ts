@@ -204,6 +204,18 @@ describe('changes', () => {
     expect(published[0]?.isRead).toBe(true)
   })
 
+  test('a file is outside git when its folder is in no repo, not there yet, or git cannot be asked; a repo folder is asked once', async () => {
+    const { calls, ports } = fakeGit({ 'C:/work/repo': REPO }, {}, new Set(['C:/new']))
+    const changes = new LiveChanges(ports)
+    expect(await changes.isOutsideGit('C:/work/repo/a.ts')).toBe(false)
+    expect(await changes.isOutsideGit('C:/work/repo/b.ts')).toBe(false)
+    expect(await changes.isOutsideGit('C:/notes/a.md')).toBe(true)
+    expect(await changes.isOutsideGit('C:/new/a.md')).toBe(true)
+    expect(calls).toEqual(['rev-parse C:/work/repo', 'rev-parse C:/notes'])
+    const unstarted = new LiveChanges({ ...ports, git: async () => Promise.reject(new Error('spawn git ENOENT')) })
+    expect(await unstarted.isOutsideGit('C:/work/repo/a.ts')).toBe(true)
+  })
+
   test("a repo git cannot read shows why; a git that cannot start leaves the file unlisted and is asked again", async () => {
     const { calls, published, ports } = fakeGit(
       { 'C:/work/repo': REPO, 'C:/work/slow': 'C:/work/slow' },

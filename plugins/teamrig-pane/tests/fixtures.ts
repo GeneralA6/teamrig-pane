@@ -170,6 +170,12 @@ export class MemoryFiles implements Files {
     this.stamps.set(path, { mtimeMs: this.clock++, size: text.length })
   }
 
+  /** The file deleted: it stamps null and its read throws. */
+  remove(path: string): void {
+    this.content.delete(path)
+    this.stamps.delete(path)
+  }
+
   async stamp(path: string): Promise<FileStamp | null> {
     return this.stamps.get(path) ?? null
   }

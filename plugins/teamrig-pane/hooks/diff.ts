@@ -39,7 +39,7 @@ export function diffArgs(file: FileChange, isUnborn: boolean): string[] {
 }
 
 /** A line as a terminal draws it: a CRLF file's `\r` dropped, tabs as TAB, any other control character (it would move the cursor or start an escape) as `�`. */
-function drawable(text: string): string {
+export function drawable(text: string): string {
   return text.replace(/\r$/, '').replaceAll('\t', TAB).replace(/\p{Cc}/gu, '�')
 }
 
