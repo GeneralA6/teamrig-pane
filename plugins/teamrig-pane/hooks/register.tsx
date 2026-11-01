@@ -665,17 +665,28 @@ export const register: Register = on => {
     const kept = await read($, known)
     title = paneTitle(seed)
     const git = (args: readonly string[], cwd: string) => $.process.run(['git', ...args], { cwd, timeoutMs: GIT_TIMEOUT_MS })
+    const knownAtStart = knownSeed(seed, kept)
+    // The copies ask the changes whether a file is outside git only from a write's hook, which waits for `copying`.
+    const copiesLive = new LiveCopies(
+      {
+        files,
+        isOutsideGit: path => changesLive.isOutsideGit(path),
+        publish: async kept => {
+          await update($, copies, () => kept)
+        },
+      },
+      { copies: await read($, copies), outside: knownAtStart.outside },
+    )
     const diffsLive = new LiveDiffs(
       {
         git,
+        outside: path => copiesLive.diff(path),
         publish: async opened => {
           await update($, diffs, () => opened)
         },
       },
       { diffs: await read($, diffs), changes: seed },
     )
-    diffing = diffsLive
-    const knownAtStart = knownSeed(seed, kept)
     const changesLive = new LiveChanges(
       {
         git,
@@ -689,7 +700,7 @@ export const register: Register = on => {
           title = retitled
           await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS }).catch(() => undefined)
         },
-        // Runs only on a read, after the copies below are set: the copies of files no longer listed go first.
+        // The copies of files no longer listed go first.
         onRead: async fresh => {
           await copiesLive.keep(fresh.outside)
           await diffsLive.refresh(fresh)
@@ -697,18 +708,10 @@ export const register: Register = on => {
       },
       knownAtStart,
     )
-    tracked = changesLive
-    const copiesLive = new LiveCopies(
-      {
-        files,
-        isOutsideGit: path => changesLive.isOutsideGit(path),
-        publish: async kept => {
-          await update($, copies, () => kept)
-        },
-      },
-      { copies: await read($, copies), outside: knownAtStart.outside },
-    )
+    // Set only once all three exist: the hooks, presses and timers reach them through these, never half made.
     copying = copiesLive
+    diffing = diffsLive
+    tracked = changesLive
     const findHere = () => findPlaces({ env, files, folders, home: home ?? null, cwd: e.cwd, machineZone })
     const places = await findHere()
     if (places.kind === 'unset') {
@@ -1107,8 +1110,8 @@ export const register: Register = on => {
       await focusOn($, 'back')
     }
     // Enter in the Find field on the Changes view: with one match it opens that file's diff too (never closing it), and
-    // either way moves the ring onto the first match with a diff, where Enter opens or closes it; an untracked folder or
-    // a file outside git has none to open.
+    // either way moves the ring onto the first match with a diff, where Enter opens or closes it; an untracked folder
+    // has none to open.
     const submitChanges = async (query: string) => {
       const hits = searchChanges(await read($, changes), query)
       const first = hits.flatMap(hit => {

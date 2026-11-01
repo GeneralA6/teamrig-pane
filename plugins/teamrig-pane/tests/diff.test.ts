@@ -1,11 +1,13 @@
 // The Changes files' diffs (hooks/diff.ts): the git run each file's diff takes, git's patch read into the lines
-// drawn, and the open diffs opened, closed and read again over a fake git.
+// drawn, and the open diffs opened, closed and read again over a fake git and a fake reader of the files written
+// outside git.
 import { describe, expect, test } from 'claude-code/testing'
 import type { ChangesSnapshot, FileChange, FileDiff, OpenDiffs, RepoChanges } from '../types'
 import type { GitRun } from '../hooks/changes'
-import { DIFF_KEPT, LiveDiffs, NO_DIFFS, diffArgs, fileOf, parseDiff, readDiff, type DiffPorts } from '../hooks/diff'
+import { DIFF_KEPT, LiveDiffs, NO_DIFFS, OUTSIDE, diffArgs, fileOf, parseDiff, readDiff, type DiffPorts } from '../hooks/diff'
 
 const REPO = 'C:/work/repo'
+const NOTE = 'C:/notes/plan.md'
 const PATCH = [
   'diff --git a/hooks/a.ts b/hooks/a.ts',
   'index 1111111..2222222 100644',
@@ -32,12 +34,23 @@ function repo(files: FileChange[], isUnborn = false): RepoChanges {
   return { root: REPO, branch: 'main', files: { items: files, more: 0 }, isPartial: false, isUnborn, problem: null }
 }
 
-function snapshot(files: FileChange[]): ChangesSnapshot {
-  return { repos: [repo(files)], outside: [], isRead: true }
+function snapshot(files: FileChange[], outside: string[] = []): ChangesSnapshot {
+  return { repos: [repo(files)], outside, isRead: true }
 }
 
-/** A git that answers each diff from `answers` by the path it names last, and the diffs written, in order. */
-function fakeDiffs(answers: Record<string, GitRun | Error>) {
+/** A diff of one added line, as a file outside git reads against its copy. */
+function oneAdded(text: string): FileDiff {
+  return { kind: 'read', lines: [{ kind: 'hunk', text: '@@ -0,0 +1 @@' }, { kind: 'add', text }], more: 0, isCut: false }
+}
+
+/** No file outside git: a fake that is never asked. */
+const NO_OUTSIDE: DiffPorts['outside'] = async path => ({ kind: 'failed', problem: `asked for ${path}` })
+
+/**
+ * A git that answers each diff from `answers` by the path it names last, a reader of the files outside git that
+ * answers from `outside` by path, and the diffs written, in order; `runs` holds git's runs and the outside reads.
+ */
+function fakeDiffs(answers: Record<string, GitRun | Error>, outside: Record<string, FileDiff> = {}) {
   const runs: string[] = []
   const published: OpenDiffs[] = []
   const ports: DiffPorts = {
@@ -47,6 +60,10 @@ function fakeDiffs(answers: Record<string, GitRun | Error>) {
       const answer = answers[path] ?? ran('')
       if (answer instanceof Error) throw answer
       return answer
+    },
+    outside: async path => {
+      runs.push(`outside ${path}`)
+      return outside[path] ?? { kind: 'failed', problem: `no answer for ${path}` }
     },
     publish: async next => {
       published.push(next)
@@ -145,11 +162,34 @@ describe('diff', () => {
     expect(await readDiff(ports.git, repo([]), change(' M', 'gone.ts'))).toEqual({ kind: 'failed', problem: 'spawn git ENOENT' })
   })
 
-  test("a row's key names its file in the changes, with its repo; none once it is not listed", () => {
-    const changes = snapshot([change(' M', 'hooks/a.ts')])
-    expect(fileOf(changes, `${REPO}:hooks/a.ts`)?.file.path).toBe('hooks/a.ts')
+  test("a row's key names its file in the changes, with its repo, or one outside git by its path; none once it is not listed", () => {
+    const changes = snapshot([change(' M', 'hooks/a.ts')], [NOTE])
+    expect(fileOf(changes, `${REPO}:hooks/a.ts`)).toMatchObject({ kind: 'repo', repo: { root: REPO }, file: { path: 'hooks/a.ts' } })
     expect(fileOf(changes, `${REPO}:hooks/b.ts`)).toBeNull()
     expect(fileOf(changes, 'C:/other:hooks/a.ts')).toBeNull()
+    expect(fileOf(changes, `${OUTSIDE}${NOTE}`)).toEqual({ kind: 'outside', path: NOTE })
+    expect(fileOf(changes, `${OUTSIDE}C:/notes/other.md`)).toBeNull()
+  })
+
+  test('a file outside git opens its diff against its copy, read again on each read of the changes, closed once it is not listed', async () => {
+    const outside: Record<string, FileDiff> = { [NOTE]: oneAdded('first') }
+    const { ports, published, runs } = fakeDiffs({}, outside)
+    const key = `${OUTSIDE}${NOTE}`
+    const diffs = new LiveDiffs(ports, { diffs: NO_DIFFS, changes: snapshot([], [NOTE]) })
+    await diffs.toggle(key)
+    expect(published).toEqual([{ [key]: { kind: 'reading' } }, { [key]: oneAdded('first') }])
+    expect(runs).toEqual([`outside ${NOTE}`])
+
+    // The session writes it again: the next read of the changes reads its diff again; git is never asked.
+    outside[NOTE] = oneAdded('second')
+    await diffs.refresh(snapshot([], [NOTE]))
+    expect(published.at(-1)).toEqual({ [key]: oneAdded('second') })
+    expect(runs).toEqual([`outside ${NOTE}`, `outside ${NOTE}`])
+
+    // It left the list: its diff closes, unread.
+    await diffs.refresh(snapshot([]))
+    expect(published.at(-1)).toEqual({})
+    expect(runs).toHaveLength(2)
   })
 
   test("a press opens a file's diff, `Reading…` until git answers, and a second press closes it", async () => {
@@ -209,6 +249,7 @@ describe('diff', () => {
           answer = resolve
           started()
         }),
+      outside: NO_OUTSIDE,
       publish: async next => {
         published.push(next)
       },
@@ -228,6 +269,7 @@ describe('diff', () => {
     const published: OpenDiffs[] = []
     const ports: DiffPorts = {
       git: async () => ran(PATCH),
+      outside: NO_OUTSIDE,
       publish: async next => {
         if (fails-- > 0) throw new Error('state write failed')
         published.push(next)

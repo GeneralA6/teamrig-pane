@@ -2,10 +2,10 @@
 // (search.ts). A word matches the start of a word in a file's path, in the path it was renamed from, or in its
 // repo's folder name or branch; a file written outside any repo by its path alone. Every match is kept, in the view's
 // order (each repo's files, then those written outside git): a repo keeps few enough files (CHANGES_KEPT) to show
-// whole. A result opens its file's diff, as the view's rows do; an untracked folder and a file outside git have none.
-// Pure.
+// whole. A result opens its file's diff, as the view's rows do; an untracked folder has none. Pure.
 import type { ChangesSnapshot, FileChange, RepoChanges } from '../types'
 import { repoName } from './changes'
+import { OUTSIDE } from './diff'
 import { matchRows, type Hit, type SearchSpec } from './search'
 import { resultKey } from './search-view'
 
@@ -41,13 +41,13 @@ export function searchChanges(changes: ChangesSnapshot, query: string): ChangeHi
   return matchRows(rows, query, CHANGES_SEARCH)
 }
 
-/** The key of `row`'s diff among the open diffs (diff.ts); null for a file with none: an untracked folder, or one outside git. */
+/** The key of `row`'s diff among the open diffs (diff.ts), `outside:<path>` for a file outside git; null for an untracked folder, which has none. */
 export function diffKeyOf(row: ChangeRow): string | null {
-  if (row.kind === 'outside') return null
+  if (row.kind === 'outside') return `${OUTSIDE}${row.path}`
   return row.file.code === '??' && row.file.path.endsWith('/') ? null : `${row.repo.root}:${row.file.path}`
 }
 
 /** The key the result for `row` is drawn under: the press that opens its diff, where it has one. */
 export function changesResultKey(row: ChangeRow): string {
-  return resultKey(CHANGES_SEARCH_VIEW, row.kind === 'repo' ? `${row.repo.root}:${row.file.path}` : `outside:${row.path}`)
+  return resultKey(CHANGES_SEARCH_VIEW, row.kind === 'repo' ? `${row.repo.root}:${row.file.path}` : `${OUTSIDE}${row.path}`)
 }

@@ -581,7 +581,6 @@ describe('changes rows', () => {
       ['problem:C:/work/gone', false],
       ['repo:C:/work/clean', true],
       ['outside', true],
-      ['outside-files', false],
     ])
     expect(textOf(blocks, `repo:${REPO}`)).toBe('repo · no branch · 4 files')
     expect(textOf(blocks, `${REPO}:new.ts`)).toBe('renamed  new.ts +3 -1 ← old.ts (staged)')
@@ -595,6 +594,24 @@ describe('changes rows', () => {
     // The files are the header's card, so no blank line parts them from it, led by the hint as the first repo with a diff to open.
     expect(blocks[0]?.card?.map(row => row.key)).toEqual([`${REPO}:hint`, `${REPO}:new.ts`, `${REPO}:t/`, `${REPO}:more`, `${REPO}:partial`])
     expect(blocks[0]?.card?.[0]?.spans).toEqual([{ text: DIFF_HINT, dim: true }])
+    // The files outside git are their header's card too; the hint led a repo, so it leads none of them.
+    expect(blocks.at(-1)?.card?.map(row => [row.key, row.expands ?? null])).toEqual([['outside:C:/notes/a.md', 'outside:C:/notes/a.md']])
+  })
+
+  test("a file outside git opens its diff under its row; the hint leads them when no repo has a diff to open", () => {
+    const key = 'outside:C:/notes/a.md'
+    const changes: ChangesSnapshot = { repos: [repo({ files: { items: [change('??', 't/')], more: 0 } })], outside: ['C:/notes/a.md', 'C:/notes/b.md'], isRead: true }
+    const diffs: OpenDiffs = { [key]: { kind: 'read', lines: [{ kind: 'note', text: 'No line changed since the session first wrote it' }], more: 0, isCut: false } }
+    const outside = changesBlocks(changes, false, diffs).at(-1)
+    expect(outside?.key).toBe('outside')
+    expect(outside?.card?.map(row => [row.key, row.expands ?? null])).toEqual([
+      ['outside-hint', null],
+      [key, key],
+      [`diff:${key}:0`, null],
+      ['outside:C:/notes/b.md', 'outside:C:/notes/b.md'],
+    ])
+    expect(textOf([outside ?? { key: 'none', rows: [] }], 'outside-hint')).toBe(DIFF_HINT)
+    expect(textOf([outside ?? { key: 'none', rows: [] }], `diff:${key}:0`)).toBe('   No line changed since the session first wrote it')
   })
 
   test('the hint leads only the first repo with a diff to open: not one with an untracked folder alone, nor a later one', () => {
@@ -645,11 +662,14 @@ describe('changes rows', () => {
     expect(changesBlocks(changes).at(0)?.card?.map(row => row.key)).toEqual([`${REPO}:hint`, key, `${REPO}:t/`, `${REPO}:b.md`])
   })
 
-  test('an open diff while git reads it, when git fails, with no line changed, and cut short', () => {
+  test('an open diff while it is read, when git or the file outside git fails, with no line changed, and cut short', () => {
     const key = `${REPO}:a.ts`
-    const words = (diff: FileDiff) => diffRows(key, diff).map(row => row.spans.map(span => span.text).join(''))
+    const words = (diff: FileDiff) => diffRows(key, diff, 'repo').map(row => row.spans.map(span => span.text).join(''))
     expect(words({ kind: 'reading' })).toEqual(['   Reading the diff…'])
     expect(words({ kind: 'failed', problem: 'fatal: bad revision HEAD' })).toEqual(['   WARN git could not read the diff: fatal: bad revision HEAD'])
+    // No git reads a file outside git: its failure is the file's own.
+    const outside = diffRows('outside:C:/n.md', { kind: 'failed', problem: 'EACCES: permission denied' }, 'outside')
+    expect(outside.map(row => row.spans.map(span => span.text).join(''))).toEqual(['   WARN could not read the diff: EACCES: permission denied'])
     expect(words({ kind: 'read', lines: [], more: 0, isCut: false })).toEqual(['   No line changed: a mode change, a rename or an empty file.'])
     expect(words({ kind: 'read', lines: [{ kind: 'add', text: 'a' }], more: 0, isCut: true })).toEqual([
       '   +a',
@@ -683,11 +703,14 @@ describe('changes rows', () => {
     expect(underlined(searched('old')[1])).toEqual([{ text: 'old', dim: true, underline: true }])
     expect(underlined(searched('v2')[1])).toEqual([{ text: 'v2', dim: true, underline: true }])
 
-    // An untracked folder has no diff to open; a file outside git says where it is; a detached repo says so.
+    // An untracked folder has no diff to open; a file outside git says where it is and opens its diff; a detached repo says so.
     const tests = searched('tests')
     expect(words(tests).slice(1)).toEqual([[`changes-search:${REPO}:tests/`, ['new      tests/ (not in git yet)', '         repo · branch pane-v2']]])
     expect(tests[1]?.expands).toBeUndefined()
-    expect(words(searched('n.md')).slice(1)).toEqual([['changes-search:outside:C:/n.md', ['C:/n.md', '   written outside git']]])
+    const note = searched('n.md', { 'outside:C:/n.md': { kind: 'failed', problem: 'gone' } })
+    expect(words(note).slice(1)).toEqual([['changes-search:outside:C:/n.md', ['C:/n.md', '   written outside git']]])
+    expect(note[1]?.expands).toBe('outside:C:/n.md')
+    expect(note[1]?.card?.map(row => row.spans.map(span => span.text).join(''))).toEqual(['   WARN could not read the diff: gone'])
     const detached: ChangesSnapshot = { ...changes, repos: [repo({ branch: null, files: { items: files, more: 0 } })] }
     expect(words(searchedIn(detached, 'tests')).at(1)).toEqual([`changes-search:${REPO}:tests/`, ['new      tests/ (not in git yet)', '         repo · no branch']])
 

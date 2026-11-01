@@ -1,7 +1,6 @@
 // The Changes view's search (hooks/changes-search.ts): the files of its list a query names by the start of a word in
 // their path, the path they were renamed from, or their repo's folder name or branch; a file written outside git by its
-// path alone. A result opens its file's diff, keyed as the list's row is; an untracked folder and a file outside git
-// have none.
+// path alone. A result opens its file's diff, keyed as the list's row is; an untracked folder has none.
 import { describe, expect, test } from 'claude-code/testing'
 import type { ChangesSnapshot, FileChange, RepoChanges } from '../types'
 import { CHANGES_SEARCH_VIEW, changesResultKey, diffKeyOf, searchChanges, type ChangeHit, type ChangeRow } from '../hooks/changes-search'
@@ -82,11 +81,11 @@ describe('searchChanges', () => {
 })
 
 describe('changes search results', () => {
-  test("a result's diff is keyed as the list's row opens it; an untracked folder and a file outside git have none", () => {
+  test("a result's diff is keyed as the list's row opens it, a file outside git's by its path; an untracked folder has none", () => {
     expect(diffKeyOf(paneRow(0))).toBe(`${PANE}:hooks/a.ts`)
     expect(diffKeyOf(paneRow(1))).toBe(`${PANE}:hooks/new.ts`)
     expect(diffKeyOf(paneRow(2))).toBeNull()
-    expect(diffKeyOf({ kind: 'outside', path: OUTSIDE })).toBeNull()
+    expect(diffKeyOf({ kind: 'outside', path: OUTSIDE })).toBe(`outside:${OUTSIDE}`)
     // An untracked file, unlike a folder, diffs against nothing.
     const [pane] = CHANGES.repos
     if (pane === undefined) throw new Error('no pane repo')

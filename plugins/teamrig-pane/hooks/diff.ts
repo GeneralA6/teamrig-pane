@@ -4,9 +4,11 @@
 // yet); a rename's names its old path too, with `-M`, so it shows as the one file it is. An untracked file's is
 // `git diff --no-index` against nothing, every line added. Color, external diff tools and textconv filters are
 // off, so the patch is git's own whatever the person's config says. Git's headers are left out: each hunk's `@@`
-// line and its lines show, at most DIFF_KEPT of them, the rest counted. The open diffs are read again after each
-// read of the changes (changes.ts: after a write or a shell call, and every 60 s), so an open diff follows the
-// edits, and a file that leaves the list closes its diff. Runs git only: one run an open file a read.
+// line and its lines show, at most DIFF_KEPT of them, the rest counted. A file written outside git (T1362), keyed
+// `outside:<path>`, has no git to ask: it diffs against the copy the pane kept before the session first wrote it
+// (outside-copies.ts). The open diffs are read again after each read of the changes (changes.ts: after a write or a
+// shell call, and every 60 s), so an open diff follows the edits, and a file that leaves the list closes its diff.
+// Runs git for a repo's file, one run an open file a read; an outside file's is read from disk.
 import type { ChangesSnapshot, DiffLine, FileChange, FileDiff, OpenDiffs, RepoChanges } from '../types'
 import { failure, LITERAL, type GitRun } from './changes'
 import { messageOf } from './errors'
@@ -14,6 +16,8 @@ import { messageOf } from './errors'
 /** The most lines of a diff kept and drawn; the rest are counted. */
 export const DIFF_KEPT = 200
 export const NO_DIFFS: OpenDiffs = {}
+/** What leads the key of a file written outside git, `outside:<path>`; a repo's file is keyed by its root, an absolute path, so never by it. */
+export const OUTSIDE = 'outside:'
 const READING: FileDiff = { kind: 'reading' }
 /** Flags that keep git's patch its own whatever its config says: no color, no external diff tool, no textconv filter. */
 const PLAIN = ['--no-color', '--no-ext-diff', '--no-textconv'] as const
@@ -25,9 +29,14 @@ const HUNK_LINES: Readonly<Record<string, DiffLine['kind']>> = { '+': 'add', '-'
 export type DiffPorts = {
   /** Runs `git <args>` in `cwd`; rejects when git cannot start or outlasts its timeout. */
   git: (args: readonly string[], cwd: string) => Promise<GitRun>
+  /** A file written outside git as it is now against its copy from before the session first wrote it (outside-copies.ts). Never rejects. */
+  outside: (path: string) => Promise<FileDiff>
   /** Writes the diffs atom (each write redraws the pane). */
   publish: (next: OpenDiffs) => Promise<void>
 }
+
+/** The file a diff's key names: one a repo lists, with its repo, or one written outside git, by its path. */
+export type DiffFile = { kind: 'repo'; repo: RepoChanges; file: FileChange } | { kind: 'outside'; path: string }
 
 /** The git run that reads `file`'s diff in its repo: against HEAD (the staged lines with no commit yet), or, untracked, against nothing. */
 export function diffArgs(file: FileChange, isUnborn: boolean): string[] {
@@ -90,11 +99,15 @@ export async function readDiff(git: DiffPorts['git'], repo: RepoChanges, file: F
   }
 }
 
-/** The file a Changes row's key names in `changes` (`<repo root>:<path>`), with its repo; null once it is not listed. */
-export function fileOf(changes: ChangesSnapshot, key: string): { repo: RepoChanges; file: FileChange } | null {
+/** The file a Changes row's key names in `changes`: `<repo root>:<path>` with its repo, or `outside:<path>`; null once it is not listed. */
+export function fileOf(changes: ChangesSnapshot, key: string): DiffFile | null {
+  if (key.startsWith(OUTSIDE)) {
+    const path = key.slice(OUTSIDE.length)
+    return changes.outside.includes(path) ? { kind: 'outside', path } : null
+  }
   for (const repo of changes.repos) {
     const file = repo.files.items.find(item => `${repo.root}:${item.path}` === key)
-    if (file !== undefined) return { repo, file }
+    if (file !== undefined) return { kind: 'repo', repo, file }
   }
   return null
 }
@@ -115,7 +128,7 @@ export class LiveDiffs {
     this.changes = seed.changes
   }
 
-  /** Closes `key`'s diff when open; else opens it, `Reading…` until git answers. A file no longer listed opens none. Never rejects. */
+  /** Closes `key`'s diff when open; else opens it, `Reading…` until it is read. A file no longer listed opens none. Never rejects. */
   async toggle(key: string): Promise<void> {
     if (this.open.delete(key)) {
       await this.write()
@@ -125,7 +138,7 @@ export class LiveDiffs {
     if (found === null) return
     this.open.set(key, READING)
     await this.write()
-    await this.readOne(key, found.repo, found.file)
+    await this.readOne(key, found)
     await this.write()
   }
 
@@ -136,15 +149,15 @@ export class LiveDiffs {
       [...this.open.keys()].map(async key => {
         const found = fileOf(changes, key)
         if (found === null) this.open.delete(key)
-        else await this.readOne(key, found.repo, found.file)
+        else await this.readOne(key, found)
       }),
     )
     await this.write()
   }
 
-  /** Reads `key`'s diff; one closed while git read stays closed. */
-  private async readOne(key: string, repo: RepoChanges, file: FileChange): Promise<void> {
-    const diff = await readDiff(this.ports.git, repo, file)
+  /** Reads `key`'s diff: git's for a repo's file, against its copy for one outside git; one closed while it was read stays closed. */
+  private async readOne(key: string, found: DiffFile): Promise<void> {
+    const diff = found.kind === 'outside' ? await this.ports.outside(found.path) : await readDiff(this.ports.git, found.repo, found.file)
     if (this.open.has(key)) this.open.set(key, diff)
   }
 
