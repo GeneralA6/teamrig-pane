@@ -85,7 +85,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   active and retired sessions, its lead over the sessions each leader leads, the retired ones in a group of their own
   and the child teams under their parent; each session's row gives its id, its name, how many sessions it leads
   (`(2)`), its roles, each in a colour of its own, and how many of its cards wait on the owner, with a `[Meet]` press
-  that has teamrig ask it to bring them now; the pane's own row starts with a green `►`; the switch's button counts the
+  that has teamrig ask it to bring them now; the pane's own row starts with a green `▶`; the switch's button counts the
   cards, `Teams (2)`. A press on a row closes or opens what lies under it; a session's card adds its hire or retire and
   how many of its tasks are done and verifying.
 - **Meetings:** the meetings booked for the session's team, by time: each one's time, length, who meets and what it

@@ -613,7 +613,7 @@ id (bold), its current name where it differs, how many sessions it leads (`(2)`,
 its own (lead, `sub-lead` for a leader that is not the lead, delivery owner, security reviewer); then how many of its
 cards wait on the owner (the config's `register.ownerSource`) now, `? 2 decisions`, with a `[Meet]` press, and when the
 next card the owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire days are on its card. The
-row of the session whose pane it is starts with a green `►`. A retired session is a dim `○`. A press on a team's or
+row of the session whose pane it is starts with a green `▶`. A retired session is a dim `○`. A press on a team's or
 retired group's row (a click,
 Enter or Space) closes it or opens it again; on a session's row it opens or closes its card. A leader's row has two
 presses: its mark folds the sessions it leads, its id opens its card. Teams and leaders start open, a retired group

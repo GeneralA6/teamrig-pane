@@ -435,7 +435,7 @@ many sessions it leads, when it leads any, dim (`web  acme-web (2)`), and its ro
 eye finds a role without reading it: lead, sub-lead (a leader that is not the lead), delivery owner, security reviewer.
 Then come how many of its cards wait on the owner now (`? 2 decisions`) with a `[Meet]` press, and when the next card the
 owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire days are on its card, keeping the row
-short. The row of the session whose pane it is starts with a green `►`, so you find yourself at a glance. A retired
+short. The row of the session whose pane it is starts with a green `▶`, so you find yourself at a glance. A retired
 session's row is a dim `○`.
 Teams under another top team are left out. Until there is a tree, the tab says why: no team, a team with no config
 file teamrig can read, or a failed read of the team folder list, or of its own team's folder before one worked. Any
