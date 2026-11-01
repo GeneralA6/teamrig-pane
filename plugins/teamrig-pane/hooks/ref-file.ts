@@ -66,7 +66,7 @@ export function refSegments(part: string): RefSegment[] {
 }
 
 /** `bytes` in whole KiB, rounded up, so a file just over the cap never reads as at it. */
-function kib(bytes: number): number {
+export function kib(bytes: number): number {
   return Math.ceil(bytes / 1024)
 }
 

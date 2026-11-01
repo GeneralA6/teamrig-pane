@@ -33,7 +33,7 @@
 // files and runs git (status, diff, grep) and the teamrig CLI (meeting list and start, meet; no model calls);
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
-import type { Components, Context, Register } from 'claude-code'
+import type { Components, Context, Register, ToolResult } from 'claude-code'
 import type {
   BarStatus,
   BodyScroll,
@@ -86,6 +86,7 @@ import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from '.
 import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 import { changesResultKey, diffKeyOf, searchChanges, type ChangeHit } from './changes-search'
 import { LiveDiffs, NO_DIFFS } from './diff'
+import { LiveCopies, NO_COPIES } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { logListBlocks, logPageBlocks, logPageTitle } from './log-rows'
 import { logResultKey, searchLog, type LogHit } from './log-search'
@@ -213,6 +214,9 @@ const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KN
 /** The open diffs are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when FileDiff or DiffLine changes shape. */
 const DIFFS_SHAPE = 'diffs-v1'
 const diffs = atom({ plugin: 'teamrig-pane', key: 'diffs' } as const, NO_DIFFS, { shape: DIFFS_SHAPE })
+/** The outside files' copies are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when OutsideCopy changes shape. */
+const COPIES_SHAPE = 'copies-v1'
+const copies = atom({ plugin: 'teamrig-pane', key: 'copies' } as const, NO_COPIES, { shape: COPIES_SHAPE })
 /** The Log view's list and page are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when LogList, LogPage or TurnEntry changes shape. */
 const LOG_SHAPE = 'log-v3'
 const LOG_READING: LogList = { kind: 'reading' }
@@ -452,6 +456,8 @@ export const register: Register = on => {
   let tracked: LiveChanges | null = null
   /** Opens, closes and reads again the Changes files' diffs; set when the session starts. */
   let diffing: LiveDiffs | null = null
+  /** Keeps the copies the diffs of files written outside git are drawn against; set when the session starts. */
+  let copying: LiveCopies | null = null
   /** Reads the Log view's list or page again while it shows; set when the session starts. */
   let logging: LiveLog | null = null
   /** Reads the Teams tab's tree again while it shows; set when the session starts, null with no team. */
@@ -669,6 +675,7 @@ export const register: Register = on => {
       { diffs: await read($, diffs), changes: seed },
     )
     diffing = diffsLive
+    const knownAtStart = knownSeed(seed, kept)
     const changesLive = new LiveChanges(
       {
         git,
@@ -682,11 +689,26 @@ export const register: Register = on => {
           title = retitled
           await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS }).catch(() => undefined)
         },
-        onRead: fresh => diffsLive.refresh(fresh),
+        // Runs only on a read, after the copies below are set: the copies of files no longer listed go first.
+        onRead: async fresh => {
+          await copiesLive.keep(fresh.outside)
+          await diffsLive.refresh(fresh)
+        },
       },
-      knownSeed(seed, kept),
+      knownAtStart,
     )
     tracked = changesLive
+    const copiesLive = new LiveCopies(
+      {
+        files,
+        isOutsideGit: path => changesLive.isOutsideGit(path),
+        publish: async kept => {
+          await update($, copies, () => kept)
+        },
+      },
+      { copies: await read($, copies), outside: knownAtStart.outside },
+    )
+    copying = copiesLive
     const findHere = () => findPlaces({ env, files, folders, home: home ?? null, cwd: e.cwd, machineZone })
     const places = await findHere()
     if (places.kind === 'unset') {
@@ -763,24 +785,28 @@ export const register: Register = on => {
   // A file the session writes adds its repo to the Changes view (or lists it as outside git); a shell
   // call may commit or write, so the repos are read again on the next poll. Each only watches: the
   // tool's own result goes back as it came, and a hook that failed lets the call run (or replays it).
-  const wrote = (ran: { deny?: string; isError?: boolean }, path: string) => {
-    if (ran.deny === undefined && ran.isError !== true) void tracked?.noteWrite(path)
+  // Ahead of the write, a file outside git has its copy kept (outside-copies.ts), so its diff has a before;
+  // after it, a copy taken for a write that never landed is dropped.
+  const written = async (path: string, run: () => Promise<ToolResult>): Promise<ToolResult> => {
+    await copying?.before(path)
+    let ran: ToolResult
+    try {
+      ran = await run()
+    } catch (error) {
+      // It may have written before it failed: counted as written, the copy goes once the file is not listed.
+      void copying?.after(path, true)
+      throw error
+    }
+    const isWritten = ran.deny === undefined && ran.isError !== true
+    void copying?.after(path, isWritten)
+    if (isWritten) void tracked?.noteWrite(path)
+    return ran
   }
-  on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
-    const ran = await next(e)
-    wrote(ran, e.file_path)
-    return ran
-  }).catch(($, e, next) => next(e))
-  on('tool.call', { tool: 'Write' }, async ($, e, next) => {
-    const ran = await next(e)
-    wrote(ran, e.file_path)
-    return ran
-  }).catch(($, e, next) => next(e))
-  on('tool.call', { tool: 'NotebookEdit' }, async ($, e, next) => {
-    const ran = await next(e)
-    wrote(ran, e.notebook_path)
-    return ran
-  }).catch(($, e, next) => next(e))
+  on('tool.call', { tool: 'Edit' }, ($, e, next) => written(e.file_path, () => next(e))).catch(($, e, next) => next(e))
+  on('tool.call', { tool: 'Write' }, ($, e, next) => written(e.file_path, () => next(e))).catch(($, e, next) => next(e))
+  on('tool.call', { tool: 'NotebookEdit' }, ($, e, next) => written(e.notebook_path, () => next(e))).catch(($, e, next) =>
+    next(e),
+  )
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const ran = await next(e)
     tracked?.markDirty()
