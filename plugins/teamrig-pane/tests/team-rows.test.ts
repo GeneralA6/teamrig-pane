@@ -177,25 +177,29 @@ describe('teamBlocks', () => {
     ])
   })
 
-  test("the row of the session whose pane it is starts with a green ► in its indent's first cell; no other row has it", () => {
+  test("the row of the session whose pane it is starts with a green ▶ in its indent's first cell; no other row has it", () => {
     const blocks = teamBlocks(TREE, [], UTC, { own: sessionKey('acme', 'web') })
     const marked = (shown: Block[]) => shown.filter(block => block.rows.some(row => row.spans.includes(OWN_MARK))).map(block => block.key)
     expect(marked(blocks)).toEqual(['session:acme/web'])
     expect(blockOf(blocks, 'session:acme/web').rows[0]?.spans.slice(0, 2)).toEqual([OWN_MARK, { text: '   ' }])
-    expect(words(blocks).find(([key]) => key === 'session:acme/web')?.[1]).toEqual(['►   ▾ ● web  acme-web (2) · sub-lead · later Mon 11-02'])
+    expect(words(blocks).find(([key]) => key === 'session:acme/web')?.[1]).toEqual(['\u{25b6}\u{fe0e}   ▾ ● web  acme-web (2) · sub-lead · later Mon 11-02'])
     // The words stay where an unmarked row has them, and its wrapped lines and card under them.
     expect(blockOf(blocks, 'session:acme/web').rows[0]?.hang?.text).toBe('      ')
     // At the top level of sessions, the lead's, the mark still leaves a blank before the open mark.
-    expect(words(teamBlocks(TREE, [], UTC, { own: sessionKey('acme', 'lead') }))[1]).toEqual(['session:acme/lead', ['► ▾ ● lead  acme-lead (2) · lead']])
+    expect(words(teamBlocks(TREE, [], UTC, { own: sessionKey('acme', 'lead') }))[1]).toEqual(['session:acme/lead', ['\u{25b6}\u{fe0e} ▾ ● lead  acme-lead (2) · lead']])
     // A session of another team, a retired one, or none: the mark follows its key, and no key marks nothing.
     expect(marked(teamBlocks(TREE, [], UTC, { own: sessionKey('tools', 'dev') }))).toEqual(['session:tools/dev'])
     expect(marked(teamBlocks(TREE, [], UTC, { own: sessionKey('acme', 'nobody') }))).toEqual([])
     expect(marked(teamBlocks(TREE, [], UTC))).toEqual([])
   })
 
-  test('the own mark is one cell of plain text, never an emoji, and draws first both docked and inline', () => {
+  test('the own mark is the equal-sided ▶ in its text form, one cell and never an emoji, and draws first both docked and inline', () => {
+    // ▶ (U+25B6), not the flat pointer ► (U+25BA); VS15 asks a terminal that could draw it as an emoji for its text.
+    expect(OWN_MARK.text).toBe('\u{25b6}\u{fe0e}')
     expect(cells(OWN_MARK.text)).toBe(1)
-    expect(/\p{Extended_Pictographic}/u.test(OWN_MARK.text)).toBe(false)
+    expect(/\p{Emoji_Presentation}|\u{fe0f}/u.test(OWN_MARK.text)).toBe(false)
+    const chars = [...OWN_MARK.text]
+    expect(chars.every((char, i) => !/\p{Extended_Pictographic}/u.test(char) || chars[i + 1] === '\u{fe0e}')).toBe(true)
     // A row with no press of its own draws as one text; a leader's, which holds two, as its pieces.
     const ui = blockOf(teamBlocks(TREE, [], UTC, { own: sessionKey('acme', 'ui') }), 'session:acme/ui')
     expect(dockLayout([ui], 80)[0]?.spans[0]).toEqual(OWN_MARK)
@@ -335,7 +339,7 @@ describe('teamBlocks with a search', () => {
 
   test('the session whose pane it is keeps its mark on its row among the results', () => {
     const blocks = teamBlocks(TREE, [], UTC, { search: { query: 'api', hits: searchTeam(ROOT, 'api') }, own: sessionKey('acme', 'api') })
-    expect(words(blocks).find(([key]) => key === 'team-search:session:acme/api')?.[1]).toEqual(['►       ● api  acme-backend · ? 1 decision [Meet]'])
+    expect(words(blocks).find(([key]) => key === 'team-search:session:acme/api')?.[1]).toEqual(['\u{25b6}\u{fe0e}       ● api  acme-backend · ? 1 decision [Meet]'])
     expect(blockOf(blocks, 'team-search:session:acme/api').rows[0]?.spans[0]).toEqual(OWN_MARK)
   })
 
