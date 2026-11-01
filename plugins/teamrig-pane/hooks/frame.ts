@@ -2,7 +2,7 @@
 // scrolls under it in a window the pane keeps itself (T860): the engine scrolls a pane's whole tree, so the pane's
 // tree stays as tall as the engine's window and holds only the body rows that meet the pane's own. Rows are counted
 // as dockLayout wrapped them, one a line: an element's head (its Text's lines, or its parts when drawn as parts, the
-// same lines), then its open card's parts, a Text or a press cut by lines and a line of presses kept whole or left out. The rows
+// same lines), then its open card's parts, a Text or a press cut by lines and a line of presses or a Note field kept whole or left out. The rows
 // between two elements are slots of their own, so the window may start or end on one. Here too are what reads the
 // window: a reveal's offset, the scroll bar, and a scroll move's offset.
 import type { UiScrollInput } from 'claude-code'
@@ -59,9 +59,9 @@ function linesOf(spans: readonly Span[]): number {
   return spans.reduce((lines, span) => lines + span.text.split('\n').length - 1, 1)
 }
 
-/** Rows a card part takes: a Text or a press its lines, a line with a task id one row. */
+/** Rows a card part takes: a Text or a press its lines, a line with a task id one row, a Note field one row. */
 function partRows(part: CardPart): number {
-  return part.kind === 'line' ? 1 : linesOf(part.spans)
+  return part.kind === 'line' || part.kind === 'field' ? 1 : linesOf(part.spans)
 }
 
 /** Rows a body element takes, as dockLayout wrapped it: its Text's lines (its parts', when drawn as parts, are the same) and its open card's. */
@@ -87,9 +87,9 @@ export function cutSpans(spans: readonly Span[], skip: number, take: number): Sp
   return lines.slice(Math.max(0, skip), Math.max(0, skip + take)).flatMap((kept, i) => [...(i > 0 ? [NEW_LINE] : []), ...(kept.length > 0 ? kept : [BLANK])])
 }
 
-/** A card part's rows `skip` to `skip + take`: a Text or a press its lines, a line whole. */
+/** A card part's rows `skip` to `skip + take`: a Text or a press its lines, a line or a Note field whole. */
 function cutPart(part: CardPart, skip: number, take: number): CardPart {
-  return part.kind === 'line' ? part : { ...part, spans: cutSpans(part.spans, skip, take) }
+  return part.kind === 'line' || part.kind === 'field' ? part : { ...part, spans: cutSpans(part.spans, skip, take) }
 }
 
 /** The parts whose rows, from `top` on, meet the body rows `from` to `to`, each cut to them. */

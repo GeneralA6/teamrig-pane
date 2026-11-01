@@ -11,13 +11,13 @@
 // are capped. Widths are display cells (width.ts), so CJK and emoji sequences wrap where the terminal
 // wraps them and a cut never lands inside one.
 import type { LogRead, RefFile } from '../types'
-import type { Block, InboxPress, Row, Span } from './rows'
+import type { ActPress, Block, InboxPress, NoteField, Row, Span } from './rows'
 import { cells, graphemes } from './width'
 
 /**
  * A piece of a line that holds a press: a task id and the task it names, a reference file and the file it names, an
  * unread count and the inbox it opens, a Teams tab key, a session a press ties the tab to, a meeting a press starts,
- * a session a press meets the owner with, or the words between them.
+ * a session a press meets the owner with, an owner act's press on a task's card, or the words between them.
  */
 export type Piece =
   | { kind: 'id'; span: Span; task: string }
@@ -27,16 +27,18 @@ export type Piece =
   | { kind: 'pin'; span: Span; pins: string }
   | { kind: 'start'; span: Span; starts: string }
   | { kind: 'meet'; span: Span; meets: string }
+  | { kind: 'act'; span: Span; acts: ActPress }
   | { kind: 'words'; spans: Span[] }
 /**
  * A run of a card's lines: a Text of the lines that hold no press (`text`), one line that holds one (`line`), its
- * pieces drawn side by side, or a row that is a press of its own (`press`, a Changes file opening its diff), its
- * lines one Text keyed by the row.
+ * pieces drawn side by side, a row that is a press of its own (`press`, a Changes file opening its diff), its
+ * lines one Text keyed by the row, or a row that is the Note field on a task's card (`field`), one row keyed by the row.
  */
 export type CardPart =
   | { kind: 'text'; key: string; spans: Span[] }
   | { kind: 'line'; key: string; pieces: Piece[] }
   | { kind: 'press'; key: string; spans: Span[]; expands: string }
+  | { kind: 'field'; key: string; field: NoteField }
 /**
  * One element of the body: a Text, inside the Button that opens its task's card when `toggle` names one, its
  * page when `opens` does (a search result), a conversation's Log page when `reads` does (docked only), the Teams tab's
@@ -109,13 +111,15 @@ function sameStyle(a: Span, b: Span): boolean {
     a.toggles === b.toggles &&
     a.pins === b.pins &&
     a.starts === b.starts &&
-    a.meets === b.meets
+    a.meets === b.meets &&
+    a.acts?.task === b.acts?.task &&
+    a.acts?.press === b.acts?.press
   )
 }
 
 /**
  * Whether `span` is a press drawn as a piece of its line: a task id or a reference file in a card, an inbox count, a
- * Teams tab key, a session to tie the tab to, a meeting to start, a session to meet.
+ * Teams tab key, a session to tie the tab to, a meeting to start, a session to meet, an owner act on a task.
  */
 function isPress(span: Span): boolean {
   return (
@@ -125,7 +129,8 @@ function isPress(span: Span): boolean {
     span.toggles !== undefined ||
     span.pins !== undefined ||
     span.starts !== undefined ||
-    span.meets !== undefined
+    span.meets !== undefined ||
+    span.acts !== undefined
   )
 }
 
@@ -293,7 +298,7 @@ function joinedLines(lines: Lines): Span[] {
 
 /**
  * A line's spans as pieces: each task id, reference file, inbox count, Teams tab key, session to tie the tab to,
- * meeting to start and session to meet its own, each run of words between them one.
+ * meeting to start, session to meet and owner act its own, each run of words between them one.
  */
 export function piecesOf(line: readonly Span[]): Piece[] {
   const pieces: Piece[] = []
@@ -306,6 +311,7 @@ export function piecesOf(line: readonly Span[]): Piece[] {
     else if (span.pins !== undefined) pieces.push({ kind: 'pin', span, pins: span.pins })
     else if (span.starts !== undefined) pieces.push({ kind: 'start', span, starts: span.starts })
     else if (span.meets !== undefined) pieces.push({ kind: 'meet', span, meets: span.meets })
+    else if (span.acts !== undefined) pieces.push({ kind: 'act', span, acts: span.acts })
     else if (last?.kind === 'words') last.spans.push(span)
     else pieces.push({ kind: 'words', spans: [span] })
   }
@@ -334,8 +340,9 @@ export function cardParts(lines: Lines, first = 0): CardPart[] {
 }
 
 /**
- * A card's rows as parts: each row with `expands` a press of its own, its lines one Text; each run of the others as
- * cardParts makes it, keyed from `first` on (past the parts of a head drawn as parts).
+ * A card's rows as parts: each row with `expands` a press of its own, its lines one Text; each row with `field` the
+ * field it names, one row; each run of the others as cardParts makes it, keyed from `first` on (past the parts of a
+ * head drawn as parts).
  */
 export function rowParts(rows: readonly Row[], wrap: (row: Row) => Lines, first = 0): CardPart[] {
   const parts: CardPart[] = []
@@ -345,12 +352,13 @@ export function rowParts(rows: readonly Row[], wrap: (row: Row) => Lines, first 
     run = []
   }
   for (const row of rows) {
-    if (row.expands === undefined) {
+    if (row.expands === undefined && row.field === undefined) {
       run.push(row)
       continue
     }
     endRun()
-    parts.push({ kind: 'press', key: row.key, spans: joinedLines(wrap(row)), expands: row.expands })
+    if (row.field !== undefined) parts.push({ kind: 'field', key: row.key, field: row.field })
+    else if (row.expands !== undefined) parts.push({ kind: 'press', key: row.key, spans: joinedLines(wrap(row)), expands: row.expands })
   }
   endRun()
   return parts
@@ -391,6 +399,11 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps:
   return body
 }
 
+/** Whether inline draws `row`: not a Note field, nor a line of owner act presses, which it could only draw as words. */
+function isInline(row: Row): boolean {
+  return row.field === undefined && !row.spans.some(span => span.acts !== undefined)
+}
+
 /** The body when building it threw: one line naming the error, so the pane is never left blank. */
 export function failedDrawing(error: unknown): Drawn[] {
   const message = error instanceof Error ? error.message : String(error)
@@ -401,10 +414,11 @@ export function failedDrawing(error: unknown): Drawn[] {
  * Each row one truncated screen row, at most `maxRows`, the last saying how many it left out and
  * where the whole list shows. A press on a task's first row still opens or closes its card, whose rows follow,
  * their task ids drawn as the words they are: a page opens from the dock. A press on a Changes file opens its diff.
+ * The owner's acts on a task (its Note field, its Note and Next presses) are the dock's alone: inline draws none.
  */
 export function inlineLayout(blocks: readonly Block[], maxRows: number): Drawn[] {
   const rows = blocks.flatMap(block =>
-    [...block.rows, ...(block.card ?? [])].map((row, i): Drawn => ({
+    [...block.rows, ...(block.card ?? [])].filter(isInline).map((row, i): Drawn => ({
       key: row.key,
       spans: merged(row.end === undefined ? row.spans : [...row.spans, { text: END_GAP }, row.end]),
       wrap: 'truncate-end',

@@ -322,6 +322,20 @@ describe('OwnerActs: runs', () => {
     expect(ports.runs).toEqual([])
   })
 
+  test('each press of an act goes to its step: Note opens the field, Send sends it, Next previews, Confirm runs, Cancel closes', async () => {
+    const ports = portsOf(answering)
+    const acts = new OwnerActs(CLI, ports)
+    await acts.press('note', 'T12')
+    acts.typed('ship it')
+    await acts.press('send', 'T12')
+    await acts.press('next', 'T12')
+    await acts.press('cancel', 'T12')
+    await acts.press('next', 'T12')
+    await acts.press('confirm', 'T12')
+    expect(ports.runs).toEqual([noteArgs('T12', 'ship it'), nextArgs('T12', true), nextArgs('T12', true), nextArgs('T12', false)])
+    expect(ports.told.map(act => act?.kind ?? null)).toEqual(['noting', 'sending', 'told', 'previewing', 'confirming', null, 'previewing', 'confirming', 'sending', 'told'])
+  })
+
   test('a field whose opening could not be told takes no Send', async () => {
     const ports = portsOf(answering)
     const acts = new OwnerActs(CLI, {

@@ -6,7 +6,7 @@
 // opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
-import type { BarStatus, ExpandedTasks, LogRead, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
 import { cardRows } from './card'
 import { COMMAND } from './command'
 import { teamSessions } from './leads'
@@ -26,7 +26,8 @@ import { cells } from './width'
  * a press on ties the tab to, as `/teamrig-pane <session>` does (a tab tied to no session, noSessionBlock); never split.
  * With `starts` the text is a press that starts that meeting (a scheduled meeting's card, meetings-rows.ts); never
  * split. With `meets` the text is a press that runs `teamrig meet` on that session, which brings the owner its cards
- * (a Teams tab row's [Meet], team-rows.ts); never split. `underline` marks the words a search matched (search-view.ts).
+ * (a Teams tab row's [Meet], team-rows.ts); never split. With `acts` the text is a press of the owner's Note or Next on
+ * a task's card (owner-acts.ts); never split. `underline` marks the words a search matched (search-view.ts).
  */
 export type Span = {
   text: string
@@ -42,10 +43,15 @@ export type Span = {
   pins?: string
   starts?: string
   meets?: string
+  acts?: ActPress
 }
 
 /** What an unread count's press opens: the area whose inbox it is, and how many of its newest lines are unread. */
 export type InboxPress = { readonly area: string; readonly unread: number }
+/** An owner act's press on a task's card (owner-acts.ts): the task, and which press it is. */
+export type ActPress = { readonly task: string; readonly press: OwnerActPress }
+/** The Note field on a task's card (owner-acts.ts): the task, and the round of its opening, a new field each. */
+export type NoteField = { readonly task: string; readonly round: number }
 /**
  * One line of a block before layout: `hang` starts each line it wraps onto (none, absent or
  * undefined as `single` passes it on, starts them at the edge); a `rule` row ends in a rule.
@@ -61,6 +67,8 @@ export type Row = {
   end?: Span | undefined
   /** The Changes file whose diff a press on the row opens or closes (changes-rows.ts): in a card the row is a press of its own. */
   expands?: string
+  /** The Note field a task's card draws in the row's place (owner-acts.ts): in a card the row is a field of its own; its spans are drawn nowhere. */
+  field?: NoteField
 }
 /**
  * What draws as one element. `toggle` names the task a press on it opens or closes the card of; `card` holds

@@ -1011,6 +1011,31 @@ describe('layout', () => {
     ])
   })
 
+  test("a task card's owner acts: each press a piece of its own, the Note field a part keyed as its row; inline draws neither", async () => {
+    const note: Span = { text: '[Note]', acts: { task: 'T5', press: 'note' } }
+    const next: Span = { text: '[Next]', acts: { task: 'T5', press: 'next' } }
+    expect(piecesOf([note, { text: ' ' }, next])).toEqual([
+      { kind: 'act', span: note, acts: { task: 'T5', press: 'note' } },
+      { kind: 'words', spans: [{ text: ' ' }] },
+      { kind: 'act', span: next, acts: { task: 'T5', press: 'next' } },
+    ])
+    expect(merged([note, { ...note, acts: { task: 'T5', press: 'send' } }, { ...note, acts: { task: 'T6', press: 'note' } }])).toHaveLength(3)
+    const field: Row = { key: 'T5:field', spans: [], field: { task: 'T5', round: 2 } }
+    const acts: Row = { key: 'T5:acts', spans: [note, { text: ' ' }, next] }
+    const words: Row = { key: 'T5:what', spans: [{ text: 'what' }] }
+    const block: Block = { key: 'T5', rows: [{ key: 'T5', spans: [{ text: 'T5  title' }] }], toggle: 'T5', card: [words, field, acts] }
+    expect(dockLayout([block], 40)[0]?.card?.map(part => [part.kind, part.key])).toEqual([
+      ['text', 'card:0'],
+      ['field', 'T5:field'],
+      ['line', 'card:2'],
+    ])
+    expect(rowParts([field], row => wrapRow(row, 10))).toEqual([{ kind: 'field', key: 'T5:field', field: { task: 'T5', round: 2 } }])
+    expect(inlineLayout([block], 10).map(drawn => [drawn.key, drawn.toggle])).toEqual([
+      ['T5', 'T5'],
+      ['T5:what', null],
+    ])
+  })
+
   test('a task id is never split or merged: it moves to a fresh line whole, two side by side stay two, words beside one stay apart', async () => {
     const id: Span = { text: 'T123', task: 'T123' }
     expect(wrapRow({ key: 'r', spans: [{ text: 'after ' }, id], hang: { text: '  ' } }, 8)).toEqual([[{ text: 'after' }], [{ text: '  ' }, id]])
