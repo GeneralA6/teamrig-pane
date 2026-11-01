@@ -1,7 +1,10 @@
 // The Teams tab as blocks of rows (rows.ts): the team tree (team.ts) a node a row, depth first, each indented by its
 // depth behind a mark that says whether it is open (▾), closed (▸) or has nothing under it. A team's row counts its
-// active and retired sessions; a session's row is its mark (● on the team, ○ dim once retired), its id, its name where
-// it differs, how many sessions it leads in brackets (T1244), its roles each in its role's colour (team-card.ts
+// active and retired sessions, then its week with its child teams' (T1713): a bar of its planned part filled as far as
+// it used it, green up to how far the week is, amber past it (ahead of plan), a │ marking that point when it is behind,
+// and the used and planned percents of the account's week. A session's row is its mark (● on the team, ○ dim once
+// retired), its id, its name where it differs, how many sessions it leads in brackets (T1244), its roles each in its
+// role's colour (team-card.ts
 // ROLE_COLORS, T1245), how many of its cards wait on the owner now with a [Meet] press that runs `teamrig meet` on it
 // (T1297) and when the next card the owner put off comes back; its hire and retire days are its card's. A retired
 // group's row counts its sessions. The row of the session whose pane it is starts with a green ► in the indent's first
@@ -19,7 +22,7 @@ import type { TimeZone } from './core/read/index'
 import { META_LINES, SEPARATOR, single, type Block, type Row, type Span } from './rows'
 import { marksOf, type Mark } from './search'
 import { excerpt, markedSpans, resultKey, searchViewBlocks, type Noun } from './search-view'
-import { foundRows, teamRows, type SessionFacts, type SessionNode, type TeamRow, type TeamTreeNode } from './team'
+import { foundRows, teamRows, type SessionFacts, type SessionNode, type TeamRow, type TeamTreeNode, type TeamWeek } from './team'
 import { roleSpans, sessionCard } from './team-card'
 import { TEAM_SEARCH_VIEW, teamFieldText, type SessionHit, type TeamSearchedField } from './team-search'
 
@@ -131,7 +134,40 @@ function sessionSpans(session: SessionFacts, card: string | null, marks: Marks):
   return spans
 }
 
-/** A team's or a retired group's own words: the team and its counts, or the group and its count. */
+/** The cells of a team's week bar: its whole planned part, a cell a tenth of it. */
+export const WEEK_CELLS = 10
+
+/** A percent of the account's week as a row prints it: whole from 10, else to a tenth (0.3%, 5.7%, 35%). */
+function weekPct(pct: number): string {
+  const tenths = Math.round(pct * 10) / 10
+  return `${tenths >= 10 ? Math.round(pct) : tenths}%`
+}
+
+/** `count` cells of `cell` in `style`; none for none, so a row holds no empty span. */
+function cellRun(cell: string, count: number, style: Omit<Span, 'text'>): Span[] {
+  return count > 0 ? [{ text: cell.repeat(count), ...style }] : []
+}
+
+/**
+ * A team's week: its bar of WEEK_CELLS cells, its planned part, filled as far as it used it; green up to how far the
+ * week is (its pace), amber past that, as it is ahead of its plan; while it is behind, a dim │ ends the pace's cells.
+ * A team planned no part of the week has no pace: its bar is empty until it uses some, then all amber. Then the used
+ * and planned percents. Nothing when no week file holds this week.
+ */
+function weekSpans(week: TeamWeek | null): Span[] {
+  if (week === null) return []
+  const hasPlan = week.plannedPct > 0
+  const usedOfPlan = hasPlan ? Math.min(1, week.usedPct / week.plannedPct) : week.usedPct > 0 ? 1 : 0
+  const filled = Math.round(usedOfPlan * WEEK_CELLS)
+  const pace = hasPlan ? Math.round(week.elapsedPct / (100 / WEEK_CELLS)) : 0
+  const bar =
+    filled >= pace
+      ? [...cellRun('█', pace, { color: 'success' }), ...cellRun('█', filled - pace, { color: 'warning' }), ...cellRun('░', WEEK_CELLS - filled, { dim: true })]
+      : [...cellRun('█', filled, { color: 'success' }), { text: `${'░'.repeat(pace - 1 - filled)}│${'░'.repeat(WEEK_CELLS - pace)}`, dim: true }]
+  return [SEPARATOR, { text: 'week ', dim: true }, ...bar, { text: ` ${weekPct(week.usedPct)} of ${weekPct(week.plannedPct)}`, dim: true }]
+}
+
+/** A team's or a retired group's own words: the team, its counts and its week, or the group and its count. */
 function groupSpans(node: Exclude<TeamTreeNode, { kind: 'session' }>): Span[] {
   switch (node.kind) {
     case 'team':
@@ -141,6 +177,7 @@ function groupSpans(node: Exclude<TeamTreeNode, { kind: 'session' }>): Span[] {
         { text: `${node.team.active} active`, dim: true },
         SEPARATOR,
         { text: `${node.team.retired} retired`, dim: true },
+        ...weekSpans(node.team.week),
       ]
     case 'retired':
       return [{ text: `retired (${node.children.length})`, dim: true }]

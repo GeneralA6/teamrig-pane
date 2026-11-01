@@ -1,19 +1,19 @@
-// The Teams tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts,
-// a session's name, how many it leads, roles in their colours (never a name it no longer runs under, nor a hire or
-// retire day: its card has them), a retired group's count, a
-// press on each row that opens what lies under it or a session's card, a leader's two, the notes for a tree it cannot
-// show, and a WARN line for each team folder it could not read.
+// The Teams tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts
+// and its week bar, a session's name, how many it leads, roles in their colours (never a name it no longer runs under,
+// nor a hire or retire day: its card has them), a retired group's count, a press on each row that opens what lies under
+// it or a session's card, a leader's two, the notes for a tree it cannot show, and a WARN line for each team folder it
+// could not read.
 import { describe, expect, test } from 'claude-code/testing'
 import type { MeetAnswer, TeamFolderFailure, TeamView } from '../types'
 import { TimeZone } from '../hooks/core/read/index'
 import { dockLayout, inlineLayout } from '../hooks/layout'
-import { SEPARATOR, type Block } from '../hooks/rows'
+import { SEPARATOR, type Block, type Span } from '../hooks/rows'
 import { sessionKey } from '../hooks/team'
-import { MEET_TEXT, OWN_MARK, TEAM_NOTHING_FOUND, TEAM_SEARCH_HINT, cardKey, openedWith, teamBlocks, toggledWith } from '../hooks/team-rows'
+import { MEET_TEXT, OWN_MARK, TEAM_NOTHING_FOUND, TEAM_SEARCH_HINT, WEEK_CELLS, cardKey, openedWith, teamBlocks, toggledWith } from '../hooks/team-rows'
 import { searchTeam } from '../hooks/team-search'
 import { cells } from '../hooks/width'
 import { HOUR, JERUSALEM, NOW } from './fixtures'
-import { ACME, TOOLS, configOf, hire, treeOf } from './team-fixtures'
+import { ACME, TOOLS, configOf, hire, treeOf, weekFile } from './team-fixtures'
 
 const UTC = TimeZone.UTC
 /** Each block as its key and its rows' words. */
@@ -237,6 +237,43 @@ describe('teamBlocks', () => {
     expect(searched.map(block => block.key).slice(0, 3)).toEqual(['team:failure:tools', 'team:failure:docs', 'team-search-count'])
     // With no tree, the no-tree note follows them.
     expect(teamBlocks({ kind: 'tree', root: null, failures: [docs] }, [], UTC).map(block => block.key)).toEqual(['team:failure:docs', 'team:note'])
+  })
+})
+
+describe("a team's week on its row", () => {
+  /** The rows with acme's week file at `used` and `planned` percent of the account's week, 57% of the week gone (pace 6 cells). */
+  const weekBlocks = (used: number, planned: number) => teamBlocks({ kind: 'tree', root: treeOf([{ ...ACME, week: weekFile(used, planned) }, TOOLS], 'acme'), failures: [] }, [], UTC)
+  const acmeRow = (used: number, planned: number): readonly Span[] => blockOf(weekBlocks(used, planned), 'team:acme').rows[0]?.spans ?? []
+  const textOf = (spans: readonly Span[]) => spans.map(span => span.text).join('')
+  const pcts = (used: string, planned: string): Span => ({ text: ` ${used} of ${planned}`, dim: true })
+  const WEEK_WORD: Span = { text: 'week ', dim: true }
+
+  test('ahead of its plan: its planned part filled as far as it used it, green to how far the week is, amber past it, then the used and planned percents', () => {
+    const spans = acmeRow(35.28, 51.91)
+    expect(textOf(spans)).toBe('▾ acme · 5 active · 1 retired · week ███████░░░ 35% of 52%')
+    expect(spans.slice(-6)).toEqual([SEPARATOR, WEEK_WORD, { text: '██████', color: 'success' }, { text: '█', color: 'warning' }, { text: '░░░', dim: true }, pcts('35%', '52%')])
+    expect(cells(textOf(spans.slice(-4, -1)))).toBe(WEEK_CELLS)
+  })
+
+  test('on its pace all green; past its whole plan every cell, amber past the pace', () => {
+    expect(acmeRow(30, 50).slice(-4)).toEqual([WEEK_WORD, { text: '██████', color: 'success' }, { text: '░░░░', dim: true }, pcts('30%', '50%')])
+    expect(acmeRow(60, 50).slice(-4)).toEqual([WEEK_WORD, { text: '██████', color: 'success' }, { text: '████', color: 'warning' }, pcts('60%', '50%')])
+  })
+
+  test('behind its plan: a dim │ in the cell the pace reaches; none used yet draws no green', () => {
+    expect(acmeRow(20, 50).slice(-4)).toEqual([WEEK_WORD, { text: '████', color: 'success' }, { text: '░│░░░░', dim: true }, pcts('20%', '50%')])
+    expect(acmeRow(0, 50).slice(-3)).toEqual([WEEK_WORD, { text: '░░░░░│░░░░', dim: true }, pcts('0%', '50%')])
+  })
+
+  test('a team planned no part of the week has no pace: empty until it uses some, then all amber', () => {
+    expect(acmeRow(0, 0).slice(-3)).toEqual([WEEK_WORD, { text: '░░░░░░░░░░', dim: true }, pcts('0%', '0%')])
+    expect(acmeRow(0.26, 0).slice(-3)).toEqual([WEEK_WORD, { text: '██████████', color: 'warning' }, pcts('0.3%', '0%')])
+  })
+
+  test('a percent to a tenth below 10, whole from 10; a team with no week file this week draws no week', () => {
+    expect(textOf(acmeRow(5.66, 9.96))).toMatch(/ 5\.7% of 10%$/)
+    expect(textOf(acmeRow(0.26, 3.84))).toMatch(/ 0\.3% of 3\.8%$/)
+    expect(words([blockOf(weekBlocks(35.28, 51.91), 'team:tools')])).toEqual([['team:tools', ['  ▾ tools · 2 active · 0 retired']]])
   })
 })
 
