@@ -1,6 +1,7 @@
 // The keys of the body's presses, one source for the presses register.tsx draws and for the order the focus ring
 // meets them in (T860): the docked body draws only the rows its window shows, and holds each press out of the window
 // as a hidden stand-in under the same key, so the ring's stops stay the same wherever the window stands.
+import type { OwnerActPress } from '../types'
 import type { Place, Placed, View } from './frame'
 import type { CardPart, Drawn, Piece } from './layout'
 
@@ -21,6 +22,19 @@ export function openKey(key: string): string {
 /** Where the presses in an element's parts or card say they are drawn: the element when drawn as parts, else its open card. */
 export function pressesFrom(drawn: Drawn): string {
   return drawn.parts === undefined ? openKey(drawn.key) : drawn.key
+}
+
+/**
+ * An owner act's press on a task's card (owner-acts.ts): `act:<press>:<task>`. A drawing holds one card per task, so
+ * the key names it without where it is drawn, and the acts can move the ring onto it.
+ */
+export function actKey(press: OwnerActPress, task: string): string {
+  return `act:${press}:${task}`
+}
+
+/** The Note field on a task's card: `note:<task>:<round>`, a new field, empty, each time it opens. */
+export function noteKey(task: string, round: number): string {
+  return `note:${task}:${round}`
 }
 
 /** A Changes file's row, a press that opens or closes its diff: `diff:`, then where it is drawn and the row. */

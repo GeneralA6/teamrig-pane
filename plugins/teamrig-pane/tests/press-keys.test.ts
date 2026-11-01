@@ -2,7 +2,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { placesOf, viewOf } from '../hooks/frame'
 import type { CardPart, Drawn } from '../hooks/layout'
-import { diffKey, headPresses, openKey, pieceKey, placeOf, pressesFrom, pressesOf, standInsOf } from '../hooks/press-keys'
+import { actKey, diffKey, headPresses, noteKey, openKey, pieceKey, placeOf, pressesFrom, pressesOf, standInsOf } from '../hooks/press-keys'
 
 /** A body element of one line, its head no press unless `extra` makes it one. */
 function drawn(key: string, extra: Partial<Drawn> = {}): Drawn {
@@ -32,6 +32,13 @@ describe('press-keys', () => {
   test('an open card is keyed after its element, and its presses say they are drawn there', () => {
     expect(openKey('T5')).toBe('T5-open')
     expect(pressesFrom(drawn('T5', { toggle: 'T5', card: [WORDS] }))).toBe('T5-open')
+  })
+
+  test("an owner act's press is keyed by the press and its task alone, a Note field by its task and round", () => {
+    expect(actKey('cancel', 'T12')).toBe('act:cancel:T12')
+    expect(actKey('note', 'T12')).toBe('act:note:T12')
+    expect(noteKey('T12', 3)).toBe('note:T12:3')
+    expect(noteKey('T12', 4)).not.toBe(noteKey('T12', 3))
   })
 
   test('an element drawn as parts holds its presses itself', () => {

@@ -357,6 +357,30 @@ export type MeetingStart = { readonly id: string; readonly outcome: 'starting' |
  */
 export type MeetAnswer = { readonly session: string; readonly outcome: 'asking' | 'asked' | 'refused'; readonly lines: readonly string[] }
 
+/** The owner's two acts on a task card (hooks/owner-acts.ts): a Note to its session, or putting it Next on its list. */
+export type OwnerActName = 'note' | 'next'
+
+/** A press of an owner act on a task card: open the Note field, ask Next's preview, send the Note, cancel, confirm Next. */
+export type OwnerActPress = 'note' | 'next' | 'send' | 'cancel' | 'confirm'
+
+/**
+ * Where the owner's act on a task card stands (hooks/owner-acts.ts), one at a time in the pane: the Note field open
+ * (each opening a new round, so a new field), Next's preview being read, the preview waiting on a confirm, an act
+ * running, or what the last one answered: its lines on success, its refusal verbatim.
+ */
+export type OwnerAct =
+  | { readonly kind: 'noting'; readonly task: string; readonly round: number }
+  | { readonly kind: 'previewing'; readonly task: string }
+  | { readonly kind: 'confirming'; readonly task: string; readonly lines: readonly string[] }
+  | { readonly kind: 'sending'; readonly task: string; readonly act: OwnerActName }
+  | {
+      readonly kind: 'told'
+      readonly task: string
+      readonly act: OwnerActName
+      readonly outcome: 'done' | 'refused'
+      readonly lines: readonly string[]
+    }
+
 /** What a turn log line records: a prompt the person sent, a reply the session showed, or a clear or compaction of its context. */
 export type TurnKind = 'prompt' | 'reply' | 'clear'
 
@@ -542,6 +566,8 @@ declare module 'claude-code' {
       meetingStart: MeetingStart | null
       /** What the last [Meet] press on the Teams tab answered; null before one, and after a session start or a switch to the tab. */
       ownerMeet: MeetAnswer | null
+      /** Where the owner's Note or Next on a task card stands (hooks/owner-acts.ts); null before one, after a cancel and after a session start. */
+      ownerAct: OwnerAct | null
     }
   }
 }
