@@ -59,7 +59,9 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   those of other sessions that need it, its
   goals, who asked, when it was added and by whom, where its ask is written, its evidence and its links. `c` closes every card. A click on a task
   id in a card opens that task's page, and a click on a file it references opens the file at the line it names, with
-  back and forward (`b`, `f`) and a trail of where you went.
+  back and forward (`b`, `f`) and a trail of where you went. In the dock a card ends in `[Note]`, which sends what you
+  type to the task's session through `teamrig owner note`, and `[Next]`, which shows what `teamrig owner next` would
+  do and, once confirmed, puts the task atop its session's list.
 - **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log, Inbox, Teams and Meetings switch (`s` or a click puts the cursor in it) that lists, as you type, the
   tasks the pane holds whose id, title, owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.
   On the Inbox view the same field finds lines by sender or words, over the Log view's list conversations by their
