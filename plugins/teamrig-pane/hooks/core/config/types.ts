@@ -503,8 +503,9 @@ export interface WakeConfig {
   readonly enabled: boolean;
   /**
    * The least urgent priority that wakes a session: 1 wakes for p0 and p1 only. A session its budget holds (past
-   * its daily budget while the team has no room today, the wake's own turn counted for both) wakes for p0 only, and
-   * one in the budget's quiet hours for p0 and p1 only, whatever this says.
+   * its daily budget while the team has no room today, the wake's own turn counted for both) or a short day pauses
+   * (`budget.pauseByPriority`) wakes for p0 only, and one in the budget's quiet hours for p0 and p1 only, whatever
+   * this says.
    */
   readonly priority: number;
   /** How long a wake waits after the first new task it is for, so tasks handed together wake the session once. */
@@ -611,7 +612,7 @@ export interface QuietHours {
 
 /** One session's weight in the split of the team's daily budget (src/budget/parts.ts `dailyBudgetOf`). */
 export interface SessionBudget {
-  /** Times its queued work: the session gets the team's budget × that / the sum over the sessions. */
+  /** Times its top queued task's weight: the session gets the team's budget × that / the sum over the sessions. */
   readonly share: number;
 }
 
@@ -675,7 +676,7 @@ export interface BudgetConfig {
   readonly sessions: Readonly<Record<string, SessionBudget>>;
   /**
    * On a short day (what is left of the week gives less than the pace line plans for the day), fund the team's
-   * sessions' queued work in priority order and pause the sessions none of it reaches. The lead, the delivery owner
+   * sessions in the priority order of their top queued task and pause the sessions none of it reaches. The lead, the delivery owner
    * held in the team and lifted sessions are never paused. Off: no session of the team is paused.
    */
   readonly pauseByPriority: boolean;
@@ -879,6 +880,16 @@ export interface DeliveryConfig {
 export interface AlertsConfig {
   /** The same external failure for this long must page a human. */
   readonly persistentFailureHours: number;
+  /**
+   * The name of the environment variable holding the chat webhook URL a page to the owner goes to (an expired Claude
+   * login, src/restore/), never the URL itself, which is a secret. Absent, with `pageWebhookFile` absent too: no page.
+   */
+  readonly pageWebhookEnv?: string;
+  /**
+   * The absolute path of a one-line file holding that URL, read at each page, so the URL never sits in an environment,
+   * a log or a session's read. Wins over `pageWebhookEnv` when both are set.
+   */
+  readonly pageWebhookFile?: string;
 }
 
 /** When the lead asks the owner the decisions waiting on them, together in a batch (src/decisions/batch.ts). */
