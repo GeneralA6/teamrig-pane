@@ -86,9 +86,10 @@ function hundredths(pct: number): number {
  * The week of a team and its child teams from their week files, the team's first: those for the week still running at
  * `now` that share the first one's reset, summed. A file on another reset is another account's (stopgap T1777: the
  * file names no account yet) and is left out; one from a week gone by too. Null when no file is left. How far the week
- * is goes in whole percent, so the tree changes about every 1.7 hours, not at every read.
+ * is goes in whole percent, so the tree changes about every 1.7 hours, not at every read. The Stats tab's week tile
+ * (stats-source.ts) sums its scope's teams with it too.
  */
-function weekOf(weeks: readonly TeamWeekSummary[], now: number): TeamWeek | null {
+export function weekOf(weeks: readonly TeamWeekSummary[], now: number): TeamWeek | null {
   const running = weeks.filter(week => week.resetsAt > now)
   const first = running[0]
   if (first === undefined) return null

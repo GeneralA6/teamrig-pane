@@ -309,6 +309,37 @@ export type TeamView =
   | { readonly kind: 'no-team' }
   | { readonly kind: 'failed'; readonly reason: string }
 
+/**
+ * What the Stats tab folds (hooks/stats-source.ts): every team in the tree of teams that holds the pane's team, one
+ * team with the teams under it, or one session's tasks in its team.
+ */
+export type StatsChoice =
+  | { readonly kind: 'tree' }
+  | { readonly kind: 'team'; readonly team: string }
+  | { readonly kind: 'session'; readonly team: string; readonly session: string }
+
+/**
+ * The Stats tab's numbers (hooks/stats-source.ts): the scope they fold, a team no longer in the tree folded as the
+ * tree; the range; the tree's teams, root first and depth first, for the scope presses; teamrig's stats fold and its
+ * Health tiles; the scope's week, its teams' week files summed (hooks/team.ts weekOf), null for none this week; and
+ * the team folders and registers whose read failed. Or that it is not read yet, that the pane's team has no config
+ * teamrig takes, or why the team folders could not be listed or the pane's own team read before any read of it worked.
+ */
+export type StatsView =
+  | {
+      readonly kind: 'stats'
+      readonly scope: StatsChoice
+      readonly range: import('../hooks/core/read/index').StatsRange
+      readonly teams: readonly string[]
+      readonly stats: import('../hooks/core/read/index').RegisterStats
+      readonly health: import('../hooks/core/read/index').RegisterHealth
+      readonly week: import('../hooks/team').TeamWeek | null
+      readonly failures: readonly TeamFolderFailure[]
+    }
+  | { readonly kind: 'reading' }
+  | { readonly kind: 'no-team' }
+  | { readonly kind: 'failed'; readonly reason: string }
+
 /** A meeting's status as teamrig keeps it (its meeting schedule's statuses). */
 export type MeetingStatus = 'scheduled' | 'started' | 'done' | 'dropped'
 
