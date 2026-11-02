@@ -1,6 +1,6 @@
 ---
 name: teamrig-pane-guide
-description: Use when running the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes, Log, Inbox, Teams, Meetings views, where it finds the register, requirements.
+description: Use when running the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes, Log, Inbox, Teams, Meetings, Stats views, where it finds the register, requirements.
 ---
 
 # teamrig-pane guide
@@ -104,6 +104,7 @@ groups (the views, the list's own, a page's steps, the status bar's) and how the
 | `u` | The Inbox view: this session's inbox lines of the last 24 hours and every unread one (see [The Inbox view](#the-inbox-view)) |
 | `e` | The Teams tab: the tree of teams the session's team is in, each lead over the sessions it leads (see [The Teams tab](#the-teams-tab)) |
 | `j` | The Meetings view: the team's booked meetings by time, each a press that opens its card, where a scheduled one starts (see [The Meetings view](#the-meetings-view)) |
+| `r` | The Stats tab: the tree's registers folded into Health tiles and the flow of work, for the scope and range it picks (see [The Stats tab](#the-stats-tab)) |
 | `m` | Tasks: this session's area (`mine`) |
 | `a` | Tasks: every owner (`all`) |
 | `o` | mine: only the tasks done today (the status bar's `done today`); again shows every task |
@@ -140,9 +141,9 @@ right end beside the `[-]`, opens the
 pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
 band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
-Minimized, the pane is the `[Tasks] [Changes n] [Log] [Inbox (n)] [Teams] [Meetings]` switch, then a dim `· minimized, press a view`
+Minimized, the pane is the `[Tasks] [Changes n] [Log] [Inbox (n)] [Teams] [Meetings] [Stats]` switch, then a dim `· minimized, press a view`
 (on a row of its own, with no `·`, in a dock too narrow for both). A
-click on any of its buttons, `t`, `d`, `g`, `u`, `e` or `j`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
+click on any of its buttons, `t`, `d`, `g`, `u`, `e`, `j` or `r`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
 session.
 
 ## Where the pane sits
@@ -675,6 +676,24 @@ The view runs the CLI of the teamrig plugin installed in Claude Code, with `node
 the view opens and every 60 seconds while it shows; on another view, or minimized, it runs nothing. With no teamrig
 plugin, one older than 0.208.0, or a list that fails, it says why
 ([reference.md](reference.md#warn-lines-and-their-fixes)). It has no Find field: a schedule is a few rows.
+
+## The Stats tab
+
+`r`, or Stats on the switch, folds the registers of the tree of teams the session's team is in into the numbers
+`teamrig stats` prints. Two rows of presses lead it, the pick in brackets: the scope (the tree, each team, and a picked
+session, whose press goes back to its team) and the range (7, 14 or 30 days, or all):
+
+    Scope  [tree]  acme  tools
+    Range  [7 d]  14 d  30 d  all
+
+| Section | What it shows |
+| --- | --- |
+| Health | A tile a measure, its `●` green, amber or red beside teamrig's words for it (the HEALTH line of `teamrig stats`), and the scope's week against its plan |
+| Flow | Its header is its headline, `opened · closed (dropped) · net`, so it answers folded; a press folds it (`▸`) and opens it. Open: the active tasks at each day's end, the newest 14 days with bars of what opened and closed, the burn-up and the cumulative flow over the range (no `$` limit-day marks yet: the pane has no source for those days) |
+
+It reads files only, every 3 seconds while it shows and at once on a press: the team folders, and each scoped team's
+register history once a scope takes it in. A folder or register it cannot read is a `WARN` line naming it, its
+numbers kept from the last read. It has no Find field.
 
 ## How it relates to the teamrig CLI
 

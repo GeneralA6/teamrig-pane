@@ -84,6 +84,7 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | --- | --- |
 | One file read | 4 MiB, about 13,500 register events |
 | Polls | a file stat every 3 seconds; a 60 second tick for due and age labels, for Changes and for the Meetings view |
+| Stats | the team folders and the scoped registers' history every 3 seconds while the tab shows, folded again only when a history, the scope, the range or the minute moved |
 | Meetings | `teamrig meeting list --json` every 60 seconds while the view shows, given 30 seconds to answer; a start is given 60 seconds |
 | `Waiting`, asked of others | the first 8 asked of other sessions, after the area's own waiting tasks; the heading and the status bar count them all, a dim line the rest |
 | `Done today` | done or dropped on the team's day, the newest 6; the heading and the status bar count them all, a dim line the rest |

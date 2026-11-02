@@ -13,7 +13,7 @@ labels on. No model calls, so no tokens. Every time is on the team's clock and z
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
 session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
 to each team session's prompts and replies, or to its own inbox lines, or to the team's tree, or to the team's
-meetings (Tasks, Changes, Log, Inbox, Teams and Meetings, below). Docked, its first line
+meetings, or to the tree's flow of work (Tasks, Changes, Log, Inbox, Teams, Meetings and Stats, below). Docked, its first line
 names the session as its tab title does (`[acme] pane`: the team, then the name without the team's prefix), so
 panes open in several tabs tell apart at a glance. That line and the controls under it stay put, and the body
 scrolls under them in a window of the pane's own: the mouse wheel moves it 3 rows a tick, PgUp and PgDn a
@@ -144,7 +144,8 @@ folder, a relative path in the session's folder and each folder above it, then i
 not find lists each path it looked at; one over 256 KiB, or not text, says why it is not shown.
 
 In the Tasks view, the Inbox view, the Changes view, over the Log view's list and on the Teams tab (see Changes, Log,
-Inbox and Teams, below), the dock shows a Find field under its switch (the Meetings view, a few rows, shows none); `s` or a click
+Inbox and Teams, below), the dock shows a Find field under its switch (the Meetings view, a few rows, and the Stats
+tab, numbers, show none); `s` or a click
 puts the cursor in it, and
 it never takes the keys by itself, so the pane's other keys keep working. Each word typed must match, case
 aside, a task's id (`T52` or `52`) or the start of a word in its title, owner, who asked, goals, week, note,
@@ -290,13 +291,14 @@ too), all of it once when the session starts. When nothing names the register, o
 the pointer file or the team config cannot be used, the pane draws one `WARN` line saying what to set
 or what is wrong.
 
-## Tasks, Changes, Log, Inbox, Teams and Meetings
+## Tasks, Changes, Log, Inbox, Teams, Meetings and Stats
 
-The switch, `[Tasks] [Changes 3] [Log] [Inbox (2)] [Teams] [Meetings]`, shows in every state: open, in a dock however narrow (its
+The switch, `[Tasks] [Changes 3] [Log] [Inbox (2)] [Teams] [Meetings] [Stats]`, shows in every state: open, in a dock however narrow (its
 buttons wrap under each other rather than clip) under the title line, above the prompt, and as the
 minimized strip. While
-the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Log, `u` Inbox, `e` Teams and `j` Meetings (`c`
-already closes the cards, `i` shows the waiting tasks alone, `m` and `w` the session's own and its working ones).
+the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Log, `u` Inbox, `e` Teams, `j` Meetings and `r` Stats
+(`c` already closes the cards, `i` shows the waiting tasks alone, `m` and `w` the session's own and its working ones,
+`n` the not-started ones, and `ctrl+x x` minimizes the pane).
 
 Changes lists the files changed in the git repos the session works in: the repo of the session's folder,
 and the repo of each file the session or one of its agents writes (Edit, Write, NotebookEdit; a file a
@@ -512,6 +514,30 @@ later and `node` on the PATH. It reads the list when the view opens and every 60
 30 s to answer and a start 60 s; on another view, or minimized, it runs nothing. A list it cannot read says why: no
 teamrig plugin, one too old to print the list, or teamrig's own error. A meeting in a newer format than the pane
 reads is counted on a `WARN` line, the rest still shown. There is no Find field: a schedule is a few rows.
+
+### Stats
+
+Stats folds the registers of the tree of teams the session's team is in into the numbers `teamrig stats` prints, for
+the scope and the days it picks. Two rows of presses lead it, the pick in brackets: the scope (the tree, each team in
+it, and a session once one is picked, whose press goes back to its team) and the range (7, 14 or 30 days, or all):
+
+    Scope  [tree]  acme  tools
+    Range  [7 d]  14 d  30 d  all
+
+Then the Health tiles, each a `●` in its level's colour (green good, amber warn, red bad) beside teamrig's words for it
+(the HEALTH line of `teamrig stats`), and the scope's week against its plan, two a row where they fit. Then the Flow
+section, its header carrying its headline (`▾ Flow · opened 540 · closed 428 (3 dropped) · net +112`), so it still
+answers folded: a press on the header folds it (`▸`) and again opens it. Open, it draws the active tasks at each day's
+end, the newest 14 days with bars of what opened and closed, then the burn-up and the cumulative flow over the whole
+range. (A `$` is to mark a day the week sat at its usage limit, so a quiet day there is not read as slack; the pane
+has no source for those days yet, so none shows.) A team's charts say where a split moved tasks out of it,
+as only the tree's are whole before one.
+
+It reads files only: the team folders as the Teams tab reads them, and the whole history of each team's register the
+scope takes in, each read only once a scope needs it. It reads every 3 s while it shows, and only then; a press reads
+at once. It folds again only when a history, the scope, the range or the minute moved. A team folder or a register it
+cannot read draws as it last read, or is left out before then, on a `WARN` line naming it and why; with no team, or
+the pane's own register unread, the tab says why. There is no Find field.
 
 ## Reading the register
 

@@ -62,7 +62,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   back and forward (`b`, `f`) and a trail of where you went. In the dock a card ends in `[Note]`, which sends what you
   type to the task's session through `teamrig owner note`, and `[Next]`, which shows what `teamrig owner next` would
   do and, once confirmed, puts the task atop its session's list.
-- **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log, Inbox, Teams and Meetings switch (`s` or a click puts the cursor in it) that lists, as you type, the
+- **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log, Inbox, Teams, Meetings and Stats switch (`s` or a click puts the cursor in it) that lists, as you type, the
   tasks the pane holds whose id, title, owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.
   On the Inbox view the same field finds lines by sender or words, over the Log view's list conversations by their
   tasks, how they opened or their session, on the Changes view changed files by path, repo or branch, and on the Teams
@@ -91,7 +91,10 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
 - **Meetings:** the meetings booked for the session's team, by time: each one's time, length, who meets and what it
   settles, the next one marked and a missed one red. A press opens its card (what it is about, who joins, its tasks
   with their status, its brief), and a scheduled one's `[Start meeting]` runs `teamrig meeting start` for you.
-  Press the switch, or `t`, `d`, `g`, `u`, `e` and `j` while the pane holds the keyboard.
+- **Stats:** the tree's registers folded as `teamrig stats` folds them, for the whole tree, a team or a session over 7,
+  14 or 30 days or all: Health tiles in green, amber and red, then the flow of work (opened, closed, net, the active
+  tasks by day, a burn-up and the cumulative flow), a section a press folds.
+  Press the switch, or `t`, `d`, `g`, `u`, `e`, `j` and `r` while the pane holds the keyboard.
 
 ## How it reads teamrig
 
