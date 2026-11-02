@@ -6,7 +6,7 @@ import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { EVENT_VERSION, indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
 import { ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
-import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, noSessionBlock, paneBlocks, type Block, type Row, type Span } from '../hooks/rows'
+import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, noSessionBlock, paneBlocks, statsPressKey, type Block, type Row, type Span } from '../hooks/rows'
 import { metaText } from '../hooks/meta'
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
@@ -1034,6 +1034,27 @@ describe('layout', () => {
       ['T5', 'T5'],
       ['T5:what', null],
     ])
+  })
+
+  test("a Stats tab pick is a piece of its own; two that pick apart stay two, the same pick one style", async () => {
+    const tools: Span = { text: 'tools', stats: { kind: 'scope', scope: { kind: 'team', team: 'tools' } } }
+    const month: Span = { text: '30 d', stats: { kind: 'range', range: '30d' } }
+    expect(piecesOf([tools, { text: '  ' }, month])).toEqual([
+      { kind: 'stats', span: tools, stats: tools.stats },
+      { kind: 'words', spans: [{ text: '  ' }] },
+      { kind: 'stats', span: month, stats: month.stats },
+    ])
+    expect(merged([tools, { ...tools, stats: { kind: 'scope', scope: { kind: 'team', team: 'acme' } } }, month])).toHaveLength(3)
+    expect(merged([tools, { ...tools, stats: { kind: 'scope', scope: { kind: 'team', team: 'tools' } } }])).toEqual([{ ...tools, text: 'toolstools' }])
+  })
+
+  test('statsPressKey names each pick as one word', () => {
+    expect([
+      statsPressKey({ kind: 'scope', scope: { kind: 'tree' } }),
+      statsPressKey({ kind: 'scope', scope: { kind: 'team', team: 'acme' } }),
+      statsPressKey({ kind: 'scope', scope: { kind: 'session', team: 'acme', session: 'dev' } }),
+      statsPressKey({ kind: 'range', range: 'all' }),
+    ]).toEqual(['tree', 'team:acme', 'session:acme/dev', 'range:all'])
   })
 
   test('a task id is never split or merged: it moves to a fresh line whole, two side by side stay two, words beside one stay apart', async () => {

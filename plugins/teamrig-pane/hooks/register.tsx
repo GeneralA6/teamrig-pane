@@ -57,6 +57,8 @@ import type {
   RingLandings,
   SetupView,
   Snapshot,
+  StatsChoice,
+  StatsView,
   TaskDetail,
   TaskRow,
   TeamSettings,
@@ -69,7 +71,7 @@ import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { inboxFile, TaskDetails, type RefPlaces } from './details'
 import { RefFileReader } from './ref-file'
-import { DEFAULT_REGISTER, TimeZone } from './core/read/index'
+import { DEFAULT_REGISTER, TimeZone, type StatsRange } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { diffKey, noteKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
@@ -79,7 +81,7 @@ import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, 
 import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
 import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, bannerBlock, currentRowKey, currentTask } from './banner'
 import { sessionName, titleSpans } from './session-title'
-import { NOTHING_EXPANDED, NOTHING_FOLDED, paneBlocks, type Block, type InboxPress, type Span } from './rows'
+import { NOTHING_EXPANDED, NOTHING_FOLDED, paneBlocks, type Block, type InboxPress, type Span, type StatsPress } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
 import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
@@ -106,6 +108,8 @@ import type { CardActs } from './act-rows'
 import { NoteHold } from './note-hold'
 import { OwnerMeet } from './owner-meet'
 import { meetingsBlocks } from './meetings-rows'
+import { statsBlocks } from './stats-rows'
+import { LiveStats } from './stats-source'
 import { findTeamrigCli } from './teamrig-cli'
 import {
   AT_LIST,
@@ -134,7 +138,7 @@ import {
 import { weekSteps } from './done'
 import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
-import { clockOf, machineZoneOf, weekOf } from './zone'
+import { clockOf, machineZoneOf, weekOf, zoneNamed } from './zone'
 import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
 import { KEYS_HOTKEY, KEYS_LABEL, keysBlocks } from './keys-page'
 import { pageBlocks } from './page'
@@ -277,6 +281,19 @@ const meetingsOpen = atom({ plugin: 'teamrig-pane', key: 'meetingsOpen' } as con
 const NO_START: MeetingStart | null = null
 /** What the last [Start meeting] press answered (meetings.ts): cleared at each session start and each switch to the view. */
 const meetingStart = atom({ plugin: 'teamrig-pane', key: 'meetingStart' } as const, NO_START)
+/** The Stats tab's numbers (stats-source.ts) are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when StatsView or the core's RegisterStats or RegisterHealth changes shape. */
+const STATS_SHAPE = 'stats-v1'
+const STATS_READING: StatsView = { kind: 'reading' }
+const NO_TEAM_STATS: StatsView = { kind: 'no-team' }
+const stats = atom({ plugin: 'teamrig-pane', key: 'stats' } as const, STATS_READING, { shape: STATS_SHAPE })
+const TREE_SCOPE: StatsChoice = { kind: 'tree' }
+/** What the Stats tab folds (stats-source.ts): the whole tree until a press on its scope row picks a team or a session. */
+const statsScope = atom({ plugin: 'teamrig-pane', key: 'statsScope' } as const, TREE_SCOPE)
+const FIRST_RANGE: StatsRange = '7d'
+/** The days the Stats tab folds: the last 7 until a press on its range row picks others. */
+const statsRange = atom({ plugin: 'teamrig-pane', key: 'statsRange' } as const, FIRST_RANGE)
+/** The Stats tab's sections the person opened or closed against their default (stats-rows.ts isSectionOpen), by key: a press on a header flips one. */
+const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as const, NOTHING_TOGGLED)
 const NO_MEET: MeetAnswer | null = null
 /** What the last [Meet] press on the Teams tab answered (owner-meet.ts): cleared at each session start and each switch to the tab. */
 const ownerMeet = atom({ plugin: 'teamrig-pane', key: 'ownerMeet' } as const, NO_MEET)
@@ -471,6 +488,8 @@ export const register: Register = on => {
   let teaming: LiveTeam | null = null
   /** Reads the Meetings view's list again while it shows and starts a meeting on a press; set when the session starts, null with no team. */
   let scheduling: LiveMeetings | null = null
+  /** Folds the Stats tab's numbers from the registers' history again while it shows; set when the session starts, null with no team or no register. */
+  let tallying: LiveStats | null = null
   /** Runs `teamrig meet` on a Teams tab row's [Meet] press; set when the session starts, null with no team. */
   let meeting: OwnerMeet | null = null
   /** Runs the owner's Note and Next on a task's card; set when the session starts, null with no team. */
@@ -501,6 +520,7 @@ export const register: Register = on => {
     logging?.stop()
     teaming?.stop()
     scheduling?.stop()
+    tallying?.stop()
     watch?.stop()
     // A filter is a look for the moment, never kept: a new session, or a hot reload, lists every task again.
     await update($, barFilter, () => null)
@@ -557,6 +577,7 @@ export const register: Register = on => {
       logging?.stop()
       teaming?.stop()
       scheduling?.stop()
+      tallying?.stop()
       const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } =
         places.kind === 'found' ? { paths: registerPaths(places.dirs), settings: places.settings } : { missing: places.problem }
       team = places.kind === 'found' && places.team !== null ? { files, paths: places.team } : null
@@ -648,6 +669,26 @@ export const register: Register = on => {
             })
       scheduling = meetingsLive
       if (meetingsLive === null) await update($, meetings, () => NO_TEAM_MEETINGS)
+      // The own team's register, zone and owner's marker: the day and the owner's waits of every team the fold takes in.
+      const statsLive =
+        team === null || 'missing' in registerAt
+          ? null
+          : new LiveStats(
+              files,
+              team.paths,
+              { events: registerAt.paths.events, zone: zoneNamed(registerAt.settings.timeZone), ownerMarker: registerAt.settings.ownerSource },
+              {
+                folders,
+                isShown: async () => (await read($, view)) === 'stats' && (await read($, size)) !== 'minimized',
+                choice: async () => ({ scope: await read($, statsScope), range: await read($, statsRange) }),
+                publish: async shown => {
+                  await update($, stats, () => shown)
+                },
+                now: () => $.clock.now(),
+              },
+            )
+      tallying = statsLive
+      if (statsLive === null) await update($, stats, () => NO_TEAM_STATS)
       // `teamrig meet` finds the team from the tab's folder, the team whose register the pane reads.
       meeting =
         team === null
@@ -674,6 +715,7 @@ export const register: Register = on => {
       logLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
       teamLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
       meetingsLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
+      statsLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
     }
     sizer = new PaneSizer({
       load: () => $.store.get(SIZE_KEY),
@@ -747,12 +789,14 @@ export const register: Register = on => {
       logging = null
       teaming = null
       scheduling = null
+      tallying = null
       meeting = null
       acting = null
       await update($, logList, () => NO_TEAM_LOG)
       await update($, logPage, () => AT_LOG_LIST)
       await update($, teamTree, () => NO_TEAM_TREE)
       await update($, meetings, () => NO_TEAM_MEETINGS)
+      await update($, stats, () => NO_TEAM_STATS)
       const watching = new SetupWatch(
         {
           find: findHere,
@@ -999,6 +1043,8 @@ export const register: Register = on => {
                     })
                   : current === 'meetings'
                   ? meetingsBlocks(await read($, meetings), await read($, meetingsOpen), await read($, meetingStart), snap.tasks, snap.now)
+                  : current === 'stats'
+                  ? statsBlocks(await read($, stats), await read($, statsToggled), columns)
                   : current === 'inbox'
                   ? inboxBlocks(snap, place.kind === 'search' ? { query: place.query, hits: inboxFound } : null)
                   : logShown === null
@@ -1029,8 +1075,8 @@ export const register: Register = on => {
     // A press on the switch's buttons. The Tasks button shows the list, from a page too,
     // scrolled back to where the page was opened from; the Log button shows the sessions, from a session's page too;
     // the Teams button reads the team tree at once; the Meetings button reads the meetings at once, leaving the last
-    // start's answer behind. Every button closes a search, which the views share: one typed in
-    // one view is never found shown in another.
+    // start's answer behind; the Stats button folds the registers at once. Every button closes a search, which the
+    // views share: one typed in one view is never found shown in another.
     const switchTo = async (target: PaneView) => {
       await update($, view, () => target)
       await sizer?.set('open')
@@ -1045,6 +1091,13 @@ export const register: Register = on => {
         await update($, meetingStart, () => NO_START)
         await scheduling?.refresh()
       }
+      if (target === 'stats') await tallying?.refresh()
+    }
+    // A press on the Stats tab's scope or range row picks it and folds the registers at once.
+    const pickStats = async (press: StatsPress) => {
+      if (press.kind === 'scope') await update($, statsScope, () => press.scope)
+      else await update($, statsRange, () => press.range)
+      await tallying?.refresh()
     }
     // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Teams tab session's
     // card, or another area's inbox count on it) shows the Tasks view at it, over its list: back shows the list, never the Team
@@ -1258,15 +1311,26 @@ export const register: Register = on => {
                   </Button>
                 )
               }
+              case 'stats': {
+                const press = piece.stats
+                return (
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void pickStats(press)}>
+                    {drawPress(piece.span, 'stats')}
+                  </Button>
+                )
+              }
             }
           })}
         </Box>
       )
     }
-    // A Teams tab key, a meeting's card in the Meetings view, or a Tasks view heading's tasks, opened or closed.
+    // A Teams tab key, a meeting's card in the Meetings view, a Stats tab section, or a Tasks view heading's tasks,
+    // opened or closed.
     const fold = (key: string) =>
       current === 'meetings'
         ? update($, meetingsOpen, opened => toggledWith(opened, key))
+        : current === 'stats'
+        ? update($, statsToggled, toggled => toggledWith(toggled, key))
         : current === 'tasks'
           ? update($, tasksFolded, folded => toggledWith(folded, key))
           : update($, teamToggled, toggled => toggledWith(toggled, key))
@@ -1490,6 +1554,11 @@ export const register: Register = on => {
         <Button key="meetings" label="Meetings" hotkey="j" variant={current === 'meetings' ? 'primary' : 'secondary'} onPress={() => void switchTo('meetings')} />,
         { label: 'Meetings', plain: false, hotkey: 'j' },
       ),
+      pressed(<Button key="stats" label="Stats" hotkey="r" variant={current === 'stats' ? 'primary' : 'secondary'} onPress={() => void switchTo('stats')} />, {
+        label: 'Stats',
+        plain: false,
+        hotkey: 'r',
+      }),
     ]
     // Minimized, a dim mark after the switch says how to open the pane in full again, a group of its own.
     const minimizedWords = 'minimized, press a view'
@@ -1578,9 +1647,9 @@ export const register: Register = on => {
     // A Log page shows one conversation: the Find field is the list's.
     const isLogList = current === 'log' && logTitle === null
     // The field in the view shown: what it shows empty, how many results its words match, and what Enter does; null
-    // in the Meetings view, which draws none.
+    // in the Meetings view and the Stats tab, which draw none.
     const find: { placeholder: string; matches: number; submit: ((query: string) => Promise<void>) | null } | null =
-      current === 'meetings'
+      current === 'meetings' || current === 'stats'
         ? null
         : isTeam
           ? { placeholder: 'id, name, role, scope…', matches: teamFound.length, submit: submitTeam }
