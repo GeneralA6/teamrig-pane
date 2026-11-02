@@ -78,6 +78,8 @@ export interface RegisterConfig {
   readonly priorities: readonly PriorityConfig[];
   /** When set, every goal tag on a new task must match this regular expression. */
   readonly goalPattern?: string;
+  /** How `add` and `update` hold a task's goal tags to the goal records (`teamrig goal`); see `GoalsMode`. */
+  readonly goals: GoalsMode;
   readonly maxTitle: number;
   readonly maxText: number;
   /** Extra regular expressions, matched case-insensitively, that refuse secret-looking text on top of the built-in shapes in `core/secret-patterns.ts`. */
@@ -130,6 +132,18 @@ export type VerifyGate = (typeof VERIFY_GATES)[number];
 
 export function isVerifyGate(value: unknown): value is VerifyGate {
   return VERIFY_GATES.some((gate) => gate === value);
+}
+
+export const GOALS_MODES = ['free', 'checked', 'required'] as const;
+/**
+ * A task's goal tags against the goal records of its team and every team above it: `free` (any tag), `checked`
+ * (each tag named must be such a goal record), or `required` (checked, and an owner-asked or p0/p1 `add` names its
+ * goal or `--goals none`).
+ */
+export type GoalsMode = (typeof GOALS_MODES)[number];
+
+export function isGoalsMode(value: unknown): value is GoalsMode {
+  return GOALS_MODES.some((mode) => mode === value);
 }
 
 export const REVIEW_MODES = ['refuse', 'warn', 'off'] as const;
@@ -523,6 +537,12 @@ export interface GithubConfig {
   readonly closedDays: number;
   /** How often the hooks start a sync on their own, in minutes, once for the whole team; 0 leaves it to `gh sync --yes`. */
   readonly everyMinutes: number;
+  /**
+   * The label that lets an issue by an author outside the repository (not its owner, an organization member or a
+   * collaborator) become a task: it counts when someone other than the author added it last and the title and body
+   * were not edited after that. Matched without case.
+   */
+  readonly acceptLabel: string;
 }
 
 /** The small-commits rule: one logical change per commit, and a reason line on any commit over the bounds. */

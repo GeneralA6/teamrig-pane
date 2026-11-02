@@ -31,9 +31,15 @@ function secret({ id, description, pattern }: SecretPattern): ScrubRule {
   return { id, description, pattern, revealMatch: false };
 }
 
-/** A placeholder (`${VAULT}`, `<token>`, `%TOKEN%`, `{token}`) or a name (`SOME_READ_TOKEN`) stands for a secret, it does not hold one. */
-function isAssignedPlaceholder(value: string): boolean {
-  return /^[$<%{]/.test(value) || (ASSIGNED_SECRET.isAllowedValue?.(value) ?? false);
+/**
+ * True when the value `ASSIGNED_SECRET` caught in `match` stands for a secret rather than holds one: a placeholder
+ * (`${VAULT}`, `<token>`, `%TOKEN%`, `{token}`), a name (`SOME_READ_TOKEN`) or a claim token's coordination id. The
+ * value is the shape's `secretGroup`, never a fixed group: the shape's own named groups come before it. A match without
+ * it is not allowed.
+ */
+function isAssignedPlaceholder(match: RegExpExecArray): boolean {
+  const value = match[ASSIGNED_SECRET.secretGroup];
+  return value !== undefined && (/^[$<%{]/.test(value) || (ASSIGNED_SECRET.isAllowedValue?.(value, match) ?? false));
 }
 
 /** Checks that are safe to publish: they name no private term, only shapes of private data. */
@@ -66,5 +72,5 @@ export const GENERIC_RULES: readonly ScrubRule[] = [
     revealMatch: false,
   },
   ...SECRET_TOKEN_PATTERNS.map(secret),
-  { ...secret(ASSIGNED_SECRET), isAllowed: (match) => match[1] !== undefined && isAssignedPlaceholder(match[1]) },
+  { ...secret(ASSIGNED_SECRET), isAllowed: isAssignedPlaceholder },
 ];

@@ -33,6 +33,11 @@ export { LAYOUT_VERSION } from '../register/marker.ts';
 export { readEvents, readRegister, snapshotOf, type EventLogRead, type RegisterSnapshot, type RetiredTasks } from '../register/snapshot.ts';
 export { loopFix, needPath, needsOf, pathText, planOrder, TaskTree, type EffectiveDue, type NextMove, type PlanPlace, type TreeTask, type WaitingOnYou } from '../register/tree.ts';
 export { byPlanOrder, dueTime, type PlanOrdered } from '../register/views.ts';
+// The done groups (T1729): one rule that sorts a span's done work for the daily report, the agenda and the Done page.
+export { DONE_GROUP_KINDS, doneGroups, doneGroupTitle, URGENT_PRIORITY, type DoneGroup, type DoneGroupKind, type DoneGroups, type DoneGroupsInput } from '../register/done-groups.ts';
+// The goal records (T1730): a team's goals with their planned window, target and every target move, read from the
+// `goals.jsonl` text beside the event log.
+export { GOALS_FILE, NO_GOAL, NO_GOALS, readGoals, type Goal, type GoalSlip, type GoalsRead } from '../register/goals.ts';
 
 // Time: the team's zone (`config.timeZone`, else the machine's). A stored bare day is a day of it, a stored minute is
 // UTC, and every time prints in it, zone-marked (`01-31 11:05 IST`); a reader passes it to the calls that print one.
@@ -64,6 +69,50 @@ export {
   type LaterCard,
   type OwnerCards,
 } from '../register/owner-waits.ts';
+
+// The register's numbers over time (T1771): each day's flow, new work by source, lead and cycle times, due-date hits,
+// waits, bugs and done per session for a team tree and a range, and the Health tiles over them with their levels, as
+// `teamrig stats` prints them. The owner marker is the config's `register.ownerSource`.
+export {
+  isActive,
+  isStatsRange,
+  RECENT_DAYS,
+  registerStats,
+  STATS_ACTIVE_STATUSES,
+  STATS_RANGES,
+  WORK_SOURCES,
+  type ActiveCounts,
+  type ActiveStatus,
+  type Band,
+  type BugStats,
+  type NewWork,
+  type PersonDone,
+  type RegisterStats,
+  type Split,
+  type Spread,
+  type StatsDay,
+  type StatsInput,
+  type StatsRange,
+  type StatsScope,
+  type StatsTeam,
+  type TeamPart,
+  type TeamStats,
+  type WaitStats,
+  type WorkSource,
+} from '../register/stats.ts';
+export {
+  HEALTH_LEVELS,
+  HEALTH_THRESHOLDS,
+  registerHealth,
+  type BacklogClearsTile,
+  type BacklogTile,
+  type CloseOpenTile,
+  type HealthInput,
+  type HealthLevel,
+  type OverdueTile,
+  type OwnerDecisionsTile,
+  type RegisterHealth,
+} from '../register/stats-health.ts';
 
 // The inboxes (`inbox/<area>.md`) and their read marks (`inbox-marks.jsonl`).
 export { indexMarks, MARK_VERSION, parseMark, readMarks, type InboxMark, type MarkIndex, type MarkLogRead } from '../inbox/marks.ts';

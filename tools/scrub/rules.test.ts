@@ -91,6 +91,12 @@ describe('generic scrub rules', () => {
     assert.deepEqual(ruleIds(join('secret', ': "', 'app-api-', 'secrets', '"')), []);
   });
 
+  it('accepts a claim token bound to a uuid, as teamrig judges it, and refuses that uuid under a bare token', () => {
+    const uuid = join('3f9a8b7c', '-1d2e-4f5a-8b6c-', '0123456789ab');
+    assert.deepEqual(ruleIds(join('claim', 'Token', ': "', uuid, '"')), []);
+    assert.deepEqual(ruleIds(join('token', ': "', uuid, '"')), ['assigned-secret']);
+  });
+
   it('fails closed on a match without its captured part: no allow check accepts it', () => {
     const bare = /x/.exec('x');
     assert.ok(bare !== null);
