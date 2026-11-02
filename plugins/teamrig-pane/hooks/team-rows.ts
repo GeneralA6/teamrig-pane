@@ -138,7 +138,7 @@ function sessionSpans(session: SessionFacts, card: string | null, marks: Marks):
 export const WEEK_CELLS = 10
 
 /** A percent of the account's week as a row prints it: whole from 10, else to a tenth (0.3%, 5.7%, 35%). */
-function weekPct(pct: number): string {
+export function weekPct(pct: number): string {
   const tenths = Math.round(pct * 10) / 10
   return `${tenths >= 10 ? Math.round(pct) : tenths}%`
 }
@@ -279,11 +279,14 @@ function meetBlock(answer: MeetAnswer): Block {
   }
 }
 
-/** A team folder the last read could not read: a WARN line naming it, why, and whether the tree draws it as last read. */
-function failureBlock(failure: TeamFolderFailure): Block {
+/**
+ * A team folder the last read could not read, on the `view` tab (the Teams or the Stats tab): a WARN line naming it,
+ * why, and whether the tab draws it as last read.
+ */
+export function failureBlock(view: string, failure: TeamFolderFailure): Block {
   const shown = failure.isLastRead ? 'it shows as last read' : 'it is left out'
   const text = `WARN team ${failure.team} could not be read: ${failure.reason.replace(/\.$/, '')}; ${shown}.`
-  return single(`${TAB}:failure:${failure.team}`, [{ text, color: 'warning' }], { text: '  ' })
+  return single(`${view}:failure:${failure.team}`, [{ text, color: 'warning' }], { text: '  ' })
 }
 
 /** What the tab draws besides the tree: the Find field's search, and what the last [Meet] press answered. */
@@ -319,7 +322,7 @@ export function teamBlocks(view: TeamView, toggled: readonly string[], zone: Tim
     case 'failed':
       return [single(`${TAB}:note`, [{ text: `The team could not be read: ${view.reason.replace(/\.$/, '')}.`, color: 'warning' }])]
     case 'tree': {
-      const failures = view.failures.map(failureBlock)
+      const failures = view.failures.map(failure => failureBlock(TAB, failure))
       if (view.root === null) return [...failures, note(`${TAB}:note`, 'No team tree: the team has no config file teamrig can read, and the tree is read from it.')]
       return [...(meet === null ? [] : [meetBlock(meet)]), ...failures, ...treeBlocks(view.root, toggled, zone, search, own)]
     }

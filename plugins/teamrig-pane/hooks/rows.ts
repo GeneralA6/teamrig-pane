@@ -6,10 +6,11 @@
 // opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
-import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, Snapshot, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, Snapshot, StatsChoice, TaskRow, TaskStatus, ViewMode } from '../types'
 import { actRows, type CardActs } from './act-rows'
 import { cardRows, GUIDE } from './card'
 import { COMMAND } from './command'
+import type { StatsRange } from './core/read/index'
 import { teamSessions } from './leads'
 import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
 import { BAR_LOOK } from './status-bar'
@@ -28,7 +29,9 @@ import { cells } from './width'
  * With `starts` the text is a press that starts that meeting (a scheduled meeting's card, meetings-rows.ts); never
  * split. With `meets` the text is a press that runs `teamrig meet` on that session, which brings the owner its cards
  * (a Teams tab row's [Meet], team-rows.ts); never split. With `acts` the text is a press of the owner's Note or Next on
- * a task's card (owner-acts.ts); never split. `underline` marks the words a search matched (search-view.ts).
+ * a task's card (owner-acts.ts); never split. With `stats` the text is a press on the Stats tab's scope or range row
+ * that picks that scope or range (stats-rows.ts); never split. `underline` marks the words a search matched
+ * (search-view.ts).
  */
 export type Span = {
   text: string
@@ -45,8 +48,11 @@ export type Span = {
   starts?: string
   meets?: string
   acts?: ActPress
+  stats?: StatsPress
 }
 
+/** A press on the Stats tab's pick rows (stats-rows.ts): the scope it folds, or the range. */
+export type StatsPress = { readonly kind: 'scope'; readonly scope: StatsChoice } | { readonly kind: 'range'; readonly range: StatsRange }
 /** What an unread count's press opens: the area whose inbox it is, and how many of its newest lines are unread. */
 export type InboxPress = { readonly area: string; readonly unread: number }
 /** An owner act's press on a task's card (owner-acts.ts): the task, and which press it is. */
