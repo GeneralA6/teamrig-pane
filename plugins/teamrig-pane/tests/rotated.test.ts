@@ -3,10 +3,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { JsonRecord } from '../hooks/core/core/guards'
 import { toJsonlLine } from '../hooks/core/core/jsonl'
-import { layoutPaths, readWorkingSet, type LayoutFiles, type SnapshotHeader } from '../hooks/core/read/index'
+import { layoutPaths, MissingSegmentError, readEvents, readWorkingSet, type LayoutFiles, type SnapshotHeader } from '../hooks/core/read/index'
 import { snapshotHeaderRecord } from '../hooks/core/register/layout'
 import { markerRecord } from '../hooks/core/register/marker'
-import { MAX_READ_BYTES, TaskRegisterSource, type RegisterPaths } from '../hooks/source'
+import { MAX_READ_BYTES, readSegment, TaskRegisterSource, type RegisterPaths } from '../hooks/source'
 import { HOUR, MemoryFiles, NOW, S1, TEAM_SETTINGS, createLine, iso, statusLine } from './fixtures'
 
 const DAY = 24 * HOUR
@@ -165,5 +165,23 @@ describe('a rotated register', () => {
     const snap = await poll(new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null))
     expect(snap?.tasks.map(task => task.id)).toEqual(['T2'])
     expect(files.reads).toEqual([PATHS.events])
+  })
+})
+
+describe('readSegment', () => {
+  test("reads a segment's events as teamrig parses them; a missing one throws MissingSegmentError, one over 4 MiB is named and never read", async () => {
+    const files = rotated()
+    expect((await readSegment(files, LAYOUT, 1)).events).toEqual(readEvents(lines(T1_CREATE, T1_DONE, T2_CREATE)).events)
+
+    const missing = await readSegment(files, LAYOUT, 2).then(
+      () => null,
+      (error: unknown) => error,
+    )
+    expect(missing instanceof MissingSegmentError).toBe(true)
+
+    files.write(SEGMENT, ' '.repeat(MAX_READ_BYTES + 2 ** 19))
+    files.reads.length = 0
+    expect(await failureOf(readSegment(files, LAYOUT, 1))).toBe('events-000001.jsonl is 4.50 MiB, over the 4 MiB a pane can read at once: it needs rotating')
+    expect(files.reads).toEqual([])
   })
 })

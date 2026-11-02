@@ -203,6 +203,18 @@ class TeamNames {
 }
 
 /**
+ * Archive segment `n` of the register at `paths`, checked on its stamp: one that is gone (MissingSegmentError) or over
+ * MAX_READ_BYTES throws before any read. A segment is never rewritten once rotated, so a caller reads each once.
+ */
+export async function readSegment(files: Files, paths: LayoutPaths, n: number): Promise<EventLogRead> {
+  const path = paths.segment(n)
+  const stamp = await files.stamp(path)
+  if (stamp === null) throw new MissingSegmentError(path)
+  if (stamp.size > MAX_READ_BYTES) throw new Error(tooBig(path, stamp.size))
+  return readEvents(await files.read(path))
+}
+
+/**
  * The register as teamrig's working-set read puts it together (core register/layout.ts): the snapshot,
  * the archive segments it does not cover, then the tail. A register never rotated has neither snapshot nor
  * segments, so it is its tail alone, as before rotation. The snapshot is refreshed before the tail, as
@@ -239,20 +251,11 @@ class LayoutRegister {
     this.stale = true
     const plan = workingSetPlan(this.snapshot.current, this.tail.current)
     const segments = new Map<number, EventLogRead>()
-    for (const n of plan.segments) segments.set(n, this.segments.get(n) ?? (await this.readSegment(n)))
+    for (const n of plan.segments) segments.set(n, this.segments.get(n) ?? (await readSegment(this.files, this.paths, n)))
     this.segments = segments
     this.value = assemble(plan, [...segments.values()], this.tail.current)
     this.stale = false
     return true
-  }
-
-  /** Segment `n`, checked on its stamp: one that is gone or over MAX_READ_BYTES throws before any read. */
-  private async readSegment(n: number): Promise<EventLogRead> {
-    const path = this.paths.segment(n)
-    const stamp = await this.files.stamp(path)
-    if (stamp === null) throw new MissingSegmentError(path)
-    if (stamp.size > MAX_READ_BYTES) throw new Error(tooBig(path, stamp.size))
-    return readEvents(await this.files.read(path))
   }
 }
 
