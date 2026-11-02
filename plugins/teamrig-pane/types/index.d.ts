@@ -287,9 +287,10 @@ export type RequirementProblem =
 /**
  * What the pane's body shows, picked with the switch over it: the register's tasks, the session's git changes
  * (hooks/changes.ts), the team sessions' prompts and replies (hooks/turn-log.ts), the session's inbox lines
- * (hooks/inbox.ts), the team tree (hooks/team.ts), or the team's meetings (hooks/meetings.ts).
+ * (hooks/inbox.ts), the team tree (hooks/team.ts), the team's meetings (hooks/meetings.ts), or the registers' numbers
+ * (hooks/stats-source.ts).
  */
-export type PaneView = 'tasks' | 'changes' | 'log' | 'inbox' | 'team' | 'meetings'
+export type PaneView = 'tasks' | 'changes' | 'log' | 'inbox' | 'team' | 'meetings' | 'stats'
 
 /**
  * A team folder the Teams tab's last read could not read (hooks/team-source.ts): its team id, why, and whether the tree
@@ -549,7 +550,7 @@ export type BodyScroll = { readonly seq: number; readonly to: ScrollTarget }
 
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the outside files' copies, the Log view's list and page, the focus ring's landings, the setup, the body's window, the team tree and the meetings are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, COPIES_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE, TEAM_SHAPE, MEETINGS_SHAPE), so a reload never draws one an older pane wrote.
+    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the outside files' copies, the Log view's list and page, the focus ring's landings, the setup, the body's window, the team tree, the meetings and the Stats tab's numbers are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, COPIES_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE, TEAM_SHAPE, MEETINGS_SHAPE, STATS_SHAPE), so a reload never draws one an older pane wrote.
     'teamrig-pane': {
       snapshot: Shaped<Snapshot>
       mode: ViewMode
@@ -599,6 +600,14 @@ declare module 'claude-code' {
       ownerMeet: MeetAnswer | null
       /** Where the owner's Note or Next on a task card stands (hooks/owner-acts.ts); null before one, after a cancel and after a session start. */
       ownerAct: OwnerAct | null
+      /** The Stats tab's numbers (hooks/stats-source.ts), as last folded. */
+      stats: Shaped<StatsView>
+      /** What the Stats tab folds: the tree, a team or a session (its scope row's presses pick it). */
+      statsScope: StatsChoice
+      /** The days the Stats tab folds (its range row's presses pick them). */
+      statsRange: import('../hooks/core/read/index').StatsRange
+      /** The Stats tab's sections the person opened or closed against their default (hooks/stats-rows.ts isSectionOpen), by key. */
+      statsToggled: readonly string[]
     }
   }
 }

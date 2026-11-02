@@ -53,6 +53,23 @@ export type Span = {
 
 /** A press on the Stats tab's pick rows (stats-rows.ts): the scope it folds, or the range. */
 export type StatsPress = { readonly kind: 'scope'; readonly scope: StatsChoice } | { readonly kind: 'range'; readonly range: StatsRange }
+
+/**
+ * What a Stats tab press picks, as one word: `tree`, `team:<team>`, `session:<team>/<session>` or `range:<range>`, so
+ * two presses that pick the same are one style (layout.ts) and the focus ring keys each press apart (press-keys.ts).
+ */
+export function statsPressKey(press: StatsPress): string {
+  if (press.kind === 'range') return `range:${press.range}`
+  const { scope } = press
+  switch (scope.kind) {
+    case 'tree':
+      return 'tree'
+    case 'team':
+      return `team:${scope.team}`
+    case 'session':
+      return `session:${scope.team}/${scope.session}`
+  }
+}
 /** What an unread count's press opens: the area whose inbox it is, and how many of its newest lines are unread. */
 export type InboxPress = { readonly area: string; readonly unread: number }
 /** An owner act's press on a task's card (owner-acts.ts): the task, and which press it is. */

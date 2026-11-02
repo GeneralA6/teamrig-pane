@@ -11,13 +11,14 @@
 // are capped. Widths are display cells (width.ts), so CJK and emoji sequences wrap where the terminal
 // wraps them and a cut never lands inside one.
 import type { LogRead, RefFile } from '../types'
-import type { ActPress, Block, InboxPress, NoteField, Row, Span } from './rows'
+import { statsPressKey, type ActPress, type Block, type InboxPress, type NoteField, type Row, type Span, type StatsPress } from './rows'
 import { cells, graphemes } from './width'
 
 /**
  * A piece of a line that holds a press: a task id and the task it names, a reference file and the file it names, an
  * unread count and the inbox it opens, a Teams tab key, a session a press ties the tab to, a meeting a press starts,
- * a session a press meets the owner with, an owner act's press on a task's card, or the words between them.
+ * a session a press meets the owner with, an owner act's press on a task's card, the scope or range a Stats tab press
+ * picks, or the words between them.
  */
 export type Piece =
   | { kind: 'id'; span: Span; task: string }
@@ -28,6 +29,7 @@ export type Piece =
   | { kind: 'start'; span: Span; starts: string }
   | { kind: 'meet'; span: Span; meets: string }
   | { kind: 'act'; span: Span; acts: ActPress }
+  | { kind: 'stats'; span: Span; stats: StatsPress }
   | { kind: 'words'; spans: Span[] }
 /**
  * A run of a card's lines: a Text of the lines that hold no press (`text`), one line that holds one (`line`), its
@@ -113,13 +115,15 @@ function sameStyle(a: Span, b: Span): boolean {
     a.starts === b.starts &&
     a.meets === b.meets &&
     a.acts?.task === b.acts?.task &&
-    a.acts?.press === b.acts?.press
+    a.acts?.press === b.acts?.press &&
+    (a.stats === undefined ? undefined : statsPressKey(a.stats)) === (b.stats === undefined ? undefined : statsPressKey(b.stats))
   )
 }
 
 /**
  * Whether `span` is a press drawn as a piece of its line: a task id or a reference file in a card, an inbox count, a
- * Teams tab key, a session to tie the tab to, a meeting to start, a session to meet, an owner act on a task.
+ * Teams tab key, a session to tie the tab to, a meeting to start, a session to meet, an owner act on a task, a Stats
+ * tab scope or range.
  */
 function isPress(span: Span): boolean {
   return (
@@ -130,7 +134,8 @@ function isPress(span: Span): boolean {
     span.pins !== undefined ||
     span.starts !== undefined ||
     span.meets !== undefined ||
-    span.acts !== undefined
+    span.acts !== undefined ||
+    span.stats !== undefined
   )
 }
 
@@ -298,7 +303,7 @@ function joinedLines(lines: Lines): Span[] {
 
 /**
  * A line's spans as pieces: each task id, reference file, inbox count, Teams tab key, session to tie the tab to,
- * meeting to start, session to meet and owner act its own, each run of words between them one.
+ * meeting to start, session to meet, owner act and Stats tab scope or range its own, each run of words between them one.
  */
 export function piecesOf(line: readonly Span[]): Piece[] {
   const pieces: Piece[] = []
@@ -312,6 +317,7 @@ export function piecesOf(line: readonly Span[]): Piece[] {
     else if (span.starts !== undefined) pieces.push({ kind: 'start', span, starts: span.starts })
     else if (span.meets !== undefined) pieces.push({ kind: 'meet', span, meets: span.meets })
     else if (span.acts !== undefined) pieces.push({ kind: 'act', span, acts: span.acts })
+    else if (span.stats !== undefined) pieces.push({ kind: 'stats', span, stats: span.stats })
     else if (last?.kind === 'words') last.spans.push(span)
     else pieces.push({ kind: 'words', spans: [span] })
   }

@@ -30,6 +30,7 @@ export const KEY_GROUPS: readonly KeyGroup[] = [
       { key: 'u', what: 'Inbox' },
       { key: 'e', what: 'Teams' },
       { key: 'j', what: 'Meetings' },
+      { key: 'r', what: 'Stats' },
     ],
   },
   {
