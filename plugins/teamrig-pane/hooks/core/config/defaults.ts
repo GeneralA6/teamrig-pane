@@ -63,6 +63,7 @@ export const DEFAULT_REGISTER: RegisterConfig = {
     { id: 4, name: "this week's owner decisions" },
     { id: 5, name: 'if budget allows' },
   ],
+  goals: 'free',
   maxTitle: 140,
   maxText: 300,
   secretPatterns: [],
@@ -246,9 +247,11 @@ export const DEFAULT_TESTS: TestsConfig = { maxFailureChars: 4000 };
 
 /**
  * Off until a team lists a repository; two weeks of closed issues covers a sync missed over a holiday. Every 15
- * minutes a new issue reaches its session within a working block, at two gh calls per repository each time.
+ * minutes a new issue reaches its session within a working block, at two gh calls per repository each time (one more
+ * per further hundred open, or recently changed closed, issues). An outsider's issue waits for the `teamrig` label,
+ * named after the tool so it does not clash with a repository's own triage labels.
  */
-export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {}, closedDays: 14, everyMinutes: 15 };
+export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {}, closedDays: 14, everyMinutes: 15, acceptLabel: 'teamrig' };
 
 /**
  * Claude Code compacts a 200k window at about 167k, so 120k refreshes before that; every 3 tasks catches a
