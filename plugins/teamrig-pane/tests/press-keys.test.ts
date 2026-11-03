@@ -55,8 +55,8 @@ describe('press-keys', () => {
       'start:M3:meeting:M3:meeting:M3:card:start:1',
     )
     expect(pieceKey({ kind: 'meet', span: { text: '[Meet]' }, meets: 'api' }, 'session:acme/api', 'row', 9)).toBe('meet:api:session:acme/api:row:9')
-    expect(pieceKey({ kind: 'stats', span: { text: '14 d' }, stats: { kind: 'range', range: '14d' } }, 'stats:pick', 'card:1', 2)).toBe(
-      'stats:range:14d:stats:pick:card:1:2',
+    expect(pieceKey({ kind: 'stats', span: { text: '30 d' }, stats: { kind: 'range', range: '30d' } }, 'stats:pick', 'card:1', 2)).toBe(
+      'stats:range:30d:stats:pick:card:1:2',
     )
     expect(diffKey('C1-open', 'f1')).toBe('diff:C1-open:f1')
     expect(pieceKey({ kind: 'act', span: { text: '[Next]' }, acts: { task: 'T5', press: 'next' } }, 'T5-open', 'card:3', 2)).toBe(actKey('next', 'T5'))

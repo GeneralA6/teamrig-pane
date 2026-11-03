@@ -124,15 +124,16 @@ describe('statsBlocks: the pick rows', () => {
   })
 
   test('bracket the range and make each other range a press', () => {
-    const range = blockOf(statsBlocks(viewOf({ scope: { kind: 'team', team: 'acme' }, range: '14d' }), [], WIDE), 'stats:pick').rows[1]
+    const range = blockOf(statsBlocks(viewOf({ scope: { kind: 'team', team: 'acme' }, range: '90d' }), [], WIDE), 'stats:pick').rows[1]
     if (range === undefined) throw new Error('no range row')
-    expect(lineOf(range)).toBe('Range  7 d  [14 d]  30 d  all')
+    expect(lineOf(range)).toBe('Range  7 d  30 d  [90 d]  180 d  1 y  all')
+    expect(spanOf(range, '1 y').stats).toEqual({ kind: 'range', range: '1y' })
     expect(spanOf(range, 'all').stats).toEqual({ kind: 'range', range: 'all' })
-    expect(spanOf(range, '[14 d]').stats).toBeUndefined()
+    expect(spanOf(range, '[90 d]').stats).toBeUndefined()
   })
 
-  test('rangeLabel reads days, and all as all', () => {
-    expect([rangeLabel('7d'), rangeLabel('30d'), rangeLabel('all')]).toEqual(['7 d', '30 d', 'all'])
+  test('rangeLabel reads days, a year as 1 y, and all as all', () => {
+    expect([rangeLabel('7d'), rangeLabel('180d'), rangeLabel('1y'), rangeLabel('all')]).toEqual(['7 d', '180 d', '1 y', 'all'])
   })
 })
 

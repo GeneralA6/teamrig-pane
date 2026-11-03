@@ -3083,7 +3083,7 @@ test("the switch's Stats button, key r, folds the tree's registers with no Find 
   await pane.press({ key: 'stats' })
   expect(keyedProps(await pane.drawn(), 'stats')).toMatchObject({ variant: 'primary' })
   expect(await drawsLine(pane, /^Scope {2}\[tree\] {2}web$/)).toBe(true)
-  expect(await drawsLine(pane, /^Range {2}\[7 d\] {2}14 d {2}30 d {2}all$/)).toBe(true)
+  expect(await drawsLine(pane, /^Range {2}\[7 d\] {2}30 d {2}90 d {2}180 d {2}1 y {2}all$/)).toBe(true)
   expect(keyedProps(await pane.drawn(), 'find')).toBeNull()
   expect(await drawsLine(pane, /^Health$/)).toBe(true)
   // A press on a section's header folds it.
@@ -3091,10 +3091,11 @@ test("the switch's Stats button, key r, folds the tree's registers with no Find 
   await pane.press({ key: 'stats:flow' })
   expect(await drawsLine(pane, /^▸ Flow · last 7 d · opened 1 · closed 0 · net \+1$/)).toBe(true)
 
-  const rangeKey = buttonKeys(await pane.drawn()).find(key => key.startsWith('stats:range:14d:'))
-  if (rangeKey === undefined) throw new Error('no 14 d press on the range row')
+  const rangeKey = buttonKeys(await pane.drawn()).find(key => key.startsWith('stats:range:1y:'))
+  if (rangeKey === undefined) throw new Error('no 1 y press on the range row')
   await pane.press({ key: rangeKey })
-  expect(await drawsLine(pane, /^Range {2}7 d {2}\[14 d\] {2}30 d {2}all$/)).toBe(true)
+  expect(await drawsLine(pane, /^Range {2}7 d {2}30 d {2}90 d {2}180 d {2}\[1 y\] {2}all$/)).toBe(true)
+  expect(await drawsLine(pane, /^▸ Flow · last 1 y · opened 1 · closed 0 · net \+1$/)).toBe(true)
 
   const teamKey = buttonKeys(await pane.drawn()).find(key => key.startsWith('stats:team:web:'))
   if (teamKey === undefined) throw new Error('no web press on the scope row')
