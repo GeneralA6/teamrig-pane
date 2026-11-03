@@ -688,8 +688,8 @@ session, whose press goes back to its team) and the range (7, 14 or 30 days, or 
 
 | Section | What it shows |
 | --- | --- |
-| Health | A tile a measure, its `●` green, amber or red beside teamrig's words for it (the HEALTH line of `teamrig stats`), and the scope's week against its plan |
-| Flow | Its header is its headline, `opened · closed (dropped) · net`, so it answers folded; a press folds it (`▸`) and opens it. Open: the active tasks at each day's end, the newest 14 days with bars of what opened and closed, the burn-up and the cumulative flow over the range (no `$` limit-day marks yet: the pane has no source for those days) |
+| Health | Under its heading, a tile a measure, its `●` green, amber or red beside teamrig's words for it (the HEALTH line of `teamrig stats`), and the scope's week against its plan |
+| Flow | Its header is its range and headline, `last 7 d · opened · closed (dropped) · net`, so it answers folded; a press folds it (`▸`) and opens it. Open: the active tasks at each day's end, the newest 14 days with bars of what opened and closed, the burn-up and the cumulative flow over the range, each part after a blank row and each day's bar a blank column from the next (no `$` limit-day marks yet: the pane has no source for those days) |
 
 It reads files only, every 3 seconds while it shows and at once on a press: the team folders, and each scoped team's
 register history once a scope takes it in. A folder or register it cannot read is a `WARN` line naming it, its
