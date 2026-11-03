@@ -168,18 +168,14 @@ function weekTile(week: TeamWeek): Tile {
   return { level, label: 'week', parts: [plain(`${weekPct(week.usedPct)}, pace ${weekPct(pace)} of ${weekPct(week.plannedPct)}`)] }
 }
 
-function clearsText(weeks: number | null): string {
-  if (weeks === null) return 'never, at this rate'
-  return `in ${weeks} ${weeks === 1 ? 'week' : 'weeks'}`
-}
-
 /**
- * The Health tiles in reading order, the week's (none without a week file) before the backlog's forecast. The ratio
- * of closes to opens names both counts (`0.79, 64 closed, 81 opened`, the opened one only when any opened), so each
- * count of tasks is a part of its own that lists them.
+ * The Health tiles in reading order, the week's last (none without a week file). The ratio of closes to opens names
+ * both counts (`0.79, 64 closed, 81 opened`, the opened one only when any opened), so each count of tasks is a part of
+ * its own that lists them. The core's backlog forecast (`backlog clears`) is left out: it has no tasks to list, and
+ * `teamrig stats` still prints it.
  */
 function healthTiles(health: RegisterHealth, stats: StatsNumbers, week: TeamWeek | null): Tile[] {
-  const { closeOpen, backlog, overdue, ownerDecisions, backlogClears } = health
+  const { closeOpen, backlog, overdue, ownerDecisions } = health
   const opened = stats.opened > 0 ? [COMMA, countPart(`${stats.opened} opened`, stats.opened, 'opened')] : []
   const closes = [plain(closeOpen.ratio === null ? 'none opened' : closeOpen.ratio.toFixed(2)), COMMA, countPart(`${stats.closedTasks} closed`, stats.closedTasks, 'closed'), ...opened]
   const oldest = ownerDecisions.oldestDays === null ? [] : [plain(`, oldest ${daysText(ownerDecisions.oldestDays)}`)]
@@ -189,7 +185,6 @@ function healthTiles(health: RegisterHealth, stats: StatsNumbers, week: TeamWeek
     { level: overdue.level, label: 'overdue', parts: [countPart(`${overdue.count}`, overdue.count, 'overdue'), COMMA, countPart(`p1 ${overdue.p1}`, overdue.p1, 'overdueP1')] },
     { level: ownerDecisions.level, label: 'owner decisions', parts: [countPart(`${ownerDecisions.count}`, ownerDecisions.count, 'ownerDecisions'), ...oldest] },
     ...(week === null ? [] : [weekTile(week)]),
-    { level: backlogClears.level, label: 'backlog clears', parts: [plain(clearsText(backlogClears.weeks))] },
   ]
 }
 
