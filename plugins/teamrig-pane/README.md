@@ -519,10 +519,11 @@ reads is counted on a `WARN` line, the rest still shown. There is no Find field:
 
 Stats folds the registers of the tree of teams the session's team is in into the numbers `teamrig stats` prints, for
 the scope and the days it picks. Two rows of presses lead it, the pick in brackets: the scope (the tree, each team in
-it, and a session once one is picked, whose press goes back to its team) and the range (7, 14 or 30 days, or all):
+it, and a session once one is picked, whose press goes back to its team) and the range (7, 30, 90 or 180 days, a
+year, or all):
 
     Scope  [tree]  acme  tools
-    Range  [7 d]  14 d  30 d  all
+    Range  [7 d]  30 d  90 d  180 d  1 y  all
 
 Then the Health section under its heading: tiles, each a `●` in its level's colour (green good, amber warn, red bad)
 beside teamrig's words for it (the HEALTH line of `teamrig stats`), and the scope's week against its plan, two a row

@@ -681,10 +681,10 @@ plugin, one older than 0.208.0, or a list that fails, it says why
 
 `r`, or Stats on the switch, folds the registers of the tree of teams the session's team is in into the numbers
 `teamrig stats` prints. Two rows of presses lead it, the pick in brackets: the scope (the tree, each team, and a picked
-session, whose press goes back to its team) and the range (7, 14 or 30 days, or all):
+session, whose press goes back to its team) and the range (7, 30, 90 or 180 days, a year, or all):
 
     Scope  [tree]  acme  tools
-    Range  [7 d]  14 d  30 d  all
+    Range  [7 d]  30 d  90 d  180 d  1 y  all
 
 | Section | What it shows |
 | --- | --- |
