@@ -526,8 +526,13 @@ year, or all):
     Range  [7 d]  30 d  90 d  180 d  1 y  all
 
 Then the Health section under its heading: tiles, each a `●` in its level's colour (green good, amber warn, red bad)
-beside teamrig's words for it (the HEALTH line of `teamrig stats`), and the scope's week against its plan, two a row
-where they fit. Then the Flow section, its header carrying its range and headline
+beside teamrig's words for it (the HEALTH line of `teamrig stats`, but for its `backlog clears` forecast, which has
+no tasks behind it), and the scope's week against its plan, two a row where they fit. Each count of tasks above none
+(`64 closed`, `81 opened`, `308 active`, the overdue count and its `p1 10`, the owner decisions) is a press that lists
+those tasks in place of the numbers, under `‹ back` and a trail such as `Stats › Overdue (35)`: a dim line saying what
+the list holds and in what order, then each task's row over a dim line of its owner, priority, due date and, for
+another team's task, that team. A press on one of the own team's tasks the pane holds opens its page; back (`b`)
+returns to the numbers. Then the Flow section, its header carrying its range and headline
 (`▾ Flow · last 7 d · opened 540 · closed 428 (3 dropped) · net +112`), so it still answers folded: a press on the
 header folds it (`▸`) and again opens it. Open, it draws the active tasks at each day's end, the newest 14 days with
 bars of what opened and closed, then the burn-up and the cumulative flow over the whole range, each part after a blank
