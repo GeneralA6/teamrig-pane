@@ -162,7 +162,6 @@ describe('statsBlocks: Health', () => {
       'Health',
       `  ${'● close/open  0.79, 0 closed, 1 opened'.padEnd(42)}● backlog  +112, 596 active`,
       `  ${'● overdue  93, p1 21'.padEnd(42)}● owner decisions  10, oldest 6.0 d`,
-      '  ● backlog clears  never, at this rate',
     ])
     expect(block.opensSection).toBe(true)
     expect(block.rows[0]?.spans).toEqual([{ text: 'Health', bold: true }])
@@ -174,38 +173,41 @@ describe('statsBlocks: Health', () => {
   test('shrinks the gap between two tiles to 2 cells before it draws a tile a row where two do not fit beside the indent', () => {
     expect(blockOf(statsBlocks(viewOf(), [], 79, OWN), 'stats:health').rows.map(lineOf)[1]).toBe(`  ${'● close/open  0.79, 0 closed, 1 opened'.padEnd(42)}● backlog  +112, 596 active`)
     expect(blockOf(statsBlocks(viewOf(), [], 77, OWN), 'stats:health').rows.map(lineOf)[1]).toBe(`  ${'● close/open  0.79, 0 closed, 1 opened'.padEnd(40)}● backlog  +112, 596 active`)
-    expect(blockOf(statsBlocks(viewOf(), [], 76, OWN), 'stats:health').rows.length).toBe(6)
+    expect(blockOf(statsBlocks(viewOf(), [], 76, OWN), 'stats:health').rows.length).toBe(5)
     expect(blockOf(statsBlocks(viewOf(), [], NARROW, OWN), 'stats:health').rows.map(lineOf)).toEqual([
       'Health',
       '  ● close/open  0.79, 0 closed, 1 opened',
       '  ● backlog  +112, 596 active',
       '  ● overdue  93, p1 21',
       '  ● owner decisions  10, oldest 6.0 d',
-      '  ● backlog clears  never, at this rate',
     ])
   })
 
-  test('words a ratio with nothing opened, an owner queue with no age and a backlog that clears', () => {
+  test('words a ratio with nothing opened and an owner queue with no age', () => {
     const health: RegisterHealth = {
       ...HEALTH,
       closeOpen: { level: 'good', ratio: null },
       ownerDecisions: { level: 'good', count: 0, oldestDays: null },
-      backlogClears: { level: 'good', weeks: 1 },
     }
     expect(tileOf(viewOf({ health, stats: { ...BASE, opened: 0 } }), 'close/open')).toEqual({ color: 'success', value: 'none opened, 0 closed' })
     expect(tileOf(viewOf({ health }), 'owner decisions').value).toBe('0')
-    expect(tileOf(viewOf({ health }), 'backlog clears').value).toBe('in 1 week')
-    expect(tileOf(viewOf({ health: { ...health, backlogClears: { level: 'warn', weeks: 6 } } }), 'backlog clears').value).toBe('in 6 weeks')
   })
 
-  test('puts the week before the forecast: amber ahead of its pace, red past its plan, green behind', () => {
+  test("leaves out the core's backlog forecast, one that clears as well as one that never does, as it has no tasks to list", () => {
+    for (const weeks of [null, 1, 6]) {
+      const health: RegisterHealth = { ...HEALTH, backlogClears: { level: weeks === null ? 'bad' : 'good', weeks } }
+      const lines = blockOf(statsBlocks(viewOf({ health }), [], NARROW, OWN), 'stats:health').rows.map(lineOf)
+      expect(lines.filter(line => line.includes('clears'))).toEqual([])
+    }
+  })
+
+  test('puts the week last: amber ahead of its pace, red past its plan, green behind', () => {
     const week = (usedPct: number, plannedPct: number): TeamWeek => ({ usedPct, plannedPct, elapsedPct: 77 })
     expect(tileOf(viewOf({ week: week(63, 70) }), 'week')).toEqual({ color: 'warning', value: '63%, pace 54% of 70%' })
     expect(tileOf(viewOf({ week: week(75, 70) }), 'week').color).toBe('error')
     expect(tileOf(viewOf({ week: week(30, 70) }), 'week').color).toBe('success')
     const rows = blockOf(statsBlocks(viewOf({ week: week(63, 70) }), [], WIDE, OWN), 'stats:health').rows.map(lineOf)
-    expect(rows[3]?.startsWith('  ● week  63%')).toBe(true)
-    expect(rows[3]?.endsWith('● backlog clears  never, at this rate')).toBe(true)
+    expect(rows.slice(3)).toEqual(['  ● week  63%, pace 54% of 70%'])
   })
 
   test('marks a week with no plan amber once any is used', () => {
@@ -226,7 +228,6 @@ describe('statsBlocks: Health', () => {
     expect(presses('backlog')).toEqual([['+112', null], [', ', null], ['596 active', { kind: 'list', list: 'active' }]])
     expect(presses('overdue')).toEqual([['93', { kind: 'list', list: 'overdue' }], [', ', null], ['p1 21', { kind: 'list', list: 'overdueP1' }]])
     expect(presses('owner decisions')).toEqual([['10', { kind: 'list', list: 'ownerDecisions' }], [', oldest 6.0 d', null]])
-    expect(presses('backlog clears')).toEqual([['never, at this rate', null]])
   })
 
   test('draws a count of none as plain words and leaves out an opened count of none, as no task is behind it', () => {
