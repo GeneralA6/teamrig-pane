@@ -6,7 +6,7 @@
 // opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
-import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, Snapshot, StatsChoice, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, Snapshot, StatsChoice, StatsListKind, TaskRow, TaskStatus, ViewMode } from '../types'
 import { actRows, type CardActs } from './act-rows'
 import { cardRows, GUIDE } from './card'
 import { COMMAND } from './command'
@@ -30,7 +30,8 @@ import { cells } from './width'
  * split. With `meets` the text is a press that runs `teamrig meet` on that session, which brings the owner its cards
  * (a Teams tab row's [Meet], team-rows.ts); never split. With `acts` the text is a press of the owner's Note or Next on
  * a task's card (owner-acts.ts); never split. With `stats` the text is a press on the Stats tab's scope or range row
- * that picks that scope or range (stats-rows.ts); never split. `underline` marks the words a search matched
+ * that picks that scope or range, or a Health tile's count that lists its tasks (stats-rows.ts); never split.
+ * `underline` marks the words a search matched
  * (search-view.ts).
  */
 export type Span = {
@@ -51,15 +52,20 @@ export type Span = {
   stats?: StatsPress
 }
 
-/** A press on the Stats tab's pick rows (stats-rows.ts): the scope it folds, or the range. */
-export type StatsPress = { readonly kind: 'scope'; readonly scope: StatsChoice } | { readonly kind: 'range'; readonly range: StatsRange }
+/** A press on the Stats tab (stats-rows.ts): the scope it folds or the range, on the pick rows; or the Health count whose tasks it lists, on a tile. */
+export type StatsPress =
+  | { readonly kind: 'scope'; readonly scope: StatsChoice }
+  | { readonly kind: 'range'; readonly range: StatsRange }
+  | { readonly kind: 'list'; readonly list: StatsListKind }
 
 /**
- * What a Stats tab press picks, as one word: `tree`, `team:<team>`, `session:<team>/<session>` or `range:<range>`, so
- * two presses that pick the same are one style (layout.ts) and the focus ring keys each press apart (press-keys.ts).
+ * What a Stats tab press picks, as one word: `tree`, `team:<team>`, `session:<team>/<session>`, `range:<range>` or
+ * `list:<count>`, so two presses that pick the same are one style (layout.ts) and the focus ring keys each press apart
+ * (press-keys.ts).
  */
 export function statsPressKey(press: StatsPress): string {
   if (press.kind === 'range') return `range:${press.range}`
+  if (press.kind === 'list') return `list:${press.list}`
   const { scope } = press
   switch (scope.kind) {
     case 'tree':
@@ -168,13 +174,16 @@ function metaSpans(task: TaskRow, tree: PaneTree, viewer: string | null): Span[]
   })
 }
 
+/** What a task's title row draws: its id, status and title (a pane task, or a Stats list's slim row). */
+type Titled = Pick<TaskRow, 'id' | 'status' | 'title'>
+
 /** Where a task's wrapped title and its meta line start: under the title, past its status mark and id. */
-export function indentOf(task: TaskRow): Span {
+export function indentOf(task: Titled): Span {
   return { text: ' '.repeat(cells(`${GLYPH[task.status]} ${task.id}${TITLE_GAP}`)) }
 }
 
 /** `◐ T12  title`, keyed `key`: its status mark in its color, its id bold, a wrapped line under the title; cut at `maxLines` when set. */
-export function titleRow(key: string, task: TaskRow, maxLines?: number): Row {
+export function titleRow(key: string, task: Titled, maxLines?: number): Row {
   return {
     key,
     spans: [{ text: GLYPH[task.status], color: GLYPH_COLOR[task.status] }, { text: ` ${task.id}`, bold: true }, { text: `${TITLE_GAP}${task.title}` }],

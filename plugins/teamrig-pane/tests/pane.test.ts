@@ -3103,6 +3103,41 @@ test("the switch's Stats button, key r, folds the tree's registers with no Find 
   expect(await drawsLine(pane, /^Scope {2}tree {2}\[web\]$/)).toBe(true)
 })
 
+test("a press on a Health count lists its tasks under back and the trail `Stats › Active (1)`; back shows the numbers, a held task's row opens its page", async ($, on) => {
+  // A session of team web, its pointer file in /work, its register holding T1, open.
+  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write('/Homes/tester/.teamrig/teams/web/config.json', ['{}'])
+  disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [createLine('T1', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the pricing page' })])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  await pane.press({ key: 'stats' })
+  const activeKey = (keys: readonly string[]) => keys.find(key => key.startsWith('stats:list:active:'))
+  const pressActive = async () => {
+    const key = activeKey(buttonKeys(await pane.drawn()))
+    if (key === undefined) throw new Error('no press on the backlog tile\'s active count')
+    await pane.press({ key })
+  }
+  expect(keyedProps(await pane.drawn(), 'back')).toBeNull()
+
+  await pressActive()
+  expect(keyedProps(await pane.drawn(), 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
+  expect(await pane.find({ type: 'Text', text: 'Stats › Active (1)' })).toMatchObject({ props: { wrap: 'truncate-end' } })
+  expect(await drawsLine(pane, /^The active tasks in the tree, p1 first, then by due date\.$/)).toBe(true)
+  expect(await drawsLine(pane, /^○ T1 {2}Ship the pricing page$/)).toBe(true)
+  expect(await drawsLine(pane, /^Health$/)).toBe(false)
+  expect(activeKey(buttonKeys(await pane.drawn()))).toBeUndefined()
+
+  await pane.press({ key: 'back' })
+  expect(keyedProps(await pane.drawn(), 'back')).toBeNull()
+  expect(await drawsLine(pane, /^Health$/)).toBe(true)
+
+  await pressActive()
+  await pane.press({ key: 'stats:list:web/T1' })
+  expect(keyedProps(await pane.drawn(), 'tasks')).toMatchObject({ variant: 'primary' })
+  expect(await drawsLine(pane, /Ship the pricing page/)).toBe(true)
+})
+
 /** What `teamrig owner` prints for the acts on T1 in the tests below, by its words. */
 const OWNER_ANSWERS: Readonly<Record<string, string>> = {
   'owner next T1 --preview': "PREVIEW po next T1: goes to the top of po's list; nothing written\n",
