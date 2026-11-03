@@ -524,14 +524,15 @@ it, and a session once one is picked, whose press goes back to its team) and the
     Scope  [tree]  acme  tools
     Range  [7 d]  14 d  30 d  all
 
-Then the Health tiles, each a `●` in its level's colour (green good, amber warn, red bad) beside teamrig's words for it
-(the HEALTH line of `teamrig stats`), and the scope's week against its plan, two a row where they fit. Then the Flow
-section, its header carrying its headline (`▾ Flow · opened 540 · closed 428 (3 dropped) · net +112`), so it still
-answers folded: a press on the header folds it (`▸`) and again opens it. Open, it draws the active tasks at each day's
-end, the newest 14 days with bars of what opened and closed, then the burn-up and the cumulative flow over the whole
-range. (A `$` is to mark a day the week sat at its usage limit, so a quiet day there is not read as slack; the pane
-has no source for those days yet, so none shows.) A team's charts say where a split moved tasks out of it,
-as only the tree's are whole before one.
+Then the Health section under its heading: tiles, each a `●` in its level's colour (green good, amber warn, red bad)
+beside teamrig's words for it (the HEALTH line of `teamrig stats`), and the scope's week against its plan, two a row
+where they fit. Then the Flow section, its header carrying its range and headline
+(`▾ Flow · last 7 d · opened 540 · closed 428 (3 dropped) · net +112`), so it still answers folded: a press on the
+header folds it (`▸`) and again opens it. Open, it draws the active tasks at each day's end, the newest 14 days with
+bars of what opened and closed, then the burn-up and the cumulative flow over the whole range, each part after a blank
+row and each day's bar a blank column from the next. (A `$` is to mark a day the week sat at its usage limit, so a
+quiet day there is not read as slack; the pane has no source for those days yet, so none shows.) A team's charts say
+where a split moved tasks out of it, as only the tree's are whole before one.
 
 It reads files only: the team folders as the Teams tab reads them, and the whole history of each team's register the
 scope takes in, each read only once a scope needs it. It reads every 3 s while it shows, and only then; a press reads
