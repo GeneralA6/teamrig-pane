@@ -8,7 +8,7 @@
 // them to know when a poll must redraw.
 import type { ThemeKey } from 'claude-code'
 import type { TaskRow, TaskStatus, TeamLeads } from '../types'
-import { ACTIVE_STATUSES, priorityText, TaskTree, TimeZone, unfinishedAfter, waitText, type EffectiveDue, type WaitContext } from './core/read/index'
+import { ACTIVE_STATUSES, dueTime, priorityText, TaskTree, TimeZone, unfinishedAfter, waitText, type EffectiveDue, type WaitContext } from './core/read/index'
 import type { Span } from './rows'
 import { dayOf, zoneNamed, type Clock } from './zone'
 
@@ -135,6 +135,16 @@ export function dueWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null 
   if (due === undefined) return task.due === null ? null : task.due.slice(5)
   const words = dateWords(due, tree.context)
   return due.from === null ? words : `${words} (from ${due.from})`
+}
+
+/**
+ * A task's own due as teamrig stores it (`YYYY-MM-DD` or `YYYY-MM-DD HH:MM`, UTC) in dateWords' words at the clock:
+ * a row that has no tree to read an effective due from (a Stats list's, stats-rows.ts); one teamrig cannot read, as
+ * written less its year.
+ */
+export function storedDueWords(due: string, clock: Clock): string {
+  const at = dueTime({ due }, clock.zone)
+  return at === undefined ? due.slice(5) : dateWords({ due, at, from: null }, clock)
 }
 
 /** `T7 (beta, due Thu 10-22)`: a task that needs another, its owner, and its effective due when it has one. */

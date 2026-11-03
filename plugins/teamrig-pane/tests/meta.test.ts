@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow, WaitRow } from '../types'
 import { TimeZone, readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { ageWords, clockWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, STATUS_WORDS, storedDayWords, typeWords, waitingWords, whenWords } from '../hooks/meta'
+import { ageWords, clockWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, STATUS_WORDS, storedDayWords, storedDueWords, typeWords, waitingWords, whenWords } from '../hooks/meta'
 import { HOUR, JERUSALEM, NOT_PICKED_UP_HOURS, NOW, clockAt, createLine, iso, statusLine, treeAt, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
@@ -73,6 +73,14 @@ describe('meta words', () => {
     expect(due('2026-10-13 22:00')).toBe('Wed 10-14 01:00 IDT')
     expect(due('2026-10-13')).toBe('today')
     expect(due('2026-10-16')).toBe('Fri 10-16')
+  })
+
+  test("a stored due with no tree reads on the clock: a bare day, a time in the clock's zone, an unreadable one as written less its year", async () => {
+    expect(storedDueWords('2026-10-16', clockAt(NOW))).toBe('Fri 10-16')
+    expect(storedDueWords('2026-10-13', clockAt(NOW))).toBe('today')
+    expect(storedDueWords('2026-10-13 18:00', clockAt(NOW))).toBe('today 18:00 UTC')
+    expect(storedDueWords('2026-10-13 18:00', clockAt(NOW, JERUSALEM))).toBe('today 21:00 IDT')
+    expect(storedDueWords('2026-13-45', clockAt(NOW))).toBe('13-45')
   })
 
   test('an age is hours under a day, one at least, then whole days', async () => {

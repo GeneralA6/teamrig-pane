@@ -109,7 +109,7 @@ import type { CardActs } from './act-rows'
 import { NoteHold } from './note-hold'
 import { OwnerMeet } from './owner-meet'
 import { meetingsBlocks } from './meetings-rows'
-import { statsBlocks } from './stats-rows'
+import { listTitle, statsBlocks } from './stats-rows'
 import { LiveStats } from './stats-source'
 import { findTeamrigCli } from './teamrig-cli'
 import {
@@ -164,6 +164,8 @@ const INLINE_MAX_ROWS = 6
 const TRAIL_SEPARATOR = ' › '
 /** The Log view's switch button, and the first crumb of a Log page's trail. */
 const LOG_LABEL = 'Log'
+/** The Stats view's switch button, and the first crumb of a Health count's trail. */
+const STATS_LABEL = 'Stats'
 const BACK_LABEL = '‹ back'
 const FORWARD_LABEL = 'forward ›'
 /** The Archive page's steps to the week before and the week after the one it shows. */
@@ -971,6 +973,8 @@ export const register: Register = on => {
     let changesFound: readonly ChangeHit[] = []
     /** The title of the conversation whose Log page shows (log-rows.ts logPageTitle); null for the list or another view. */
     let logTitle: Span[] | null = null
+    /** The title of the Health count whose tasks the Stats tab shows (stats-rows.ts listTitle); null for its numbers or another view. */
+    let statsTitle: string | null = null
     /** What a project teamrig is not set up for shows (setup.ts), alone, in every view; null once a register is found. */
     let setupShown: SetupView | null = NOT_SETTING_UP
     let body: Drawn[] = []
@@ -1032,6 +1036,8 @@ export const register: Register = on => {
         // Inline, the Log view shows its list alone: a page opens in the dock.
         const logShown = setupShown === null && current === 'log' && !inline ? await read($, logPage) : null
         logTitle = logShown === null ? null : logPageTitle(logShown, logs, snap)
+        const statsShown = setupShown === null && current === 'stats' ? await read($, stats) : null
+        statsTitle = statsShown?.kind === 'stats' && statsShown.list !== null ? listTitle(statsShown.list) : null
         const viewBlocks =
           setupShown !== null
             ? setupBlocks(setupShown)
@@ -1047,8 +1053,12 @@ export const register: Register = on => {
                     })
                   : current === 'meetings'
                   ? meetingsBlocks(await read($, meetings), await read($, meetingsOpen), await read($, meetingStart), snap.tasks, snap.now)
-                  : current === 'stats'
-                  ? statsBlocks(await read($, stats), await read($, statsToggled), columns)
+                  : statsShown !== null
+                  ? statsBlocks(statsShown, await read($, statsToggled), columns, {
+                      team: snap.team,
+                      held: new Set(snap.tasks.map(task => task.id)),
+                      clock: clockOf(snap),
+                    })
                   : current === 'inbox'
                   ? inboxBlocks(snap, place.kind === 'search' ? { query: place.query, hits: inboxFound } : null)
                   : logShown === null
@@ -1097,10 +1107,27 @@ export const register: Register = on => {
       }
       if (target === 'stats') await tallying?.refresh()
     }
-    // A press on the Stats tab's scope or range row picks it and folds the registers at once.
+    // A press on the Stats tab's scope or range row picks it, and one on a Health count shows its tasks from their top;
+    // either folds the registers at once.
     const pickStats = async (press: StatsPress) => {
-      if (press.kind === 'scope') await update($, statsScope, () => press.scope)
-      else await update($, statsRange, () => press.range)
+      switch (press.kind) {
+        case 'scope':
+          await update($, statsScope, () => press.scope)
+          break
+        case 'range':
+          await update($, statsRange, () => press.range)
+          break
+        case 'list':
+          await update($, statsList, () => press.list)
+          await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
+          break
+      }
+      await tallying?.refresh()
+    }
+    // Back from a Health count's tasks shows the tab's numbers again, from their top.
+    const closeStatsList = async () => {
+      await update($, statsList, () => NO_STATS_LIST)
+      await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
       await tallying?.refresh()
     }
     // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Teams tab session's
@@ -1558,8 +1585,8 @@ export const register: Register = on => {
         <Button key="meetings" label="Meetings" hotkey="j" variant={current === 'meetings' ? 'primary' : 'secondary'} onPress={() => void switchTo('meetings')} />,
         { label: 'Meetings', plain: false, hotkey: 'j' },
       ),
-      pressed(<Button key="stats" label="Stats" hotkey="r" variant={current === 'stats' ? 'primary' : 'secondary'} onPress={() => void switchTo('stats')} />, {
-        label: 'Stats',
+      pressed(<Button key="stats" label={STATS_LABEL} hotkey="r" variant={current === 'stats' ? 'primary' : 'secondary'} onPress={() => void switchTo('stats')} />, {
+        label: STATS_LABEL,
         plain: false,
         hotkey: 'r',
       }),
@@ -1891,7 +1918,21 @@ export const register: Register = on => {
             ),
             rows: 3,
           }
-    return drawPane([controls, pageHead, logHead, weekRow, statusRows].filter((part): part is HeaderPart => part !== null))
+    // A Health count's tasks lead with back (b) to the tab's numbers, then the trail `Stats › Overdue (35)`, then a rule.
+    const statsHead: HeaderPart | null =
+      statsTitle === null
+        ? null
+        : {
+            node: (
+              <Box key="stats-head" flexDirection="column">
+                <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void closeStatsList()} />
+                {drawText([{ text: STATS_LABEL }, { text: TRAIL_SEPARATOR, dim: true }, { text: statsTitle }], 'truncate-end', 'stats-trail')}
+                <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
+              </Box>
+            ),
+            rows: 3,
+          }
+    return drawPane([controls, pageHead, logHead, statsHead, weekRow, statusRows].filter((part): part is HeaderPart => part !== null))
   })
 
   /** The banner's own: each layout settles its cache, so one shared with the pane's body would drop its rows. */

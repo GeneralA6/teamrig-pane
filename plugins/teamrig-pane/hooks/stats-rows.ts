@@ -3,20 +3,25 @@
 // session once one is picked, a press on it going back to its team) and the range, the pick in brackets, the others
 // in plain text so they read as presses. Then the Health section under its heading: tiles, each a `●` in its level's
 // colour (good green, warn amber, bad red) beside teamrig's words for it (the HEALTH line of `teamrig stats`) and the
-// scope's week against its plan, two a row where they fit. Then the Flow section, its header carrying the range and
+// scope's week against its plan, two a row where they fit; each count of tasks above none is a press (`stats`) that
+// lists the tasks behind it (T1864) in place of the tab's numbers: a dim line saying what the list holds, then each
+// task's title row over a dim meta line, a press on one of the own team's that the pane holds opening its page; the
+// head's back (register.tsx statsHead) returns to the numbers. Then the Flow section, its header carrying the range and
 // its headline so it still answers folded (`folds`): the active tasks at each day's end, the newest days with bars of
 // what opened and closed and a `$` on a day the week sat at its usage limit, the burn-up and the cumulative flow, each
 // part after a blank row, a chart under a legend whose title is bold; a team's charts say where a split moved tasks
 // out of them, as only the tree's are whole before it. A team folder the last read could not read is a WARN line. Pure.
 import type { ThemeKey } from 'claude-code'
-import type { StatsChoice, StatsNumbers, StatsView } from '../types'
+import type { StatsChoice, StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
 import { joined } from './card'
-import { STATS_RANGES, type ActiveStatus, type HealthLevel, type RegisterHealth, type StatsDay, type StatsRange } from './core/read/index'
-import { FOLDED_MARK, single, type Block, type Row, type Span, type StatsPress } from './rows'
+import { priorityText, STATS_RANGES, type ActiveStatus, type HealthLevel, type RegisterHealth, type StatsDay, type StatsRange } from './core/read/index'
+import { storedDueWords } from './meta'
+import { FOLDED_MARK, indentOf, META_LINES, SEPARATOR, single, TITLE_LINES, titleRow, type Block, type Row, type Span, type StatsPress } from './rows'
 import { activeChart, bar, BURN_GLYPH, burnUpChart, FLOW_GLYPH, flowChart, type BurnSeries, type Chart, type LineSeries } from './stats-chart'
 import type { TeamWeek } from './team'
 import { failureBlock, weekPct } from './team-rows'
 import { cells } from './width'
+import type { Clock } from './zone'
 
 const VIEW = 'stats'
 /** The Flow section's block key: a press on its header folds the section. */
@@ -54,8 +59,24 @@ const WEEKDAY = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: '
 
 /** The `stats` view's numbers. */
 type Folded = Extract<StatsView, { kind: 'stats' }>
-/** A Health tile: its level, what it measures and teamrig's words for its value. */
-type Tile = { readonly level: HealthLevel; readonly label: string; readonly value: string }
+/** A part of a tile's value: its words, and the Health count whose tasks a press on it lists (null: plain words, or a count of none). */
+type TilePart = { readonly text: string; readonly opens: StatsListKind | null }
+/** A Health tile: its level, what it measures and teamrig's words for its value, in parts. */
+type Tile = { readonly level: HealthLevel; readonly label: string; readonly parts: readonly TilePart[] }
+/** The pane's own team, the tasks its snapshot holds (a press on one opens its page) and its clock: what a Stats list's rows read. */
+export type StatsOwn = { readonly team: string | null; readonly held: ReadonlySet<string>; readonly clock: Clock }
+
+/** Each list's title, as the tab's head names it. */
+const LIST_TITLES: Readonly<Record<StatsListKind, string>> = { active: 'Active', opened: 'Opened', closed: 'Closed', overdue: 'Overdue', overdueP1: 'Overdue p1', ownerDecisions: 'Owner decisions' }
+/** What each list holds, around the scope's words: `The tasks` + ` in the tree` + ` opened`. */
+const LIST_WORDS: Readonly<Record<StatsListKind, { readonly lead: string; readonly tail: string }>> = {
+  active: { lead: 'The active tasks', tail: '' },
+  opened: { lead: 'The tasks', tail: ' opened' },
+  closed: { lead: 'The tasks', tail: ' closed' },
+  overdue: { lead: 'The active tasks', tail: ' past their due date' },
+  overdueP1: { lead: 'The active p1 tasks', tail: ' past their due date' },
+  ownerDecisions: { lead: 'The tasks', tail: ' waiting on the owner' },
+}
 /** How a chart's series draws. */
 type Look = Omit<Span, 'text'>
 
@@ -129,11 +150,22 @@ function rangeRow(range: StatsRange): Row {
  * The scope's week as a tile: used, where its plan puts it by now (pace) and the plan. Amber ahead of pace, red past
  * the plan; with no plan, amber once any is used.
  */
+function plain(text: string): TilePart {
+  return { text, opens: null }
+}
+
+/** `text` for a count of `count` tasks: a press that lists them, or plain words when there are none. */
+function countPart(text: string, count: number, list: StatsListKind): TilePart {
+  return { text, opens: count > 0 ? list : null }
+}
+
+const COMMA = plain(', ')
+
 function weekTile(week: TeamWeek): Tile {
-  if (week.plannedPct <= 0) return { level: week.usedPct > 0 ? 'warn' : 'good', label: 'week', value: `${weekPct(week.usedPct)}, no plan` }
+  if (week.plannedPct <= 0) return { level: week.usedPct > 0 ? 'warn' : 'good', label: 'week', parts: [plain(`${weekPct(week.usedPct)}, no plan`)] }
   const pace = (week.plannedPct * week.elapsedPct) / 100
   const level: HealthLevel = week.usedPct > week.plannedPct ? 'bad' : week.usedPct > pace ? 'warn' : 'good'
-  return { level, label: 'week', value: `${weekPct(week.usedPct)}, pace ${weekPct(pace)} of ${weekPct(week.plannedPct)}` }
+  return { level, label: 'week', parts: [plain(`${weekPct(week.usedPct)}, pace ${weekPct(pace)} of ${weekPct(week.plannedPct)}`)] }
 }
 
 function clearsText(weeks: number | null): string {
@@ -141,32 +173,39 @@ function clearsText(weeks: number | null): string {
   return `in ${weeks} ${weeks === 1 ? 'week' : 'weeks'}`
 }
 
-/** The Health tiles in reading order, the week's (none without a week file) before the backlog's forecast. */
-function healthTiles(health: RegisterHealth, week: TeamWeek | null): Tile[] {
+/**
+ * The Health tiles in reading order, the week's (none without a week file) before the backlog's forecast. The ratio
+ * of closes to opens names both counts (`0.79, 64 closed, 81 opened`, the opened one only when any opened), so each
+ * count of tasks is a part of its own that lists them.
+ */
+function healthTiles(health: RegisterHealth, stats: StatsNumbers, week: TeamWeek | null): Tile[] {
   const { closeOpen, backlog, overdue, ownerDecisions, backlogClears } = health
-  const oldest = ownerDecisions.oldestDays === null ? '' : `, oldest ${daysText(ownerDecisions.oldestDays)}`
+  const opened = stats.opened > 0 ? [COMMA, countPart(`${stats.opened} opened`, stats.opened, 'opened')] : []
+  const closes = [plain(closeOpen.ratio === null ? 'none opened' : closeOpen.ratio.toFixed(2)), COMMA, countPart(`${stats.closedTasks} closed`, stats.closedTasks, 'closed'), ...opened]
+  const oldest = ownerDecisions.oldestDays === null ? [] : [plain(`, oldest ${daysText(ownerDecisions.oldestDays)}`)]
   return [
-    { level: closeOpen.level, label: 'close/open', value: closeOpen.ratio === null ? 'none opened' : closeOpen.ratio.toFixed(2) },
-    { level: backlog.level, label: 'backlog', value: `${signed(backlog.net)}, ${backlog.active} active` },
-    { level: overdue.level, label: 'overdue', value: `${overdue.count}, p1 ${overdue.p1}` },
-    { level: ownerDecisions.level, label: 'owner decisions', value: `${ownerDecisions.count}${oldest}` },
+    { level: closeOpen.level, label: 'close/open', parts: closes },
+    { level: backlog.level, label: 'backlog', parts: [plain(signed(backlog.net)), COMMA, countPart(`${backlog.active} active`, backlog.active, 'active')] },
+    { level: overdue.level, label: 'overdue', parts: [countPart(`${overdue.count}`, overdue.count, 'overdue'), COMMA, countPart(`p1 ${overdue.p1}`, overdue.p1, 'overdueP1')] },
+    { level: ownerDecisions.level, label: 'owner decisions', parts: [countPart(`${ownerDecisions.count}`, ownerDecisions.count, 'ownerDecisions'), ...oldest] },
     ...(week === null ? [] : [weekTile(week)]),
-    { level: backlogClears.level, label: 'backlog clears', value: clearsText(backlogClears.weeks) },
+    { level: backlogClears.level, label: 'backlog clears', parts: [plain(clearsText(backlogClears.weeks))] },
   ]
 }
 
 function tileSpans(tile: Tile): Span[] {
-  return [{ text: HEALTH_DOT, color: LEVEL_COLOR[tile.level] }, { text: ` ${tile.label}  `, dim: true }, { text: tile.value }]
+  const parts = tile.parts.map((part): Span => (part.opens === null ? { text: part.text } : { text: part.text, stats: { kind: 'list', list: part.opens } }))
+  return [{ text: HEALTH_DOT, color: LEVEL_COLOR[tile.level] }, { text: ` ${tile.label}  `, dim: true }, ...parts]
 }
 
 /**
  * The Health section: its bold heading, then the tiles under INDENT, two a row in two columns TILE_GAP apart where both
  * fit, the gap shrinking to MIN_TILE_GAP before they go one a row.
  */
-function healthBlock(health: RegisterHealth, week: TeamWeek | null, width: number): Block {
+function healthBlock(view: Folded, width: number): Block {
   const key = `${VIEW}:health`
   const room = width - cells(INDENT.text)
-  const tiles = healthTiles(health, week).map(tileSpans)
+  const tiles = healthTiles(view.health, view.stats, view.week).map(tileSpans)
   const lefts = tiles.filter((_, index) => index % 2 === 0)
   const rights = tiles.filter((_, index) => index % 2 === 1)
   const leftCells = Math.max(0, ...lefts.map(spansCells))
@@ -317,11 +356,57 @@ function flowBlock(view: Folded, open: boolean, width: number): Block {
   return open ? { ...block, card: flowRows(view, width) } : block
 }
 
+/** `Overdue (35)`: the list's title, as the tab's head names it, and how many tasks it holds. */
+export function listTitle(list: StatsList): string {
+  return `${LIST_TITLES[list.kind]} (${list.rows.length})`
+}
+
+function scopeWords(scope: StatsChoice): string {
+  switch (scope.kind) {
+    case 'tree':
+      return 'in the tree'
+    case 'team':
+      return `in ${scope.team} and the teams under it`
+    case 'session':
+      return `of ${scope.session} in ${scope.team}`
+  }
+}
+
+/** The line over a list: what it holds in the scope, the range for the tasks opened or closed in it, and its order. */
+function listWhat(view: Folded, kind: StatsListKind): string {
+  const { lead, tail } = LIST_WORDS[kind]
+  const range = kind === 'opened' || kind === 'closed' ? (view.range === 'all' ? ' ever' : ` in the last ${rangeLabel(view.range)}`) : ''
+  const order = kind === 'ownerDecisions' ? 'the oldest wait first' : kind === 'overdueP1' ? 'by due date' : 'p1 first, then by due date'
+  return `${lead} ${scopeWords(view.scope)}${tail}${range}, ${order}.`
+}
+
+/**
+ * A listed task: `◐ T12  title` cut at TITLE_LINES, over a dim meta line of its owner, priority, own due on the
+ * team's clock and, when another team holds it, that team. A press opens its page when the pane holds it: one of the
+ * own team's tasks its snapshot keeps.
+ */
+function listBlock(row: StatsListRow, own: StatsOwn): Block {
+  const key = `${VIEW}:list:${row.team}/${row.id}`
+  const indent = indentOf(row)
+  const due = row.due === null ? [] : [`due ${storedDueWords(row.due, own.clock)}`]
+  const facts = [row.owner, priorityText(row.priority), ...due, ...(row.team === own.team ? [] : [row.team])]
+  const spans = facts.flatMap((fact, index): Span[] => (index === 0 ? [{ text: fact, dim: true }] : [SEPARATOR, { text: fact, dim: true }]))
+  const block: Block = { key, rows: [titleRow(key, row, TITLE_LINES), { key: `${key}:meta`, spans: [indent, ...spans], hang: indent, maxLines: META_LINES }] }
+  return row.team === own.team && own.held.has(row.id) ? { ...block, opens: row.id } : block
+}
+
+/** A Health count's tasks in place of the tab's numbers: the WARN lines, the line saying what it holds, then its tasks. */
+function listBlocks(view: Folded, list: StatsList, own: StatsOwn): Block[] {
+  const tasks = list.rows.length === 0 ? [note('No tasks.')] : list.rows.map(row => listBlock(row, own))
+  return [...view.failures.map(failure => failureBlock(VIEW, failure)), single(`${VIEW}:list`, [{ text: listWhat(view, list.kind), dim: true }]), ...tasks]
+}
+
 /**
  * The Stats tab `width` cells wide: the scope and range rows, a WARN line for each team folder the last read could not
- * read, the Health tiles and the Flow section, open or folded by `toggled` against OPEN_SECTIONS; or why none show.
+ * read, the Health tiles and the Flow section, open or folded by `toggled` against OPEN_SECTIONS; while a tile's press
+ * picked a count, its tasks instead, read against `own`; or why none show.
  */
-export function statsBlocks(view: StatsView, toggled: readonly string[], width: number): Block[] {
+export function statsBlocks(view: StatsView, toggled: readonly string[], width: number, own: StatsOwn): Block[] {
   switch (view.kind) {
     case 'reading':
       return [note('Reading the registers…')]
@@ -330,10 +415,11 @@ export function statsBlocks(view: StatsView, toggled: readonly string[], width: 
     case 'failed':
       return [single(`${VIEW}:note`, [{ text: `The registers could not be read: ${view.reason.replace(/\.$/, '')}.`, color: 'warning' }])]
     case 'stats':
+      if (view.list !== null) return listBlocks(view, view.list, own)
       return [
         { key: `${VIEW}:pick`, rows: [scopeRow(view.scope, view.teams), rangeRow(view.range)] },
         ...view.failures.map(failure => failureBlock(VIEW, failure)),
-        healthBlock(view.health, view.week, width),
+        healthBlock(view, width),
         flowBlock(view, isSectionOpen(FLOW_KEY, toggled), width),
       ]
   }
