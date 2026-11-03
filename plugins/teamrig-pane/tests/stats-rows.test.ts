@@ -106,6 +106,15 @@ describe('statsBlocks: the pick rows', () => {
     expect(spanOf(scope, 'tools').stats).toEqual({ kind: 'scope', scope: { kind: 'team', team: 'tools' } })
   })
 
+  test('bold the label and draw each press in plain text, so a press does not read as a dim note', () => {
+    const [scope, range] = blockOf(statsBlocks(viewOf(), [], WIDE), 'stats:pick').rows
+    if (scope === undefined || range === undefined) throw new Error('no pick rows')
+    expect(spanOf(scope, 'Scope')).toEqual({ text: 'Scope', bold: true })
+    expect(spanOf(range, 'Range')).toEqual({ text: 'Range', bold: true })
+    expect(spanOf(scope, 'acme')).toEqual({ text: 'acme', stats: { kind: 'scope', scope: { kind: 'team', team: 'acme' } } })
+    expect(spanOf(range, 'all')).toEqual({ text: 'all', stats: { kind: 'range', range: 'all' } })
+  })
+
   test("add a picked session, its press going back to the session's team", () => {
     const [scope] = blockOf(statsBlocks(viewOf({ scope: { kind: 'session', team: 'tools', session: 'dev' } }), [], WIDE), 'stats:pick').rows
     if (scope === undefined) throw new Error('no scope row')
@@ -128,24 +137,32 @@ describe('statsBlocks: the pick rows', () => {
 })
 
 describe('statsBlocks: Health', () => {
-  test('draws the tiles two a row in two columns where they fit, the dot in its level colour', () => {
-    const rows = blockOf(statsBlocks(viewOf(), [], WIDE), 'stats:health').rows
-    expect(rows.map(lineOf)).toEqual([
-      `${'● close/open  0.79'.padEnd(41)}● backlog  +112, 596 active`,
-      `${'● overdue  93, p1 21'.padEnd(41)}● owner decisions  10, oldest 6.0 d`,
-      '● backlog clears  never, at this rate',
+  test('opens a section under a bold heading, the tiles indented two a row in two columns where they fit, the dot in its level colour', () => {
+    const block = blockOf(statsBlocks(viewOf(), [], WIDE), 'stats:health')
+    expect(block.rows.map(lineOf)).toEqual([
+      'Health',
+      `  ${'● close/open  0.79'.padEnd(41)}● backlog  +112, 596 active`,
+      `  ${'● overdue  93, p1 21'.padEnd(41)}● owner decisions  10, oldest 6.0 d`,
+      '  ● backlog clears  never, at this rate',
     ])
-    expect(rows[0]?.spans[0]).toEqual({ text: '●', color: 'error' })
+    expect(block.opensSection).toBe(true)
+    expect(block.rows[0]?.spans).toEqual([{ text: 'Health', bold: true }])
+    expect(block.rows[1]?.spans[1]).toEqual({ text: '●', color: 'error' })
+    expect(block.rows[1]?.hang).toEqual({ text: '    ' })
     expect(tileOf(viewOf(), 'owner decisions').color).toBe('warning')
   })
 
-  test('draws a tile a row where two do not fit', () => {
+  test('shrinks the gap between two tiles to 2 cells before it draws a tile a row where two do not fit beside the indent', () => {
+    expect(blockOf(statsBlocks(viewOf(), [], 78), 'stats:health').rows.map(lineOf)[1]).toBe(`  ${'● close/open  0.79'.padEnd(41)}● backlog  +112, 596 active`)
+    expect(blockOf(statsBlocks(viewOf(), [], 76), 'stats:health').rows.map(lineOf)[1]).toBe(`  ${'● close/open  0.79'.padEnd(39)}● backlog  +112, 596 active`)
+    expect(blockOf(statsBlocks(viewOf(), [], 75), 'stats:health').rows.length).toBe(6)
     expect(blockOf(statsBlocks(viewOf(), [], NARROW), 'stats:health').rows.map(lineOf)).toEqual([
-      '● close/open  0.79',
-      '● backlog  +112, 596 active',
-      '● overdue  93, p1 21',
-      '● owner decisions  10, oldest 6.0 d',
-      '● backlog clears  never, at this rate',
+      'Health',
+      '  ● close/open  0.79',
+      '  ● backlog  +112, 596 active',
+      '  ● overdue  93, p1 21',
+      '  ● owner decisions  10, oldest 6.0 d',
+      '  ● backlog clears  never, at this rate',
     ])
   })
 
@@ -168,8 +185,8 @@ describe('statsBlocks: Health', () => {
     expect(tileOf(viewOf({ week: week(75, 70) }), 'week').color).toBe('error')
     expect(tileOf(viewOf({ week: week(30, 70) }), 'week').color).toBe('success')
     const rows = blockOf(statsBlocks(viewOf({ week: week(63, 70) }), [], WIDE), 'stats:health').rows.map(lineOf)
-    expect(rows[2]?.startsWith('● week  63%')).toBe(true)
-    expect(rows[2]?.endsWith('● backlog clears  never, at this rate')).toBe(true)
+    expect(rows[3]?.startsWith('  ● week  63%')).toBe(true)
+    expect(rows[3]?.endsWith('● backlog clears  never, at this rate')).toBe(true)
   })
 
   test('marks a week with no plan amber once any is used', () => {
@@ -181,18 +198,21 @@ describe('statsBlocks: Health', () => {
 describe('statsBlocks: Flow', () => {
   const stats: RegisterStats = { ...BASE, days: WEEK_DAYS, opened: 540, closedTasks: 428, droppedTasks: 3, net: 112 }
 
-  test('heads the section with its headline, open by default, a press on it folding it', () => {
+  test('heads the section with its range and headline, open by default, a press on it folding it', () => {
     const block = blockOf(statsBlocks(viewOf({ stats }), [], WIDE), FLOW_KEY)
-    expect(block.rows.map(lineOf)).toEqual(['▾ Flow · opened 540 · closed 428 (3 dropped) · net +112'])
+    expect(block.rows.map(lineOf)).toEqual(['▾ Flow · last 7 d · opened 540 · closed 428 (3 dropped) · net +112'])
     expect(block.folds).toBe(FLOW_KEY)
     expect(block.opensSection).toBe(true)
     expect(block.card === undefined).toBe(false)
   })
 
-  test('folded, keeps the headline and draws none of its rows', () => {
+  test('folded, keeps the range and headline and draws none of its rows', () => {
     const block = blockOf(statsBlocks(viewOf({ stats: { ...stats, droppedTasks: 0, net: -2 } }), [FLOW_KEY], WIDE), FLOW_KEY)
-    expect(block.rows.map(lineOf)).toEqual(['▸ Flow · opened 540 · closed 428 · net -2'])
+    expect(block.rows.map(lineOf)).toEqual(['▸ Flow · last 7 d · opened 540 · closed 428 · net -2'])
     expect(block.card).toBeUndefined()
+    expect(blockOf(statsBlocks(viewOf({ stats, range: 'all' }), [FLOW_KEY], WIDE), FLOW_KEY).rows.map(lineOf)).toEqual([
+      '▸ Flow · all days · opened 540 · closed 428 (3 dropped) · net +112',
+    ])
   })
 
   test('isSectionOpen flips a section from its default', () => {
@@ -228,12 +248,26 @@ describe('statsBlocks: Flow', () => {
     expect(keys.indexOf(`${FLOW_KEY}:active:legend`) < keys.indexOf(`${FLOW_KEY}:day:head`)).toBe(true)
     expect(keys.indexOf(`${FLOW_KEY}:day:head`) < keys.indexOf(`${FLOW_KEY}:burn:legend`)).toBe(true)
     expect(keys.indexOf(`${FLOW_KEY}:burn:legend`) < keys.indexOf(`${FLOW_KEY}:cfd:legend`)).toBe(true)
-    expect(lineOf(rowOf(card, `${FLOW_KEY}:burn:legend`))).toBe('  burn-up: ▀ created, ▄ closed; the gap is the backlog')
-    expect(lineOf(rowOf(card, `${FLOW_KEY}:cfd:legend`))).toBe('  cumulative flow: ░ open, ▒ waiting, ▓ in progress, █ verifying')
+    expect(lineOf(rowOf(card, `${FLOW_KEY}:active:legend`))).toBe("  Active tasks at each day's end")
+    expect(lineOf(rowOf(card, `${FLOW_KEY}:burn:legend`))).toBe('  Burn-up  ▀ created, ▄ closed; the gap is the backlog')
+    expect(lineOf(rowOf(card, `${FLOW_KEY}:cfd:legend`))).toBe('  Cumulative flow  ░ open, ▒ waiting, ▓ in progress, █ verifying')
+    expect(spanOf(rowOf(card, `${FLOW_KEY}:cfd:legend`), 'Cumulative flow').bold).toBe(true)
+    expect(spanOf(rowOf(card, `${FLOW_KEY}:burn:legend`), ' created, ').dim).toBe(true)
     expect(lineOf(rowOf(card, `${FLOW_KEY}:active:limits`)).trim()).toBe('$')
     const charted = card.filter(row => /:(active|burn|cfd):(\d+|days|limits)$/.test(row.key))
     expect(charted.every(row => cells(lineOf(row)) <= WIDE)).toBe(true)
     expect(rowOf(card, `${FLOW_KEY}:active:0`).spans[1]).toEqual({ text: '5 ┤', dim: true })
+  })
+
+  test('leads each part with a blank row: the active line, the day rows, the burn-up and the cumulative flow', () => {
+    const keys = flowCard(viewOf({ stats })).map(row => row.key)
+    const before = (part: string): string | undefined => keys[keys.indexOf(part) - 1]
+    expect(keys[0]).toBe(`${FLOW_KEY}:active:gap`)
+    expect(before(`${FLOW_KEY}:active:legend`)).toBe(`${FLOW_KEY}:active:gap`)
+    expect(before(`${FLOW_KEY}:day:head`)).toBe(`${FLOW_KEY}:day:gap`)
+    expect(before(`${FLOW_KEY}:burn:legend`)).toBe(`${FLOW_KEY}:burn:gap`)
+    expect(before(`${FLOW_KEY}:cfd:legend`)).toBe(`${FLOW_KEY}:cfd:gap`)
+    expect(flowCard(viewOf({ stats })).filter(row => row.key.endsWith(':gap')).map(row => row.spans)).toEqual([[], [], [], []])
   })
 
   test("marks a split in the range on a team's scope, never on the tree's or before the range", () => {
@@ -242,7 +276,7 @@ describe('statsBlocks: Flow', () => {
     const splits: RegisterStats = { ...stats, splits: [early, split] }
     const card = flowCard(viewOf({ stats: splits, scope: { kind: 'team', team: 'tools' } }))
     expect(card.filter(row => row.key.includes(':split:')).map(lineOf)).toEqual(['  before 10-28: tree only, 412 tasks moved acme -> tools'])
-    expect(card[0]?.key).toBe(`${FLOW_KEY}:split:0`)
+    expect(card.slice(0, 2).map(row => row.key)).toEqual([`${FLOW_KEY}:split:0`, `${FLOW_KEY}:active:gap`])
     expect(flowCard(viewOf({ stats: splits })).some(row => row.key.includes(':split:'))).toBe(false)
   })
 

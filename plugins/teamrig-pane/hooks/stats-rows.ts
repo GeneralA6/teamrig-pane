@@ -1,12 +1,13 @@
 // The Stats tab as blocks of rows (rows.ts, T1419): teamrig's stats fold of the registers (stats-source.ts) for the
 // scope and range the tab picks. On top two rows of presses (`stats`): the scope (the tree, each team in it, and a
-// session once one is picked, a press on it going back to its team) and the range, the pick in brackets. Then the
-// Health tiles, each a `●` in its level's colour (good green, warn amber, bad red) beside teamrig's words for it (the
-// HEALTH line of `teamrig stats`) and the scope's week against its plan, two a row where they fit. Then the Flow
-// section, its header carrying its headline so it still answers folded (`folds`): the active tasks at each day's end,
-// the newest days with bars of what opened and closed and a `$` on a day the week sat at its usage limit, the burn-up
-// and the cumulative flow; a team's charts say where a split moved tasks out of them, as only the tree's are whole
-// before it. A team folder the last read could not read is a WARN line. Pure.
+// session once one is picked, a press on it going back to its team) and the range, the pick in brackets, the others
+// in plain text so they read as presses. Then the Health section under its heading: tiles, each a `●` in its level's
+// colour (good green, warn amber, bad red) beside teamrig's words for it (the HEALTH line of `teamrig stats`) and the
+// scope's week against its plan, two a row where they fit. Then the Flow section, its header carrying the range and
+// its headline so it still answers folded (`folds`): the active tasks at each day's end, the newest days with bars of
+// what opened and closed and a `$` on a day the week sat at its usage limit, the burn-up and the cumulative flow, each
+// part after a blank row, a chart under a legend whose title is bold; a team's charts say where a split moved tasks
+// out of them, as only the tree's are whole before it. A team folder the last read could not read is a WARN line. Pure.
 import type { ThemeKey } from 'claude-code'
 import type { StatsChoice, StatsView } from '../types'
 import { joined } from './card'
@@ -33,12 +34,15 @@ export const LIMIT_MARK = '$'
 
 /** Leads a section's rows. */
 const INDENT: Span = { text: '  ' }
+/** Leads a wrapped line of a row INDENT leads. */
+const HANG: Span = { text: '    ' }
 /** Leads an open section's header, as FOLDED_MARK leads a folded one. */
 const OPEN_MARK: Span = { text: '▾ ', dim: true }
 /** Between a pick row's label and its presses, and between two presses. */
 const PICK_GAP = '  '
-/** The fewest blank cells between two Health tiles on one row. */
+/** The blank cells between two Health tiles on one row, and the fewest it shrinks to before they go one a row. */
 const TILE_GAP = 4
+const MIN_TILE_GAP = 2
 /** Between a day row's columns. */
 const COLUMN_GAP = '  '
 /** The cells a day row's date takes: `Sat 10-31`. */
@@ -93,14 +97,14 @@ function spansCells(spans: readonly Span[]): number {
   return cells(spans.map(span => span.text).join(''))
 }
 
-/** A pick row's choice: the picked one in brackets, no press; another a press that picks it. */
+/** A pick row's choice: the picked one in brackets, no press; another a press that picks it, in plain text (a dim one reads as no press). */
 function choiceSpan(label: string, picked: boolean, press: StatsPress): Span {
-  return picked ? { text: `[${label}]`, color: 'claude', bold: true } : { text: label, dim: true, stats: press }
+  return picked ? { text: `[${label}]`, color: 'claude', bold: true } : { text: label, stats: press }
 }
 
-/** `label` and its choices, PICK_GAP apart, a wrapped line starting under the first choice. */
+/** `label` in bold and its choices, PICK_GAP apart, a wrapped line starting under the first choice. */
 function pickRow(key: string, label: string, choices: readonly Span[]): Row {
-  return { key, spans: [{ text: label, dim: true }, ...choices.flatMap(choice => [{ text: PICK_GAP }, choice])], hang: { text: ' '.repeat(cells(label + PICK_GAP)) } }
+  return { key, spans: [{ text: label, bold: true }, ...choices.flatMap(choice => [{ text: PICK_GAP }, choice])], hang: { text: ' '.repeat(cells(label + PICK_GAP)) } }
 }
 
 /** The scope row: the tree and each of its teams; on a session's scope, the session too, its press back to its team. */
@@ -155,26 +159,38 @@ function tileSpans(tile: Tile): Span[] {
   return [{ text: HEALTH_DOT, color: LEVEL_COLOR[tile.level] }, { text: ` ${tile.label}  `, dim: true }, { text: tile.value }]
 }
 
-/** The Health tiles, two a row in two columns where both fit `width`, else one a row. */
+/**
+ * The Health section: its bold heading, then the tiles under INDENT, two a row in two columns TILE_GAP apart where both
+ * fit, the gap shrinking to MIN_TILE_GAP before they go one a row.
+ */
 function healthBlock(health: RegisterHealth, week: TeamWeek | null, width: number): Block {
   const key = `${VIEW}:health`
+  const room = width - cells(INDENT.text)
   const tiles = healthTiles(health, week).map(tileSpans)
   const lefts = tiles.filter((_, index) => index % 2 === 0)
   const rights = tiles.filter((_, index) => index % 2 === 1)
-  const column = Math.max(0, ...lefts.map(spansCells)) + TILE_GAP
-  const paired = column + Math.max(0, ...rights.map(spansCells)) <= width
+  const leftCells = Math.max(0, ...lefts.map(spansCells))
+  const gap = Math.min(TILE_GAP, room - leftCells - Math.max(0, ...rights.map(spansCells)))
+  const paired = gap >= MIN_TILE_GAP
+  const column = leftCells + gap
   const lines = paired
     ? lefts.map((left, index) => {
         const right = rights[index]
         return right === undefined ? left : [...left, { text: ' '.repeat(column - spansCells(left)) }, ...right]
       })
     : tiles
-  return { key, rows: lines.map((spans, index) => ({ key: `${key}:${index}`, spans, hang: { text: '  ' } })) }
+  const heading: Row = { key: `${key}:head`, spans: [{ text: 'Health', bold: true }] }
+  return { key, rows: [heading, ...lines.map((spans, index): Row => ({ key: `${key}:${index}`, spans: [INDENT, ...spans], hang: HANG }))], opensSection: true }
 }
 
-/** A legend row: dim words, with each series' glyph in its look. */
-function legendRow(key: string, spans: readonly Span[]): Row {
-  return { key: `${key}:legend`, spans: [INDENT, ...spans], hang: INDENT }
+/** A blank row before a part of the Flow section, so its parts read apart. */
+function gapRow(key: string): Row {
+  return { key: `${key}:gap`, spans: [] }
+}
+
+/** A legend row: its bold title, then dim words with each series' glyph in its look. */
+function legendRow(key: string, title: string, spans: readonly Span[]): Row {
+  return { key: `${key}:legend`, spans: [INDENT, { text: title, bold: true }, ...spans], hang: INDENT }
 }
 
 /** A chart's rows under INDENT: its axis dim, each run in its series' look; then its days, and its `$` marks in amber. */
@@ -259,37 +275,43 @@ function splitRows(scope: StatsChoice, stats: RegisterStats): Row[] {
     }))
 }
 
-/** The open Flow section's rows: split marks, the active line, the day rows, the burn-up and the cumulative flow. */
+/** The open Flow section's rows: split marks, then each after a blank row the active line, the day rows, the burn-up and the cumulative flow. */
 function flowRows(view: Folded, width: number): Row[] {
   const { stats } = view
   const room = width - cells(INDENT.text)
   const dim = (text: string): Span => ({ text, dim: true })
+  const activeKey = `${FLOW_KEY}:active`
   const burnKey = `${FLOW_KEY}:burn`
   const flowKey = `${FLOW_KEY}:cfd`
-  const flowLegend = FLOW_LEGEND.flatMap((status, index): Span[] => [...(index === 0 ? [] : [dim(', ')]), { text: FLOW_GLYPH[status], ...FLOW_LOOK[status] }, dim(` ${STATUS_WORDS[status]}`)])
+  const flowLegend = FLOW_LEGEND.flatMap((status, index): Span[] => [dim(index === 0 ? '  ' : ', '), { text: FLOW_GLYPH[status], ...FLOW_LOOK[status] }, dim(` ${STATUS_WORDS[status]}`)])
   return [
     ...splitRows(view.scope, stats),
-    legendRow(`${FLOW_KEY}:active`, [dim("active tasks at each day's end")]),
-    ...chartRows(`${FLOW_KEY}:active`, activeChart(stats.days, room), LINE_LOOK),
+    gapRow(activeKey),
+    legendRow(activeKey, 'Active tasks', [dim(" at each day's end")]),
+    ...chartRows(activeKey, activeChart(stats.days, room), LINE_LOOK),
+    gapRow(`${FLOW_KEY}:day`),
     ...dayRows(stats.days, width),
-    legendRow(burnKey, [
-      dim('burn-up: '),
+    gapRow(burnKey),
+    legendRow(burnKey, 'Burn-up', [
+      dim('  '),
       { text: BURN_GLYPH.created, ...BURN_LOOK.created },
       dim(' created, '),
       { text: BURN_GLYPH.closed, ...BURN_LOOK.closed },
       dim(' closed; the gap is the backlog'),
     ]),
     ...chartRows(burnKey, burnUpChart(stats.days, room), BURN_LOOK),
-    legendRow(flowKey, [dim('cumulative flow: '), ...flowLegend]),
+    gapRow(flowKey),
+    legendRow(flowKey, 'Cumulative flow', flowLegend),
     ...chartRows(flowKey, flowChart(stats.days, room), FLOW_LOOK),
   ]
 }
 
-/** The Flow section: its header with the range's opened, closed and net, and while open its rows as the block's card. */
+/** The Flow section: its header with the range and its opened, closed and net, and while open its rows as the block's card. */
 function flowBlock(view: Folded, open: boolean, width: number): Block {
   const { stats } = view
   const dropped = stats.droppedTasks > 0 ? ` (${stats.droppedTasks} dropped)` : ''
-  const parts: Span[] = [{ text: 'Flow', bold: true }, { text: `opened ${stats.opened}` }, { text: `closed ${stats.closedTasks}${dropped}` }, { text: `net ${signed(stats.net)}` }]
+  const range = view.range === 'all' ? 'all days' : `last ${rangeLabel(view.range)}`
+  const parts: Span[] = [{ text: 'Flow', bold: true }, { text: range }, { text: `opened ${stats.opened}` }, { text: `closed ${stats.closedTasks}${dropped}` }, { text: `net ${signed(stats.net)}` }]
   const head: Row = { key: FLOW_KEY, spans: [open ? OPEN_MARK : FOLDED_MARK, ...joined(parts)], hang: INDENT }
   const block: Block = { key: FLOW_KEY, rows: [head], folds: FLOW_KEY, opensSection: true }
   return open ? { ...block, card: flowRows(view, width) } : block

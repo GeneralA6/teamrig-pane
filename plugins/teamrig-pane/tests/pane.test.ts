@@ -3085,10 +3085,11 @@ test("the switch's Stats button, key r, folds the tree's registers with no Find 
   expect(await drawsLine(pane, /^Scope {2}\[tree\] {2}web$/)).toBe(true)
   expect(await drawsLine(pane, /^Range {2}\[7 d\] {2}14 d {2}30 d {2}all$/)).toBe(true)
   expect(keyedProps(await pane.drawn(), 'find')).toBeNull()
+  expect(await drawsLine(pane, /^Health$/)).toBe(true)
   // A press on a section's header folds it.
-  expect(await drawsLine(pane, /^▾ Flow · opened 1 · closed 0 · net \+1$/)).toBe(true)
+  expect(await drawsLine(pane, /^▾ Flow · last 7 d · opened 1 · closed 0 · net \+1$/)).toBe(true)
   await pane.press({ key: 'stats:flow' })
-  expect(await drawsLine(pane, /^▸ Flow · opened 1 · closed 0 · net \+1$/)).toBe(true)
+  expect(await drawsLine(pane, /^▸ Flow · last 7 d · opened 1 · closed 0 · net \+1$/)).toBe(true)
 
   const rangeKey = buttonKeys(await pane.drawn()).find(key => key.startsWith('stats:range:14d:'))
   if (rangeKey === undefined) throw new Error('no 14 d press on the range row')
