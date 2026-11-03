@@ -5,11 +5,11 @@
 // again after it; a folder or register whose read fails drawn as it last read, or left out before one, and named.
 import { describe, expect, test } from 'claude-code/testing'
 import type { StatsView } from '../types'
-import { TEAM_WEEK_FORMAT, TimeZone, readEvents, registerHealth, registerStats, type StatsRange, type StatsScope, type StatsTeam, type TeamWeekSummary } from '../hooks/core/read/index'
+import { TEAM_WEEK_FORMAT, TimeZone, readEvents, readRegister, registerHealth, registerStats, type StatsScope, type StatsTask, type StatsTasks, type StatsTeam, type TeamWeekSummary } from '../hooks/core/read/index'
 import { POLL_MS, TICK_MS } from '../hooks/live'
 import type { TeamFiles } from '../hooks/places'
 import type { FileStamp, Files } from '../hooks/source'
-import { LiveStats, type StatsPick, type StatsSettings } from '../hooks/stats-source'
+import { LiveStats, listsOf, type StatsPick, type StatsSettings } from '../hooks/stats-source'
 import { weekOf } from '../hooks/team'
 import { HOUR, MemoryFiles, NOW, createLine, statusLine, waitingLine } from './fixtures'
 import { weekFile } from './team-fixtures'
@@ -50,16 +50,38 @@ const text = (lines: readonly string[]) => lines.map(line => `${line}\n`).join('
 const ACME: StatsTeam = { team: 'acme', lead: 'lead', events: readEvents(text(ACME_LINES)).events }
 const TOOLS: StatsTeam = { team: 'tools', lead: 'boss', events: readEvents(text(TOOLS_LINES)).events }
 
-const TREE: StatsPick = { scope: { kind: 'tree' }, range: '7d' }
+const TREE: StatsPick = { scope: { kind: 'tree' }, range: '7d', list: null }
 const ACME_WEEK = weekFile(20, 30)
 const TOOLS_WEEK = weekFile(10, 15)
 const weekText = (week: TeamWeekSummary) => JSON.stringify({ v: TEAM_WEEK_FORMAT, ...week })
 
-/** The view teamrig's fold gives `teams` in the tree of acme and tools at `at`, with no week and no failure. */
+/** The view teamrig's fold gives `teams` in the tree of acme and tools at `at`, its picked list as rows, with no week and no failure. */
 function folded(teams: readonly StatsTeam[], pick: StatsPick, at = NOW, session?: StatsScope): StatsView {
-  const stats = registerStats({ teams, range: pick.range, now: new Date(at), zone: TimeZone.UTC, ownerMarker: 'owner', ...(session === undefined ? {} : { session }) })
-  return { kind: 'stats', scope: pick.scope, range: pick.range, teams: ['acme', 'tools'], stats, health: registerHealth(stats), week: null, failures: [] }
+  const { tasks, ...stats } = registerStats({ teams, range: pick.range, now: new Date(at), zone: TimeZone.UTC, ownerMarker: 'owner', ...(session === undefined ? {} : { session }) })
+  const list = pick.list === null ? null : { kind: pick.list, rows: listsOf(tasks, TimeZone.UTC)[pick.list] }
+  return { kind: 'stats', scope: pick.scope, range: pick.range, teams: ['acme', 'tools'], stats, health: registerHealth(stats), list, week: null, failures: [] }
 }
+
+/** T4 to T9 as teamrig folds them: T4 and T6 p1, the rest p2; T4, T5 and T7 due, T6, T8 and T9 not. */
+const PLANNED = readRegister(
+  text([
+    createLine('T9', { at: NOW - DAY, by: 'lead', owner: 'api', priority: 2 }),
+    createLine('T8', { at: NOW - DAY, by: 'lead', owner: 'api', priority: 2 }),
+    createLine('T5', { at: NOW - DAY, by: 'lead', owner: 'api', priority: 2, due: '2026-10-16' }),
+    createLine('T7', { at: NOW - DAY, by: 'lead', owner: 'api', priority: 2, due: '2026-10-15' }),
+    createLine('T6', { at: NOW - DAY, by: 'lead', owner: 'api', priority: 1 }),
+    createLine('T4', { at: NOW - DAY, by: 'lead', owner: 'api', priority: 1, due: '2026-10-20' }),
+  ]),
+).state.tasks
+
+/** `id` of PLANNED as `team` holds it. */
+function plannedIn(team: string, id: string): StatsTask {
+  const task = PLANNED.get(id)
+  if (task === undefined) throw new Error(`no ${id} in PLANNED`)
+  return { team, task }
+}
+
+const planned = (id: string): StatsTask => plannedIn('acme', id)
 
 /** The fake disk with each path whose next reads fail, by path, until the test clears it. */
 class FailingFiles implements Files {
@@ -150,16 +172,16 @@ describe('LiveStats', () => {
   test("a team's scope folds it and the teams under it, reading only their registers; a session's folds its tasks in its team", async () => {
     const disk = teamsDisk()
     const { live, pick, views } = fakeStats(disk)
-    pick.value = { scope: { kind: 'team', team: 'tools' }, range: '30d' }
+    pick.value = { scope: { kind: 'team', team: 'tools' }, range: '30d', list: null }
     await live.refresh()
     expect(views).toEqual([folded([TOOLS], pick.value)])
     expect(disk.reads).not.toContain(OWN_EVENTS)
 
-    pick.value = { scope: { kind: 'team', team: 'acme' }, range: 'all' }
+    pick.value = { scope: { kind: 'team', team: 'acme' }, range: 'all', list: null }
     await live.refresh()
     expect(views.at(-1)).toEqual(folded([ACME, TOOLS], pick.value))
 
-    pick.value = { scope: { kind: 'session', team: 'acme', session: 'api' }, range: '30d' }
+    pick.value = { scope: { kind: 'session', team: 'acme', session: 'api' }, range: '30d', list: null }
     disk.reads.length = 0
     await live.refresh()
     expect(views.at(-1)).toEqual(folded([ACME], pick.value, NOW, { team: 'acme', session: 'api' }))
@@ -169,9 +191,9 @@ describe('LiveStats', () => {
   test('a scope naming a team not in the tree folds the whole tree', async () => {
     const disk = teamsDisk()
     const { live, pick, views } = fakeStats(disk)
-    pick.value = { scope: { kind: 'team', team: 'other' }, range: '7d' }
+    pick.value = { scope: { kind: 'team', team: 'other' }, range: '7d', list: null }
     await live.refresh()
-    pick.value = { scope: { kind: 'session', team: 'gone', session: 'dev' }, range: '7d' }
+    pick.value = { scope: { kind: 'session', team: 'gone', session: 'dev' }, range: '7d', list: null }
     await live.refresh()
     expect(views).toEqual([folded([ACME, TOOLS], TREE)])
     expect(disk.reads).not.toContain(OTHER_EVENTS)
@@ -192,13 +214,36 @@ describe('LiveStats', () => {
     expect(later.kind === 'stats' ? [later.health.ownerDecisions.count, later.stats.waits.ownerDecisions.oldestDays] : []).toEqual([1, (DAY + TICK_MS) / DAY])
   })
 
+  test("a Health tile's pick publishes the tasks behind its count as slim rows, never the register's tasks; another list writes again with no read and no fold", async () => {
+    const disk = teamsDisk()
+    const { live, pick, views } = fakeStats(disk)
+    pick.value = { ...TREE, list: 'ownerDecisions' }
+    await live.refresh()
+    const first = views.at(-1)
+    expect(first).toEqual(folded([ACME, TOOLS], pick.value))
+    const decisions = first?.kind === 'stats' ? first.list : undefined
+    expect(decisions).toEqual({ kind: 'ownerDecisions', rows: [{ team: 'acme', id: 'T2', title: 'Pick the database', owner: 'lead', status: 'waiting', priority: 3, due: null }] })
+    expect(first?.kind === 'stats' ? Object.keys(first.stats) : ['no stats']).not.toContain('tasks')
+
+    disk.reads.length = 0
+    pick.value = { ...TREE, list: 'closed' }
+    await live.refresh()
+    pick.value = { ...TREE, list: 'ownerDecisions' }
+    await live.refresh()
+    expect(disk.reads).toEqual([])
+    const lists = views.map(view => (view.kind === 'stats' ? view.list : undefined))
+    expect(lists[1]).toEqual({ kind: 'closed', rows: [{ team: 'tools', id: 'T3', title: 'Fix the build', owner: 'dev', status: 'done', priority: 3, due: null }] })
+    // The same row object: the minute's fold was kept, not folded again for another list.
+    expect(lists[2]?.rows[0]).toBe(decisions?.rows[0])
+  })
+
   test("the scope's week sums its teams' week files, a session's its team's", async () => {
     const disk = teamsDisk()
     disk.write(`${ACME_HOME}/state/usage/team.week.json`, weekText(ACME_WEEK))
     disk.write(`${TOOLS_HOME}/state/usage/team.week.json`, weekText(TOOLS_WEEK))
     const { live, pick, views } = fakeStats(disk)
     await live.refresh()
-    pick.value = { scope: { kind: 'session', team: 'tools', session: 'dev' }, range: '7d' }
+    pick.value = { scope: { kind: 'session', team: 'tools', session: 'dev' }, range: '7d', list: null }
     await live.refresh()
     const weeks = views.map(view => (view.kind === 'stats' ? view.week : undefined))
     expect(weeks).toEqual([weekOf([ACME_WEEK, TOOLS_WEEK], NOW), weekOf([TOOLS_WEEK], NOW)])
@@ -303,7 +348,7 @@ describe('LiveStats', () => {
       open = resolve
     })
     const first = live.refresh()
-    const tools: StatsPick = { scope: { kind: 'team', team: 'tools' }, range: '7d' }
+    const tools: StatsPick = { scope: { kind: 'team', team: 'tools' }, range: '7d', list: null }
     pick.value = tools
     gate.held = null
     await live.refresh()
@@ -329,5 +374,28 @@ describe('LiveStats', () => {
     expect(views.length).toBe(1)
     live.stop()
     expect(timers[0]?.cancelled).toBe(true)
+  })
+})
+
+describe('listsOf', () => {
+  const NONE: StatsTasks = { active: [], opened: [], closed: [], overdue: [], overdueP1: [], ownerDecisions: [] }
+  const ids = (rows: readonly { readonly id: string }[]) => rows.map(row => row.id)
+
+  test('lists each count p1 first, then by due date, undated last, then the oldest task first', () => {
+    const lists = listsOf({ ...NONE, active: ['T9', 'T8', 'T5', 'T7', 'T6', 'T4'].map(planned) }, TimeZone.UTC)
+    expect(ids(lists.active)).toEqual(['T4', 'T6', 'T7', 'T5', 'T8', 'T9'])
+    expect(lists.active[0]).toEqual({ team: 'acme', id: 'T4', title: 'task T4', owner: 'api', status: 'open', priority: 1, due: '2026-10-20' })
+  })
+
+  test("keeps the owner's waits in teamrig's order, the oldest wait first", () => {
+    const lists = listsOf({ ...NONE, ownerDecisions: ['T9', 'T4', 'T6'].map(planned) }, TimeZone.UTC)
+    expect(ids(lists.ownerDecisions)).toEqual(['T9', 'T4', 'T6'])
+  })
+
+  test("a task in two lists is one row in both; another team's task of the same id is its own row", () => {
+    const lists = listsOf({ ...NONE, overdue: [planned('T4')], overdueP1: [planned('T4')], opened: [plannedIn('tools', 'T4')] }, TimeZone.UTC)
+    expect(lists.overdueP1[0]).toBe(lists.overdue[0])
+    expect(lists.opened[0]).not.toBe(lists.overdue[0])
+    expect(lists.opened[0]?.team).toBe('tools')
   })
 })

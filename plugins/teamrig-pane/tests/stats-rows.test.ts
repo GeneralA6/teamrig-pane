@@ -2,13 +2,13 @@
 // two a row where they fit, the Flow section's header and fold, its day rows, charts, limit and split marks, the WARN
 // lines of unread team folders, and the notes when no numbers show.
 import { describe, expect, test } from 'claude-code/testing'
-import { readEvents, registerStats, TimeZone, type ActiveCounts, type RegisterHealth, type RegisterStats, type StatsDay } from '../hooks/core/read/index'
+import { readEvents, registerStats, TimeZone, type ActiveCounts, type RegisterHealth, type StatsDay } from '../hooks/core/read/index'
 import type { Block, Row, Span } from '../hooks/rows'
 import { activeChart, bar } from '../hooks/stats-chart'
 import { DAY_ROWS, FLOW_KEY, dayLabel, isSectionOpen, rangeLabel, statsBlocks } from '../hooks/stats-rows'
 import type { TeamWeek } from '../hooks/team'
 import { cells } from '../hooks/width'
-import type { StatsView } from '../types'
+import type { StatsNumbers, StatsView } from '../types'
 import { createLine, NOW, statusLine } from './fixtures'
 
 const DAY = 24 * 3_600_000
@@ -17,8 +17,8 @@ const NARROW = 40
 
 const LINES = [createLine('T1', { at: NOW - 3 * DAY, by: 'lead', owner: 'api', title: 'Add the route' }), statusLine('T1', 'api', NOW - 2 * DAY, 'in-progress')]
 const EVENTS = readEvents(LINES.map(line => `${line}\n`).join('')).events
-/** teamrig's fold of one small register: the fields a test does not set. */
-const BASE: RegisterStats = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
+/** teamrig's fold of one small register less its tasks, as the view holds it: the fields a test does not set. */
+const { tasks, ...BASE } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
 /** The design's Health of 10-31: four red, one amber. */
 const HEALTH: RegisterHealth = {
   closeOpen: { level: 'bad', ratio: 0.79 },
@@ -33,7 +33,7 @@ type Folded = Extract<StatsView, { kind: 'stats' }>
 
 /** The tab's numbers for the tree of acme and tools, the 7 days, no week and no failure, unless `over` sets them. */
 function viewOf(over: Partial<Folded> = {}): Folded {
-  return { kind: 'stats', scope: { kind: 'tree' }, range: '7d', teams: ['acme', 'tools'], stats: BASE, health: HEALTH, week: null, failures: [], ...over }
+  return { kind: 'stats', scope: { kind: 'tree' }, range: '7d', teams: ['acme', 'tools'], stats: BASE, health: HEALTH, list: null, week: null, failures: [], ...over }
 }
 
 /** An October day: what opened and closed on it, five tasks open at its end. */
@@ -197,7 +197,7 @@ describe('statsBlocks: Health', () => {
 })
 
 describe('statsBlocks: Flow', () => {
-  const stats: RegisterStats = { ...BASE, days: WEEK_DAYS, opened: 540, closedTasks: 428, droppedTasks: 3, net: 112 }
+  const stats: StatsNumbers = { ...BASE, days: WEEK_DAYS, opened: 540, closedTasks: 428, droppedTasks: 3, net: 112 }
 
   test('heads the section with its range and headline, open by default, a press on it folding it', () => {
     const block = blockOf(statsBlocks(viewOf({ stats }), [], WIDE), FLOW_KEY)
@@ -274,7 +274,7 @@ describe('statsBlocks: Flow', () => {
   test("marks a split in the range on a team's scope, never on the tree's or before the range", () => {
     const split = { day: '2026-10-28', from: 'acme', to: 'tools', tasks: 412 }
     const early = { day: '2026-10-01', from: 'acme', to: 'tools', tasks: 2 }
-    const splits: RegisterStats = { ...stats, splits: [early, split] }
+    const splits: StatsNumbers = { ...stats, splits: [early, split] }
     const card = flowCard(viewOf({ stats: splits, scope: { kind: 'team', team: 'tools' } }))
     expect(card.filter(row => row.key.includes(':split:')).map(lineOf)).toEqual(['  before 10-28: tree only, 412 tasks moved acme -> tools'])
     expect(card.slice(0, 2).map(row => row.key)).toEqual([`${FLOW_KEY}:split:0`, `${FLOW_KEY}:active:gap`])

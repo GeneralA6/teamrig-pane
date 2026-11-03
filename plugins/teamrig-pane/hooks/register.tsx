@@ -58,6 +58,7 @@ import type {
   SetupView,
   Snapshot,
   StatsChoice,
+  StatsListKind,
   StatsView,
   TaskDetail,
   TaskRow,
@@ -282,7 +283,7 @@ const NO_START: MeetingStart | null = null
 /** What the last [Start meeting] press answered (meetings.ts): cleared at each session start and each switch to the view. */
 const meetingStart = atom({ plugin: 'teamrig-pane', key: 'meetingStart' } as const, NO_START)
 /** The Stats tab's numbers (stats-source.ts) are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when StatsView or the core's RegisterStats or RegisterHealth changes shape. */
-const STATS_SHAPE = 'stats-v1'
+const STATS_SHAPE = 'stats-v2'
 const STATS_READING: StatsView = { kind: 'reading' }
 const NO_TEAM_STATS: StatsView = { kind: 'no-team' }
 const stats = atom({ plugin: 'teamrig-pane', key: 'stats' } as const, STATS_READING, { shape: STATS_SHAPE })
@@ -292,6 +293,9 @@ const statsScope = atom({ plugin: 'teamrig-pane', key: 'statsScope' } as const, 
 const FIRST_RANGE: StatsRange = '7d'
 /** The days the Stats tab folds: the last 7 until a press on its range row picks others. */
 const statsRange = atom({ plugin: 'teamrig-pane', key: 'statsRange' } as const, FIRST_RANGE)
+const NO_STATS_LIST: StatsListKind | null = null
+/** The Health count whose tasks the Stats tab lists in place of its numbers: none until a tile's press picks one, back clears it. */
+const statsList = atom({ plugin: 'teamrig-pane', key: 'statsList' } as const, NO_STATS_LIST)
 /** The Stats tab's sections the person opened or closed against their default (stats-rows.ts isSectionOpen), by key: a press on a header flips one. */
 const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as const, NOTHING_TOGGLED)
 const NO_MEET: MeetAnswer | null = null
@@ -680,7 +684,7 @@ export const register: Register = on => {
               {
                 folders,
                 isShown: async () => (await read($, view)) === 'stats' && (await read($, size)) !== 'minimized',
-                choice: async () => ({ scope: await read($, statsScope), range: await read($, statsRange) }),
+                choice: async () => ({ scope: await read($, statsScope), range: await read($, statsRange), list: await read($, statsList) }),
                 publish: async shown => {
                   await update($, stats, () => shown)
                 },
