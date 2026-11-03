@@ -9,9 +9,9 @@
 // part after a blank row, a chart under a legend whose title is bold; a team's charts say where a split moved tasks
 // out of them, as only the tree's are whole before it. A team folder the last read could not read is a WARN line. Pure.
 import type { ThemeKey } from 'claude-code'
-import type { StatsChoice, StatsView } from '../types'
+import type { StatsChoice, StatsNumbers, StatsView } from '../types'
 import { joined } from './card'
-import { STATS_RANGES, type ActiveStatus, type HealthLevel, type RegisterHealth, type RegisterStats, type StatsDay, type StatsRange } from './core/read/index'
+import { STATS_RANGES, type ActiveStatus, type HealthLevel, type RegisterHealth, type StatsDay, type StatsRange } from './core/read/index'
 import { FOLDED_MARK, single, type Block, type Row, type Span, type StatsPress } from './rows'
 import { activeChart, bar, BURN_GLYPH, burnUpChart, FLOW_GLYPH, flowChart, type BurnSeries, type Chart, type LineSeries } from './stats-chart'
 import type { TeamWeek } from './team'
@@ -263,7 +263,7 @@ function dayRows(days: readonly StatsDay[], width: number): Row[] {
 }
 
 /** On a team's or a session's scope, each split in the range: before it only the tree's charts hold the tasks it moved. */
-function splitRows(scope: StatsChoice, stats: RegisterStats): Row[] {
+function splitRows(scope: StatsChoice, stats: StatsNumbers): Row[] {
   if (scope.kind === 'tree') return []
   const first = stats.days[0]?.day ?? ''
   return stats.splits

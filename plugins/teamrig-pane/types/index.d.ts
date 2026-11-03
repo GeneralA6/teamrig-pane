@@ -320,11 +320,39 @@ export type StatsChoice =
   | { readonly kind: 'session'; readonly team: string; readonly session: string }
 
 /**
+ * teamrig's stats fold less the tasks behind its counts (core register/stats.ts RegisterStats.tasks): the view keeps
+ * only the list a Health tile's press opened, as slim rows (StatsList), never the register's tasks, which are heavy.
+ */
+export type StatsNumbers = Omit<import('../hooks/core/read/index').RegisterStats, 'tasks'>
+
+/**
+ * The tasks behind a Health count a tile's press lists (core register/stats.ts StatsTasks): the active ones, those
+ * opened or closed in the range, the overdue ones, their p1 part, and those waiting on the owner.
+ */
+export type StatsListKind = keyof import('../hooks/core/read/index').StatsTasks
+
+/** One task of a Stats list: the team that holds it now and the fields its row draws. */
+export type StatsListRow = {
+  readonly team: string
+  readonly id: string
+  readonly title: string
+  readonly owner: string
+  readonly status: TaskStatus
+  readonly priority: number
+  /** As teamrig keeps it: `YYYY-MM-DD` or `YYYY-MM-DD HH:MM`, UTC; a bare day means its end. */
+  readonly due: string | null
+}
+
+/** The tasks behind one Health count (hooks/stats-source.ts listsOf): p1 first, then by due date, but the owner's waits the oldest first. */
+export type StatsList = { readonly kind: StatsListKind; readonly rows: readonly StatsListRow[] }
+
+/**
  * The Stats tab's numbers (hooks/stats-source.ts): the scope they fold, a team no longer in the tree folded as the
  * tree; the range; the tree's teams, root first and depth first, for the scope presses; teamrig's stats fold and its
- * Health tiles; the scope's week, its teams' week files summed (hooks/team.ts weekOf), null for none this week; and
- * the team folders and registers whose read failed. Or that it is not read yet, that the pane's team has no config
- * teamrig takes, or why the team folders could not be listed or the pane's own team read before any read of it worked.
+ * Health tiles; the tasks behind the count a tile's press picked, null while none is; the scope's week, its teams'
+ * week files summed (hooks/team.ts weekOf), null for none this week; and the team folders and registers whose read
+ * failed. Or that it is not read yet, that the pane's team has no config teamrig takes, or why the team folders could
+ * not be listed or the pane's own team read before any read of it worked.
  */
 export type StatsView =
   | {
@@ -332,8 +360,9 @@ export type StatsView =
       readonly scope: StatsChoice
       readonly range: import('../hooks/core/read/index').StatsRange
       readonly teams: readonly string[]
-      readonly stats: import('../hooks/core/read/index').RegisterStats
+      readonly stats: StatsNumbers
       readonly health: import('../hooks/core/read/index').RegisterHealth
+      readonly list: StatsList | null
       readonly week: import('../hooks/team').TeamWeek | null
       readonly failures: readonly TeamFolderFailure[]
     }
@@ -606,6 +635,8 @@ declare module 'claude-code' {
       statsScope: StatsChoice
       /** The days the Stats tab folds (its range row's presses pick them). */
       statsRange: import('../hooks/core/read/index').StatsRange
+      /** The Health count whose tasks the Stats tab lists in place of its numbers (a tile's press picks it, back clears it); null for the numbers. */
+      statsList: StatsListKind | null
       /** The Stats tab's sections the person opened or closed against their default (hooks/stats-rows.ts isSectionOpen), by key. */
       statsToggled: readonly string[]
     }
