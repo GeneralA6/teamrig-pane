@@ -71,9 +71,9 @@ export function isSectionOpen(key: string, toggled: readonly string[]): boolean 
   return OPEN_SECTIONS.includes(key) !== toggled.includes(key)
 }
 
-/** A range as its press reads: `7 d`, `all`. */
+/** A range as its press reads, its count apart from its unit: `7 d`, `1 y`, `all`. */
 export function rangeLabel(range: StatsRange): string {
-  return range === 'all' ? 'all' : `${range.slice(0, -1)} d`
+  return range === 'all' ? 'all' : `${range.slice(0, -1)} ${range.slice(-1)}`
 }
 
 /** A `YYYY-MM-DD` day as a day row reads it: `Sat 10-31`. */

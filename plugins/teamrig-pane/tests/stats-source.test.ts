@@ -159,7 +159,7 @@ describe('LiveStats', () => {
     await live.refresh()
     expect(views.at(-1)).toEqual(folded([ACME, TOOLS], pick.value))
 
-    pick.value = { scope: { kind: 'session', team: 'acme', session: 'api' }, range: '14d' }
+    pick.value = { scope: { kind: 'session', team: 'acme', session: 'api' }, range: '30d' }
     disk.reads.length = 0
     await live.refresh()
     expect(views.at(-1)).toEqual(folded([ACME], pick.value, NOW, { team: 'acme', session: 'api' }))
