@@ -2,8 +2,9 @@
 // the active tasks at each day's end as a line of box-drawing strokes, a burn-up of the work created and closed whose
 // gap is the backlog, the cumulative flow (the active work stacked by status), and a bar in eighths of a cell. Pure:
 // days in, rows out, each row's cells in runs that name the series they draw so its rows can colour them. A chart fits
-// its days into the width it gets: up to MAX_DAY_CELLS columns a day while they fit, past that the days in even
-// buckets, each drawn at its last day's end.
+// its days into the width it gets: MIN_DAY_CELLS to MAX_DAY_CELLS columns a day while they fit, past that the days in
+// even buckets of MIN_DAY_CELLS columns, each drawn at its last day's end. The burn-up and the flow leave each point's
+// last column blank, so two days' bars never touch; the active line runs through it.
 import { STATS_ACTIVE_STATUSES, type ActiveCounts, type ActiveStatus, type StatsDay } from './core/read/index'
 
 /** A run of a chart row's cells in one series' look; `series` null for cells no series fills, drawn blank. */
@@ -32,6 +33,8 @@ export const LINE_HEIGHT = 8
 export const FLOW_HEIGHT = 10
 /** The most columns one day takes, so a short range does not stretch into wide steps. */
 export const MAX_DAY_CELLS = 4
+/** The fewest columns one point takes: its bar and the blank column after it. */
+export const MIN_DAY_CELLS = 2
 /** The fewest blank cells between two day labels. */
 export const LABEL_GAP = 1
 /** The burn-up's cell for each of its series. */
@@ -69,19 +72,21 @@ export function bar(value: number, max: number, width: number): string {
 
 /**
  * `daily` (one point a day, oldest first) fitted into `room` columns: each day its own point, as many columns each as
- * fit up to MAX_DAY_CELLS, while there is a column a day; past that, `room` even buckets of days, each at its last
- * day's value and day (a day's end, as every chart here plots), at the limit if any of its days was.
+ * fit up to MAX_DAY_CELLS, while there are MIN_DAY_CELLS columns a day; past that, even buckets of days MIN_DAY_CELLS
+ * columns each, each at its last day's value and day (a day's end, as every chart here plots), at the limit if any of
+ * its days was. A room under MIN_DAY_CELLS gives its one column to each point.
  */
 export function fitPoints<V>(daily: readonly ChartPoint<V>[], room: number): Fit<V> {
   const count = daily.length
-  if (count <= room) return { points: daily, per: Math.min(MAX_DAY_CELLS, Math.max(1, Math.floor(room / Math.max(count, 1)))) }
-  const points = Array.from({ length: room }, (_, index) => daily.slice(Math.floor((index * count) / room), Math.floor(((index + 1) * count) / room))).flatMap(
+  const slots = Math.max(1, Math.floor(room / MIN_DAY_CELLS))
+  if (count <= slots) return { points: daily, per: Math.min(MAX_DAY_CELLS, Math.max(1, Math.floor(room / Math.max(count, 1)))) }
+  const points = Array.from({ length: slots }, (_, index) => daily.slice(Math.floor((index * count) / slots), Math.floor(((index + 1) * count) / slots))).flatMap(
     (bucket): ChartPoint<V>[] => {
       const last = bucket[bucket.length - 1]
       return last === undefined ? [] : [{ day: last.day, atLimit: bucket.some(point => point.atLimit), value: last.value }]
     },
   )
-  return { points, per: 1 }
+  return { points, per: Math.max(1, Math.min(MIN_DAY_CELLS, room)) }
 }
 
 /**
@@ -92,7 +97,7 @@ export function activeChart(days: readonly StatsDay[], width: number): Chart<Lin
   const values = days.map(day => activeTotal(day.active))
   const top = Math.max(0, ...values)
   const height = Math.min(LINE_HEIGHT, top + 1)
-  return chartOf(days, values, levelLabels(top, height), width, columns => lineColumns(columns.map(value => levelOf(value, top, height))))
+  return chartOf(days, values, levelLabels(top, height), width, false, columns => lineColumns(columns.map(value => levelOf(value, top, height))))
 }
 
 /**
@@ -108,7 +113,7 @@ export function burnUpChart(days: readonly StatsDay[], width: number): Chart<Bur
   })
   const top = Math.max(0, ...values.map(value => value.created))
   const height = Math.min(LINE_HEIGHT, top + 1)
-  return chartOf(days, values, levelLabels(top, height), width, columns =>
+  return chartOf(days, values, levelLabels(top, height), width, true, columns =>
     columns.map((value): Column<BurnSeries> => {
       const createdAt = levelOf(value.created, top, height)
       const closedAt = levelOf(value.closed, top, height)
@@ -134,6 +139,7 @@ export function flowChart(days: readonly StatsDay[], width: number): Chart<Activ
     days.map(day => day.active),
     labels,
     width,
+    true,
     columns => columns.map(active => flowColumn(active, top, height)),
   )
 }
@@ -184,13 +190,15 @@ function lineColumns(levels: readonly number[]): Column<LineSeries>[] {
 
 /**
  * A chart of `values` (one a day of `days`) in `width` cells: the axis of `labels` (top to bottom, one a row), the
- * points fitted into the room right of it, each point's value repeated over its columns for `draw` to turn into cells.
+ * points fitted into the room right of it, each point's value repeated over its columns for `draw` to turn into cells;
+ * `gapped`, each point's last column left blank where a point has MIN_DAY_CELLS or more.
  */
 function chartOf<V, S extends string>(
   days: readonly StatsDay[],
   values: readonly V[],
   labels: readonly number[],
   width: number,
+  gapped: boolean,
   draw: (columns: readonly V[]) => Column<S>[],
 ): Chart<S> {
   const digits = Math.max(1, ...labels.map(label => String(label).length))
@@ -201,7 +209,8 @@ function chartOf<V, S extends string>(
     return value === undefined ? [] : [{ day: day.day, atLimit: day.atLimit, value }]
   })
   const { points, per } = fitPoints(daily, room)
-  const columns = draw(points.flatMap(point => Array.from({ length: per }, () => point.value)))
+  const drawn = draw(points.flatMap(point => Array.from({ length: per }, () => point.value)))
+  const columns = gapped && per >= MIN_DAY_CELLS ? drawn.map((column, index) => (index % per === per - 1 ? new Map<number, Cell<S>>() : column)) : drawn
   const rows = labels.map((label, row): ChartRow<S> => {
     const level = labels.length - 1 - row
     return { axis: String(label).padStart(digits) + AXIS_END, runs: runsOf(columns.map(column => column.get(level) ?? null)) }
