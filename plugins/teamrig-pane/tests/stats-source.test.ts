@@ -5,7 +5,7 @@
 // again after it; a folder or register whose read fails drawn as it last read, or left out before one, and named.
 import { describe, expect, test } from 'claude-code/testing'
 import type { StatsView } from '../types'
-import { TEAM_WEEK_FORMAT, TimeZone, readEvents, readRegister, registerHealth, registerStats, type StatsScope, type StatsTask, type StatsTasks, type StatsTeam, type TeamWeekSummary } from '../hooks/core/read/index'
+import { TEAM_WEEK_FORMAT, TimeZone, dueTime, readEvents, readRegister, registerHealth, registerStats, type StatsScope, type StatsTask, type StatsTasks, type StatsTeam, type TeamWeekSummary } from '../hooks/core/read/index'
 import { POLL_MS, TICK_MS } from '../hooks/live'
 import type { TeamFiles } from '../hooks/places'
 import type { FileStamp, Files } from '../hooks/source'
@@ -397,5 +397,23 @@ describe('listsOf', () => {
     expect(lists.overdueP1[0]).toBe(lists.overdue[0])
     expect(lists.opened[0]).not.toBe(lists.overdue[0])
     expect(lists.opened[0]?.team).toBe('tools')
+  })
+
+  test("parses each task's due once, however many lists it is in and however long they are", () => {
+    const zone = TimeZone.of('Asia/Jerusalem')
+    if (zone === undefined) throw new Error('no Asia/Jerusalem zone on this system')
+    const instant = zone.instant.bind(zone)
+    let parses = 0
+    zone.instant = (wall, secondMs) => {
+      parses += 1
+      return instant(wall, secondMs)
+    }
+    const all = ['T9', 'T8', 'T5', 'T7', 'T6', 'T4'].map(planned)
+    for (const { task } of all) dueTime(task, zone)
+    const once = parses
+    parses = 0
+    listsOf({ ...NONE, active: all, opened: all, closed: all }, zone)
+    expect(once).toBe(3)
+    expect(parses).toBe(once)
   })
 })
