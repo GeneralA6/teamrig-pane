@@ -689,13 +689,13 @@ session, whose press goes back to its team) and the range (7, 30, 90 or 180 days
 | Section | What it shows |
 | --- | --- |
 | Health | Under its heading, a tile a measure, its `●` green, amber or red beside teamrig's words for it (the HEALTH line of `teamrig stats`, but for its `backlog clears` forecast), and the scope's week against its plan. Each count of tasks above none (`64 closed`, `81 opened`, `308 active`, the overdue count and its `p1 10`, the owner decisions) is a press that lists those tasks (see below) |
+| Flow | Its header is its range and headline, `last 7 d · opened · closed (dropped) · net`, so it answers folded; a press folds it (`▸`) and opens it. Open: the active tasks at each day's end, the newest 14 days with bars of what opened and closed, the burn-up and the cumulative flow over the range, each part after a blank row and each day's bar a blank column from the next (no `$` limit-day marks yet: the pane has no source for those days) |
 
 A press on a Health count draws its tasks in place of the numbers, under `‹ back` and a trail such as
 `Stats › Overdue (35)`: a dim line saying what the list holds in the scope (and the range, for the opened and closed
 ones) and its order (p1 first, then by due date; the owner decisions the oldest wait first), then each task's row over a
 dim line of its owner, priority, due date and, for another team's task, that team. A press on one of the own team's
 tasks that the pane holds opens its page; `b` or `‹ back` returns to the numbers. An empty list says `No tasks.`
-| Flow | Its header is its range and headline, `last 7 d · opened · closed (dropped) · net`, so it answers folded; a press folds it (`▸`) and opens it. Open: the active tasks at each day's end, the newest 14 days with bars of what opened and closed, the burn-up and the cumulative flow over the range, each part after a blank row and each day's bar a blank column from the next (no `$` limit-day marks yet: the pane has no source for those days) |
 
 It reads files only, every 3 seconds while it shows and at once on a press: the team folders, and each scoped team's
 register history once a scope takes it in. A folder or register it cannot read is a `WARN` line naming it, its

@@ -92,7 +92,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   settles, the next one marked and a missed one red. A press opens its card (what it is about, who joins, its tasks
   with their status, its brief), and a scheduled one's `[Start meeting]` runs `teamrig meeting start` for you.
 - **Stats:** the tree's registers folded as `teamrig stats` folds them, for the whole tree, a team or a session over 7,
-  14 or 30 days or all: Health tiles in green, amber and red, then the flow of work (opened, closed, net, the active
+  30, 90 or 180 days, a year or all: Health tiles in green, amber and red, then the flow of work (opened, closed, net, the active
   tasks by day, a burn-up and the cumulative flow), a section a press folds.
   Press the switch, or `t`, `d`, `g`, `u`, `e`, `j` and `r` while the pane holds the keyboard.
 
