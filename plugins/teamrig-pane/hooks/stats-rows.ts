@@ -146,10 +146,7 @@ function rangeRow(range: StatsRange): Row {
   )
 }
 
-/**
- * The scope's week as a tile: used, where its plan puts it by now (pace) and the plan. Amber ahead of pace, red past
- * the plan; with no plan, amber once any is used.
- */
+/** `text` as plain words in a tile's value: no press. */
 function plain(text: string): TilePart {
   return { text, opens: null }
 }
@@ -161,6 +158,10 @@ function countPart(text: string, count: number, list: StatsListKind): TilePart {
 
 const COMMA = plain(', ')
 
+/**
+ * The scope's week as a tile: used, where its plan puts it by now (pace) and the plan. Amber ahead of pace, red past
+ * the plan; with no plan, amber once any is used.
+ */
 function weekTile(week: TeamWeek): Tile {
   if (week.plannedPct <= 0) return { level: week.usedPct > 0 ? 'warn' : 'good', label: 'week', parts: [plain(`${weekPct(week.usedPct)}, no plan`)] }
   const pace = (week.plannedPct * week.elapsedPct) / 100
