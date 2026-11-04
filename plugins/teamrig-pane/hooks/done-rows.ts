@@ -6,10 +6,9 @@
 // register.tsx draws the week steps (‹ prev, next ›) over it. Pure.
 import type { Snapshot, TaskRow, ViewMode } from '../types'
 import type { TimeZone } from './core/read/index'
-import { doneWeek, type DoneWeek } from './done'
+import { doneWeek, weekClockOf, type DoneWeek } from './done'
 import { clockWords, dayWords, storedDayWords } from './meta'
 import { GLYPH, GLYPH_COLOR, indentOf, problemBlocks, readingBlock, single, TITLE_GAP, type Block, type Row } from './rows'
-import { clockOf } from './zone'
 
 /** The command that lists the finished tasks the pane no longer holds. */
 export const OLDER_DONE_COMMAND = 'teamrig list --status done,dropped'
@@ -59,7 +58,7 @@ export function doneBlocks(snap: Snapshot, mode: ViewMode, week: string): Block[
   const reading = readingBlock(snap)
   if (reading !== null) return [reading]
   const owner = mode === 'mine' ? snap.area : null
-  const clock = clockOf(snap)
+  const clock = weekClockOf(snap)
   const shown = doneWeek(snap.tasks, owner, week, clock)
   const blocks: Block[] = [...problemBlocks(snap), headBlock(owner ?? 'all', shown)]
   shown.days.forEach((day, i) => {
