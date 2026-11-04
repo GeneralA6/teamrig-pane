@@ -141,6 +141,11 @@ export type Snapshot = {
    */
   timeZone: string
   /**
+   * Who the owner is in a task's `source`: the team config's `register.ownerSource` (default `owner`), which the Done
+   * page's Owner asked group reads (core register/done-groups.ts).
+   */
+  ownerSource: string
+  /**
    * Each session's cards on the owner, keyed by its id, as the last poll found them (hooks/owner-cards.ts): recounted
    * when the register moves and, while a card is put off, each minute, so one comes back with no file change. A
    * session with none is absent.
@@ -152,8 +157,8 @@ export type Snapshot = {
   now: number
 }
 
-/** What the team config sets that the snapshot carries: the NOT PICKED UP hours and the team's zone. */
-export type DrawnSettings = Pick<Snapshot, 'notPickedUpAfterHours' | 'timeZone'>
+/** What the team config sets that the snapshot carries: the NOT PICKED UP hours, the team's zone and the owner's marker. */
+export type DrawnSettings = Pick<Snapshot, 'notPickedUpAfterHours' | 'timeZone' | 'ownerSource'>
 
 /** What the team config says about the owner's waits: its `register.ownerSource` and `register.requireDecisionCard`. */
 export type OwnerSettings = { readonly ownerSource: string; readonly requireDecisionCard: boolean }

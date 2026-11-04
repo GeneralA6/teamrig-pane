@@ -301,6 +301,7 @@ describe('view', () => {
     expect(sameView(one, { ...one, now: Date.UTC(2026, 9, 14, 0, 1) })).toBe(false)
     expect(sameView(base, { ...base, notPickedUpAfterHours: NOT_PICKED_UP_HOURS * 2 })).toBe(false)
     expect(sameView(base, { ...base, timeZone: 'Asia/Jerusalem' })).toBe(false)
+    expect(sameView(base, { ...base, ownerSource: 'boss' })).toBe(false)
     const cards = { po: { due: [{ id: 'T1', title: 'Ship it?' }], later: [] } }
     expect(sameView({ ...base, ownerCards: cards }, { ...base, ownerCards: { po: { due: [{ id: 'T1', title: 'Ship it?' }], later: [] } } })).toBe(true)
     expect(sameView(base, { ...base, ownerCards: cards })).toBe(false)
@@ -1389,10 +1390,11 @@ describe('source', () => {
     expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...SNAPSHOT_SETTINGS, now: NOW })
   })
 
-  test("each snapshot carries the team config's settings the source was made with: its NOT PICKED UP hours and zone", async () => {
-    const drawn = { notPickedUpAfterHours: 48, timeZone: 'Asia/Jerusalem' }
+  test("each snapshot carries the team config's settings the source was made with: its NOT PICKED UP hours, zone and owner marker", async () => {
+    const drawn = { notPickedUpAfterHours: 48, timeZone: 'Asia/Jerusalem', ownerSource: 'boss' }
     const source = new TaskRegisterSource(new MemoryFiles(), PATHS, { ...TEAM_SETTINGS, ...drawn }, null)
-    const settingsOf = (snap: Snapshot | null) => (snap === null ? null : { notPickedUpAfterHours: snap.notPickedUpAfterHours, timeZone: snap.timeZone })
+    const settingsOf = (snap: Snapshot | null) =>
+      snap === null ? null : { notPickedUpAfterHours: snap.notPickedUpAfterHours, timeZone: snap.timeZone, ownerSource: snap.ownerSource }
     expect(settingsOf(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW }))).toEqual(drawn)
     expect(settingsOf(await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW + HOUR, force: true }))).toEqual(drawn)
   })
