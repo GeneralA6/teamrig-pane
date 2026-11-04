@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { TimeZone } from '../hooks/core/read/index'
-import { clockOf, dayOf, machineZoneOf, momentWords, weekAfter, weekOf, zoneNamed } from '../hooks/zone'
+import { clockOf, dayOf, machineZoneOf, momentWords, planWeekOf, weekAfter, weekOf, zoneNamed } from '../hooks/zone'
 import { JERUSALEM, NOW } from './fixtures'
 
 // NOW is Tue 2026-10-13 14:00 UTC: 17:00 IDT in Jerusalem (summer time until 10-25), in the week of Mon 10-12.
@@ -63,5 +63,13 @@ describe('zone', () => {
     expect(weekOf(MONDAY - 60_000, JERUSALEM)).toBe('2026-10-12')
     expect(weekOf(Date.UTC(2026, 9, 25, 22, 0), JERUSALEM)).toBe('2026-10-26')
     expect(weekOf(Date.UTC(2026, 9, 25, 21, 59), JERUSALEM)).toBe('2026-10-19')
+  })
+
+  test("a planning week starts on the weekday of the plan in force, by whole weeks either way; with none, Monday's", () => {
+    const plan = '2026-10-07'
+    expect(['2026-10-07', '2026-10-13', '2026-10-14', '2026-10-06'].map(day => planWeekOf(day, plan))).toEqual(['2026-10-07', '2026-10-07', '2026-10-14', '2026-09-30'])
+    // Across a month, six weeks back: Tue 09-01 is in the week of Wed 08-26.
+    expect(planWeekOf('2026-09-01', plan)).toBe('2026-08-26')
+    expect(planWeekOf('2026-10-13', null)).toBe('2026-10-12')
   })
 })

@@ -2,7 +2,8 @@
 // $.state holds plain data and a TimeZone holds formatters, and a drawing reads the TimeZone back by that name. A
 // stored instant is UTC; the pane prints it on the zone's clock, zone-marked (`14:02 IDT`), and "today" is the
 // zone's day of the snapshot's clock, as in teamrig. A week starts Monday 00:00 in the zone and is named by that
-// Monday's date, as the register's `week` fields are (`2026-10-12`). Pure.
+// Monday's date (`2026-10-12`); a planning week starts on the weekday of the week plan in force, as the register's
+// `week` fields name it (planWeekOf). Pure.
 import type { Snapshot } from '../types'
 import { TimeZone } from './core/read/index'
 
@@ -64,4 +65,14 @@ export function weekOf(ms: number, zone: TimeZone): string {
 /** The week `weeks` weeks after `week` (before it when negative). */
 export function weekAfter(week: string, weeks: number): string {
   return new Date(Date.parse(week) + weeks * WEEK_DAYS * DAY_MS).toISOString().slice(0, 10)
+}
+
+/**
+ * The `YYYY-MM-DD` start of the planning week holding `day` (`YYYY-MM-DD`): `plan`, the week plan in force (core
+ * currentWeek), moved by whole weeks, so every week starts on its weekday as `teamrig plan` counts weeks; with no
+ * plan, the day's Monday week.
+ */
+export function planWeekOf(day: string, plan: string | null): string {
+  if (plan === null) return weekOf(Date.parse(day), TimeZone.UTC)
+  return weekAfter(plan, Math.floor((Date.parse(day) - Date.parse(plan)) / (WEEK_DAYS * DAY_MS)))
 }

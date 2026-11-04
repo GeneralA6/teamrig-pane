@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow } from '../types'
 import { TimeZone, readRegister } from '../hooks/core/read/index'
-import { doneWeek, HELD_DAYS, heldSince, heldWeek, heldWeeks, isHeldFinished, MAX_DONE_ROWS, weekSteps } from '../hooks/done'
+import { doneWeek, HELD_DAYS, heldSince, heldWeek, heldWeeks, isHeldFinished, MAX_DONE_ROWS, weekClockOf, weekSteps, type WeekClock } from '../hooks/done'
 import { doneBlocks, heldText, OLDER_DONE_COMMAND, weekWords } from '../hooks/done-rows'
 import { rowOf } from '../hooks/log'
 import type { Block } from '../hooks/rows'
@@ -19,9 +19,11 @@ function finished(id: string, owner: string, at: number, status: 'done' | 'dropp
 
 // NOW is Tue 2026-10-13 14:00 UTC: its week is the one of Mon 10-12, and the pane holds back to Mon 10-05 14:00.
 const MONDAY = Date.UTC(2026, 9, 12)
-/** NOW on UTC's clock, and on Jerusalem's (17:00 IDT, summer time until 10-25). */
-const AT_NOW = clockAt(NOW)
-const IN_JERUSALEM = clockAt(NOW, JERUSALEM)
+/** NOW on UTC's clock, and on Jerusalem's (17:00 IDT, summer time until 10-25), with no week plan: Monday weeks. */
+const AT_NOW: WeekClock = { ...clockAt(NOW), plan: null }
+const IN_JERUSALEM: WeekClock = { ...clockAt(NOW, JERUSALEM), plan: null }
+/** NOW under a week plan started Wed 10-07: its weeks run Wednesday to Tuesday. */
+const IN_PLAN: WeekClock = { ...AT_NOW, plan: '2026-10-07' }
 const TASKS = rowsOf([
   ...finished('T1', 'po', NOW - HOUR),
   ...finished('T2', 'po', MONDAY, 'dropped'),
@@ -47,6 +49,22 @@ describe('weeks', () => {
     expect(weekSteps('2026-09-28', AT_NOW)).toEqual({ week: '2026-10-05', prev: null, next: '2026-10-12' })
     // T6 closed a minute before the pane stops holding, T7 is open.
     expect(TASKS.filter(task => isHeldFinished(task, NOW)).map(task => task.id)).toEqual(['T1', 'T2', 'T3', 'T4', 'T5'])
+  })
+
+  test('under a week plan the weeks start on its weekday, and a Monday week reads as the plan week holding it', () => {
+    expect(heldWeeks(IN_PLAN)).toEqual({ newest: '2026-10-07', oldest: '2026-09-30' })
+    expect(heldWeek('2026-10-12', IN_PLAN)).toBe('2026-10-07')
+    expect(weekSteps('2026-10-07', IN_PLAN)).toEqual({ week: '2026-10-07', prev: '2026-09-30', next: null })
+    // Wed 10-07 to Tue 10-13 holds Friday's T5 and Sunday's T4 with this week's.
+    expect(idsByDay(doneWeek(TASKS, 'po', '2026-10-07', IN_PLAN))).toEqual([['Tue 10-13', 'T1'], ['Mon 10-12', 'T2'], ['Sun 10-11', 'T4'], ['Fri 10-09', 'T5']])
+  })
+
+  test("the snapshot's week plan is the newest week tag started by now, on the team's clock; none with no tag", () => {
+    // T1 once per week tag; 10-14's plan has not started at NOW.
+    const tagged = (...weeks: (string | null)[]): TaskRow[] => weeks.flatMap(week => TASKS.slice(0, 1).map(task => ({ ...task, week })))
+    const snap = { now: NOW, timeZone: 'UTC', tasks: tagged('2026-09-30', '2026-10-07', '2026-10-14', null) }
+    expect(weekClockOf(snap).plan).toBe('2026-10-07')
+    expect(weekClockOf({ ...snap, tasks: tagged(null) }).plan).toBe(null)
   })
 })
 

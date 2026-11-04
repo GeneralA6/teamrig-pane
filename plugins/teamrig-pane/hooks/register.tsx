@@ -136,10 +136,10 @@ import {
   type Landing,
   wentTo,
 } from './nav'
-import { weekSteps } from './done'
+import { heldWeeks, weekClockOf, weekSteps } from './done'
 import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
-import { clockOf, machineZoneOf, weekOf, zoneNamed } from './zone'
+import { clockOf, machineZoneOf, zoneNamed } from './zone'
 import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
 import { KEYS_HOTKEY, KEYS_LABEL, keysBlocks } from './keys-page'
 import { pageBlocks } from './page'
@@ -1636,7 +1636,7 @@ export const register: Register = on => {
               label={ARCHIVE_LABEL}
               hotkey="h"
               variant={place.kind === 'done' ? 'primary' : 'secondary'}
-              onPress={() => void go($, current => doneAt(current, weekOf(snap.now, clockOf(snap).zone)))}
+              onPress={() => void go($, current => doneAt(current, heldWeeks(weekClockOf(snap)).newest))}
             />,
             { label: ARCHIVE_LABEL, plain: false, hotkey: 'h' },
           ),
@@ -1855,7 +1855,7 @@ export const register: Register = on => {
     // The Archive page's week between its steps to the week before and after (p, l), each dim where the pane holds no
     // older or newer week. A step changes the page's week in place, so back returns to where the page was opened from.
     const stepTo = (week: string) => () => void go($, current => doneAt(current, week))
-    const steps = place.kind === 'done' ? weekSteps(place.week, clockOf(snap)) : null
+    const steps = place.kind === 'done' ? weekSteps(place.week, weekClockOf(snap)) : null
     const weekText = steps === null ? '' : `week of ${weekWords(steps.week)}`
     const weekRow =
       steps === null

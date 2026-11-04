@@ -1,12 +1,14 @@
 // The finished tasks the pane holds (source.ts: those done or dropped within HELD_DAYS, teamrig's own retention), a
 // week at a time: the Archive page (done-rows.ts) shows one week, newest week first, its days newest first and inside a
-// day the newest first. A week and its days are the team zone's (zone.ts weekOf). The newest week is the one `now`
-// falls in, the oldest the one HELD_DAYS before it: the paging stays inside them, the oldest week cut where the pane
-// stops holding. At most MAX_DONE_ROWS rows a week, with how many more there are. Pure.
-import type { TaskRow } from '../types'
+// day the newest first. A week is a planning week, starting on the weekday of the week plan in force (zone.ts
+// planWeekOf), so a page's week and its plan are the same days; its days are the team zone's. The newest week is the
+// one `now` falls in, the oldest the one HELD_DAYS before it: the paging stays inside them, the oldest week cut where
+// the pane stops holding. At most MAX_DONE_ROWS rows a week, with how many more there are. Pure.
+import type { Snapshot, TaskRow } from '../types'
+import { currentWeek } from './core/read/index'
 import { dayWords } from './meta'
 import { newestFirst } from './view'
-import { dayOf, weekAfter, weekOf, type Clock } from './zone'
+import { clockOf, dayOf, planWeekOf, weekAfter, type Clock } from './zone'
 
 /** Most rows the Archive page lists for a week; past it a dim line counts the rest. */
 export const MAX_DONE_ROWS = 50
@@ -32,23 +34,44 @@ export function isHeldFinished(task: TaskRow, now: number): boolean {
   return isFinished(task) && Date.parse(task.statusAt) >= heldSince(now)
 }
 
+/**
+ * A clock with the week plan in force (core currentWeek: the newest week tag started by now), whose weekday the pages'
+ * weeks start on; null when no task carries one, and the weeks are Monday's.
+ */
+export type WeekClock = Clock & { readonly plan: string | null }
+
+/** The snapshot's clock, with the week plan in force among its tasks. */
+export function weekClockOf(snap: Pick<Snapshot, 'now' | 'timeZone' | 'tasks'>): WeekClock {
+  const clock = clockOf(snap)
+  return { ...clock, plan: currentWeek(snap.tasks, new Date(snap.now), clock.zone) }
+}
+
+/** The planning week an instant falls in, by the zone's day of it. */
+export function weekAt(ms: number, { zone, plan }: WeekClock): string {
+  return planWeekOf(dayOf(ms, zone), plan)
+}
+
 /** The weeks the pane holds finished tasks in: the newest (`now`'s) and the oldest (HELD_DAYS before it). */
 export type HeldWeeks = { newest: string; oldest: string }
 
-export function heldWeeks({ now, zone }: Clock): HeldWeeks {
-  return { newest: weekOf(now, zone), oldest: weekOf(heldSince(now), zone) }
+export function heldWeeks(clock: WeekClock): HeldWeeks {
+  return { newest: weekAt(clock.now, clock), oldest: weekAt(heldSince(clock.now), clock) }
 }
 
-/** `week` moved inside the held weeks: one older than the oldest is the oldest, one newer than the newest the newest. */
-export function heldWeek(week: string, clock: Clock): string {
+/**
+ * The planning week holding `week`'s day (a week from before the plan moved, or a Monday one, reads as the week holding
+ * it), moved inside the held weeks: one older than the oldest is the oldest, one newer than the newest the newest.
+ */
+export function heldWeek(week: string, clock: WeekClock): string {
   const { newest, oldest } = heldWeeks(clock)
-  return week > newest ? newest : week < oldest ? oldest : week
+  const holding = planWeekOf(week, clock.plan)
+  return holding > newest ? newest : holding < oldest ? oldest : holding
 }
 
 /** A week of the held ones (heldWeek), and the held weeks before and after it, null at either end. */
 export type WeekSteps = { week: string; prev: string | null; next: string | null }
 
-export function weekSteps(week: string, clock: Clock): WeekSteps {
+export function weekSteps(week: string, clock: WeekClock): WeekSteps {
   const shown = heldWeek(week, clock)
   const { newest, oldest } = heldWeeks(clock)
   return { week: shown, prev: shown > oldest ? weekAfter(shown, -1) : null, next: shown < newest ? weekAfter(shown, 1) : null }
@@ -77,17 +100,13 @@ export type DoneWeek = {
  * The finished tasks of `week` among `tasks`, those of `owner` alone (null: every owner's), as the Archive page lists
  * them. A week outside the held ones reads as the nearest held one.
  */
-export function doneWeek(tasks: readonly TaskRow[], owner: string | null, week: string, clock: Clock): DoneWeek {
+export function doneWeek(tasks: readonly TaskRow[], owner: string | null, week: string, clock: WeekClock): DoneWeek {
   const { now, zone } = clock
   const steps = weekSteps(week, clock)
   const shown = steps.week
-  const end = weekAfter(shown, 1)
   const finished = tasks
     .filter(task => isHeldFinished(task, now) && (owner === null || task.owner === owner))
-    .filter(task => {
-      const at = weekOf(Date.parse(task.statusAt), zone)
-      return at >= shown && at < end
-    })
+    .filter(task => weekAt(Date.parse(task.statusAt), clock) === shown)
     .sort(newestFirst)
   const days: DoneDay[] = []
   for (const task of finished.slice(0, MAX_DONE_ROWS)) {
