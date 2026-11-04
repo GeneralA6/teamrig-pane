@@ -298,9 +298,9 @@ export class TaskRegisterSource {
   constructor(files: Files, paths: RegisterPaths, settings: TeamSettings, team: TeamFiles | null) {
     this.files = files
     this.paths = paths
-    const { ownerSource, requireDecisionCard, ...drawn } = settings
+    const { requireDecisionCard, ...drawn } = settings
     this.drawn = drawn
-    this.owner = { ownerSource, requireDecisionCard }
+    this.owner = { ownerSource: settings.ownerSource, requireDecisionCard }
     this.zone = zoneNamed(settings.timeZone)
     this.register = new LayoutRegister(files, paths.events)
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))

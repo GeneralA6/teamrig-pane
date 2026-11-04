@@ -12,14 +12,14 @@ export const HOUR = 3_600_000
 /** teamrig's default hours before an untouched task reads NOT PICKED UP, for a team whose config sets none. */
 export const NOT_PICKED_UP_HOURS = DEFAULT_REGISTER.check.notPickedUpAfterHours
 
-/** What a snapshot carries of a team config that sets neither the hours nor a zone, on a machine whose zone is UTC. */
-export const SNAPSHOT_SETTINGS: DrawnSettings = { notPickedUpAfterHours: NOT_PICKED_UP_HOURS, timeZone: TimeZone.UTC.name }
-/** What a team whose config sets none of the pane's settings reads with, on a machine whose zone is UTC. */
-export const TEAM_SETTINGS: TeamSettings = {
-  ...SNAPSHOT_SETTINGS,
+/** What a snapshot carries of a team config that sets neither the hours, a zone nor an owner marker, on a machine whose zone is UTC. */
+export const SNAPSHOT_SETTINGS: DrawnSettings = {
+  notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
+  timeZone: TimeZone.UTC.name,
   ownerSource: DEFAULT_REGISTER.ownerSource,
-  requireDecisionCard: DEFAULT_REGISTER.requireDecisionCard,
 }
+/** What a team whose config sets none of the pane's settings reads with, on a machine whose zone is UTC. */
+export const TEAM_SETTINGS: TeamSettings = { ...SNAPSHOT_SETTINGS, requireDecisionCard: DEFAULT_REGISTER.requireDecisionCard }
 /**
  * A snapshot's team fields when the pane found no team, on an empty register: no team name, no session name, no leads,
  * no work marks, no cards on the owner and no tasks counted.
