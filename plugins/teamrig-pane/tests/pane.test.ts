@@ -107,6 +107,11 @@ function personScroll(by: number): UiScrollInput {
 
 /** A dock wide enough that a requirement's WARN line is one drawn line, so a test can match all of it. */
 const WIDE = { ...PANE_PROPS, bodyColumns: 200 } as const
+/**
+ * WIDE with a window the whole Stats tab fits in: its Flow section open and the six sections after it run past WIDE's 40
+ * rows, and a scroll bar beside the window would end each drawn line with its track.
+ */
+const STATS_PROPS = { ...WIDE, scroll: { offset: 0, bodyRows: 120 } } as const
 
 /** An open card: its Status row first, its Origin row further down. */
 const CARD = /^ {4}│ (Description|Status) [\s\S]*│ Origin /
@@ -3077,7 +3082,7 @@ test("the switch's Stats button, key r, folds the tree's registers with no Find 
   disk.write('/Homes/tester/.teamrig/teams/web/config.json', ['{}'])
   disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [createLine('T1', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the pricing page' })])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: STATS_PROPS })
   expect(keyedProps(await pane.drawn(), 'stats')).toMatchObject({ label: 'Stats', hotkey: 'r', variant: 'secondary' })
 
   await pane.press({ key: 'stats' })
@@ -3110,7 +3115,7 @@ test("a press on a Health count lists its tasks under back and the trail `Stats 
   disk.write('/Homes/tester/.teamrig/teams/web/config.json', ['{}'])
   disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [createLine('T1', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the pricing page' })])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: STATS_PROPS })
   await pane.press({ key: 'stats' })
   const activeKey = (keys: readonly string[]) => keys.find(key => key.startsWith('stats:list:active:'))
   const pressActive = async () => {
@@ -3136,6 +3141,39 @@ test("a press on a Health count lists its tasks under back and the trail `Stats 
   await pane.press({ key: 'stats:list:web/T1' })
   expect(keyedProps(await pane.drawn(), 'tasks')).toMatchObject({ variant: 'primary' })
   expect(await drawsLine(pane, /Ship the pricing page/)).toBe(true)
+})
+
+test('the six sections after Flow draw folded, each header alone answering; a press opens one, and a name in People scopes the tab to that session', async ($, on) => {
+  // A session of team web, its pointer file in /work, its register holding T1, made by lead and done by api.
+  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
+  disk.write('/Homes/tester/.teamrig/teams/web/config.json', ['{}'])
+  disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
+    createLine('T1', { owner: 'api', by: 'lead', at: NOW - HOUR, title: 'Ship the pricing page' }),
+    statusLine('T1', 'api', NOW - HOUR / 2, 'done'),
+  ])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: STATS_PROPS })
+  await pane.press({ key: 'stats' })
+  for (const head of [
+    /^▸ New work · 1 in 7 d · 1 with no goal$/,
+    /^▸ Speed · lead time median 0\.0 d · 1 never started$/,
+    /^▸ Delays · 0 overdue$/,
+    /^▸ Waits · 0 waiting · owner decisions 0$/,
+    /^▸ Bugs · 0 active · opened 0, fixed 0 in 7 d$/,
+    /^▸ People · done in 7 d · 1 session$/,
+  ]) {
+    expect(await drawsLine(pane, head)).toBe(true)
+  }
+  const sessionKey = (keys: readonly string[]) => keys.find(key => key.startsWith('stats:session:web/api:'))
+  expect(sessionKey(buttonKeys(await pane.drawn()))).toBeUndefined()
+
+  await pane.press({ key: 'stats:people' })
+  expect(await drawsLine(pane, /^▾ People · done in 7 d · 1 session$/)).toBe(true)
+  const key = sessionKey(buttonKeys(await pane.drawn()))
+  if (key === undefined) throw new Error("no press on api's name in People")
+  await pane.press({ key })
+  expect(await drawsLine(pane, /^Scope {2}tree {2}web {2}\[api ×\]$/)).toBe(true)
 })
 
 /** What `teamrig owner` prints for the acts on T1 in the tests below, by its words. */

@@ -10,7 +10,9 @@
 // its headline so it still answers folded (`folds`): the active tasks at each day's end, the newest days with bars of
 // what opened and closed and a `$` on a day the week sat at its usage limit, the burn-up and the cumulative flow, each
 // part after a blank row, a chart under a legend whose title is bold; a team's charts say where a split moved tasks
-// out of them, as only the tree's are whole before it. A team folder the last read could not read is a WARN line. Pure.
+// out of them, as only the tree's are whole before it. After Flow the New work, Speed, Delays, Waits, Bugs and People
+// sections (stats-sections.ts, T1859), closed by default. A team folder the last read could not read is a WARN line.
+// Pure.
 import type { ThemeKey } from 'claude-code'
 import type { StatsChoice, StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
 import { priorityText, STATS_RANGES, type ActiveStatus, type HealthLevel, type RegisterHealth, type StatsDay, type StatsRange } from './core/read/index'
@@ -18,6 +20,7 @@ import { storedDueWords } from './meta'
 import { indentOf, META_LINES, SEPARATOR, single, TITLE_LINES, titleRow, type Block, type Row, type Span, type StatsPress } from './rows'
 import { activeChart, bar, BURN_GLYPH, burnUpChart, FLOW_GLYPH, flowChart, type BurnSeries, type Chart, type LineSeries } from './stats-chart'
 import { daysText, HANG, INDENT, rangeLabel, sectionBlock, signed, VIEW } from './stats-parts'
+import { sectionBlocks } from './stats-sections'
 import type { TeamWeek } from './team'
 import { failureBlock, weekPct } from './team-rows'
 import { cells } from './width'
@@ -377,8 +380,9 @@ function listBlocks(view: Folded, list: StatsList, own: StatsOwn): Block[] {
 
 /**
  * The Stats tab `width` cells wide: the scope and range rows, a WARN line for each team folder the last read could not
- * read, the Health tiles and the Flow section, open or folded by `toggled` against OPEN_SECTIONS; while a tile's press
- * picked a count, its tasks instead, read against `own`; or why none show.
+ * read, the Health tiles, the Flow section and the sections after it (stats-sections.ts), each open or folded by
+ * `toggled` against OPEN_SECTIONS; while a count's press picked it, its tasks instead, read against `own`; or why none
+ * show.
  */
 export function statsBlocks(view: StatsView, toggled: readonly string[], width: number, own: StatsOwn): Block[] {
   switch (view.kind) {
@@ -395,6 +399,7 @@ export function statsBlocks(view: StatsView, toggled: readonly string[], width: 
         ...view.failures.map(failure => failureBlock(VIEW, failure)),
         healthBlock(view, width),
         flowBlock(view, isSectionOpen(FLOW_KEY, toggled), width),
+        ...sectionBlocks(view, key => isSectionOpen(key, toggled), width),
       ]
   }
 }

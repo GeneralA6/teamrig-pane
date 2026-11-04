@@ -8,6 +8,7 @@ import type { Block, Row, Span } from '../hooks/rows'
 import { activeChart, bar } from '../hooks/stats-chart'
 import { rangeLabel } from '../hooks/stats-parts'
 import { DAY_ROWS, FLOW_KEY, HEALTH_DOT, dayLabel, isSectionOpen, listTitle, statsBlocks, type StatsOwn } from '../hooks/stats-rows'
+import { SECTION_KEYS, SPEED_KEY } from '../hooks/stats-sections'
 import type { TeamWeek } from '../hooks/team'
 import { cells } from '../hooks/width'
 import type { StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
@@ -321,6 +322,16 @@ describe('statsBlocks: Flow', () => {
     expect([isSectionOpen(FLOW_KEY, []), isSectionOpen(FLOW_KEY, [FLOW_KEY]), isSectionOpen('stats:speed', []), isSectionOpen('stats:speed', ['stats:speed'])]).toEqual([true, false, false, true])
   })
 
+  test('the six sections after Flow draw folded by default, a toggled key opening its own alone', () => {
+    const opened = (toggled: readonly string[]): string[] =>
+      statsBlocks(viewOf({ stats }), toggled, WIDE, OWN)
+        .filter(block => SECTION_KEYS.includes(block.key) && block.card !== undefined)
+        .map(block => block.key)
+    expect(opened([])).toEqual([])
+    expect(opened([SPEED_KEY])).toEqual([SPEED_KEY])
+    expect(SECTION_KEYS.map(key => blockOf(statsBlocks(viewOf({ stats }), [], WIDE, OWN), key).folds)).toEqual(SECTION_KEYS)
+  })
+
   test('draws the days newest first with bars on one scale, the net in its colour, and $ on a day at the limit', () => {
     const card = flowCard(viewOf({ stats }))
     const days = card.filter(row => /:day:2026-/.test(row.key))
@@ -390,7 +401,7 @@ describe('statsBlocks: Flow', () => {
 describe('statsBlocks: unread team folders', () => {
   test('draw a WARN line each under the pick rows, before the Health tiles', () => {
     const blocks = statsBlocks(viewOf({ failures: [{ team: 'tools', reason: 'EPERM.', isLastRead: true }] }), [], WIDE, OWN)
-    expect(blocks.map(block => block.key)).toEqual(['stats:pick', 'stats:failure:tools', 'stats:health', FLOW_KEY])
+    expect(blocks.map(block => block.key)).toEqual(['stats:pick', 'stats:failure:tools', 'stats:health', FLOW_KEY, ...SECTION_KEYS])
     expect(blockOf(blocks, 'stats:failure:tools').rows.map(lineOf)).toEqual(['WARN team tools could not be read: EPERM; it shows as last read.'])
   })
 })
