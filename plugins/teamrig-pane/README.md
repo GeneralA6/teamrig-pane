@@ -540,6 +540,27 @@ row and each day's bar a blank column from the next. (A `$` is to mark a day the
 quiet day there is not read as slack; the pane has no source for those days yet, so none shows.) A team's charts say
 where a split moved tasks out of it, as only the tree's are whole before one.
 
+Six more sections follow Flow, closed by default, each header answering the glance on its own; a press on one opens
+it:
+
+    ▸ New work · 556 in 7 d · 548 with no goal
+    ▸ Speed · lead time median 0.7-1.3 d · 126 never started
+    ▸ Delays · 104 overdue · p1 26
+    ▸ Waits · 84 waiting · owner decisions 8, oldest 15.5 d
+    ▸ Bugs · 108 active · opened 138, fixed 79 in 7 d
+    ▸ People · done in 7 d · 19 sessions
+
+New work draws where the range's new tasks came from (another session, self-made, the owner, the lead, GitHub) as a
+share bar over its legend, then their type, priority and how many have no goal. Speed draws each team's lead and cycle
+time, median and p85, as a table (a line a team where the pane is too narrow for it), then the active tasks by age.
+Delays draws the overdue count and its p1, each a press that lists them as the Health tiles' do, each team's count when
+the scope holds two or more, the share done by its due date as a bar a team, the days late and the dues moved. Waits
+draws what the waiting tasks wait on (another task, a time, a decision, an approval) as a share bar, with a note when a
+task waiting on two things makes the kinds add past the count, and the owner's decisions, a press that lists them. Bugs
+draws the bugs opened and fixed as bars on one scale, their share of new work and the dropped share of the closes.
+People draws the 8 sessions that closed the most tasks done, each name over a bar and a press that scopes the tab to
+that session, then a dim line counting the rest.
+
 It reads files only: the team folders as the Teams tab reads them, and the whole history of each team's register the
 scope takes in, each read only once a scope needs it. It reads every 3 s while it shows, and only then; a press reads
 at once. It folds again only when a history, the scope, the range or the minute moved. A team folder or a register it
