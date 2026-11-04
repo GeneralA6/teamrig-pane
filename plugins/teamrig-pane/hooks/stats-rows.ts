@@ -13,17 +13,16 @@
 // out of them, as only the tree's are whole before it. A team folder the last read could not read is a WARN line. Pure.
 import type { ThemeKey } from 'claude-code'
 import type { StatsChoice, StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
-import { joined } from './card'
 import { priorityText, STATS_RANGES, type ActiveStatus, type HealthLevel, type RegisterHealth, type StatsDay, type StatsRange } from './core/read/index'
 import { storedDueWords } from './meta'
-import { FOLDED_MARK, indentOf, META_LINES, SEPARATOR, single, TITLE_LINES, titleRow, type Block, type Row, type Span, type StatsPress } from './rows'
+import { indentOf, META_LINES, SEPARATOR, single, TITLE_LINES, titleRow, type Block, type Row, type Span, type StatsPress } from './rows'
 import { activeChart, bar, BURN_GLYPH, burnUpChart, FLOW_GLYPH, flowChart, type BurnSeries, type Chart, type LineSeries } from './stats-chart'
+import { daysText, HANG, INDENT, rangeLabel, sectionBlock, signed, VIEW } from './stats-parts'
 import type { TeamWeek } from './team'
 import { failureBlock, weekPct } from './team-rows'
 import { cells } from './width'
 import type { Clock } from './zone'
 
-const VIEW = 'stats'
 /** The Flow section's block key: a press on its header folds the section. */
 export const FLOW_KEY = `${VIEW}:flow`
 /** The sections that start open; a section's key among the tab's toggled keys flips it from this. */
@@ -37,12 +36,6 @@ export const LEVEL_COLOR: Readonly<Record<HealthLevel, ThemeKey>> = { good: 'suc
 /** Marks a day the week sat at its usage limit, so a quiet day there is not read as slack. */
 export const LIMIT_MARK = '$'
 
-/** Leads a section's rows. */
-const INDENT: Span = { text: '  ' }
-/** Leads a wrapped line of a row INDENT leads. */
-const HANG: Span = { text: '    ' }
-/** Leads an open section's header, as FOLDED_MARK leads a folded one. */
-const OPEN_MARK: Span = { text: '▾ ', dim: true }
 /** Between a pick row's label and its presses, and between two presses. */
 const PICK_GAP = '  '
 /** The blank cells between two Health tiles on one row, and the fewest it shrinks to before they go one a row. */
@@ -92,22 +85,9 @@ export function isSectionOpen(key: string, toggled: readonly string[]): boolean 
   return OPEN_SECTIONS.includes(key) !== toggled.includes(key)
 }
 
-/** A range as its press reads, its count apart from its unit: `7 d`, `1 y`, `all`. */
-export function rangeLabel(range: StatsRange): string {
-  return range === 'all' ? 'all' : `${range.slice(0, -1)} ${range.slice(-1)}`
-}
-
 /** A `YYYY-MM-DD` day as a day row reads it: `Sat 10-31`. */
 export function dayLabel(day: string): string {
   return `${WEEKDAY.format(new Date(`${day}T00:00:00Z`))} ${day.slice(5)}`
-}
-
-function signed(value: number): string {
-  return value > 0 ? `+${value}` : `${value}`
-}
-
-function daysText(value: number): string {
-  return `${value.toFixed(1)} d`
 }
 
 function note(text: string): Block {
@@ -347,9 +327,7 @@ function flowBlock(view: Folded, open: boolean, width: number): Block {
   const dropped = stats.droppedTasks > 0 ? ` (${stats.droppedTasks} dropped)` : ''
   const range = view.range === 'all' ? 'all days' : `last ${rangeLabel(view.range)}`
   const parts: Span[] = [{ text: 'Flow', bold: true }, { text: range }, { text: `opened ${stats.opened}` }, { text: `closed ${stats.closedTasks}${dropped}` }, { text: `net ${signed(stats.net)}` }]
-  const head: Row = { key: FLOW_KEY, spans: [open ? OPEN_MARK : FOLDED_MARK, ...joined(parts)], hang: INDENT }
-  const block: Block = { key: FLOW_KEY, rows: [head], folds: FLOW_KEY, opensSection: true }
-  return open ? { ...block, card: flowRows(view, width) } : block
+  return sectionBlock(FLOW_KEY, parts, open ? flowRows(view, width) : null)
 }
 
 /** `Overdue (35)`: the list's title, as the tab's head names it, and how many tasks it holds. */
