@@ -2,7 +2,7 @@
 // after Flow): the indents, a section's foldable header, and the words for a number, a duration and a range. Pure.
 import { joined } from './card'
 import type { StatsRange } from './core/read/index'
-import { FOLDED_MARK, type Block, type Row, type Span } from './rows'
+import { FOLDED_MARK, OPEN_MARK, type Block, type Row, type Span } from './rows'
 
 /** The Stats tab's view name, which leads each of its block keys. */
 export const VIEW = 'stats'
@@ -10,8 +10,6 @@ export const VIEW = 'stats'
 export const INDENT: Span = { text: '  ' }
 /** Leads a wrapped line of a row INDENT leads. */
 export const HANG: Span = { text: '    ' }
-/** Leads an open section's header, as FOLDED_MARK leads a folded one. */
-export const OPEN_MARK: Span = { text: '▾ ', dim: true }
 
 /** `value` with its sign: `+3`, `-2`, `0`. */
 export function signed(value: number): string {

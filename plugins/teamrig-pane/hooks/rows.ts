@@ -128,6 +128,8 @@ export const NOTHING_EXPANDED: ExpandedTasks = {}
 export const NOTHING_FOLDED: readonly string[] = []
 /** Leads a folded heading: its tasks lie under it, a press shows them. */
 export const FOLDED_MARK: Span = { text: '▸ ', dim: true }
+/** Leads an open heading that folds, as FOLDED_MARK leads a folded one. */
+export const OPEN_MARK: Span = { text: '▾ ', dim: true }
 /** Between a task's id and its title. */
 export const TITLE_GAP = '  '
 /** A task's title and its meta line are cut at this many lines each; with its card open, the title shows whole. */
