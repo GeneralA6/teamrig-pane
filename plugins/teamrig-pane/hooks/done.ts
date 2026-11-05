@@ -1,17 +1,16 @@
 // The finished tasks the pane holds (source.ts: those done or dropped within HELD_DAYS, teamrig's own retention), a
-// week at a time: the Archive page (done-rows.ts) shows one week, newest week first, its days newest first and inside a
-// day the newest first. A week is a planning week, starting on the weekday of the week plan in force (zone.ts
-// planWeekOf), so a page's week and its plan are the same days; its days are the team zone's. The newest week is the
-// one `now` falls in, the oldest the one HELD_DAYS before it: the paging stays inside them, the oldest week cut where
-// the pane stops holding. At most MAX_DONE_ROWS rows a week, with how many more there are. Pure.
+// week at a time: the Done page (done-rows.ts) shows one week, its days newest first, each day's tasks in the done
+// groups the owner report and the meeting agenda use (core doneGroups: owner asked, a goal, urgent, the week's plan,
+// other work, and the dropped apart). A week is a planning week, starting on the weekday of the week plan in force
+// (zone.ts planWeekOf), so a page's week and its plan are the same days; its days are the team zone's. The newest
+// week is the one `now` falls in, the oldest the one HELD_DAYS before it: the paging stays inside them, the oldest
+// week cut where the pane stops holding. Pure.
 import type { Snapshot, TaskRow } from '../types'
-import { currentWeek } from './core/read/index'
+import { currentWeek, doneGroups, type DoneGroups } from './core/read/index'
 import { dayWords } from './meta'
 import { newestFirst } from './view'
 import { clockOf, dayOf, planWeekOf, weekAfter, type Clock } from './zone'
 
-/** Most rows the Archive page lists for a week; past it a dim line counts the rest. */
-export const MAX_DONE_ROWS = 50
 /**
  * How many days back the pane holds finished tasks: teamrig's own RETAIN_DAYS (its compaction keeps a task finished
  * within it in the working set), so a rotated register and one never rotated hold the same ones.
@@ -77,54 +76,65 @@ export function weekSteps(week: string, clock: WeekClock): WeekSteps {
   return { week: shown, prev: shown > oldest ? weekAfter(shown, -1) : null, next: shown < newest ? weekAfter(shown, 1) : null }
 }
 
-/** One day of a week in the team's zone: its words (`Thu 10-15`) and its finished tasks, newest first. */
-export type DoneDay = { day: string; words: string; tasks: TaskRow[] }
+/**
+ * One day of a week in the team's zone: its date (`2026-10-15`), its words (`Thu 10-15`), whether it is `now`'s day,
+ * and its finished tasks in the done groups.
+ */
+export type DoneDay = { day: string; words: string; today: boolean; groups: DoneGroups<TaskRow> }
 
 /**
- * A week of finished tasks: its days, newest first, holding MAX_DONE_ROWS tasks at most; how many it holds in all, done
- * and dropped; how many the cap left out; the weeks before and after it the pane holds (null at either end); and,
- * for the oldest week, when the pane stops holding (else null).
+ * A week of finished tasks: its days, newest first; how many it holds, done and dropped; the weeks before and after it
+ * the pane holds (null at either end); and, for the oldest week, when the pane stops holding (else null).
  */
 export type DoneWeek = {
   week: string
   days: DoneDay[]
   done: number
   dropped: number
-  more: number
   prev: string | null
   next: string | null
   heldFrom: number | null
 }
 
+/** Whose finished tasks a page lists (null: every owner's), and the register's marker for the owner as a source. */
+export type DoneScope = { owner: string | null; ownerMarker: string }
+
 /**
- * The finished tasks of `week` among `tasks`, those of `owner` alone (null: every owner's), as the Archive page lists
- * them. A week outside the held ones reads as the nearest held one.
+ * The finished tasks of `week` among `tasks`, of `scope`'s owner, as the Done page lists them. A week outside the held
+ * ones reads as the nearest held one.
  */
-export function doneWeek(tasks: readonly TaskRow[], owner: string | null, week: string, clock: WeekClock): DoneWeek {
+export function doneWeek(tasks: readonly TaskRow[], scope: DoneScope, week: string, clock: WeekClock): DoneWeek {
   const { now, zone } = clock
   const steps = weekSteps(week, clock)
   const shown = steps.week
   const finished = tasks
-    .filter(task => isHeldFinished(task, now) && (owner === null || task.owner === owner))
+    .filter(task => isHeldFinished(task, now) && (scope.owner === null || task.owner === scope.owner))
     .filter(task => weekAt(Date.parse(task.statusAt), clock) === shown)
     .sort(newestFirst)
-  const days: DoneDay[] = []
-  for (const task of finished.slice(0, MAX_DONE_ROWS)) {
+  const days: { day: string; words: string; tasks: TaskRow[] }[] = []
+  for (const task of finished) {
     const ms = Date.parse(task.statusAt)
     const day = dayOf(ms, zone)
     const last = days[days.length - 1]
     if (last !== undefined && last.day === day) last.tasks.push(task)
     else days.push({ day, words: dayWords(ms, zone), tasks: [task] })
   }
+  const today = dayOf(now, zone)
   const dropped = finished.filter(task => task.status === 'dropped').length
   return {
     week: shown,
-    days,
+    // Each task is one of its day's, so the whole span is the day's.
+    days: days.map(({ day, words, tasks: closed }) => ({
+      day,
+      words,
+      today: day === today,
+      groups: doneGroups({ tasks: closed, ownerMarker: scope.ownerMarker, zone, from: -Infinity, to: Infinity }),
+    })),
     done: finished.length - dropped,
     dropped,
-    more: Math.max(0, finished.length - MAX_DONE_ROWS),
     prev: steps.prev,
     next: steps.next,
     heldFrom: steps.prev === null ? heldSince(now) : null,
   }
 }
+
