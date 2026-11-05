@@ -159,7 +159,7 @@ describe('the pane guide states the limits the code holds', () => {
     ['Card links', [constant('links.ts', 'MAX_LINKS'), constant('links.ts', 'MAX_ADDRESS_CHARS')]],
     ['Search results', [constant('task-search.ts', 'MAX_RESULTS')]],
     ['Log', [Number(captured('core/config/defaults.ts', /DEFAULT_TURN_LOG\b[^=]*= \{[^}]*\bkeepHours: (\d+)/)), constant('turn-log.ts', 'LOG_PAGE_CHARS')]],
-    ['Archive', [constant('done.ts', 'MAX_DONE_ROWS'), constant('done.ts', 'HELD_DAYS')]],
+    ['Done page', [constant('done-rows.ts', 'GROUP_ROWS'), constant('done.ts', 'HELD_DAYS')]],
   ];
 
   for (const [label, values] of limits) {
