@@ -882,7 +882,7 @@ test('a project set up while the pane shows the steps lists its tasks at the nex
   await clock.advance(POLL_MS)
   // With a team found, the switch, Find and the mode buttons are back.
   const labels = await buttonLabels(pane)
-  for (const label of ['Tasks', 'Log', 'Find', 'mine', 'all', 'archive ›', 'keys']) expect(labels).toContain(label)
+  for (const label of ['Tasks', 'Log', 'Find', 'mine', 'all', 'done ›', 'keys']) expect(labels).toContain(label)
   await pane.press({ key: 'all' })
   expect(await pane.find({ text: /Ship the team register/ })).toBeDefined()
   expect(await pane.find({ text: SETUP_HEAD })).toBeUndefined()
@@ -1112,20 +1112,20 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   expect(countType(await pane.drawn(), 'Box')).toBe(10)
 })
 
-test('the mode row draws its groups (the modes, the archive page, close cards, keys) a dim · between two on a row, none at a wrap', async ($, on) => {
+test('the mode row draws its groups (the modes, the Done page, close cards, keys) a dim · between two on a row, none at a wrap', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   await pane.press({ key: 'all' })
-  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive', '·', 'keys']])
+  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'done-page', '·', 'keys']])
   expect(await pane.find({ type: 'Text', text: /^·$/ })).toMatchObject({ props: { dimColor: true } })
 
   await pane.press({ key: 'security:T2' })
-  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive', '·', 'close-cards', '·', 'keys']])
-  // `[ mine ] [ all ] · [ archive › ]` takes 32 of the 48 columns: `· [ close cards ]` would run 2 past them, so close
-  // cards starts the next row, with no `·` before it, and `· k: keys` follows it there.
+  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'done-page', '·', 'close-cards', '·', 'keys']])
+  // `[ mine ] [ all ] · [ done › ] · [ close cards ]` takes 47 of the 48 columns: `· [ keys ]` would run past them, so keys
+  // starts the next row, with no `·` before it.
   await pane.redraw(PANE_PROPS)
-  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'archive'], ['close-cards', '·', 'keys']])
+  expect(rowItems(await pane.drawn(), 'modes')).toEqual([['mine', 'all', '·', 'done-page', '·', 'close-cards'], ['keys']])
 })
 
 test('an open card draws each address its ref, note, proof and evidence hold as one Link, the issue a GitHub task came from first', async ($, on) => {
@@ -1205,7 +1205,7 @@ test('a drawing that throws shows the error under the mode buttons, and the next
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
   expect(await pane.find({ text: /^WARN the pane could not draw: .*state store unavailable/ })).toBeDefined()
-  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', 'stats', 'find-key', 'mine', 'all', 'archive', 'keys'])
+  expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', 'stats', 'find-key', 'mine', 'all', 'done-page', 'keys'])
 
   isStateDown = false
   await pane.redraw(PANE_PROPS)
@@ -2341,7 +2341,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     'find-key',
     'mine',
     'all',
-    'archive',
+    'done-page',
     'keys',
     'back',
     'crumb:0',
@@ -2360,7 +2360,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     ' Teams Meetings Stats',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all · archive › · keys',
+    ' mine all · done › · keys',
     '',
     ' ‹ back  forward ›',
     ' Tasks › T50 › T58',
@@ -2419,7 +2419,7 @@ test('back, forward and the trail step through the places; the list keeps the he
     'find-key',
     'mine',
     'all',
-    'archive',
+    'done-page',
     'close-cards',
     'keys',
     'forward',
@@ -2494,7 +2494,7 @@ test("a reference file in an open card opens as a page: its name, where it was r
     ' Teams Meetings Stats',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all · archive › · keys',
+    ' mine all · done › · keys',
     '',
     ' ‹ back  forward ›',
     ' Tasks › x.md',
@@ -2660,7 +2660,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
     ' Teams Meetings Stats',
     ' Find  clear',
     ' Keys go to Claude · click the field to search',
-    ' mine all · archive › · keys',
+    ' mine all · done › · keys',
     '',
     ' 2 tasks match',
     '',
@@ -2738,7 +2738,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   expect(buttonKeys(drawn)).not.toContain('find-key')
 })
 
-test('the Find field keeps its index among the focusable elements on the list, with a card open, in a search, on a page and on the Archive page, so the focus ring stays in it as the person types', async ($, on) => {
+test('the Find field keeps its index among the focusable elements on the list, with a card open, in a search, on a page and on the Done page, so the focus ring stays in it as the person types', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, CHAIN)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
@@ -2759,7 +2759,7 @@ test('the Find field keeps its index among the focusable elements on the list, w
   drawn = await pane.drawn()
   expect(keyedNode(drawn, 'page-head')).not.toBe(null)
   indexes.push(fieldIndex(drawn))
-  await pane.press({ key: 'archive' })
+  await pane.press({ key: 'done-page' })
   drawn = await pane.drawn()
   expect(keyedNode(drawn, 'week-steps')).not.toBe(null)
   indexes.push(fieldIndex(drawn))
@@ -2866,7 +2866,7 @@ test("the line under the Find field says where the keys go: to Claude's prompt, 
   expect(await keysLine()).toBe(null)
 })
 
-test('archive (h) opens the Archive page at the week of now; prev (p) and next (l) step weeks; a row opens its page; back returns', async ($, on) => {
+test('done (h) opens the Done page at the week of now; prev (p) and next (l) step weeks; a row opens its page; back returns', async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, [
     ...CHAIN,
@@ -2877,11 +2877,11 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-  expect(keyedProps(await pane.drawn(), 'archive')).toMatchObject({ label: 'archive ›', hotkey: 'h', variant: 'secondary' })
+  expect(keyedProps(await pane.drawn(), 'done-page')).toMatchObject({ label: 'done ›', hotkey: 'h', variant: 'secondary' })
 
-  await pane.press({ key: 'archive' })
+  await pane.press({ key: 'done-page' })
   let drawn = await pane.drawn()
-  expect(keyedProps(drawn, 'archive')).toMatchObject({ variant: 'primary' })
+  expect(keyedProps(drawn, 'done-page')).toMatchObject({ variant: 'primary' })
   expect(keyedProps(drawn, 'prev')).toMatchObject({ label: '‹ prev', hotkey: 'p' })
   // The newest week has no next: dim words, no press.
   expect(buttonKeys(drawn)).not.toContain('next')
@@ -2892,10 +2892,10 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
     ' Teams Meetings Stats',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all · archive › · keys',
+    ' mine all · done › · keys',
     '',
     ' ‹ back  forward ›',
-    ' Tasks › Archive 10-13',
+    ' Tasks › Done 10-13',
     ` ${'─'.repeat(48)}`,
     '',
     ' ‹ prev  week of Tue 10-13  next ›',
@@ -2947,14 +2947,14 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
   // A step changes the week in place: back returns to the list.
   await pane.press({ key: 'back' })
   drawn = await pane.drawn()
-  // The list keeps the head while the places ahead stay, the Archive page and T9's (forward returns to them).
-  expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › Archive 10-13 › T9'])
+  // The list keeps the head while the places ahead stay, the Done page and T9's (forward returns to them).
+  expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › Done 10-13 › T9'])
   expect(keyedNode(drawn, 'week-steps')).toBe(null)
   expect(buttonKeys(drawn)).toContain('next:T52')
 
-  // Inline, where no page shows, there is no archive.
+  // Inline, where no page shows, there is no Done page.
   await pane.redraw({ ...PANE_PROPS, placement: 'inline' })
-  expect(buttonKeys(await pane.drawn())).not.toContain('archive')
+  expect(buttonKeys(await pane.drawn())).not.toContain('done-page')
 })
 
 /** The hotkeys of a drawing's buttons, in drawing order. */
@@ -2978,7 +2978,7 @@ test('keys (k) opens the Keys page, every key the pane answers in a grid at the 
     ' Teams Meetings Stats',
     ' Find',
     ' Keys go to Claude · click the field to search',
-    ' mine all · archive › · keys',
+    ' mine all · done › · keys',
     '',
     ' ‹ back  forward ›',
     ' Tasks › Keys',
@@ -2989,7 +2989,7 @@ test('keys (k) opens the Keys page, every key the pane answers in a grid at the 
     ' r  Stats',
     '',
     ` ${'s  Find'.padEnd(16)}${'m  mine'.padEnd(16)}a  all`,
-    ` ${'h  archive'.padEnd(16)}${'c  close cards'.padEnd(16)}k  keys`,
+    ` ${'h  done'.padEnd(16)}${'c  close cards'.padEnd(16)}k  keys`,
     '',
     ` ${'b  back'.padEnd(16)}${'f  forward'.padEnd(16)}p  week before`,
     ' l  week after',
@@ -3024,9 +3024,9 @@ test("the Keys page names every key a button of the pane answers, and each key i
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   const seen = new Set(hotkeysOf(await pane.drawn()))
-  // A card open (close cards), the Archive page (back, prev), the week before (next), the list again (forward), then
+  // A card open (close cards), the Done page (back, prev), the week before (next), the list again (forward), then
   // each other view.
-  for (const key of ['next:T52', 'archive', 'prev', 'back', 'changes', 'log', 'inbox', 'team', 'meetings', 'stats']) {
+  for (const key of ['next:T52', 'done-page', 'prev', 'back', 'changes', 'log', 'inbox', 'team', 'meetings', 'stats']) {
     await pane.press({ key })
     for (const hotkey of hotkeysOf(await pane.drawn())) seen.add(hotkey)
   }

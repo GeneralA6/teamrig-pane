@@ -1,5 +1,5 @@
 // How the header's rows wrap, counted in code. The dock's header (switch, mode buttons, a page's trail,
-// the Archive week's steps) keeps its rows fixed above the body's window, so the window's height is the
+// the Done week's steps) keeps its rows fixed above the body's window, so the window's height is the
 // pane's rows less the header's: the header draws each row pre-packed here (one row Box a row, no
 // flexWrap), and the rows it draws are the rows it counts. Packing follows the engine's flex wrap: items
 // left to right, `gap` cells between two on a row, a new row when the next would run past the width; one

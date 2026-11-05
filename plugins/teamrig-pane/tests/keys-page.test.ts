@@ -20,7 +20,7 @@ describe('keys page', () => {
   test('at 48 columns each group is three columns of the widest entry (14 cells) with 2 between, then the bar and the focus keys', () => {
     expect(wordsOf(keysBlocks(48))).toEqual([
       [`${'t  Tasks'.padEnd(16)}${'d  Changes'.padEnd(16)}g  Log`, `${'u  Inbox'.padEnd(16)}${'e  Teams'.padEnd(16)}j  Meetings`, 'r  Stats'],
-      [`${'s  Find'.padEnd(16)}${'m  mine'.padEnd(16)}a  all`, `${'h  archive'.padEnd(16)}${'c  close cards'.padEnd(16)}k  keys`],
+      [`${'s  Find'.padEnd(16)}${'m  mine'.padEnd(16)}a  all`, `${'h  done'.padEnd(16)}${'c  close cards'.padEnd(16)}k  keys`],
       [`${'b  back'.padEnd(16)}${'f  forward'.padEnd(16)}p  week before`, 'l  week after'],
       ['o v w i n  only that status; again shows all'],
       ['ctrl+x tab, or a click: keys to the pane', 'Esc: keys back to Claude', 'ctrl+x x, or ✕: minimize the pane'],

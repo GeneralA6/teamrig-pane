@@ -4,7 +4,7 @@
 // anywhere but the newest place drops the places ahead of it; a page opens at its top, and a return from a page to
 // the list scrolls back to the element the page was opened from. A search (search.ts) is a place too, holding its
 // query: typing changes the query of the search shown, never adds a place, so back from a result's page returns to
-// the results, and emptying the field (or clear) closes the search. The Archive page (done-rows.ts) is a place holding
+// the results, and emptying the field (or clear) closes the search. The Done page (done-rows.ts) is a place holding
 // its week: a step to an older or newer week changes the week of the page shown, never adds a place, so back
 // returns to where the page was opened from. A press on a file a card's Reference row names (ref-file.ts) opens that
 // file's page (file-page.ts), a place holding the file as the ref writes it and the line it points at: it opens at
@@ -31,7 +31,7 @@ export function currentPlace(nav: Nav): Place {
   return nav.places[nav.at] ?? LIST
 }
 
-/** One place: the list whichever row it remembers, a task's page by its id, a search by its query, the Archive page by its week, a file's page by its file and line, the Keys page. */
+/** One place: the list whichever row it remembers, a task's page by its id, a search by its query, the Done page by its week, a file's page by its file and line, the Keys page. */
 function samePlace(a: Place, b: Place): boolean {
   switch (a.kind) {
     case 'list':
@@ -49,7 +49,7 @@ function samePlace(a: Place, b: Place): boolean {
   }
 }
 
-/** Whether `place` is a page, drawn under back, forward and the trail: a task's, the Archive's, a file's or the Keys page. */
+/** Whether `place` is a page, drawn under back, forward and the trail: a task's, the Done page's, a file's or the Keys page. */
 export function isPage(place: Place): boolean {
   return place.kind === 'task' || place.kind === 'done' || place.kind === 'file' || place.kind === 'keys'
 }
@@ -80,7 +80,7 @@ export function searched(nav: Nav, query: string): Nav {
   return { ...nav, places: nav.places.map((place, i): Place => (i === nav.at ? { kind: 'search', query } : place)) }
 }
 
-/** `nav` showing the Archive page for `week`: the Archive page shown takes the week in its place, no new place; anywhere else it is pushed. */
+/** `nav` showing the Done page for `week`: the Done page shown takes the week in its place, no new place; anywhere else it is pushed. */
 export function doneAt(nav: Nav, week: string): Nav {
   if (currentPlace(nav).kind !== 'done') return pushed(nav, { kind: 'done', week })
   return { ...nav, places: nav.places.map((place, i): Place => (i === nav.at ? { kind: 'done', week } : place)) }
@@ -161,7 +161,7 @@ export function filesKept<T>(byFile: Readonly<Record<string, T>>, nav: Nav): Rec
 export type Landing = { kind: 'top' } | { kind: 'row'; key: string } | { kind: 'line'; file: string; line: number }
 
 /**
- * Where a step from `before` to `next` leaves the window: a page opens at its top, the Archive page at each week, a
+ * Where a step from `before` to `next` leaves the window: a page opens at its top, the Done page at each week, a
  * file's page at the line its ref points at (its top for none), a search at its top too (its field and first results)
  * unless it was shown already, and a step from a task's or a file's page back to the list lands on the element the
  * list remembers it was left from. Null for any other step, typing in a search among them, and when the list
@@ -185,7 +185,7 @@ export function landing(before: Nav, next: Nav): Landing | null {
 }
 
 /**
- * A crumb's words: `Tasks` for the list, a page's task id, `Search` with its query in quotes, `Archive 10-12` with its
+ * A crumb's words: `Tasks` for the list, a page's task id, `Search` with its query in quotes, `Done 10-12` with its
  * week's Monday, a file's name, `Keys`.
  */
 export function placeLabel(place: Place): string {
@@ -197,7 +197,7 @@ export function placeLabel(place: Place): string {
     case 'search':
       return place.query === '' ? 'Search' : `Search "${place.query}"`
     case 'done':
-      return `Archive ${place.week.slice(5)}`
+      return `Done ${place.week.slice(5)}`
     case 'file':
       return place.file.split(/[\\/]/).at(-1) ?? place.file
     case 'keys':

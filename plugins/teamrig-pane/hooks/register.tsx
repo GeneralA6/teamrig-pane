@@ -168,11 +168,11 @@ const LOG_LABEL = 'Log'
 const STATS_LABEL = 'Stats'
 const BACK_LABEL = '‹ back'
 const FORWARD_LABEL = 'forward ›'
-/** The Archive page's steps to the week before and the week after the one it shows. */
+/** The Done page's steps to the week before and the week after the one it shows. */
 const PREV_LABEL = '‹ prev'
 const NEXT_LABEL = 'next ›'
-/** The mode row's button to the Archive page, its `›` saying it opens a page. */
-const ARCHIVE_LABEL = 'archive ›'
+/** The mode row's button to the Done page, its `›` saying it opens a page. */
+const DONE_LABEL = 'done ›'
 /** What the close hook answers the person's close with: the engine logs it as why the pane stayed. */
 const MINIMIZED = `minimized to its strip: a press on it, or /${COMMAND}, opens it again`
 /** How long one git run may take before it is killed and the repo shows the failure. */
@@ -1519,7 +1519,7 @@ export const register: Register = on => {
     const sessionTitle = inline ? null : titleSpans(snap)
     const titleRow: HeaderPart | null = sessionTitle === null ? null : { node: drawText(sessionTitle, 'truncate-end', 'title'), rows: 1 }
 
-    // The header's rows that wrap (the switch, the mode buttons, a page's trail, the Archive week's steps) are packed in
+    // The header's rows that wrap (the switch, the mode buttons, a page's trail, the Done week's steps) are packed in
     // code (pack.ts), each a column Box under its key of one row Box a row, keyed `<key>:<row>`: the rows drawn are the
     // rows counted, so the body's window can take the rows the header leaves (T860).
     const drawRows = (key: string, packed: readonly (readonly HeaderItem[])[], gap: number): HeaderPart => ({
@@ -1634,20 +1634,21 @@ export const register: Register = on => {
       }),
     ]
     const place = currentPlace(at)
-    // The archive opens the Archive page (done-rows.ts) at the week of now, its `›` saying it opens a page and is no
+    // The done button opens the Done page (done-rows.ts) at the week of now, its `›` saying it opens a page and is no
     // mode, in the dock alone, where a page can show: inline, the places are never read.
     const pageButtons = inline
       ? []
       : [
+          // Not `done`: that key is the Tasks list's Done today heading (rows.ts SECTION_KEY), drawn beside this button.
           pressed(
             <Button
-              key="archive"
-              label={ARCHIVE_LABEL}
+              key="done-page"
+              label={DONE_LABEL}
               hotkey="h"
               variant={place.kind === 'done' ? 'primary' : 'secondary'}
               onPress={() => void go($, current => doneAt(current, heldWeeks(weekClockOf(snap)).newest))}
             />,
-            { label: ARCHIVE_LABEL, plain: false, hotkey: 'h' },
+            { label: DONE_LABEL, plain: false, hotkey: 'h' },
           ),
         ]
     // A page shows no list, so no card in it to close.
@@ -1661,7 +1662,7 @@ export const register: Register = on => {
           ]
         : []
     // `k: keys` opens the Keys page (keys-page.ts), every key the pane answers, drawn plain with its key as the
-    // status bar's counts are; in the dock alone, as the archive.
+    // status bar's counts are; in the dock alone, as the done button.
     const keysButtons = inline
       ? []
       : [
@@ -1861,7 +1862,7 @@ export const register: Register = on => {
       ...crumbRow,
       ...(isCutAfter ? [dimWords('cut-after', `${TRAIL_SEPARATOR}…`)] : []),
     ]
-    // The Archive page's week between its steps to the week before and after (p, l), each dim where the pane holds no
+    // The Done page's week between its steps to the week before and after (p, l), each dim where the pane holds no
     // older or newer week. A step changes the page's week in place, so back returns to where the page was opened from.
     const stepTo = (week: string) => () => void go($, current => doneAt(current, week))
     const steps = place.kind === 'done' ? weekSteps(place.week, weekClockOf(snap)) : null

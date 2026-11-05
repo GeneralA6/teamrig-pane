@@ -178,7 +178,7 @@ describe('nav', () => {
     expect(landing(searched(AT_LIST, 'feed'), leftSearch(searched(AT_LIST, 'feed')))).toBe(null)
   })
 
-  test('the archive pushes the Archive page; a step to another week changes the week shown, so back returns to the list', async () => {
+  test('the done button pushes the Done page; a step to another week changes the week shown, so back returns to the list', async () => {
     const opened = doneAt(AT_LIST, '2026-10-12')
     expect(opened).toEqual({ places: [{ kind: 'list', row: null }, done('2026-10-12')], at: 1 })
     expect(landing(AT_LIST, opened)).toEqual({ kind: 'top' })
@@ -190,7 +190,7 @@ describe('nav', () => {
     const onPage = pushed(older, page('T4'))
     expect(currentPlace(back(onPage))).toEqual(done('2026-10-05'))
     expect(pushed(older, done('2026-10-05'))).toBe(older)
-    expect([placeLabel(done('2026-10-05')), ...trailWords(onPage)]).toEqual(['Archive 10-05', 'list', 'done', '[T4]'])
+    expect([placeLabel(done('2026-10-05')), ...trailWords(onPage)]).toEqual(['Done 10-05', 'list', 'done', '[T4]'])
     expect([...placeIds(onPage)]).toEqual(['T4'])
   })
 
@@ -235,7 +235,7 @@ describe('file pages', () => {
     expect(pushed(nav, file('notes/api/t26.md')).places).toEqual([{ kind: 'list', row: null }, page('T52'), file('notes/api/t26.md', 12), file('notes/api/t26.md')])
   })
 
-  test('a task, the Archive and a file are pages; the list and a search are not', async () => {
+  test('a task, the Done page and a file are pages; the list and a search are not', async () => {
     const places: Place[] = [page('T5'), done('2026-10-12'), file('x/y.md'), { kind: 'list', row: null }, search('feed')]
     expect(places.map(isPage)).toEqual([true, true, true, false, false])
   })

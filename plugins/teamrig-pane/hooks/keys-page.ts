@@ -1,5 +1,5 @@
 // The Keys page: every key the pane answers, opened by `k: keys` at the end of the Tasks view's mode row
-// (register.tsx) as the archive opens its page, back returning to where it was opened from. The keys come in groups,
+// (register.tsx) as the done button opens its page, back returning to where it was opened from. The keys come in groups,
 // a block each (the views; the Tasks list's Find field, modes and pages; a page's steps), each entry `t  Tasks` in a
 // column as wide as the widest entry of any group and as many columns to a row as the body's width holds (pack.ts),
 // so the groups line up as one grid at any width; then the status bar's keys (status-bar.ts BAR_LOOK) on one line,
@@ -39,7 +39,7 @@ export const KEY_GROUPS: readonly KeyGroup[] = [
       { key: 's', what: 'Find' },
       { key: 'm', what: 'mine' },
       { key: 'a', what: 'all' },
-      { key: 'h', what: 'archive' },
+      { key: 'h', what: 'done' },
       { key: 'c', what: 'close cards' },
       { key: KEYS_HOTKEY, what: KEYS_LABEL },
     ],
