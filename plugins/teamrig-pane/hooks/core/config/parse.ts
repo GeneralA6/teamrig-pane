@@ -762,6 +762,7 @@ function parseDeliveryRepos(read: ConfigReader, raw: JsonRecord): Record<string,
     if (reviewCheck !== undefined && !reviewGate) {
       read.report(`${path}.reviewCheck`, 'runs only with reviewGate true, so it never runs');
     }
+    const docsFolder = read.optionalString(entry, 'docsFolder', path, isPathText);
     reportRenamedKey(read, entry, path, 'followMainCheckout', 'updateMainCheckout');
     const worktreeFolder = read.optionalString(entry, 'worktreeFolder', path, isPathText);
     const worktreeSetup = entry['worktreeSetup'] === undefined ? undefined : read.stringListItem(entry['worktreeSetup'], `${path}.worktreeSetup`, HOOK_ARGV_MAX_ITEMS);
@@ -772,6 +773,8 @@ function parseDeliveryRepos(read: ConfigReader, raw: JsonRecord): Record<string,
       ...(dependencyCheck === undefined ? {} : { dependencyCheck }),
       reviewGate,
       ...(reviewCheck === undefined ? {} : { reviewCheck }),
+      ...(docsFolder === undefined ? {} : { docsFolder }),
+      decisionRecordGate: read.boolean(entry, 'decisionRecordGate', path, false),
       updateMainCheckout: read.boolean(entry, 'updateMainCheckout', path, false),
       ...(worktreeFolder === undefined ? {} : { worktreeFolder }),
       ...(worktreeSetup === undefined ? {} : { worktreeSetup }),
