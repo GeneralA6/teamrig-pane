@@ -48,7 +48,7 @@ export type CardPart =
  * a Changes search result). `card`, set while that card is open, is the card's own parts, drawn under the Button and
  * outside it. `parts`, set docked when no press but a Teams tab key's opens the element and a line of its holds a press
  * (a leader's fold mark and id), is its lines as parts, drawn in place of its Text and its
- * `folds` press, its open card under them.
+ * `folds` press, its open card under them. `joined`, its Block's, leaves no gap above it (frame.ts placesOf).
  */
 export type Drawn = {
   key: string
@@ -61,6 +61,7 @@ export type Drawn = {
   expands?: string
   card?: CardPart[]
   parts?: CardPart[]
+  joined?: boolean
 }
 
 const RULE = '─'
@@ -390,6 +391,7 @@ export function dockLayout(blocks: readonly Block[], bodyColumns: number, wraps:
       ...(block.opens === undefined ? {} : { opens: block.opens }),
       ...(block.reads === undefined ? {} : { reads: block.reads }),
       ...(block.expands === undefined ? {} : { expands: block.expands }),
+      ...(block.joined === undefined ? {} : { joined: block.joined }),
     }
     const pressed =
       block.toggle === undefined && block.opens === undefined && block.reads === undefined && block.expands === undefined && lines.some(line => line.some(isPress))

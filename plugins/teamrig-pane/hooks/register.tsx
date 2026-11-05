@@ -1452,7 +1452,7 @@ export const register: Register = on => {
       )
     // The header and body as they are, one under the other, in no window of their own. Inline (gap 0) inlineLayout cut
     // the rows to fit; a dock whose header is too tall to stay put (HEADER_MAX_SHARE) draws every block, a blank row
-    // apart, and the engine's window scrolls the pane as one.
+    // apart (a joined one right under the last), and the engine's window scrolls the pane as one.
     // A drawing with no window of its own: the engine's window takes the scrolls, and every press is drawn in it.
     const drawnWithoutWindow = () => {
       lastView = null
@@ -1460,10 +1460,15 @@ export const register: Register = on => {
     }
     const drawFlat = (header: readonly HeaderPart[], gap: number) => {
       drawnWithoutWindow()
+      const places = placesOf(body, gap)
       return (
         <Box flexDirection="column" paddingX={PAD_COLUMNS} gap={gap}>
           {header.map(part => part.node)}
-          {body.map(drawBlock)}
+          {body.length === 0 ? null : (
+            <Box key="body" flexDirection="column">
+              {frameOf(places, viewOf(places, 0, Number.POSITIVE_INFINITY)).map(drawSlot)}
+            </Box>
+          )}
         </Box>
       )
     }
