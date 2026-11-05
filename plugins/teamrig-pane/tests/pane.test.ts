@@ -3149,7 +3149,7 @@ test('the six sections after Flow draw folded, each header alone answering; a pr
   disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
   disk.write('/Homes/tester/.teamrig/teams/web/config.json', ['{}'])
   disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
-    createLine('T1', { owner: 'api', by: 'lead', at: NOW - HOUR, title: 'Ship the pricing page' }),
+    createLine('T1', { owner: 'api', by: 'lead', at: NOW - HOUR, title: 'Ship the pricing page', goals: [] }),
     statusLine('T1', 'api', NOW - HOUR / 2, 'done'),
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
