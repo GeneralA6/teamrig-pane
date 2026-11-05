@@ -109,7 +109,8 @@ export type Row = {
  * node or a session's card (team-rows.ts), on the Meetings view a meeting's card (meetings-rows.ts), on the Tasks
  * view a section's or an owner's tasks under its heading (sectionHeading); docked only
  * while its rows hold no press of their own (`toggles`), which take its place there; `expands` names the Changes file whose diff a press on it opens or closes, docked (a Changes search
- * result, changes-rows.ts); `opensSection` leads it with a blank line, past the gap every block has.
+ * result, changes-rows.ts); `opensSection` leads it with a blank line, past the gap every block has; `joined` draws it
+ * right under the block before it, with no gap, for a list whose lines are presses of their own (done-rows.ts).
  */
 export type Block = {
   key: string
@@ -121,6 +122,7 @@ export type Block = {
   expands?: string
   card?: Row[]
   opensSection?: boolean
+  joined?: boolean
 }
 
 export const NOTHING_EXPANDED: ExpandedTasks = {}

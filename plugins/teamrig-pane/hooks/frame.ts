@@ -129,10 +129,11 @@ export function cutDrawn(drawn: Drawn, skip: number, take: number): { readonly d
   }
 }
 
-/** Each body element's place, `gap` rows between two, with its head's rows and its parts' places. */
+/** Each body element's place, `gap` rows between two (none above a joined one), with its head's rows and its parts' places. */
 export function placesOf(body: readonly Drawn[], gap: number): Placed[] {
-  let top = 0
-  return body.map(drawn => {
+  let bottom = 0
+  return body.map((drawn, i) => {
+    const top = i === 0 || drawn.joined === true ? bottom : bottom + gap
     const rows = rowsOf(drawn)
     const headRows = linesOf(drawn.spans)
     let partTop = drawn.parts === undefined ? top + headRows : top
@@ -141,9 +142,8 @@ export function placesOf(body: readonly Drawn[], gap: number): Placed[] {
       partTop += place.rows
       return place
     })
-    const placed = { drawn, top, rows, headRows, parts }
-    top += rows + gap
-    return placed
+    bottom = top + rows
+    return { drawn, top, rows, headRows, parts }
   })
 }
 

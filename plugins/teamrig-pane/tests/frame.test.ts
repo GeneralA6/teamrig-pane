@@ -87,8 +87,11 @@ function drawnLines(drawn: Drawn, head: boolean): string[] {
 
 /** The body's rows as text, a gap row as ''. */
 function bodyLines(body: readonly Drawn[], gap: number): string[] {
-  return body.flatMap((drawn, i) => [...(i > 0 ? Array.from({ length: gap }, () => '') : []), ...drawnLines(drawn, true)])
+  return body.flatMap((drawn, i) => [...(i > 0 && drawn.joined !== true ? Array.from({ length: gap }, () => '') : []), ...drawnLines(drawn, true)])
 }
+
+/** A body whose second and fourth elements sit right under the one before. */
+const JOINED_BODY: readonly Drawn[] = [element('a', 1), { ...element('b', 2), joined: true }, element('c', 1), { ...element('d', 1), joined: true }]
 
 /** The rows a frame's slots draw as text, a gap row as ''. */
 function frameLines(slots: readonly FrameSlot[]): string[] {
@@ -231,6 +234,28 @@ describe('frameOf', () => {
           expect(frameLines(frameOf(places, view))).toEqual(lines.slice(view.offset, view.offset + visibleRows))
         }
     }
+  })
+
+  test('places a joined element right under the one before, and draws no gap slot there', () => {
+    const places = placesOf(JOINED_BODY, 1)
+    expect(places.map(({ drawn, top }) => [drawn.key, top])).toEqual([['a', 0], ['b', 1], ['c', 4], ['d', 5]])
+    const slots = frameOf(places, viewOf(places, 0, 40))
+    expect(slots.map(slot => (slot.kind === 'gap' ? slot.key : slot.drawn.key))).toEqual(['a', 'b', 'gap:b', 'c', 'd'])
+  })
+
+  test('a joined body shows exactly the window of its rows, wherever it stands', () => {
+    const lines = bodyLines(JOINED_BODY, 1)
+    const places = placesOf(JOINED_BODY, 1)
+    for (const visibleRows of [1, 2, lines.length])
+      for (let offset = 0; offset <= lines.length; offset++) {
+        const view = viewOf(places, offset, visibleRows)
+        expect(frameLines(frameOf(places, view))).toEqual(lines.slice(view.offset, view.offset + visibleRows))
+      }
+  })
+
+  test('a window of no end draws the whole body', () => {
+    const places = placesOf(JOINED_BODY, 1)
+    expect(frameLines(frameOf(places, viewOf(places, 0, Number.POSITIVE_INFINITY)))).toEqual(bodyLines(JOINED_BODY, 1))
   })
 
   test('a window that starts on a gap starts with it', () => {
