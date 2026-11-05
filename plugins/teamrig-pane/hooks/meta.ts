@@ -88,7 +88,7 @@ export function dayWords(ms: number, zone: TimeZone): string {
 }
 
 /**
- * `Mon 10-12`: a stored day (a task's `week`, the Archive's week: `YYYY-MM-DD`, a day of the team's zone as written)
+ * `Mon 10-12`: a stored day (a task's `week`, the Done page's week: `YYYY-MM-DD`, a day of the team's zone as written)
  * with its weekday; null when it cannot be read. A calendar day, not an instant: its UTC midnight is that day in UTC.
  */
 export function storedDayWords(day: string): string | null {
