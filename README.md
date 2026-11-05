@@ -68,7 +68,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   tasks, how they opened or their session, on the Changes view changed files by path, repo or branch, and on the Teams
   tab sessions by id, name, roles or hire scope.
   A line under it says where your keys go: into the search, to the pane's keys, or to Claude's prompt.
-- **Archive:** `h` lists the tasks finished this week, a day at a time; `p` and `l` step a week back
+- **Done:** `h` lists the tasks finished this week, day by day in groups that fold; `p` and `l` step a week back
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.
 - **Changes:** the files changed in each git repo the session works in, each with its lines added and removed;
   a click on a file opens its diff under it, `+` lines green and `-` lines red.

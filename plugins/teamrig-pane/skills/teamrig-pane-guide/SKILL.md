@@ -124,9 +124,9 @@ groups (the views, the list's own, a page's steps, the status bar's) and how the
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's Log page, back to the list; on a Stats list of tasks, back to the numbers |
 | `f` | Forward to the place back left, while there is one |
 | `s` | In the dock's Tasks, Inbox, Changes and Teams views and on the Log view's list: puts the cursor in the Find field under the switch, which searches what the view holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
-| `h` | In the dock: `archive ›`, the Archive page of this week's finished tasks (see [Archive](#archive)) |
-| `p` | On the Archive page: the week before, while the pane holds it |
-| `l` | On the Archive page: the week after, up to this week |
+| `h` | In the dock: `done ›`, the Done page of this week's finished tasks (see [Done](#done)) |
+| `p` | On the Done page: the week before, while the pane holds it |
+| `l` | On the Done page: the week after, up to this week |
 | `✕`, or `ctrl+x x` | Minimizes the pane to a one-row strip; it never closes |
 
 A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "command:teamrig-pane"` to
@@ -172,7 +172,7 @@ draws no title.
 
 In a project teamrig is not set up for (no `.teamrig.json` up from the session's folder, no `$TEAMRIG_TEAM`, no
 folder named), the pane shows how to set it up and nothing else, in every view: no Tasks / Changes / Log switch, no
-Find row, no mine / all / archive (the minimized strip keeps its switch, and a press opens the setup):
+Find row, no mine / all / done (the minimized strip keeps its switch, and a press opens the setup):
 
 ```text
 teamrig is not set up for this project
@@ -470,39 +470,46 @@ A line under the field says where your keys go now:
 The keys go to Claude's prompt on Esc, a click outside the pane, a Claude dialog, or a key the pane does not use
 pressed while the cursor is on one of its buttons.
 
-### Archive
+### Done
 
-`archive ›` (`h`), in the dock's mode row after mine and all and a dim `·`, opens the Archive page on this week (a week starts Monday 00:00
-on the team's clock and is named by that Monday, as the register's week fields are): the view's tasks closed done or dropped, a day at a time, newest first, each
-on one dim line with when it closed:
+`done ›` (`h`), in the dock's mode row after mine and all and a dim `·`, opens the Done page on this week (the team's
+planning week, starting on the weekday of the plan in force, Monday with no plan, at 00:00 on the team's clock): the
+view's tasks closed done or dropped, each day a heading that folds, newest first, and under an open day its groups:
 
 ```text
 ‹ back  forward ›
-Tasks › Archive 10-12
+Tasks › Done 10-13
 ────────────────────────────────────────────────
 
-‹ prev  week of Mon 10-12  next ›
+‹ prev  week of Tue 10-13  next ›
 
-Archive · po · 1 done · 0 dropped
+Done · po · 8 done · 1 dropped
 
-Tue 10-13
-
-✓ T7  Fix the loader                   12:00 IDT
+▾ Today so far · Tue 10-13 · 6 done
+  Owner asked (5)
+    ✓ T7  Fix the loader               12:00 IDT
+    ✓ T8  Feed the pages               12:40 IDT
+    ✓ T9  Trim the log                 13:05 IDT
+    ✓ T11  Name the rows              13:30 IDT
+    ▸ 1 more
+  ▸ Other work (1)
+▸ Mon 10-12 · 2 done · 1 owner asked · 1 dropped
 ```
 
 | Part | What it does |
 | --- | --- |
 | `‹ prev` (`p`), `next ›` (`l`) | The week before and the week after, dim where the pane holds none; a step changes the week in place, so `‹ back` returns to where the page was opened from |
-| `Archive · po · 1 done · 0 dropped` | Whose tasks (in mine the area's, every owner's when the session has none; in all every owner's) and how many closed done and dropped that week |
-| A day | A dim line, `Tue 10-13`, then the tasks closed that day, newest first |
+| `Done · po · 8 done · 1 dropped` | Whose tasks (in mine the area's, every owner's when the session has none; in all every owner's) and how many closed done and dropped that week |
+| A day | A heading a press opens or closes: the newest starts open, `▾ Today so far` leading today; a closed day counts what it holds (done, then owner asked, for a goal, urgent and dropped where not zero) |
+| A group | `Owner asked (5)`, a goal's tag, `Urgent p1`, `This week's plan`, `Other work`, then `Dropped`, in that order, each task in one group: a press folds it; Other work and Dropped start closed |
+| `▸ 1 more` | Past 4 rows a group counts the rest; a press opens them in place |
 | A task | `✓` done or `✗` dropped, its id and title, when it closed (in all, its owner too); a click opens its page, and back returns to the week |
-| `3 more this week: search finds them` | Past 50 rows, the rest counted |
 | `The pane holds tasks finished since Mon 10-05 14:00 IDT; teamrig list --status done,dropped lists older ones.` | Ends the oldest week the pane holds |
 
 The pane holds the tasks finished in the last 8 days, the days teamrig's own rotation keeps finished tasks in its
-working set, so the Archive page reaches back to the week those days start in, never further; `teamrig list --status
+working set, so the Done page reaches back to the week those days start in, never further; `teamrig list --status
 done,dropped` reads the register's whole history. A week with none says `Nothing finished this week.` The trail names
-the page by its week (`Done 10-12`). Above the prompt no page shows, so there is no Archive page.
+the page by its week (`Done 10-13`). Above the prompt no page shows, so there is no Done page.
 
 ## The Changes view
 

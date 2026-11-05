@@ -101,7 +101,7 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | A reference file's page | 256 KiB, read whole as the page opens; a larger file, or one that is not text, says why it is not shown |
 | Search results | 30 shown, the active first, under a dim line counting every match |
 | A Claude dialog (a permission prompt, a question) | while it is open, Claude Code sends the pane no keys, clicks or wheel scroll, and tells it nothing: answer the dialog first |
-| Archive | 50 rows a week, a dim line counting the rest; the tasks finished in the last 8 days, teamrig's own retention |
+| Done page | 4 rows a group before `▸ n more`; the tasks finished in the last 8 days, teamrig's own retention |
 
 The pane never writes the register, the inboxes or any repo itself: the Meetings view's `[Start meeting]` runs
 `teamrig meeting start`, the Teams tab's `[Meet]` runs `teamrig meet`, and a card's `[Note]` and `[Next]` run
