@@ -301,6 +301,8 @@ const NO_STATS_LIST: StatsListKind | null = null
 const statsList = atom({ plugin: 'teamrig-pane', key: 'statsList' } as const, NO_STATS_LIST)
 /** The Stats tab's sections the person opened or closed against their default (stats-rows.ts isSectionOpen), by key: a press on a header flips one. */
 const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as const, NOTHING_TOGGLED)
+/** The Done page's days, groups and `n more` rows the person flipped against their default (done-rows.ts), by key. */
+const doneToggled = atom({ plugin: 'teamrig-pane', key: 'doneToggled' } as const, NOTHING_TOGGLED)
 const NO_MEET: MeetAnswer | null = null
 /** What the last [Meet] press on the Teams tab answered (owner-meet.ts): cleared at each session start and each switch to the tab. */
 const ownerMeet = atom({ plugin: 'teamrig-pane', key: 'ownerMeet' } as const, NO_MEET)
@@ -1028,7 +1030,7 @@ export const register: Register = on => {
             : place.kind === 'search'
               ? searchBlocks(snap, place.query, found)
               : place.kind === 'done'
-                ? doneBlocks(snap, shown, place.week)
+                ? doneBlocks(snap, shown, place.week, await read($, doneToggled))
                 : place.kind === 'file'
                   ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
                   : place.kind === 'keys'
@@ -1356,15 +1358,17 @@ export const register: Register = on => {
         </Box>
       )
     }
-    // A Teams tab key, a meeting's card in the Meetings view, a Stats tab section, or a Tasks view heading's tasks,
-    // opened or closed.
+    // A Teams tab key, a meeting's card in the Meetings view, a Stats tab section, a Done page's day or group, or a
+    // Tasks view heading's tasks, opened or closed.
     const fold = (key: string) =>
       current === 'meetings'
         ? update($, meetingsOpen, opened => toggledWith(opened, key))
         : current === 'stats'
         ? update($, statsToggled, toggled => toggledWith(toggled, key))
         : current === 'tasks'
-          ? update($, tasksFolded, folded => toggledWith(folded, key))
+          ? currentPlace(at).kind === 'done'
+            ? update($, doneToggled, toggled => toggledWith(toggled, key))
+            : update($, tasksFolded, folded => toggledWith(folded, key))
           : update($, teamToggled, toggled => toggledWith(toggled, key))
     // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
     // conversation's Log page (`reads`), opens or closes a Teams tab key or a meeting's card (`folds`), or a Changes

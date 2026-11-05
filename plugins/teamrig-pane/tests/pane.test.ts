@@ -2895,41 +2895,60 @@ test('archive (h) opens the Archive page at the week of now; prev (p) and next (
     ' mine all · archive › · keys',
     '',
     ' ‹ back  forward ›',
-    ' Tasks › Archive 10-12',
+    ' Tasks › Archive 10-13',
     ` ${'─'.repeat(48)}`,
     '',
-    ' ‹ prev  week of Mon 10-12  next ›',
+    ' ‹ prev  week of Tue 10-13  next ›',
     '',
-    ' Archive · po · 1 done · 0 dropped',
+    ' Done · po · 1 done · 0 dropped',
     '',
-    ' Tue 10-13',
-    '',
-    ' ✓ T7  Fix the loader                   12:00 UTC',
+    ' ▾ Today so far · Tue 10-13 · 1 done',
+    '   Owner asked (1)',
+    '     ✓ T7  Fix the loader               12:00 UTC',
   ])
 
-  // The week before: T9 dropped on Friday, and where the pane stops holding finished tasks.
+  // A dock too short to keep the header still draws the page in the engine's window: its list stays as tight.
+  await pane.redraw({ ...PANE_PROPS, scroll: { offset: 0, bodyRows: 12 } })
+  expect(screenOf(await pane.drawn()).slice(-5)).toEqual([
+    ' Done · po · 1 done · 0 dropped',
+    '',
+    ' ▾ Today so far · Tue 10-13 · 1 done',
+    '   Owner asked (1)',
+    '     ✓ T7  Fix the loader               12:00 UTC',
+  ])
+  await pane.redraw(PANE_PROPS)
+
+  // The week before: the tasks' week tag is Tuesday's, so the weeks are; T9 dropped on Friday, in a group that starts closed.
+  await pane.press({ key: 'prev' })
+  expect(await pane.find({ type: 'Text', text: /^week of Tue 10-06$/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /^▾ Fri 10-09 · 0 done$/ })).toBeDefined()
+  expect(buttonKeys(await pane.drawn())).not.toContain('done-page:T9')
+
+  // A press opens the group, and a row opens its task's page; back returns to the week it was opened from, still open.
+  await pane.press({ key: 'done-group:2026-10-09:dropped' })
+  await pane.press({ key: 'done-page:T9' })
+  expect(await pane.find({ type: 'Text', text: /^✗ T9  Feed the pages$/ })).toBeDefined()
+  await pane.press({ key: 'back' })
+  expect(await pane.find({ type: 'Text', text: /^week of Tue 10-06$/ })).toBeDefined()
+  expect(buttonKeys(await pane.drawn())).toContain('done-page:T9')
+
+  // The oldest week: no prev, and where the pane stops holding finished tasks.
   await pane.press({ key: 'prev' })
   drawn = await pane.drawn()
   expect(buttonKeys(drawn)).not.toContain('prev')
   expect(await pane.find({ type: 'Text', text: /^‹ prev$/ })).toMatchObject({ props: { dimColor: true } })
   expect(keyedProps(drawn, 'next')).toMatchObject({ label: 'next ›', hotkey: 'l' })
-  expect(await pane.find({ type: 'Text', text: /^week of Mon 10-05$/ })).toBeDefined()
-  expect(await pane.find({ type: 'Text', text: /^Fri 10-09$/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /^week of Tue 09-29$/ })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: /^The pane holds tasks finished since Mon/ })).toBeDefined()
 
-  // A row opens its task's page; back returns to the week it was opened from.
-  await pane.press({ key: 'done-page:T9' })
-  expect(await pane.find({ type: 'Text', text: /^✗ T9  Feed the pages$/ })).toBeDefined()
-  await pane.press({ key: 'back' })
-  expect(await pane.find({ type: 'Text', text: /^week of Mon 10-05$/ })).toBeDefined()
-
   await pane.press({ key: 'next' })
-  expect(await pane.find({ type: 'Text', text: /^week of Mon 10-12$/ })).toBeDefined()
+  await pane.press({ key: 'next' })
+  expect(await pane.find({ type: 'Text', text: /^week of Tue 10-13$/ })).toBeDefined()
   // A step changes the week in place: back returns to the list.
   await pane.press({ key: 'back' })
   drawn = await pane.drawn()
   // The list keeps the head while the places ahead stay, the Archive page and T9's (forward returns to them).
-  expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › Archive 10-12 › T9'])
+  expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › Archive 10-13 › T9'])
   expect(keyedNode(drawn, 'week-steps')).toBe(null)
   expect(buttonKeys(drawn)).toContain('next:T52')
 

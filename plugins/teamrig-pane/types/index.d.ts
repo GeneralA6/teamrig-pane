@@ -644,6 +644,8 @@ declare module 'claude-code' {
       statsList: StatsListKind | null
       /** The Stats tab's sections the person opened or closed against their default (hooks/stats-rows.ts isSectionOpen), by key. */
       statsToggled: readonly string[]
+      /** The Done page's days, groups and `n more` rows the person flipped against their default (hooks/done-rows.ts), by key. */
+      doneToggled: readonly string[]
     }
   }
 }
