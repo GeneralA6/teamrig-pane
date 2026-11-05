@@ -66,7 +66,7 @@ tab is:` over the team's sessions, each a press that pins the tab to it.
 again (`auto`) or pins a session, named by its id or its name; a word that names no session pins nothing
 and lists the team's sessions. In the pane, `m` and `a` switch views, and `o`, `v`, `w`, `i` and `n`
 show one status's tasks alone (Status bar, below); on a task's page `b` and `f` go back and forward, and
-in the dock the Find field (`s`) searches the tasks, `archive ›` (`h`) lists the finished ones a week at a time
+in the dock the Find field (`s`) searches the tasks, `done ›` (`h`) lists the finished ones a week at a time
 (below), and `k: keys` (`k`), at the end of the mode row, opens the Keys page: every key the pane answers, on one
 page, back returning to where it was opened from.
 
@@ -164,10 +164,12 @@ the field), and `Keys go to Claude` while Claude's prompt has them (a click on t
 query kept). A Claude dialog, such as a permission prompt, takes the keys, clicks and wheel scroll from the pane
 until it is answered: that is Claude Code's rule, not the pane's.
 
-`archive ›` (`h`, in the dock's mode row after `mine` and `all` and a dim `·`, its `›` saying a press opens a page)
-opens the Archive page on this week, a week starting
-Monday 00:00 on the team's clock: the view's tasks closed done or dropped, a dim line a day, newest first, each task on one
-dim line with when it closed (in `all`, its owner too), at most 50 with a dim line counting the rest. Its
+`done ›` (`h`, in the dock's mode row after `mine` and `all` and a dim `·`, its `›` saying a press opens a page)
+opens the Done page on this week, the team's planning week (starting on the plan's weekday, Monday with no plan, at
+00:00 on the team's clock): the view's tasks closed done or dropped, each day a heading that folds, newest first and
+open, a closed day counting what it holds. Under an open day each group (`Owner asked`, a goal, `Urgent p1`, `This
+week's plan`, `Other work`, `Dropped`) folds too, the last two closed at first; a group shows four tasks, each on one
+dim line with when it closed (in `all`, its owner too), then `▸ n more`, which opens the rest in place. Its
 head names whose tasks and how many were done and dropped. `‹ prev` (`p`) and `next ›` (`l`) step a
 week back and forward in place, so back returns to where the page was opened from; a click on a task
 opens its page, and back returns to the week. The pane holds the tasks finished in the last 8 days, so
@@ -264,7 +266,7 @@ both folders named below, the session's team is still looked for, for the files 
 and for its notes: when none can be found or read, the pane goes without them.
 
 In a project teamrig is not set up for (no team and no folder named), the pane shows how to set it up
-and nothing else, with no view buttons, Find row or mine/all/archive until it finds a team (the minimized
+and nothing else, with no view buttons, Find row or mine/all/done until it finds a team (the minimized
 strip keeps its buttons, and a press opens the setup): one step, set up a team (ask Claude, or run
 `/teamrig:team-setup`, which makes the team and ties the project to it), opening with installing teamrig
 while no team is under the kit home. Joining a team already made (write `{"team": "<id>"}` to the
