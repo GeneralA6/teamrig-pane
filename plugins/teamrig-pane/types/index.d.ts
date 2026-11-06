@@ -47,6 +47,12 @@ export type TaskRow = {
   goals: readonly string[]
   /** The `YYYY-MM-DD` start of the planning week it belongs to; null when none. */
   week: string | null
+  /** Its size in percent of the weekly limit (`teamrig update --size`); null when no one sized it. */
+  size: number | null
+  /** The leader who pinned it to the top of its owner's list (`teamrig update --pin`); null when not pinned. */
+  pin: string | null
+  /** The work class it was given (`--class`); null when none, and it counts as the team's default class. */
+  workClass: string | null
   createdBy: string
   createdAt: string
   /** The newest event of any kind, and the session that wrote it. */
