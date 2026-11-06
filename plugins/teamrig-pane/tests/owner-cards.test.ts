@@ -121,6 +121,18 @@ describe('ownerCardsOf', () => {
     expect(cards['pane']?.due.map(card => card.id)).toEqual(['T2', 'T1'])
     expect(cards['docs']?.due.map(card => card.id)).toEqual(['T3'])
   })
+
+  test('a session’s cards follow the team’s focus: with an owner’s order turned off, the ids settle them', () => {
+    const lines = [
+      createLine('T1', { owner: 'pane', by: 'lead', at: NOW - 3 * HOUR, priority: 3 }),
+      createLine('T2', { owner: 'pane', by: 'lead', at: NOW - 3 * HOUR, priority: 1 }),
+      waitingLine('T1', 'pane', NOW - 2 * HOUR, [{ kind: 'approval', who: 'owner' }]),
+      waitingLine('T2', 'pane', NOW - 2 * HOUR, [{ kind: 'approval', who: 'owner' }]),
+    ]
+    const focus = { ...DEFAULT_FOCUS, expedite: { ...DEFAULT_FOCUS.expedite, ownerP1: false }, score: { ...DEFAULT_FOCUS.score, ownerOrderValues: [] } }
+    expect(cardsOf(lines)['pane']?.due.map(card => card.id)).toEqual(['T2', 'T1'])
+    expect(cardsOf(lines, { ...SETTINGS, focus })['pane']?.due.map(card => card.id)).toEqual(['T1', 'T2'])
+  })
 })
 
 describe('laterWords', () => {

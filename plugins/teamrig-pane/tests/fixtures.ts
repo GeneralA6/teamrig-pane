@@ -62,7 +62,7 @@ export function treeAt(
   timeZone = TimeZone.UTC.name,
   leads: TeamLeads | null = null,
 ): PaneTree {
-  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone, leads })
+  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone, leads, focus: DEFAULT_FOCUS, ownerSource: DEFAULT_REGISTER.ownerSource })
 }
 
 /** The clock at `now` in `zone`, UTC unless given. */
