@@ -23,9 +23,10 @@ its buttons, whose header would take over half its rows, scrolls as one.
 
 - **mine**: the session's area, under its status bar (Status bar, below) and a header counting its
   active tasks (`3 active`; a pin names the area first, `web (pinned) · 3 active`; the switch's Inbox
-  button counts the unread inbox lines). Its tasks follow in sections, each in teamrig's plan order (priority,
-  then the date it works to with undated last, then id: its own due, or an earlier one of an active task
-  that needs it) under a bold heading with its count, an empty one left out:
+  button counts the unread inbox lines). Its tasks follow in sections, each in teamrig's plan order (the pinned
+  task, then band, then score, the highest first, then a started task, then the date it works to with undated
+  last: its own due, or an earlier one of an active task that needs it) under a bold heading with its count, an
+  empty one left out:
   `Verifying` (the nearest to done, so closing them comes first), `Working on`, `Up next`, `Waiting`
   (its own waiting tasks, then the first 8 it asked of other sessions, each saying `on <owner>`) and
   `Done today` (its tasks done or dropped on the team's day, the newest 6). A heading's count is the
@@ -40,8 +41,10 @@ a second shows them again.
 
 A task is two lines: its status mark, bold id and title (cut at two lines, whole while its card is open), then a dim meta line under
 the title. The mark is its status as `teamrig list` names it: `○` open, `◐` in progress, `◑` verifying,
-`■` waiting, `✓` done, `✗` dropped. The meta line reads `p2 · due Sat 10-17 · in progress since 11:55 IDT`:
-its priority, `bug` or `critical bug` for a bug, the date it works to (its own due, or an earlier one of an active task that needs it,
+`■` waiting, `✓` done, `✗` dropped. The meta line reads
+`Roadmap · score 6.67 · p2 · due Sat 10-17 · in progress since 11:55 IDT`: its work class and score, as
+`teamrig list` prints them (a finished task keeps its class and has no score), its priority, `pinned` on the task
+a leader pinned, `bug` or `critical bug` for a bug, the date it works to (its own due, or an earlier one of an active task that needs it,
 which it names: `due Wed 10-14 (from T7)`; `verify by` while verifying), since when it stands at its status
 and why, whom it holds up, then what needs a look. A verifying task's change has landed and waits for what proves it works: its
 note says what that is (`verifying since 09:10 IDT: tests pass on main`). A waiting task waits on a
@@ -94,6 +97,8 @@ the value column, and shows only when it has a value:
 - **Lead:** the lead its owner answers to, from the team's config: the sub-lead that lists it, else the
   lead (for the lead's own tasks too); none when the pane read no team config;
 - **Priority:** its number;
+- **Class:** its work class: `Roadmap`, `Maintenance` or `Improvements`;
+- **Score:** its score in plan order; none on a finished task;
 - **Type:** `bug` or `critical bug`; none for a task;
 - **Due:** the date it works to, `late 2d` in red once past it, a date taken from a task that needs it
   naming that task (`Wed 10-14 (from T7)`); **Verify by** while it is verifying;

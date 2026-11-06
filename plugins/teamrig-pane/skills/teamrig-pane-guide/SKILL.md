@@ -206,8 +206,9 @@ With no team config the pane can read, it names the command alone: `This tab is 
 /teamrig-pane <session> ties it to one.`
 
 **mine** shows its status bar (below), then a header counting the area's active tasks, `3 active`, then its tasks
-in sections, each in teamrig's plan order (priority, then the date it works to, undated last, then id: its own due,
-or an earlier one of an active task that needs it) under a bold heading with its count; an empty section is left out:
+in sections, each in teamrig's plan order (the pinned task, then band, then score, the highest first, then a started
+task, then the date it works to, undated last: its own due, or an earlier one of an active task that needs it) under a
+bold heading with its count; an empty section is left out:
 
 1. `Verifying`: the change landed, its proof is still to come; these lead, because closing them comes first;
 2. `Working on`: in progress;
@@ -239,14 +240,17 @@ A task is two lines, its title and a dim meta line under it:
 
 ```text
 ◐ T12  Build the signup endpoint
-       p2 · due Sat 10-17 · in progress since 11:55 IDT
+       Roadmap · score 6.67 · p2 · due Sat 10-17 · in progress since 11:55 IDT
 ```
 
 | Part | Meaning |
 | --- | --- |
 | `○` `◐` `◑` `■` `✓` `✗` | open, in-progress, verifying, waiting, done, dropped (as `teamrig list` names them) |
 | `T12`, the title | The id, bold, and the title, cut at two lines; whole while its card is open |
-| `p2` | Its priority; `p0`, teamrig's own level for work done right now, comes before every other |
+| `Roadmap`, `Maintenance`, `Improvements` | Its work class, as `teamrig list` prints it; a finished task keeps it |
+| `score 6.67` | Its score in plan order, as `teamrig list` prints it; none on a finished task, which holds no place in the order |
+| `p2` | Its priority; `p0`, teamrig's own level for work done right now, goes ahead of every score |
+| `pinned` | The one task a leader above its owner pinned (`teamrig update --pin`), which tops the owner's list |
 | `bug`, `critical bug` | What the item is past a plain task (`teamrig add --type bug`, `--critical`); a task says nothing |
 | `due Sat 10-17` | The date it works to: its own due, or an earlier one of an active task that needs it, which it names (`due Wed 10-14 (from T7)`); `verify by` while verifying |
 | `in progress since 11:55 IDT` | Since when it stands at its status (a time today, else a day, on the team's clock); a verifying task's note follows, what will prove it |
@@ -313,6 +317,8 @@ value:
     │ Owner        api
     │ Lead         lead
     │ Priority     2
+    │ Class        Roadmap
+    │ Score        6.67
     │ Due          Sat 10-17
     │ Planned      this week
     │ After        T5 (done)
@@ -333,6 +339,8 @@ value:
 | `Owner` | The session that owns it, on every card |
 | `Lead` | The lead its owner answers to, from the team's config: the sub-lead that lists it, else the lead (for the lead's own tasks too); none when the pane read no team config |
 | `Priority` | Its priority, a number |
+| `Class` | Its work class: `Roadmap`, `Maintenance` or `Improvements` |
+| `Score` | Its score in plan order; none on a finished task |
 | `Type` | `bug` or `critical bug`; none for a task |
 | `Due` | The date it works to, `late 2d` in red once past it, a date taken from a task that needs it naming that task (`Wed 10-14 (from T7)`); `Verify by` while it is verifying |
 | `Planned` | The week plan it is in, against the team's week: `this week`, `next week`, `week of Mon 10-26`, or `not in a week plan` |
@@ -385,6 +393,8 @@ Status       not started since Sat 10-10 by lead
 Owner        etl
 Lead         lead
 Priority     3
+Class        Improvements
+Score        3.33
 Planned      this week
 Goal         G10.2
 Origin       Asked by owner, added by lead Sat 10-10
