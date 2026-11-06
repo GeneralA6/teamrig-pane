@@ -154,6 +154,11 @@ export type Snapshot = {
   /** How the team ranks its tasks: the team config's `focus`, which plan order and a row's class and score read (hooks/ranking.ts). */
   focus: RankFocus
   /**
+   * The goals of the team and the teams above it, as the last poll found them (hooks/tree-goals.ts): what a Roadmap
+   * task's score and the goal named beside it read. Moves when a rank or a parent does.
+   */
+  goals: GoalRanks
+  /**
    * Each session's cards on the owner, keyed by its id, as the last poll found them (hooks/owner-cards.ts): recounted
    * when the register moves and, while a card is put off, each minute, so one comes back with no file change. A
    * session with none is absent.
@@ -164,6 +169,12 @@ export type Snapshot = {
   /** When it was built, so due and age labels move on without a file change. */
   now: number
 }
+
+/**
+ * Each goal's parent and rank by its tag, what a ranking reads of a goal (core register/ranking.ts `goals`). Plain data,
+ * not a Map, as a snapshot crosses `$.state`.
+ */
+export type GoalRanks = Readonly<Record<string, { readonly parent: string | null; readonly rank: number | null }>>
 
 /**
  * The `focus` keys a ranking reads, as teamrig's config sets them (core register/ranking.ts RankingFocus). This contract

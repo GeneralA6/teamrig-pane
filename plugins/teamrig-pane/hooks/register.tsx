@@ -74,6 +74,7 @@ import { inboxFile, TaskDetails, type RefPlaces } from './details'
 import { RefFileReader } from './ref-file'
 import { DEFAULT_FOCUS, DEFAULT_REGISTER, TimeZone, type StatsRange } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
+import { NO_GOAL_RANKS, TreeGoals } from './tree-goals'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { diffKey, noteKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
 import { buttonCells, packGroups, packRows, type ButtonLook } from './pack'
@@ -196,6 +197,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   timeZone: TimeZone.UTC.name,
   ownerSource: DEFAULT_REGISTER.ownerSource,
   focus: DEFAULT_FOCUS,
+  goals: NO_GOAL_RANKS,
   ownerCards: {},
   taskCounts: NO_TASK_COUNTS,
   now: 0,
@@ -206,7 +208,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
  * value reads as absent (the empty snapshot, until the reload's first poll). Bump it whenever the
  * Snapshot or TaskRow type in ../types changes shape.
  */
-const SNAPSHOT_SHAPE = 'register-v14'
+const SNAPSHOT_SHAPE = 'register-v15'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */
@@ -595,7 +597,8 @@ export const register: Register = on => {
       tallying?.stop()
       const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } =
         places.kind === 'found' ? { paths: registerPaths(places.dirs), settings: places.settings } : { missing: places.problem }
-      team = places.kind === 'found' && places.team !== null ? { files, paths: places.team } : null
+      const teamFiles = places.kind === 'found' ? places.team : null
+      team = teamFiles === null ? null : { files, paths: teamFiles }
       const refPlaces: RefPlaces = {
         inboxDir: 'missing' in registerAt ? null : registerAt.paths.inboxDir,
         home: home ?? null,
@@ -609,7 +612,7 @@ export const register: Register = on => {
         source:
           'missing' in registerAt
             ? registerAt
-            : new TaskRegisterSource(files, registerAt.paths, registerAt.settings, places.kind === 'found' ? places.team : null),
+            : new TaskRegisterSource(files, registerAt.paths, registerAt.settings, teamFiles, new TreeGoals(files, registerAt.paths.goals, teamFiles)),
         sessionId: () => $.session.id(),
         now: () => $.clock.now(),
         publish: async change => {

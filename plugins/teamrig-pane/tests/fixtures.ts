@@ -1,11 +1,12 @@
 // Register lines shaped as teamrig writes them (events v2, inbox marks v1), and an in-memory `Files`.
 import { DEFAULT_FOCUS, DEFAULT_REGISTER, EVENT_VERSION, MARK_VERSION, TimeZone } from '../hooks/core/read/index'
+import { GOAL_RECORD_VERSION } from '../hooks/core/register/goals'
 import { lineHash } from '../hooks/line-hash'
 import { treeOf, type PaneTree } from '../hooks/meta'
-import type { FileStamp, Files } from '../hooks/source'
+import type { FileStamp, Files, GoalSource } from '../hooks/source'
 import { NO_TASK_COUNTS } from '../hooks/task-counts'
 import { zoneNamed, type Clock } from '../hooks/zone'
-import type { DrawnSettings, Snapshot, TaskRow, TeamLeads, TeamSettings, WaitRow } from '../types'
+import type { DrawnSettings, GoalRanks, Snapshot, TaskRow, TeamLeads, TeamSettings, WaitRow } from '../types'
 
 export const NOW = Date.UTC(2026, 9, 13, 14, 0)
 export const HOUR = 3_600_000
@@ -23,15 +24,34 @@ export const SNAPSHOT_SETTINGS: DrawnSettings = {
 export const TEAM_SETTINGS: TeamSettings = { ...SNAPSHOT_SETTINGS, requireDecisionCard: DEFAULT_REGISTER.requireDecisionCard }
 /**
  * A snapshot's team fields when the pane found no team, on an empty register: no team name, no session name, no leads,
- * no work marks, no cards on the owner and no tasks counted.
+ * no work marks, no goals, no cards on the owner and no tasks counted.
  */
-export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work' | 'ownerCards' | 'taskCounts'> = {
+export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work' | 'goals' | 'ownerCards' | 'taskCounts'> = {
   team: null,
   areaName: null,
   leads: null,
   work: [],
+  goals: {},
   ownerCards: {},
   taskCounts: NO_TASK_COUNTS,
+}
+
+/** A tree that holds no goals and never moves: a source whose test is not about them. */
+export const NO_TREE_GOALS: GoalSource = { refresh: async () => false, current: {} }
+
+/** A goal's first record, as `teamrig goal add` writes it. */
+export function goalLine(tag: string, parent: string | null = null): string {
+  return JSON.stringify({ v: GOAL_RECORD_VERSION, type: 'goal-add', at: iso(NOW), by: 'lead', tag, title: `goal ${tag}`, start: '2026-10-01', target: '2026-12-01', parent })
+}
+
+/** A goal's new title, as `teamrig goal set` writes it: the target stays. */
+export function goalTitleLine(tag: string, title: string): string {
+  return JSON.stringify({ v: GOAL_RECORD_VERSION, type: 'goal-set', at: iso(NOW), by: 'lead', tag, target: null, title, note: 'renamed' })
+}
+
+/** A goal's rank, as `teamrig goal rank` writes it; null takes it off the ranking. */
+export function goalRankLine(tag: string, rank: number | null): string {
+  return JSON.stringify({ v: GOAL_RECORD_VERSION, type: 'goal-rank', at: iso(NOW), by: 'lead', tag, rank })
 }
 
 /** A team zone ahead of UTC, three hours on NOW (Israel's summer time, `IDT`): what a UTC clock cannot tell apart. */
@@ -53,7 +73,7 @@ export const INBOX_UNREAD_FROM = 3
 
 /**
  * The tree of `tasks` at `now`, for a team whose config sets `notPickedUpAfterHours` (teamrig's default when unset)
- * and the zone named `timeZone` (UTC unless given), with `leads` (none read unless given).
+ * and the zone named `timeZone` (UTC unless given), with `leads` and `goals` (none read unless given).
  */
 export function treeAt(
   tasks: readonly TaskRow[],
@@ -61,8 +81,9 @@ export function treeAt(
   notPickedUpAfterHours = NOT_PICKED_UP_HOURS,
   timeZone = TimeZone.UTC.name,
   leads: TeamLeads | null = null,
+  goals: GoalRanks = {},
 ): PaneTree {
-  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone, leads, focus: DEFAULT_FOCUS, ownerSource: DEFAULT_REGISTER.ownerSource })
+  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone, leads, focus: DEFAULT_FOCUS, ownerSource: DEFAULT_REGISTER.ownerSource, goals })
 }
 
 /** The clock at `now` in `zone`, UTC unless given. */

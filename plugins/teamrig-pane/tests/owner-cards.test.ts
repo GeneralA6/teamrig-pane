@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { OwnerSettings } from '../types'
+import type { GoalRanks, OwnerSettings } from '../types'
 import { DEFAULT_FOCUS, readRegister, TimeZone } from '../hooks/core/read/index'
 import { laterWords, ownerCardsOf } from '../hooks/owner-cards'
 import { HOUR, JERUSALEM, NOW, createLine, waitingLine, type CardFields } from './fixtures'
@@ -10,8 +10,8 @@ const SETTINGS: OwnerSettings = { ownerSource: 'owner', requireDecisionCard: tru
 const GATED: CardFields = { question: 'Ship the analytics tab?', options: ['A: now', 'B: next week'], recommend: 'A', byDefault: 'B', gate: 'product' }
 const UNGATED: CardFields = { question: 'Which colour?', options: ['A: green', 'B: blue'], recommend: 'A', byDefault: 'A' }
 
-function cardsOf(lines: readonly string[], settings: OwnerSettings = SETTINGS, now: number = NOW, zone: TimeZone = TimeZone.UTC) {
-  return ownerCardsOf(readRegister(lines.join('\n')).state.tasks, now, zone, settings)
+function cardsOf(lines: readonly string[], settings: OwnerSettings = SETTINGS, now: number = NOW, zone: TimeZone = TimeZone.UTC, goals: GoalRanks = {}) {
+  return ownerCardsOf(readRegister(lines.join('\n')).state.tasks, now, zone, settings, goals)
 }
 
 describe('ownerCardsOf', () => {

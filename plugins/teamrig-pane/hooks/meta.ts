@@ -8,7 +8,7 @@
 // snapshot's clock. Pure: the words change with the clock and the other tasks' statuses, so view.ts's sameView compares
 // them to know when a poll must redraw.
 import type { ThemeKey } from 'claude-code'
-import type { RankFocus, TaskRow, TaskStatus, TeamLeads } from '../types'
+import type { GoalRanks, RankFocus, TaskRow, TaskStatus, TeamLeads } from '../types'
 import { ACTIVE_STATUSES, dueTime, priorityText, TaskTree, TimeZone, unfinishedAfter, waitText, type EffectiveDue, type TreeRanking, type WaitContext } from './core/read/index'
 import { rankingOf } from './ranking'
 import type { Span } from './rows'
@@ -22,7 +22,7 @@ export type Flag = 'overdue' | 'new' | 'unseen'
 
 /**
  * What treeOf reads from a snapshot (types/index.d.ts Snapshot): its tasks, its clock, the team's NOT PICKED UP hours
- * and zone, who leads whom, and what its ranking reads: the team's focus and owner marker.
+ * and zone, who leads whom, and what its ranking reads: the team's focus, owner marker and goals.
  */
 export type TreeSource = {
   readonly tasks: readonly TaskRow[]
@@ -32,6 +32,7 @@ export type TreeSource = {
   readonly leads: TeamLeads | null
   readonly focus: RankFocus
   readonly ownerSource: string
+  readonly goals: GoalRanks
 }
 
 /**
@@ -200,7 +201,7 @@ export function lateWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null
  * as in teamrig.
  */
 export function treeOf(snap: TreeSource): PaneTree {
-  return new PaneTree(new Map(snap.tasks.map(task => [task.id, task])), new Date(snap.now), zoneNamed(snap.timeZone), snap.notPickedUpAfterHours, snap.leads, rankingOf(snap.focus, snap.ownerSource))
+  return new PaneTree(new Map(snap.tasks.map(task => [task.id, task])), new Date(snap.now), zoneNamed(snap.timeZone), snap.notPickedUpAfterHours, snap.leads, rankingOf(snap.focus, snap.ownerSource, snap.goals))
 }
 
 /**

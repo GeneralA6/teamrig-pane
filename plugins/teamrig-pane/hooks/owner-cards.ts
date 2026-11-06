@@ -3,7 +3,7 @@
 // reader groups them (ownerCardsBySession); this keeps only what the pane draws, the Later ones soonest back first so
 // a session's row names the next. Pure: the clock decides when a Later card comes back, so a poll recomputes them as
 // time passes with no file change.
-import type { LaterOwnerCard, OwnerCard, OwnerSettings, SessionOwnerCards } from '../types'
+import type { GoalRanks, LaterOwnerCard, OwnerCard, OwnerSettings, SessionOwnerCards } from '../types'
 import { dueTime, ownerCardsBySession, showStored, TaskTree, type LaterCard, type Task, type TimeZone } from './core/read/index'
 import { storedDayWords } from './meta'
 import { rankingOf } from './ranking'
@@ -29,8 +29,8 @@ function backAt(card: LaterCard, zone: TimeZone): number {
  * Each session's cards on the owner at `now`, keyed by the session; a session with none is absent. Its due cards keep
  * the register's plan order; its Later ones come soonest back first, plan order among those back at once.
  */
-export function ownerCardsOf(tasks: ReadonlyMap<string, Task>, now: number, zone: TimeZone, settings: OwnerSettings): Record<string, SessionOwnerCards> {
-  const tree = new TaskTree(tasks, new Date(now), zone, undefined, undefined, rankingOf(settings.focus, settings.ownerSource))
+export function ownerCardsOf(tasks: ReadonlyMap<string, Task>, now: number, zone: TimeZone, settings: OwnerSettings, goals: GoalRanks): Record<string, SessionOwnerCards> {
+  const tree = new TaskTree(tasks, new Date(now), zone, undefined, undefined, rankingOf(settings.focus, settings.ownerSource, goals))
   const bySession: Record<string, SessionOwnerCards> = {}
   for (const [session, { due, later }] of ownerCardsBySession([...tasks.values()], tree, settings.ownerSource, settings.requireDecisionCard)) {
     const soonest = [...later].sort((a, b) => backAt(a, zone) - backAt(b, zone))
