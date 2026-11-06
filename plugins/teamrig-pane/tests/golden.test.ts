@@ -6,6 +6,7 @@ import { rankWords, treeOf, whenWords, type PaneTree } from '../hooks/meta'
 import { findPlaces } from '../hooks/places'
 import { paneBlocks, type Block } from '../hooks/rows'
 import { registerPaths, skippedText, TaskRegisterSource } from '../hooks/source'
+import { TreeGoals } from '../hooks/tree-goals'
 import { clockOf } from '../hooks/zone'
 import {
   clockAt,
@@ -112,7 +113,8 @@ async function paneSnapshot(files: MemoryFiles): Promise<Snapshot> {
     machineZone: 'UTC',
   })
   if (places.kind !== 'found') throw new Error(places.kind === 'problem' ? places.problem : 'no team found')
-  const snap = await new TaskRegisterSource(files, registerPaths(places.dirs), places.settings, places.team).poll({
+  const paths = registerPaths(places.dirs)
+  const snap = await new TaskRegisterSource(files, paths, places.settings, places.team, new TreeGoals(files, paths.goals, places.team)).poll({
     claudeSession: GOLDEN_SESSION,
     pinned: null,
     now: GOLDEN.generatedAt,
@@ -172,11 +174,11 @@ describe('golden', () => {
   test("reads teamrig's own register fixtures as teamrig lists them, with the lines it skips counted alike", async () => {
     expect(GOLDEN.fixtures.map(fixture => fixture.name)).toEqual(['events-v0.jsonl', 'events-v1.jsonl', 'events-v2.jsonl'])
     // teamrig listed each with the demo team's config, so its settings, zone and leads.
-    const { notPickedUpAfterHours, timeZone, leads, focus, ownerSource } = await paneSnapshot(goldenFiles())
+    const { notPickedUpAfterHours, timeZone, leads, focus, ownerSource, goals } = await paneSnapshot(goldenFiles())
     for (const fixture of GOLDEN.fixtures) {
       const register = readRegister(fixture.events)
       const rows = [...register.state.tasks.values()].map(task => rowOf(task))
-      const tree = treeOf({ tasks: rows, now: GOLDEN.generatedAt, notPickedUpAfterHours, timeZone, leads, focus, ownerSource })
+      const tree = treeOf({ tasks: rows, now: GOLDEN.generatedAt, notPickedUpAfterHours, timeZone, leads, focus, ownerSource, goals })
       const lines = rows.map(row => listLine(row, tree)).sort()
       expect({ fixture: fixture.name, lines }).toEqual({ fixture: fixture.name, lines: linesOf(fixture.list) })
       const skipped = skippedText(PATHS, register, readMarks(''))

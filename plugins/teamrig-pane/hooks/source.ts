@@ -3,9 +3,10 @@
 // and the register put together by teamrig's own read entry (hooks/core/read), so the pane shows what
 // teamrig's commands show, on a register never rotated and on a rotated one alike.
 // File access goes through `Files`, which register.tsx backs with $.fs and tests with a fake.
-import type { AreaSource, DrawnSettings, OwnerSettings, SessionOwnerCards, Snapshot, TaskCounts, TaskRow, TeamLeads, TeamSettings, WorkMark } from '../types'
+import type { AreaSource, DrawnSettings, GoalRanks, OwnerSettings, SessionOwnerCards, Snapshot, TaskCounts, TaskRow, TeamLeads, TeamSettings, WorkMark } from '../types'
 import {
   assemble,
+  GOALS_FILE,
   indexMarks,
   inboxLines,
   layoutPaths,
@@ -73,11 +74,12 @@ export async function unlessMissing<T, M>(call: () => Promise<T>, exists: () => 
 
 /**
  * The register's files: the events the tasks are folded from (the tail, beside which a rotated register
- * keeps its snapshot and archive, named by teamrig's layoutPaths), the inbox read marks, and the inbox folder.
+ * keeps its snapshot and archive, named by teamrig's layoutPaths), the inbox read marks, the team's goals, and the inbox
+ * folder.
  */
-export type RegisterPaths = { events: string; marks: string; inboxDir: string }
+export type RegisterPaths = { events: string; marks: string; goals: string; inboxDir: string }
 
-/** The register's folders: its state folder (events, inbox read marks) and its inbox folder. */
+/** The register's folders: its state folder (events, inbox read marks, goals) and its inbox folder. */
 export type RegisterDirs = { tasksDir: string; inboxDir: string }
 
 /** A path with forward slashes and no trailing one. */
@@ -88,8 +90,14 @@ export function slashed(path: string): string {
 /** The register's files under its folders, named as teamrig names them, with slashes made forward. */
 export function registerPaths(dirs: RegisterDirs): RegisterPaths {
   const tasks = slashed(dirs.tasksDir)
-  return { events: `${tasks}/events.jsonl`, marks: `${tasks}/inbox-marks.jsonl`, inboxDir: slashed(dirs.inboxDir) }
+  return { events: `${tasks}/events.jsonl`, marks: `${tasks}/inbox-marks.jsonl`, goals: `${tasks}/${GOALS_FILE}`, inboxDir: slashed(dirs.inboxDir) }
 }
+
+/**
+ * The goals a ranking reads (tree-goals.ts TreeGoals), handed in as tree-goals.ts reads WatchedFile from here: `refresh`
+ * answers true when a rank or a parent moved, and a throw keeps the last good ranks.
+ */
+export type GoalSource = { refresh(): Promise<boolean>; readonly current: GoalRanks }
 
 /**
  * The most one read copies: $.fs.read rejects a bigger file, and has no ranged read. A register never
@@ -294,10 +302,13 @@ export class TaskRegisterSource {
   private readonly names: TeamNames | null
   /** The hours the team keeps its turn log, the work marks' window; null with no team or no team config, which have none. */
   private readonly keepHours: number | null
+  /** The goals of the tree, which a task's score and the owner's cards' order read. */
+  private readonly goals: GoalSource
 
-  constructor(files: Files, paths: RegisterPaths, settings: TeamSettings, team: TeamFiles | null) {
+  constructor(files: Files, paths: RegisterPaths, settings: TeamSettings, team: TeamFiles | null, goals: GoalSource) {
     this.files = files
     this.paths = paths
+    this.goals = goals
     const { requireDecisionCard, ...drawn } = settings
     this.drawn = drawn
     this.owner = { ownerSource: settings.ownerSource, requireDecisionCard, focus: settings.focus }
@@ -321,7 +332,9 @@ export class TaskRegisterSource {
       this.work = this.keepHours === null ? [] : workMarks(this.register.current.read.events, now - this.keepHours * HOUR_MS)
       this.taskCounts = taskCountsOf(this.register.current.state.tasks.values(), this.register.current.retired !== null)
     }
-    const ownerChanged = this.refreshOwnerCards(registerChanged, now)
+    // Before the cards: a moved rank reorders them with no register event.
+    const goalsChanged = await this.goals.refresh()
+    const ownerChanged = this.refreshOwnerCards(registerChanged || goalsChanged, now)
     const marksChanged = await this.marks.refresh()
     const { byArea, areaBySession } = indexMarks(this.marks.current.marks)
     const inboxArea = areaBySession.get(claudeSession) ?? null
@@ -332,7 +345,7 @@ export class TaskRegisterSource {
     this.lastArea = area
     const inboxChanged = this.inbox ? await this.inbox.refresh() : false
     const namesChanged = this.names ? await this.names.refresh() : false
-    if (!force && !registerChanged && !ownerChanged && !marksChanged && !areaChanged && !inboxChanged && !namesChanged) return null
+    if (!force && !registerChanged && !goalsChanged && !ownerChanged && !marksChanged && !areaChanged && !inboxChanged && !namesChanged) return null
 
     // An area that never ran `inbox read` has no mark: its count is unknown, not everything.
     const mark = area === null ? undefined : byArea.get(area)
@@ -350,6 +363,7 @@ export class TaskRegisterSource {
       inbox: inboxItems(lines, unread === null ? null : unread.total - unread.lines.length, now),
       problem: skippedText(this.paths, this.register.current, this.marks.current),
       ...this.drawn,
+      goals: this.goals.current,
       ownerCards: this.ownerCards,
       taskCounts: this.taskCounts,
       now,
@@ -357,15 +371,15 @@ export class TaskRegisterSource {
   }
 
   /**
-   * Counts the cards on the owner again when the register moved, or when a card is put off and a minute passed (its
-   * time may have come); true when they changed.
+   * Counts the cards on the owner again when the register or the goals moved, or when a card is put off and a minute
+   * passed (its time may have come); true when they changed.
    */
-  private refreshOwnerCards(registerChanged: boolean, now: number): boolean {
+  private refreshOwnerCards(ranksMoved: boolean, now: number): boolean {
     const minute = Math.floor(now / MINUTE_MS)
     const putOff = Object.values(this.ownerCards).some(cards => cards.later.length > 0)
-    if (!registerChanged && !(putOff && minute !== this.ownerCardsMinute)) return false
+    if (!ranksMoved && !(putOff && minute !== this.ownerCardsMinute)) return false
     this.ownerCardsMinute = minute
-    const cards = ownerCardsOf(this.register.current.state.tasks, now, this.zone, this.owner)
+    const cards = ownerCardsOf(this.register.current.state.tasks, now, this.zone, this.owner, this.goals.current)
     if (JSON.stringify(cards) === JSON.stringify(this.ownerCards)) return false
     this.ownerCards = cards
     return true
