@@ -2018,26 +2018,26 @@ test("the Teams tab lists the tree of teams the session's team is in; a press on
 
   await pane.press({ key: 'team' })
   expect(await drawsLine(pane, /^▾ acme · 4 active · 1 retired \[Stats\]$/)).toBe(true)
-  expect(await drawsLine(pane, /● api  acme-api \[Stats\]$/)).toBe(true)
-  expect(await drawsLine(pane, /● ui  acme-ui \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-api \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-ui \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /▸ retired \(1\)$/)).toBe(true)
-  expect(await drawsLine(pane, /○ qa/)).toBe(false)
+  expect(await drawsLine(pane, /○ acme-qa/)).toBe(false)
   expect(await drawsLine(pane, /▾ tools · 1 active · 0 retired \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /\bother\b/)).toBe(false)
   expect(await pane.find({ text: /Add the route/ })).toBeUndefined()
 
-  // web leads, so its row holds two presses: its mark closes what it leads and a second opens it again, its id opens its
-  // card. The retired group's row opens the retired sessions; api's id opens api's card, as every session's does.
+  // web leads, so its row holds two presses: its mark closes what it leads and a second opens it again, its name opens its
+  // card. The retired group's row opens the retired sessions; api's name opens api's card, as every session's does.
   await pane.press({ key: await pressOn(pane, 'session:acme/web') })
-  expect(await drawsLine(pane, /● api  acme-api \[Stats\]$/)).toBe(false)
-  expect(await drawsLine(pane, /▸ ● web  acme-web \(2\) · sub-lead \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-api \[Stats\]$/)).toBe(false)
+  expect(await drawsLine(pane, /▸ ● acme-web \(2\) · sub-lead \[Stats\]$/)).toBe(true)
   await pane.press({ key: await pressOn(pane, 'session:acme/web') })
-  expect(await drawsLine(pane, /● api  acme-api \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-api \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /│ Role {9}sub-lead · leads 2 sessions$/)).toBe(false)
   await pane.press({ key: await pressOn(pane, 'card:session:acme/web') })
   expect(await drawsLine(pane, /│ Role {9}sub-lead · leads 2 sessions$/)).toBe(true)
   await pane.press({ key: 'retired:acme' })
-  expect(await drawsLine(pane, /○ qa  acme-qa \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /○ acme-qa \[Stats\]$/)).toBe(true)
   await pane.press({ key: await pressOn(pane, 'card:session:acme/api') })
   expect(await drawsLine(pane, /│ Led by {7}web, then lead$/)).toBe(true)
   expect(await drawsLine(pane, /│ Now {10}nothing in progress$/)).toBe(true)
@@ -2077,9 +2077,9 @@ test("the Teams tab's Find field draws the sessions it names under their leaders
   await pane.input({ key: 'find', text: 'api', kind: 'change' })
   // The count, then api under its team and the leaders over it; the sessions and teams it leads nowhere near are not drawn.
   expect(await drawsLine(pane, /^1 session matches$/)).toBe(true)
-  expect(await drawsLine(pane, /● api  acme-api \[Stats\]$/)).toBe(true)
-  expect(await drawsLine(pane, /● web  acme-web\b/)).toBe(true)
-  expect(await drawsLine(pane, /● ui  acme-ui\b/)).toBe(false)
+  expect(await drawsLine(pane, /● acme-api \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-web\b/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-ui\b/)).toBe(false)
   expect(await drawsLine(pane, /\btools\b/)).toBe(false)
   expect(keyedProps(await pane.drawn(), 'find')).toMatchObject({ submitLabel: 'open' })
 
@@ -2136,7 +2136,7 @@ test('the Teams tab reads no team folder while another view shows, and reads wha
 
   await pane.press({ key: 'team' })
   expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
-  expect(await drawsLine(pane, /● dev  tools-dev \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● tools-dev \[Stats\]$/)).toBe(true)
 })
 
 test('the Teams tab says so when the session has no team', async ($, on) => {
@@ -3213,8 +3213,8 @@ test('back from a Stats tab a Teams row opened brings that row into a dock too s
   await pane.redraw(WIDE)
 
   await pane.press({ key: 'back' })
-  expect(await drawsLine(pane, /● s50\b/)).toBe(true)
-  expect(await drawsLine(pane, /● s1\b/)).toBe(false)
+  expect(await drawsLine(pane, /● acme-s50\b/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-s1\b/)).toBe(false)
 })
 
 test("the Stats switch button drops a Teams row's back, the tab staying on the row's scope", async ($, on) => {

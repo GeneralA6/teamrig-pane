@@ -3,8 +3,8 @@
 // active and retired sessions, then its week with its child teams' (T1713): a bar of its planned part filled as far as
 // it used it, green up to how far the week is, amber past it (ahead of plan), a │ marking that point when it is behind,
 // and the used and planned percents of the account's week. A session's row is its mark (● on the team, ○ dim once
-// retired), its id, its name where it differs, how many sessions it leads in brackets (T1244), its roles each in its
-// role's colour (team-card.ts
+// retired), its name alone, its id staying on its card (T1795), how many sessions it leads in brackets (T1244), its
+// roles each in its role's colour (team-card.ts
 // ROLE_COLORS, T1245), how many of its cards wait on the owner now with a [Meet] press that runs `teamrig meet` on it
 // (T1297) and when the next card the owner put off comes back; its hire and retire days are its card's. A retired
 // group's row counts its sessions. The row of the session whose pane it is starts with a green ▶ in the indent's first
@@ -13,11 +13,11 @@
 // (`folds`), a press on a session's row its card (team-card.ts) under it, or for a leader the sessions it leads. Docked,
 // a row whose line holds a press draws as its pieces and drops its own, so the row's presses sit on its words
 // (`toggles`): a team's mark and name open or close what lies under it, a leader's mark the sessions it leads, a
-// session's id its card. Inline a row is one press, its `folds`, and [Stats] and [Meet] are words.
+// session's name its card. Inline a row is one press, its `folds`, and [Stats] and [Meet] are words.
 // While the Find field holds a query, the tab draws its search (team-search.ts) on the shared search view
 // (search-view.ts) instead: the count, then the sessions it names under their teams and leaders (team.ts foundRows),
-// the words that matched underlined, a matched hire scope on a dim line under its row, and a press on any session's
-// row, docked its id, opening or closing its card. What the last [Meet] press answered leads the tab, then a WARN line
+// the words that matched underlined, a matched id or hire scope on a dim line under its row, and a press on any
+// session's row, docked its name, opening or closing its card. What the last [Meet] press answered leads the tab, then a WARN line
 // for each team folder the last read could not read (T1234). A card prints its days on the team's clock. Pure.
 import type { MeetAnswer, StatsChoice, TeamFolderFailure, TeamView } from '../types'
 import type { TimeZone } from './core/read/index'
@@ -85,11 +85,6 @@ function within(marks: readonly Mark[], from: number, length: number): Mark[] {
   })
 }
 
-/** `prefix` then `text`, the `marks` runs of `text` underlined, all in `style`. */
-function prefixedSpans(prefix: string, text: string, marks: readonly Mark[], style: Omit<Span, 'text'>): Span[] {
-  return markedSpans(`${prefix}${text}`, marks.map(mark => ({ start: mark.start + prefix.length, end: mark.end + prefix.length })), style)
-}
-
 /** Its roles, each behind the separator in its role's colour, the role `marks` (of the words joined as teamFieldText joins them) underlined. */
 function markedRoles(session: SessionFacts, marks: readonly Mark[]): Span[] {
   const spans: Span[] = []
@@ -125,16 +120,16 @@ function decisionSpans(session: SessionFacts): Span[] {
 }
 
 /**
- * A session's row: its mark, its id (bold on the team, the press that opens or closes its card), its name where it is
- * not the id, how many sessions it leads in brackets, dim, its roles in their colours, its cards on the owner, its
- * [Stats]; where `marks` says a search's words matched, underlined. Its hire and retire are its card's.
+ * A session's row: its mark, its name (bold on the team, the press that opens or closes its card), how many sessions
+ * it leads in brackets, dim, its roles in their colours, its cards on the owner, its [Stats]; where `marks` says a
+ * search's words matched, underlined. Its id, hire and retire are its card's. A name that is the id is searched as the
+ * id (teamFieldText), so its marks are the id's.
  */
 function sessionSpans({ key, session }: SessionNode, marks: Marks): Span[] {
   const isRetired = !session.active
-  const idStyle: Omit<Span, 'text'> = isRetired ? { dim: true } : { bold: true }
-  const spans: Span[] = [isRetired ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.id, marks('id'), { ...idStyle, toggles: cardKey(key) })]
-  const name = teamFieldText(session, 'name')
-  if (name !== null) spans.push(...prefixedSpans('  ', name, marks('name'), { dim: isRetired }))
+  const nameStyle: Omit<Span, 'text'> = isRetired ? { dim: true } : { bold: true }
+  const matched = marks(teamFieldText(session, 'name') === null ? 'id' : 'name')
+  const spans: Span[] = [isRetired ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.name, matched, { ...nameStyle, toggles: cardKey(key) })]
   if (session.leads > 0) spans.push({ text: ` (${session.leads})`, dim: true })
   spans.push(...markedRoles(session, marks('role')), ...decisionSpans(session))
   spans.push(...statsSpans(key, { kind: 'session', team: session.team, session: session.id }))
@@ -237,9 +232,9 @@ function rowBlock({ node, depth, open }: TeamRow, toggled: ReadonlySet<string>, 
 
 /**
  * One row a search draws: a team or a retired group, open over what it leads to, no fold; a session the search names,
- * keyed as its result, its matched words underlined and its matched scope on a dim line under it; a session drawn only
- * to lead to one. A session's row is one press that opens or closes its card, which follows it while open (docked, its
- * id is).
+ * keyed as its result, its matched words underlined and a matched id or scope on a dim line under it, as its row does
+ * not draw them; a session drawn only to lead to one. A session's row is one press that opens or closes its card, which
+ * follows it while open (docked, its name is).
  */
 function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, SessionHit>, toggled: ReadonlySet<string>, zone: TimeZone, own: string | null): Block {
   const { before, hang } = leadOf(depth, isOwn(node, own))
@@ -249,11 +244,14 @@ function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, Se
   const marks: Marks = hit === undefined ? NO_MARKS : field => marksOf(hit, field)
   const key = hit === undefined ? node.key : resultKey(TEAM_SEARCH_VIEW, node.key)
   const rows: Row[] = [{ key, spans: [...before, foldMark(open), ...sessionSpans(node, marks)], hang }]
-  const scope = teamFieldText(node.session, 'scope')
-  if (scope !== null && marks('scope').length > 0) {
-    const shown = excerpt(scope, marks('scope'))
-    const spans = [hang, { text: 'scope ', dim: true }, ...markedSpans(shown.text, shown.marks, { dim: true })]
-    rows.push({ key: `${TEAM_SEARCH_VIEW}-scope:${node.key}`, spans, hang, maxLines: META_LINES })
+  // A name that holds the id, as most `<team>-<id>` names do, shows it on the row, where a line would only repeat it.
+  const unshown: readonly TeamSearchedField[] = node.session.name.includes(node.session.id) ? ['scope'] : ['id', 'scope']
+  for (const field of unshown) {
+    const text = teamFieldText(node.session, field)
+    if (text === null || marks(field).length === 0) continue
+    const shown = excerpt(text, marks(field))
+    const spans = [hang, { text: `${field} `, dim: true }, ...markedSpans(shown.text, shown.marks, { dim: true })]
+    rows.push({ key: `${TEAM_SEARCH_VIEW}-${field}:${node.key}`, spans, hang, maxLines: META_LINES })
   }
   return { key, rows, folds: cardKey(node.key), ...openCard(node, hang, toggled, zone) }
 }
