@@ -248,7 +248,7 @@ A task is two lines, its title and a dim meta line under it:
 | `○` `◐` `◑` `■` `✓` `✗` | open, in-progress, verifying, waiting, done, dropped (as `teamrig list` names them) |
 | `T12`, the title | The id, bold, and the title, cut at two lines; whole while its card is open |
 | `Roadmap`, `Maintenance`, `Improvements` | Its work class, as `teamrig list` prints it; a finished task keeps it |
-| `score 6.67` | Its score in plan order, as `teamrig list` prints it; none on a finished task, which holds no place in the order |
+| `score 6.67` | Its score in plan order, as `teamrig list` prints it; none on a finished task, which holds no place in the order. A Roadmap task scores by the rank of the goal it serves, read from the team's goals and those of the teams above, as `teamrig list` reads them |
 | `p2` | Its priority; `p0`, teamrig's own level for work done right now, goes ahead of every score |
 | `pinned` | The one task a leader above its owner pinned (`teamrig update --pin`), which tops the owner's list |
 | `bug`, `critical bug` | What the item is past a plain task (`teamrig add --type bug`, `--critical`); a task says nothing |
