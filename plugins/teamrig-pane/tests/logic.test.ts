@@ -196,6 +196,18 @@ describe('log', () => {
     expect([bug?.type, bug?.critical, task?.type, task?.critical]).toEqual(['bug', true, null, false])
   })
 
+  test('a row carries the size, pin and work class plan order reads, so a pinned row tops the list', async () => {
+    const rows = rowsOf([
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 1 }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW, priority: 3, taskKeys: { size: 1.5, pin: 'lead', workClass: 'Roadmap' } }),
+    ])
+    const [plain, pinned] = rows
+    expect([pinned?.size, pinned?.pin, pinned?.workClass]).toEqual([1.5, 'lead', 'Roadmap'])
+    expect([plain?.size, plain?.pin, plain?.workClass]).toEqual([null, null, null])
+    const tree = treeAt(rows, NOW)
+    expect([...rows].sort((a, b) => tree.byPlanOrder(a, b)).map(row => row.id)).toEqual(['T2', 'T1'])
+  })
+
   test('each status glyph is a one-cell text symbol, never an emoji, and verifying is the green half of working', async () => {
     for (const glyph of Object.values(GLYPH)) {
       expect(cells(glyph)).toBe(1)
