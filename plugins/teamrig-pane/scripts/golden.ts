@@ -76,6 +76,7 @@ const kit = join(root, 'kit')
 const project = join(root, 'proj')
 const state = join(kit, 'teams', TEAM, 'state')
 const eventsFile = join(state, 'events.jsonl')
+const goalsFile = join(state, 'goals.jsonl')
 const marksFile = join(state, 'inbox-marks.jsonl')
 const inboxFile = join(state, 'inbox', 'alpha.md')
 const configFile = join(kit, 'teams', TEAM, 'config.json')
@@ -191,7 +192,7 @@ try {
   writeFileSync(configFile, withTimeZone(read(configFile), GOLDEN_TIME_ZONE))
   as('lead', 'add', '--owner', 'alpha', '--priority', 'p1', '--title', 'First task with ref', '--description', 'The first task, with a ref', '--ref', 'msg 10-15')
   as('lead', 'add', '--owner', 'alpha', '--priority', 'p3', '--title', 'No ref task', '--description', 'A task with no ref')
-  as('lead', 'add', '--owner', 'alpha', '--priority', 'p2', '--title', 'Goals task', '--description', 'A task with goals, a due and a week', '--ref', 'doc:1', '--goals', 'G1,roadmap goal', '--due', '2026-10-20', '--week', '2026-10-12')
+  as('lead', 'add', '--owner', 'alpha', '--priority', 'p2', '--title', 'Goals task', '--description', 'A task with goals, a due and a week', '--ref', 'doc:1', '--goals', 'G1,roadmap goal', '--due', '2026-10-20', '--week', '2026-10-12', '--class', 'Roadmap')
   as('alpha', 'add', '--owner', 'beta', '--priority', 'p4', '--title', 'Beta task from alpha', '--description', 'A task one session asks of another', '--ref', 'x')
   as('lead', 'add', '--owner', 'alpha', '--priority', 'p5', '--title', 'To be dropped', '--description', 'A task dropped later', '--ref', 'r')
   as('alpha', 'set', 'T2', '--status', 'in-progress')
@@ -224,6 +225,10 @@ try {
   writeFileSync(inboxFile, 'a rewritten line\nanother rewritten line\n')
   inbox.push(inboxState('rewritten'))
 
+  // A ranked goal, so the Roadmap task T4 scores by its rank and its row names the goal.
+  as('lead', 'goal', 'add', 'G1', '--title', 'The demo ships', '--target', '2026-12-01')
+  as('lead', 'goal', 'rank', 'G1', '1')
+
   // Lines teamrig skips: one from a newer teamrig, one torn, one naming no task.
   const events = read(eventsFile)
   const newer = JSON.stringify({ v: 3, type: 'vote', id: 'T2', at: new Date(clock.next()).toISOString(), by: 'lead', choice: 'ship' })
@@ -233,6 +238,7 @@ try {
   const files: Record<string, string> = {
     'kit/teams/demo/config.json': clean(read(configFile)),
     'kit/teams/demo/state/events.jsonl': clean(read(eventsFile)),
+    'kit/teams/demo/state/goals.jsonl': clean(read(goalsFile)),
     'kit/teams/demo/state/inbox-marks.jsonl': clean(read(marksFile)),
     'kit/teams/demo/state/inbox/alpha.md': clean(read(inboxFile)),
     'proj/.teamrig.json': clean(read(join(project, '.teamrig.json'))),
