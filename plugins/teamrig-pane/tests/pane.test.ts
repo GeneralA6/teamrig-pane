@@ -105,6 +105,8 @@ function personScroll(by: number): UiScrollInput {
 }
 
 /** A dock wide enough that a requirement's WARN line is one drawn line, so a test can match all of it. */
+/** `words` as a drawn row holds them: a docked pane may wrap between any two. */
+const wrappable = (words: string) => new RegExp(words.replaceAll(' ', '\\s+'))
 const WIDE = { ...PANE_PROPS, bodyColumns: 200 } as const
 /**
  * WIDE with a window the whole Stats tab fits in: its Flow section open and the six sections after it run past WIDE's 40
@@ -244,7 +246,7 @@ test('docks the session area: its tasks, flags and unread inbox', async ($, on) 
   expect(keyedProps(await pane.drawn(), 'inbox')).toMatchObject({ label: 'Inbox (2)' })
   expect(keyedProps(await pane.drawn(), 'team')).toMatchObject({ label: 'Teams' })
   expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
-  expect(await pane.find({ text: /p2 · due Wed 10-14 · new · asked by owner/ })).toBeDefined()
+  expect(await pane.find({ text: wrappable('p2 · due Wed 10-14 · new · asked by owner') })).toBeDefined()
   expect(await pane.find({ text: /Rotate the local URI/ })).toBeUndefined()
 })
 
@@ -784,12 +786,12 @@ test('docked, it pads the frame, spaces the tasks, wraps a long title under itse
   expect((await pane.find({ type: 'Box' }))?.props).toMatchObject({ paddingLeft: 1, gap: 1, height: PANE_PROPS.scroll.bodyRows, overflow: 'hidden' })
   expect(propsOf(keyedNode(await pane.drawn(), 'header'))).toMatchObject({ paddingRight: 1 })
   const task = await pane.find({ type: 'Text', text: /Ship the task pane/ })
-  expect(task?.text).toMatch(/^○ T1  .+\n {6}\S.+\n {6}p3 · new · asked by owner$/)
+  expect(task?.text).toMatch(/^○ T1  .+\n {6}\S.+\n {6}Improvements · score \S+ · p3 · new ·\n {6}asked by owner$/)
   expect(task?.text.split('\n').every(line => line.length <= PANE_PROPS.bodyColumns - 2)).toBe(true)
   const cut = (await pane.find({ type: 'Text', text: /^○ T2 / }))?.text.split('\n') ?? []
-  expect(cut.length).toBe(3)
+  expect(cut.length).toBe(4)
   expect(cut[1]).toMatch(/^ {6}\S.*…$/)
-  expect(cut[2]).toBe('      p3 · new · asked by owner')
+  expect(cut.slice(2).join('\n')).toMatch(/^ {6}Improvements · score \S+ · p3 · new ·\n {6}asked by owner$/)
 })
 
 test('a title and note of CJK and emoji sequences wrap by display cells, no line past the frame', async ($, on) => {
@@ -1019,7 +1021,7 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
   ])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-  const collapsed = /^○ T1  Ship the task pane\n {6}p3 · new · asked by owner$/
+  const collapsed = /^○ T1  Ship the task pane\n {6}Improvements · score \S+ · p3 · new · asked by owner$/
   expect(await pane.find({ type: 'Text', text: collapsed })).toBeDefined()
   expect(await pane.find({ text: /ship the pane with details/ })).toBeUndefined()
   const boxes = countType(await pane.drawn(), 'Box')
@@ -1033,6 +1035,8 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
     cardLine('Status', 'not started since 13:00 UTC by lead'),
     cardLine('Owner', 'po'),
     cardLine('Priority', '3'),
+    cardLine('Class', 'Improvements'),
+    cardLine('Score', '3.33'),
     cardLine('Planned', 'this week'),
     cardLine('Goal', 'G10.1g'),
     cardLine('Origin', 'Asked by owner, added by lead 13:00 UTC'),
@@ -1064,7 +1068,7 @@ test("an open card shows its priority as a number, never the team config's name 
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   await pane.press({ key: 'all' })
-  expect(await pane.find({ text: /^◐ T7  Ship the team register\n {6}p2 · in progress since 13:30 UTC$/ })).toBeDefined()
+  expect(await pane.find({ text: /^◐ T7  Ship the team register\n {6}Improvements · score \S+ · p2 · in progress since 13:30 UTC$/ })).toBeDefined()
   expect(await pane.find({ text: /correctness/ })).toBeUndefined()
 
   await pane.press({ key: 'web:T7' })
@@ -1073,6 +1077,8 @@ test("an open card shows its priority as a number, never the team config's name 
     cardLine('Note', 'details drawn'),
     cardLine('Owner', 'web'),
     cardLine('Priority', '2'),
+    cardLine('Class', 'Improvements'),
+    cardLine('Score', '23.33'),
     cardLine('Planned', 'this week'),
     cardLine('Goal', 'G10.2'),
     `${CARD_UNDER}G15`,
@@ -2369,6 +2375,8 @@ test("a task id in an open card opens that task's page: its title and card alone
     ' Status       not started since Sat 10-10 by lead',
     ' Owner        etl',
     ' Priority     3',
+    ' Class        Improvements',
+    ' Score        5',
     ' Planned      this week',
     ' Goal         G10.2',
     ' Origin       Asked by owner, added by lead Sat',

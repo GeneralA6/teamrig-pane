@@ -1,4 +1,5 @@
-// The dim line under a task's title (rows.ts), in plain words: its priority, its type past a plain task (a bug), when
+// The dim line under a task's title (rows.ts), in plain words: its work class and score (what its place in plan order
+// reads, as `teamrig list` prints them), its priority, `pinned` on a pinned task, its type past a plain task (a bug), when
 // it is due (teamrig's effective due: an earlier date of a task that needs it, naming that task), how long it has
 // stood at its status and what holds it (a waiting task's reasons, an open one's unfinished `after`), whom it holds up
 // (the active tasks of other sessions that need it), then what needs a look (late, new, not picked up). An open task's
@@ -227,9 +228,20 @@ export function typeWords(task: Pick<TaskRow, 'type' | 'critical'>): string | nu
   return task.critical ? `critical ${task.type}` : task.type
 }
 
+/** A task's class and score as words; score null: a finished task, which holds no place in the order. */
+export type RankWords = { readonly workClass: string; readonly score: string | null }
+
+/** What core's rankParts prints on a `teamrig list` row, as a row and a card each lay it out; null: `tree` ranks nothing. */
+export function rankWords(task: TaskRow, tree: PaneTree): RankWords | null {
+  const ranked = tree.rankedOf(task)
+  if (ranked === undefined) return null
+  return { workClass: ranked.workClass, score: ACTIVE_STATUSES.includes(task.status) ? String(ranked.score) : null }
+}
+
 /**
- * The meta line's parts, in order: `<owner>'s` when `viewer` (the area whose list it is) does not own it, the
- * priority, the type past a plain task (typeWords), `due …` (`verify by …` while verifying; `(from T7)` on a date
+ * The meta line's parts, in order: `<owner>'s` when `viewer` (the area whose list it is) does not own it, the work
+ * class and `score …` (rankWords), the priority, `pinned` on a pinned task, which is why it tops its list, the type
+ * past a plain task (typeWords), `due …` (`verify by …` while verifying; `(from T7)` on a date
  * taken from T7), `<status> since …` with why a waiting task waits or what proves a verifying one, `after T5` while a
  * task not yet started has one unfinished, `needed by T7 (beta)` while a task of another owner needs it
  * (neededByWords), then the flags: `late 1d`, `new` (to its owner), `not picked up 2d`, and `asked by <who>` on a task
@@ -242,7 +254,13 @@ export function metaParts(task: TaskRow, tree: PaneTree, viewer: string | null):
   const others = viewer !== null && task.owner !== viewer
   const parts: Span[] = []
   if (others) parts.push({ text: `${task.owner}'s` })
+  const rank = rankWords(task, tree)
+  if (rank !== null) {
+    parts.push({ text: rank.workClass })
+    if (rank.score !== null) parts.push({ text: `score ${rank.score}` })
+  }
   parts.push({ text: priorityText(task.priority) })
+  if (task.pin !== null) parts.push({ text: 'pinned' })
   const type = typeWords(task)
   if (type !== null) parts.push({ text: type })
   const due = dueLabel(task, tree)
