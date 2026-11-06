@@ -444,18 +444,23 @@ file teamrig can read, or a failed read of the team folder list, or of its own t
 other team folder it cannot read (a locked or half-written file) never fails the tab: a `WARN team <id> could not be
 read: …` line above the tree names it, and the team draws as it was last read, or is left out until a read of it works.
 
-A press on a team's or a retired group's row (a click, or Enter or Space on it) closes it (`▸`), and a second press opens
-it again (`▾`). Teams and leaders start open, and a retired group starts closed. A press on a session's row opens its card
-under it, and a second closes it. A leader's row holds two presses: its mark closes or opens the sessions it leads, its
-id opens its card; inline, where a row is one press, the row does the first. What was opened or closed stays so across a
-hot reload. ↑ and ↓ move between rows. There are no ← and → keys, since the engine binds keys only to buttons.
+Docked, a row's presses sit on its words. A press on a team's mark or name, or on a retired group's row (a click, or
+Enter or Space on it), closes it (`▸`), and a second press opens it again (`▾`). Teams and leaders start open, and a
+retired group starts closed. A press on a session's id opens its card under it, and a second closes it. A leader's mark
+closes or opens the sessions it leads. Inline, where a row is one press, the row does the first of these. What was
+opened or closed stays so across a hot reload. ↑ and ↓ move between rows. There are no ← and → keys, since the engine
+binds keys only to buttons.
+
+Each team's and session's row ends in `[Stats]`, which opens the Stats tab on that team (its child teams rolled in) or
+that session (the tasks it owns). `‹ back` (`b`) and the trail `Teams › Stats` then lead the tab, and back shows the
+Teams tab at that row. A Health count's list keeps its own back first, and a press on the switch drops the row's.
+Inline `[Stats]` is words only, as `[Meet]` is.
 
 `[Meet]` runs `teamrig meet <session>`: teamrig wakes a running session with an inbox line asking it to bring the owner
 its cards now, or opens it in a new tab to do so, and refuses a session with no card waiting on the owner. What teamrig
 answered leads the tab: `Asking web for its cards…`, then `Asked web for its cards:` with teamrig's lines (the tab it
-woke or opened), or `web was not asked:` and why. One meet runs at a time, given 60 s. Docked, a row with a `[Meet]`
-holds two presses, its id opening its card; inline, the row opens the card. It needs the teamrig plugin 0.209.0 or
-later installed in Claude Code (found as for Meetings, below) and `node` on the PATH. The switch's Teams button counts
+woke or opened), or `web was not asked:` and why. One meet runs at a time, given 60 s. Inline, a row with a `[Meet]`
+opens the card. It needs the teamrig plugin 0.209.0 or later installed in Claude Code (found as for Meetings, below) and `node` on the PATH. The switch's Teams button counts
 the cards waiting on the owner now across the team's sessions, `Teams (2)`; a card the owner put off counts again once it
 comes back.
 
