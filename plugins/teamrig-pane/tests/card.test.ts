@@ -31,9 +31,14 @@ function taskOf(tasks: readonly TaskRow[], id: string): TaskRow {
 
 const textOf = (row: Row) => row.spans.map(span => span.text).join('')
 
-/** The card of `id` among `tasks`, in the waiting section, at `now` on the team's clock in `timeZone`. */
-function cardOf(tasks: readonly TaskRow[], id: string, detail: TaskDetail = UNREAD, now = NOW, timeZone = 'UTC'): Row[] {
+/** The whole card of `id` among `tasks`, in the waiting section, at `now` on the team's clock in `timeZone`. */
+function wholeCardOf(tasks: readonly TaskRow[], id: string, detail: TaskDetail = UNREAD, now = NOW, timeZone = 'UTC'): Row[] {
   return cardRows('waiting', taskOf(tasks, id), detail, treeAt(tasks, now, undefined, timeZone))
+}
+
+/** A card past its Class and Score rows: only the tests of those rows should move with a score. */
+function cardOf(tasks: readonly TaskRow[], id: string, detail: TaskDetail = UNREAD, now = NOW, timeZone = 'UTC'): Row[] {
+  return wholeCardOf(tasks, id, detail, now, timeZone).filter(row => !/:(class|score)$/.test(row.key))
 }
 
 /** The first line of the row keyed `row` in a card, or an empty row when the card has none. */
@@ -131,6 +136,22 @@ describe('card', () => {
   test("a p0 task's card reads Priority 0, teamrig's level for work done right now", async () => {
     const tasks = rowsOf([createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', priority: 0 })])
     expect(textOf(rowNamed(cardOf(tasks, 'T1'), 'priority'))).toBe(labelled('Priority', '0'))
+  })
+
+  test('Class and Score come right after Priority, the words of the row the card replaced', async () => {
+    const tasks = rowsOf([createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', priority: 2, taskKeys: { workClass: 'Roadmap', size: 2 } })])
+    const card = wholeCardOf(tasks, 'T1')
+    const keys = card.map(row => row.key.replace('waiting-card:T1:', ''))
+    expect(keys.slice(keys.indexOf('priority'), keys.indexOf('priority') + 3)).toEqual(['priority', 'class', 'score'])
+    expect(textOf(rowNamed(card, 'class'))).toBe(labelled('Class', 'Roadmap'))
+    expect(textOf(rowNamed(card, 'score'))).toBe(labelled('Score', '1.5'))
+  })
+
+  test('a finished task keeps its Class row and has no Score row: it holds no place in the order', async () => {
+    const tasks = rowsOf([createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', priority: 2 }), statusLine('T1', 'po', NOW, 'done', 'shipped')])
+    const card = wholeCardOf(tasks, 'T1')
+    expect(textOf(rowNamed(card, 'class'))).toBe(labelled('Class', 'Improvements'))
+    expect(rowNamed(card, 'score')).toBe(NO_ROW)
   })
 
   test('a Reference part keeps its words around the file it names, a T-id in them its own span; the same file at another line once', async () => {

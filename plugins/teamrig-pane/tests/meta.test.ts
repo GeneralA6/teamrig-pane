@@ -2,7 +2,8 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow, WaitRow } from '../types'
 import { TimeZone, readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { ageWords, clockWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, STATUS_WORDS, storedDayWords, storedDueWords, typeWords, waitingWords, whenWords } from '../hooks/meta'
+import type { Span } from '../hooks/rows'
+import { ageWords, clockWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, rankWords, STATUS_WORDS, storedDayWords, storedDueWords, typeWords, waitingWords, whenWords } from '../hooks/meta'
 import { HOUR, JERUSALEM, NOT_PICKED_UP_HOURS, NOW, clockAt, createLine, iso, statusLine, treeAt, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
@@ -24,9 +25,12 @@ const AT_NOW = treeAt([], NOW)
 /** The same clock in Jerusalem's zone, where NOW is 17:00 IDT (summer time until 10-25). */
 const IN_JERUSALEM = treeAt([], NOW, NOT_PICKED_UP_HOURS, JERUSALEM.name)
 
+/** A meta line's words past a plain task's class and score: only the tests of those words should move with a score. */
+const pastRank = (parts: readonly Span[]) => parts.map(part => part.text).filter(text => text !== 'Improvements' && !text.startsWith('score '))
+
 /** The meta line's words at `now`, the snapshot holding `tasks`. */
 const textOf = (task: TaskRow, viewer: string | null, now = NOW, tasks: readonly TaskRow[] = []) =>
-  metaParts(task, treeAt(tasks, now), viewer).map(part => part.text)
+  pastRank(metaParts(task, treeAt(tasks, now), viewer))
 
 describe('meta words', () => {
   test("a day is the zone's weekday and month-day; a time today is its zone-marked hour, an older one its day", async () => {
@@ -212,7 +216,7 @@ describe('meta line', () => {
       statusLine('T1', 'po', NOW - 2 * HOUR, 'in-progress', 'halfway'),
     )
     expect(textOf(task, 'po')).toEqual(['p2', 'due Mon 10-12', 'in progress since 12:00 UTC', 'late 14h'])
-    expect(metaParts(task, AT_NOW, 'po').map(part => part.color)).toEqual([undefined, undefined, undefined, 'error'])
+    expect(metaParts(task, AT_NOW, 'po').map(part => part.color)).toEqual([undefined, undefined, undefined, undefined, undefined, 'error'])
   })
 
   test('a bug says so after its priority, a critical one critical bug; a task, or one no one typed, says nothing', async () => {
@@ -237,7 +241,7 @@ describe('meta line', () => {
   test('waiting: since when and why, in red; one waiting since an earlier day names the day', async () => {
     const task = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - 2 * DAY }), statusLine('T1', 'po', NOW - DAY, 'waiting', 'waits on T58'))
     expect(textOf(task, 'po')).toEqual(['p3', 'waiting since Mon 10-12: waits on T58'])
-    expect(metaParts(task, AT_NOW, 'po')[1]?.color).toBe('error')
+    expect(metaParts(task, AT_NOW, 'po')[3]?.color).toBe('error')
     const bare = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - DAY }), statusLine('T1', 'po', NOW, 'waiting'))
     expect(textOf(bare, 'po')).toEqual(['p3', 'waiting since 14:00 UTC'])
   })
@@ -261,7 +265,7 @@ describe('meta line', () => {
     expect(waitingWords(approval, AT_NOW.context)).toBe('approval lead')
     const until = taskOf(createLine('T4', { owner: 'po', by: 'po', at: NOW - DAY }), waitingLine('T4', 'po', NOW, [{ kind: 'time', at: '2026-10-16 14:00' }]))
     expect(waitingWords(until, IN_JERUSALEM.context)).toBe('until Fri 10-16 17:00 IDT')
-    expect(metaParts(until, IN_JERUSALEM, 'po').map(part => part.text)).toEqual(['p3', 'waiting since 17:00 IDT: until Fri 10-16 17:00 IDT'])
+    expect(pastRank(metaParts(until, IN_JERUSALEM, 'po'))).toEqual(['p3', 'waiting since 17:00 IDT: until Fri 10-16 17:00 IDT'])
   })
 
   test('a task not yet started names the tasks it comes after that are unfinished; once started, none', async () => {
@@ -290,7 +294,7 @@ describe('meta line', () => {
   test('an open task someone else asked for is new to its owner and names who asked, then reads not picked up', async () => {
     const task = taskOf(createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'lead' }))
     expect(textOf(task, 'po')).toEqual(['p3', 'new', 'asked by lead'])
-    expect(metaParts(task, AT_NOW, 'po')[1]?.color).toBe('suggestion')
+    expect(metaParts(task, AT_NOW, 'po')[3]?.color).toBe('suggestion')
     expect(textOf(task, 'po', NOW + 2 * DAY)).toEqual(['p3', 'not picked up 2d', 'asked by lead'])
     const own = taskOf(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po' }))
     expect(textOf(own, 'po')).toEqual(['p3'])
@@ -305,6 +309,40 @@ describe('meta line', () => {
 
   test('the words alone are the all view\'s, joined as the row draws them', async () => {
     const task = taskOf(createLine('T1', { owner: 'etl', by: 'po', at: NOW - HOUR, source: 'po', due: '2026-10-13 18:00' }))
-    expect(metaText(task, AT_NOW)).toBe('p3 · due today 18:00 UTC · new · asked by po')
+    expect(metaText(task, treeAt([task], NOW))).toBe('Improvements · score 16.67 · p3 · due today 18:00 UTC · new · asked by po')
+  })
+})
+
+describe('meta rank words', () => {
+  const own = (taskKeys: Readonly<Record<string, unknown>> = {}) => createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', priority: 2, taskKeys })
+  /** A tree of its own: a tree keeps each task's place by id, so a shared one would read the first T1's score for all. */
+  const wordsOf = (task: TaskRow) => metaText(task, treeAt([task], NOW))
+
+  test("a row leads with what its place in plan order reads, as teamrig list's row prints it: class, then score, then priority", async () => {
+    expect(wordsOf(taskOf(own()))).toBe('Improvements · score 3.33 · p2')
+  })
+
+  test('a task classed by hand reads that class, and its size moves its score', async () => {
+    expect(wordsOf(taskOf(own({ workClass: 'Roadmap', size: 2 })))).toBe('Roadmap · score 1.5 · p2')
+  })
+
+  test('a pinned task says so after its priority, ahead of its type: nothing else on the row says why it tops the list', async () => {
+    expect(wordsOf(taskOf(own({ pin: 'lead', type: 'bug' })))).toBe('Improvements · score 3.33 · p2 · pinned · bug')
+  })
+
+  test('a finished task keeps its class and has no score: it holds no place in the order', async () => {
+    expect(wordsOf(taskOf(own(), statusLine('T1', 'po', NOW, 'done', 'shipped')))).toBe('Improvements · p2')
+  })
+
+  test('a task asked of another session still names its owner first', async () => {
+    const task = taskOf(createLine('T1', { owner: 'etl', by: 'po', at: NOW - HOUR, source: 'po', priority: 2 }))
+    expect(metaParts(task, treeAt([task], NOW), 'po').map(part => part.text).slice(0, 3)).toEqual(["etl's", 'Improvements', 'score 3.33'])
+  })
+
+  test('rankWords gives the class and score apart, for the card; a finished task has a class and a null score', async () => {
+    const open = taskOf(own())
+    expect(rankWords(open, treeAt([open], NOW))).toEqual({ workClass: 'Improvements', score: '3.33' })
+    const done = taskOf(own(), statusLine('T1', 'po', NOW, 'done', 'shipped'))
+    expect(rankWords(done, treeAt([done], NOW))).toEqual({ workClass: 'Improvements', score: null })
   })
 })

@@ -246,15 +246,15 @@ describe('view', () => {
     expect([view.verifying, view.working, view.waiting, view.doneToday]).toEqual([[], [], [], []])
   })
 
-  test("a p0 task, teamrig's level for work done right now, folds and reads p0, and its priority alone ranks it nowhere", async () => {
+  test("a p0 task, teamrig's level for work done right now, folds and reads p0, and comes ahead of every score", async () => {
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'po', at: NOW, source: 'po', priority: 1 }),
       createLine('T2', { owner: 'po', by: 'po', at: NOW, source: 'po', priority: 0 }),
     )
     const tree = treeAt(tasks, NOW)
-    expect(tasks.map(t => metaText(t, tree))).toEqual(['p1', 'p0'])
-    // Band and score replaced priority in plan order (core register/score.ts): neither is the owner's, so they tie and the id settles it.
-    expect(areaView(tasks, 'po', tree).upNext.map(t => t.id)).toEqual(['T1', 'T2'])
+    expect(tasks.map(t => metaText(t, tree))).toEqual(['Improvements · score 3.33 · p1', 'Improvements · score 3.33 · p0'])
+    // Their scores tie: a p0 leads because it takes the expedite band whatever its class (core register/score.ts).
+    expect(areaView(tasks, 'po', tree).upNext.map(t => t.id)).toEqual(['T2', 'T1'])
   })
 
   test("an owner's p1 is an expedite, ahead of a p1 anyone else asked for whatever the ids", async () => {
@@ -435,6 +435,10 @@ describe('rows', () => {
     const row = rowAt(blocks, key)
     return row ? textOf(row) : undefined
   }
+  /** A meta row's words past its class and score: tests/meta.test.ts pins those, so a score change stays out of these. */
+  const metaAt = (blocks: readonly Block[], key: string) => textAt(blocks, key)?.replace(/(Improvements|Roadmap|Maintenance) · (score \S+ · )?/, '')
+  /** A block's card past its class and score rows, which tests/card.test.ts pins. */
+  const factsAt = (blocks: readonly Block[], key: string) => (blockAt(blocks, key)?.card ?? []).filter(row => !/:(class|score)$/.test(row.key))
   /** Where a card value's further lines start: the guide, then blank up to the value column. */
   const CARD_UNDER = `    │ ${' '.repeat(LABEL_CELLS)}`
   /** A card row's first line in the list: the guide, the label padded to the value column, the value. */
@@ -472,14 +476,14 @@ describe('rows', () => {
     expect(rowAt(blocks, 'next:T1')?.maxLines).toBe(2)
     expect(blockAt(blocks, 'next:T1')?.toggle).toBe('T1')
     expect(blockAt(blocks, 'next:T1')?.rows.map(r => r.key)).toEqual(['next:T1', 'next-meta:T1'])
-    expect(textAt(blocks, 'next-meta:T1')).toBe('      p2 · due Wed 10-14 · new · asked by lead')
-    expect(rowAt(blocks, 'next-meta:T1')?.spans.slice(1).map(span => span.dim ?? span.color)).toEqual([true, true, true, true, 'suggestion', true, true])
+    expect(metaAt(blocks, 'next-meta:T1')).toBe('      p2 · due Wed 10-14 · new · asked by lead')
+    expect(rowAt(blocks, 'next-meta:T1')?.spans.slice(1).map(span => span.dim ?? span.color)).toEqual([true, true, true, true, true, true, true, true, 'suggestion', true, true])
     expect(rowAt(blocks, 'next-meta:T1')?.hang).toEqual({ text: '      ' })
     expect(rowAt(blocks, 'next')?.spans).toEqual([{ text: 'Up next', bold: true }, { text: ' (1)', dim: true }])
     expect(blockAt(blocks, 'next')?.opensSection).toBe(true)
     expect(textAt(blocks, 'waiting')).toBe('Waiting (1)')
     expect(rowAt(blocks, 'waiting:T2')?.spans[0]).toEqual({ text: '■', color: 'error' })
-    expect(textAt(blocks, 'waiting-meta:T2')).toBe('      p3 · waiting since 14:00 UTC: needs owner')
+    expect(metaAt(blocks, 'waiting-meta:T2')).toBe('      p3 · waiting since 14:00 UTC: needs owner')
     expect(textAt(blocks, 'done')).toBe('Done today (1)')
     expect(rowAt(blocks, 'done:T3')).toEqual({
       key: 'done:T3',
@@ -521,9 +525,9 @@ describe('rows', () => {
       createLine('T5', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', taskKeys: { after: ['T1'] } }),
     )
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine')
-    expect(textAt(blocks, 'waiting-meta:T2')).toBe('      p3 · waiting since 14:00 UTC: decision owner, on T1; the copy first')
-    expect(textAt(blocks, 'waiting-meta:T4')).toBe('      p3 · waiting since 14:00 UTC: until Fri 10-16 14:00 UTC')
-    expect(textAt(blocks, 'next-meta:T5')).toBe('      p3 · after T1')
+    expect(metaAt(blocks, 'waiting-meta:T2')).toBe('      p3 · waiting since 14:00 UTC: decision owner, on T1; the copy first')
+    expect(metaAt(blocks, 'waiting-meta:T4')).toBe('      p3 · waiting since 14:00 UTC: until Fri 10-16 14:00 UTC')
+    expect(metaAt(blocks, 'next-meta:T5')).toBe('      p3 · after T1')
   })
 
   test('the header leaves the session\'s own area unnamed, its tab names it, and names a pinned one', async () => {
@@ -656,16 +660,16 @@ describe('rows', () => {
     expect(rowAt(blocks, 'verifying')?.spans).toEqual([{ text: 'Verifying', color: 'success', bold: true }, { text: ' (1)', dim: true }])
     expect(textAt(blocks, 'verifying:T3')).toBe('◑ T3  Shipped')
     expect(rowAt(blocks, 'verifying:T3')?.spans[0]).toEqual({ text: '◑', color: 'success' })
-    expect(textAt(blocks, 'verifying-meta:T3')).toBe('      p3 · verify by Fri 10-16 · verifying since 14:00 UTC: health check passes')
+    expect(metaAt(blocks, 'verifying-meta:T3')).toBe('      p3 · verify by Fri 10-16 · verifying since 14:00 UTC: health check passes')
     expect(textAt(blocks, 'working')).toBe('Working on (1)')
     expect(rowAt(blocks, 'working:T2')?.spans[0]).toEqual({ text: '◐', color: 'warning' })
-    expect(textAt(blocks, 'working-meta:T2')).toBe('      p3 · in progress since 14:00 UTC')
-    expect(textAt(blocks, 'next-meta:T1')).toBe('      p3')
+    expect(metaAt(blocks, 'working-meta:T2')).toBe('      p3 · in progress since 14:00 UTC')
+    expect(metaAt(blocks, 'next-meta:T1')).toBe('      p3')
     // Waiting holds po's own; what po asked of etl sits under a heading of its own, saying whose it is.
     expect(textAt(blocks, 'waiting')).toBe('Waiting (1)')
-    expect(textAt(blocks, 'waiting-meta:T4')).toBe('      p3 · waiting since 14:00 UTC')
+    expect(metaAt(blocks, 'waiting-meta:T4')).toBe('      p3 · waiting since 14:00 UTC')
     expect(rowAt(blocks, 'asked')?.spans).toEqual([{ text: 'Asked of others', bold: true }, { text: ' (1)', dim: true }])
-    expect(textAt(blocks, 'waiting-meta:T6')).toBe("      etl's · p3")
+    expect(metaAt(blocks, 'waiting-meta:T6')).toBe("      etl's · p3")
     expect(blocks.filter(b => b.rows[0]?.key === b.key && !b.key.includes(':')).every(b => b.key === 'header' || b.opensSection === true)).toBe(true)
   })
 
@@ -743,7 +747,7 @@ describe('rows', () => {
     expect(blocks.map(b => b.key)).toEqual(['header', 'next', 'next:T2', 'waiting', 'waiting:T1'])
     expect(blockAt(blocks, 'waiting:T1')?.rows.map(r => r.key)).toEqual(['waiting:T1'])
     expect(rowAt(blocks, 'waiting:T1')?.maxLines).toBe(undefined)
-    expect(blockAt(blocks, 'waiting:T1')?.card?.map(r => r.key)).toEqual([
+    expect(factsAt(blocks, 'waiting:T1').map(r => r.key)).toEqual([
       'waiting-card:T1:description',
       'waiting-card:T1:status',
       'waiting-card:T1:note',
@@ -757,7 +761,7 @@ describe('rows', () => {
       'waiting-card:T1:reference:1',
       'waiting-card:T1:evidence',
     ])
-    expect(blockAt(blocks, 'waiting:T1')?.card?.map(textOf)).toEqual([
+    expect(factsAt(blocks, 'waiting:T1').map(textOf)).toEqual([
       cardLine('Description', '2026-10-13 lead: ship the pane'),
       cardLine('Status', 'waiting since 14:00 UTC by po'),
       cardLine('Note', 'needs owner'),
@@ -771,7 +775,7 @@ describe('rows', () => {
       `${CARD_UNDER}docs/x.md`,
       cardLine('Evidence', 'abc123'),
     ])
-    expect(blockAt(blocks, 'next:T2')?.card?.map(textOf)).toEqual([
+    expect(factsAt(blocks, 'next:T2').map(textOf)).toEqual([
       cardLine('Status', 'not started since 13:00 UTC by po'),
       cardLine('Owner', 'po'),
       cardLine('Priority', '3'),
@@ -793,14 +797,14 @@ describe('rows', () => {
       statusLine('T2', 'po', NOW, 'in-progress', 'halfway'),
     ])
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', { T1: { ref: null, quotes: [], goals: [] }, T2: { ref: 'docs/x.md', quotes: [], goals: [] } })
-    expect(blockAt(blocks, 'next:T1')?.card?.map(textOf)).toEqual([
+    expect(factsAt(blocks, 'next:T1').map(textOf)).toEqual([
       cardLine('Status', 'not started since 13:00 UTC by lead'),
       cardLine('Owner', 'po'),
       cardLine('Priority', '2'),
       cardLine('Planned', 'not in a week plan'),
       cardLine('Origin', 'Asked by owner, added by lead 13:00 UTC'),
     ])
-    expect(blockAt(blocks, 'working:T2')?.card?.map(r => r.key)).toEqual([
+    expect(factsAt(blocks, 'working:T2').map(r => r.key)).toEqual([
       'working-card:T2:status',
       'working-card:T2:note',
       'working-card:T2:owner',
@@ -814,8 +818,8 @@ describe('rows', () => {
     expect(cardText(blocks, 'working-card:T2:note')).toBe(cardLine('Note', 'halfway'))
     const collapsed = paneBlocks(snapshotOf(tasks, 'po'), 'mine', {})
     expect(textAt(collapsed, 'next:T1')).toBe('○ T1  Bare')
-    expect(textAt(collapsed, 'next-meta:T1')).toBe('      p2 · new · asked by owner')
-    expect(textAt(collapsed, 'working-meta:T2')).toBe('      p7 · in progress since 14:00 UTC')
+    expect(metaAt(collapsed, 'next-meta:T1')).toBe('      p2 · new · asked by owner')
+    expect(metaAt(collapsed, 'working-meta:T2')).toBe('      p7 · in progress since 14:00 UTC')
     expect(collapsed.every(b => b.card === undefined)).toBe(true)
   })
 
@@ -837,7 +841,7 @@ describe('rows', () => {
     const open = { T4: { ref: null, quotes: [], goals: [] } }
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'mine', open)
     expect(blockAt(blocks, 'done:T4')?.rows.map(r => [r.key, r.maxLines])).toEqual([['done:T4', undefined]])
-    expect(blockAt(blocks, 'done:T4')?.card?.map(textOf)).toEqual([
+    expect(factsAt(blocks, 'done:T4').map(textOf)).toEqual([
       cardLine('Status', 'done since 14:00 UTC by po'),
       cardLine('Note', 'merged'),
       cardLine('Owner', 'po'),
@@ -861,7 +865,7 @@ describe('rows', () => {
     const blocks = paneBlocks(snapshotOf(tasks, 'etl'), 'all')
     expect(blocks.map(b => b.key)).toEqual(['owner:etl', 'etl:T2', 'owner:security', 'security:T1'])
     expect(blockAt(blocks, 'security:T1')?.rows.map(r => r.key)).toEqual(['security:T1', 'security-meta:T1'])
-    expect(textAt(blocks, 'security-meta:T1')).toBe('      p3 · waiting since 14:00 UTC: needs owner')
+    expect(metaAt(blocks, 'security-meta:T1')).toBe('      p3 · waiting since 14:00 UTC: needs owner')
     expect(rowAt(blocks, 'owner:security')?.spans).toEqual([{ text: 'security', bold: true }, { text: ' · 1 active · 1 waiting', dim: true }])
     expect(rowAt(blocks, 'owner:etl')?.spans).toEqual([{ text: 'etl', color: 'claude', bold: true }, { text: ' (you) · 1 active', dim: true }])
     expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => b.opensSection)).toEqual([false, true])
@@ -920,7 +924,7 @@ describe('rows', () => {
     const blocks = paneBlocks(snapshotOf(tasks, 'po'), 'all')
     expect(blocks.map(b => b.key)).toEqual(['owner:etl', 'etl:T2', 'etl:T1'])
     expect(textAt(blocks, 'owner:etl')).toBe('etl · 2 active · 1 verifying')
-    expect(textAt(blocks, 'etl-meta:T2')).toBe('      p4 · verifying since 14:00 UTC: one clean night')
+    expect(metaAt(blocks, 'etl-meta:T2')).toBe('      p4 · verifying since 14:00 UTC: one clean night')
   })
 })
 

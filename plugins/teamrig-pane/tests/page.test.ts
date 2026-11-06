@@ -30,7 +30,8 @@ describe('page', () => {
     expect(block?.toggle).toBe(undefined)
     expect(block?.rows.map(textOf)).toEqual(['○ T50  Ship the pages'])
     expect(block?.rows[0]?.maxLines).toBe(undefined)
-    const card = block?.card ?? []
+    // Past the Class and Score rows, which tests/card.test.ts pins: a page lays out the same card.
+    const card = (block?.card ?? []).filter(row => !/:(class|score)$/.test(row.key))
     expect(card.map(row => row.key.replace('page-card:T50:', ''))).toEqual(['status', 'owner', 'priority', 'planned', 'after', 'goal', 'origin', 'reference'])
     expect(card.map(textOf)).toEqual([
       labelled('Status', 'not started since 13:00 UTC by lead'),

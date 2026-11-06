@@ -143,10 +143,10 @@ describe('golden', () => {
     const since = (id: string) => whenWords(snap.tasks.find(task => task.id === id)?.statusAt ?? '', clockOf(snap))
     expect(rowText(blocks, 'working:T2')).toBe('◐ T2  First task with ref')
     // T4 comes after T2, so T2 works to T4's date, as teamrig's list says it; beta's T8 needs it too, by a later date.
-    expect(rowText(blocks, 'working-meta:T2')).toBe(`      p1 · due Tue 10-20 (from T4) · in progress since ${since('T2')} · needed by T8 (beta, due Thu 10-22)`)
-    expect(rowText(blocks, 'waiting-meta:T3')).toBe(`      p2 · waiting since ${since('T3')}: decision owner, until Wed 01-09 12:00 IST; waiting on beta`)
+    expect(rowText(blocks, 'working-meta:T2')).toBe(`      Improvements · score 5 · p1 · due Tue 10-20 (from T4) · in progress since ${since('T2')} · needed by T8 (beta, due Thu 10-22)`)
+    expect(rowText(blocks, 'waiting-meta:T3')).toBe(`      Improvements · score 3.33 · p2 · waiting since ${since('T3')}: decision owner, until Wed 01-09 12:00 IST; waiting on beta`)
     expect(rowText(blocks, 'next:T4')).toBe('○ T4  Goals task renamed')
-    expect(rowText(blocks, 'next-meta:T4')).toBe('      p1 · due Tue 10-20 · after T2 · asked by lead')
+    expect(rowText(blocks, 'next-meta:T4')).toBe('      Improvements · score 3.33 · p1 · due Tue 10-20 · after T2 · asked by lead')
   })
 
   test('finds the session area from the mark teamrig inbox read wrote for the session', async () => {

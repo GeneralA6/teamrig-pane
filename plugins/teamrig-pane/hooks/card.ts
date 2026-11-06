@@ -4,7 +4,8 @@
 // written before teamrig kept one shows the ask quoted from its ref (details.ts) instead. Status: since when, who
 // set it when that is known, then why a waiting task waits. Note: the newest status note. Proof: what proves a
 // verifying task. Owner: the session that owns it, on every card. Lead: the lead its owner answers to (leads.ts),
-// when the team's config is read. Priority, Type (a bug or a critical bug; none for a task), Due (Verify by while
+// when the team's config is read. Priority, Class and Score (what its place in plan order reads; a finished task has
+// no score), Type (a bug or a critical bug; none for a task), Due (Verify by while
 // verifying; a date taken from a task that needs it names that task; late in red) and Planned (its week plan against
 // the team's week: this week, next week, the week of a day, or none), each on its own row. After: the tasks planned first, with their
 // status. Needed by: each active task of another owner that needs it, with its owner and due, the earliest due first.
@@ -22,7 +23,7 @@ import { fileLabel, refParts } from './details'
 import { idSpans } from './ids'
 import { leadOf } from './leads'
 import { issueOf, taskLinks } from './links'
-import { dueWords, lateWords, neededByLines, STATUS_WORDS, storedDayWords, typeWords, waitingWords, whenWords, type PaneTree } from './meta'
+import { dueWords, lateWords, neededByLines, rankWords, STATUS_WORDS, storedDayWords, typeWords, waitingWords, whenWords, type PaneTree } from './meta'
 import { refSegments } from './ref-file'
 import type { Row, Span } from './rows'
 import { weekAfter, weekOf, type Clock } from './zone'
@@ -46,6 +47,8 @@ export type CardField =
   | 'owner'
   | 'lead'
   | 'priority'
+  | 'class'
+  | 'score'
   | 'type'
   | 'due'
   | 'planned'
@@ -205,6 +208,7 @@ export function cardRows(
   const isKnown = (id: string) => context.statusOf(id) !== undefined
   const field = (row: CardField, label: string, lines: Lines) =>
     only === null || only.has(row) ? labelled(key(row), label, lines, isKnown, lead) : []
+  const rank = rankWords(task, tree)
   return [
     ...field('description', 'Description', descriptionLines(task, detail)),
     ...field('status', 'Status', statusLines(task, context)),
@@ -213,6 +217,8 @@ export function cardRows(
     ...field('owner', 'Owner', [[{ text: task.owner }]]),
     ...field('lead', 'Lead', textLines(leadOf(task.owner, tree.leads))),
     ...field('priority', 'Priority', [[{ text: String(task.priority) }]]),
+    ...field('class', 'Class', textLines(rank?.workClass ?? null)),
+    ...field('score', 'Score', textLines(rank?.score ?? null)),
     ...field('type', 'Type', textLines(typeWords(task))),
     ...field('due', task.status === 'verifying' ? 'Verify by' : 'Due', dueLines(task, tree)),
     ...field('planned', 'Planned', plannedLines(task, context)),
