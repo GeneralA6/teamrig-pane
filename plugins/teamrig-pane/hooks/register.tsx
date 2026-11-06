@@ -72,7 +72,7 @@ import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { inboxFile, TaskDetails, type RefPlaces } from './details'
 import { RefFileReader } from './ref-file'
-import { DEFAULT_REGISTER, TimeZone, type StatsRange } from './core/read/index'
+import { DEFAULT_FOCUS, DEFAULT_REGISTER, TimeZone, type StatsRange } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { diffKey, noteKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
@@ -195,6 +195,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   notPickedUpAfterHours: DEFAULT_REGISTER.check.notPickedUpAfterHours,
   timeZone: TimeZone.UTC.name,
   ownerSource: DEFAULT_REGISTER.ownerSource,
+  focus: DEFAULT_FOCUS,
   ownerCards: {},
   taskCounts: NO_TASK_COUNTS,
   now: 0,

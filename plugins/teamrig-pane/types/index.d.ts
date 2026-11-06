@@ -151,6 +151,8 @@ export type Snapshot = {
    * page's Owner asked group reads (core register/done-groups.ts).
    */
   ownerSource: string
+  /** How the team ranks its tasks: the team config's `focus`, which plan order and a row's class and score read (hooks/ranking.ts). */
+  focus: RankFocus
   /**
    * Each session's cards on the owner, keyed by its id, as the last poll found them (hooks/owner-cards.ts): recounted
    * when the register moves and, while a card is put off, each minute, so one comes back with no file change. A
@@ -163,11 +165,37 @@ export type Snapshot = {
   now: number
 }
 
-/** What the team config sets that the snapshot carries: the NOT PICKED UP hours, the team's zone and the owner's marker. */
-export type DrawnSettings = Pick<Snapshot, 'notPickedUpAfterHours' | 'timeZone' | 'ownerSource'>
+/**
+ * The `focus` keys a ranking reads, as teamrig's config sets them (core register/ranking.ts RankingFocus). This contract
+ * cannot import, so it spells them out, and hooks/log.ts holds the two equal.
+ */
+export type RankFocus = {
+  readonly defaultClass: string
+  readonly roadmapClass: string
+  readonly maintenanceClass: string
+  readonly score: {
+    readonly rankValues: readonly number[]
+    readonly roadmapUnranked: number
+    readonly maintenanceValue: number
+    readonly maintenanceBug: number
+    readonly maintenanceCritical: number
+    readonly improvementsValue: number
+    readonly overdueValue: number
+    readonly dueSoonValue: number
+    readonly dueSoonDays: number
+    readonly unblocksShare: number
+    readonly ownerOrderValues: readonly number[]
+    readonly defaultSizePct: number
+    readonly minSizePct: number
+  }
+  readonly expedite: { readonly critical: boolean; readonly ownerP1: boolean }
+}
 
-/** What the team config says about the owner's waits: its `register.ownerSource` and `register.requireDecisionCard`. */
-export type OwnerSettings = { readonly ownerSource: string; readonly requireDecisionCard: boolean }
+/** What the team config sets that the snapshot carries: the NOT PICKED UP hours, the team's zone, the owner's marker and how it ranks. */
+export type DrawnSettings = Pick<Snapshot, 'notPickedUpAfterHours' | 'timeZone' | 'ownerSource' | 'focus'>
+
+/** What the team config says about the owner's waits: its `register.ownerSource` and `register.requireDecisionCard`, and how they rank. */
+export type OwnerSettings = { readonly ownerSource: string; readonly requireDecisionCard: boolean; readonly focus: RankFocus }
 
 /** What the pane reads from the team config: what the snapshot carries, and what decides which cards are the owner's. */
 export type TeamSettings = DrawnSettings & OwnerSettings

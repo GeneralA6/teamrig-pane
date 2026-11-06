@@ -2,8 +2,8 @@
 // read entry (src/read/index.ts) and the modules it reaches, written by scripts/sync-core.ts, so every
 // event, status and line teamrig writes reads here as teamrig's own commands read it (T248). This file
 // only maps a folded task to the row the pane draws.
-import type { TaskRow, TaskStatus, WaitRow } from '../types'
-import type { Task, TaskStatus as ReadStatus, WaitReason } from './core/read/index'
+import type { RankFocus, TaskRow, TaskStatus, WaitRow } from '../types'
+import type { RankingFocus, Task, TaskStatus as ReadStatus, WaitReason } from './core/read/index'
 
 /** True only when A and B are the same union. */
 type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
@@ -15,6 +15,8 @@ export const STATUS_CONTRACT_MATCHES: Same<TaskStatus, ReadStatus> = true
 export const WAIT_CONTRACT_MATCHES: Same<WaitRow, WaitReason> = true
 // The same for an item's type (a task or a bug).
 export const ITEM_TYPE_CONTRACT_MATCHES: Same<TaskRow['type'], Task['type']> = true
+// The same for the `focus` keys a ranking reads.
+export const FOCUS_CONTRACT_MATCHES: Same<RankFocus, RankingFocus> = true
 
 /** A task as the pane draws it. */
 export function rowOf(task: Task): TaskRow {

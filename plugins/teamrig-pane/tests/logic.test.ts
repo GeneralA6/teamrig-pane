@@ -4,7 +4,7 @@ import { LABEL_CELLS } from '../hooks/card'
 import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { EVENT_VERSION, indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
-import { ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
+import { FOCUS_CONTRACT_MATCHES, ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, noSessionBlock, paneBlocks, statsPressKey, type Block, type Row, type Span } from '../hooks/rows'
 import { metaText } from '../hooks/meta'
@@ -194,6 +194,10 @@ describe('log', () => {
       createLine('T2', { owner: 'po', by: 'po', at: NOW }),
     ])
     expect([bug?.type, bug?.critical, task?.type, task?.critical]).toEqual(['bug', true, null, false])
+  })
+
+  test("the focus keys the plugin contract spells out are the ones teamrig's ranking reads", async () => {
+    expect(FOCUS_CONTRACT_MATCHES).toBe(true)
   })
 
   test('a row carries the size, pin and work class plan order reads, so a pinned row tops the list', async () => {

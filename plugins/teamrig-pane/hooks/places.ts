@@ -6,10 +6,10 @@
 // settings file, else none. The team's config and rename log, read again by sessions.ts at each
 // `/teamrig-pane <session>`, name its sessions. The team config also sets how long a task may stand untouched by its
 // owner before it reads NOT PICKED UP, the team's zone (its `timeZone`, else the machine's, as teamrig resolves it),
-// which waits are the owner's (its `register.ownerSource` and `register.requireDecisionCard`) and how many hours
-// teamrig keeps its turn log, the Log view's window.
+// which waits are the owner's (its `register.ownerSource` and `register.requireDecisionCard`), how the team ranks its
+// tasks (its `focus`) and how many hours teamrig keeps its turn log, the Log view's window.
 import type { ProjectSetup, TeamSettings } from '../types'
-import { DEFAULT_REGISTER, parseConfigText, TimeZone, type ConfigRead, type KitConfig } from './core/read/index'
+import { DEFAULT_FOCUS, DEFAULT_REGISTER, parseConfigText, TimeZone, type ConfigRead, type KitConfig } from './core/read/index'
 import { slashed, type Files, type RegisterDirs } from './source'
 import type { TurnLogPlace } from './turn-log'
 
@@ -131,8 +131,9 @@ export async function findPlaces(input: PlacesInput): Promise<Places> {
 
 /**
  * What a team config (null: none read) sets for the pane, as teamrig reads it: the `register.check` NOT PICKED UP
- * hours, the owner's marker and whether a decision on the owner needs a card naming its gate, each else teamrig's
- * default; the zone named by `timeZone`, else the machine's, else UTC (TimeZone.resolve).
+ * hours, the owner's marker, whether a decision on the owner needs a card naming its gate and how the team ranks its
+ * tasks (`focus`), each else teamrig's default; the zone named by `timeZone`, else the machine's, else UTC
+ * (TimeZone.resolve).
  */
 export function teamSettings(config: KitConfig | null, machineZone: string): TeamSettings {
   const register = config?.register ?? DEFAULT_REGISTER
@@ -141,6 +142,7 @@ export function teamSettings(config: KitConfig | null, machineZone: string): Tea
     timeZone: TimeZone.resolve(config?.timeZone, machineZone).name,
     ownerSource: register.ownerSource,
     requireDecisionCard: register.requireDecisionCard,
+    focus: config?.focus ?? DEFAULT_FOCUS,
   }
 }
 
