@@ -29,9 +29,12 @@ export function rename(id: string, from: string, to: string): Rename {
 /** The account's week resets three days after NOW, so NOW is 4 days into it: 57% of the week. */
 export const WEEK_RESET = NOW + 72 * HOUR
 
-/** A team's week file: its used and planned part of the account's week, for the week that resets at `resetsAt`. */
-export function weekFile(usedPct: number, plannedPct: number, resetsAt = WEEK_RESET): TeamWeekSummary {
-  return { usedPct, plannedPct, accountUsedPct: 70, resetsAt, at: NOW - HOUR }
+/**
+ * A team's week file: its used and planned part of `account`'s week, for the week that resets at `resetsAt`. A default
+ * parameter fires on undefined, so a format 1 file, which names no account, is `{ ...weekFile(1, 2), account: undefined }`.
+ */
+export function weekFile(usedPct: number, plannedPct: number, resetsAt = WEEK_RESET, account = 'acme-account'): TeamWeekSummary {
+  return { account, usedPct, plannedPct, accountUsedPct: 70, resetsAt, at: NOW - HOUR, limits: [] }
 }
 
 /** The register's tasks after `lines`, as the pane lists them. */
