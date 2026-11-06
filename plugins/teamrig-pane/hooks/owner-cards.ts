@@ -6,6 +6,7 @@
 import type { LaterOwnerCard, OwnerCard, OwnerSettings, SessionOwnerCards } from '../types'
 import { dueTime, ownerCardsBySession, showStored, TaskTree, type LaterCard, type Task, type TimeZone } from './core/read/index'
 import { storedDayWords } from './meta'
+import { rankingOf } from './ranking'
 
 /** A stored bare day (`2026-11-02`); a stored minute (`2026-11-02 12:00`) is UTC, and Date.parse would read it as local. */
 const BARE_DAY = /^\d{4}-\d{2}-\d{2}$/
@@ -29,7 +30,7 @@ function backAt(card: LaterCard, zone: TimeZone): number {
  * the register's plan order; its Later ones come soonest back first, plan order among those back at once.
  */
 export function ownerCardsOf(tasks: ReadonlyMap<string, Task>, now: number, zone: TimeZone, settings: OwnerSettings): Record<string, SessionOwnerCards> {
-  const tree = new TaskTree(tasks, new Date(now), zone)
+  const tree = new TaskTree(tasks, new Date(now), zone, undefined, undefined, rankingOf(settings.focus, settings.ownerSource))
   const bySession: Record<string, SessionOwnerCards> = {}
   for (const [session, { due, later }] of ownerCardsBySession([...tasks.values()], tree, settings.ownerSource, settings.requireDecisionCard)) {
     const soonest = [...later].sort((a, b) => backAt(a, zone) - backAt(b, zone))

@@ -7,7 +7,7 @@ import { EVENT_VERSION, indexMarks, readMarks, readRegister, TASK_STATUSES } fro
 import { FOCUS_CONTRACT_MATCHES, ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, noSessionBlock, paneBlocks, statsPressKey, type Block, type Row, type Span } from '../hooks/rows'
-import { metaText } from '../hooks/meta'
+import { metaText, treeOf } from '../hooks/meta'
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
@@ -232,7 +232,7 @@ describe('log', () => {
 })
 
 describe('view', () => {
-  test('lists each section in plan order: priority, then due (undated last), then id; what it asked of others sits apart', async () => {
+  test('lists each section in plan order: an expedite, then by score, then due (undated last), then id; what it asked of others sits apart', async () => {
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 3 }),
       createLine('T2', { owner: 'po', by: 'po', at: NOW, priority: 1 }),
@@ -246,14 +246,58 @@ describe('view', () => {
     expect([view.verifying, view.working, view.waiting, view.doneToday]).toEqual([[], [], [], []])
   })
 
-  test("a p0 task, teamrig's level for work done right now, folds, reads p0 and leads its section", async () => {
+  test("a p0 task, teamrig's level for work done right now, folds and reads p0, and its priority alone ranks it nowhere", async () => {
     const tasks = fold(
       createLine('T1', { owner: 'po', by: 'po', at: NOW, source: 'po', priority: 1 }),
       createLine('T2', { owner: 'po', by: 'po', at: NOW, source: 'po', priority: 0 }),
     )
     const tree = treeAt(tasks, NOW)
     expect(tasks.map(t => metaText(t, tree))).toEqual(['p1', 'p0'])
+    // Band and score replaced priority in plan order (core register/score.ts): neither is the owner's, so they tie and the id settles it.
+    expect(areaView(tasks, 'po', tree).upNext.map(t => t.id)).toEqual(['T1', 'T2'])
+  })
+
+  test("an owner's p1 is an expedite, ahead of a p1 anyone else asked for whatever the ids", async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, source: 'lead', priority: 1 }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW, priority: 1 }),
+    )
+    expect(areaView(tasks, 'po', treeAt(tasks, NOW)).upNext.map(t => t.id)).toEqual(['T2', 'T1'])
+  })
+
+  test("a class's band comes before any score: a Maintenance task leads an Improvements one that scores far higher", async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, source: 'lead', taskKeys: { size: 0.05 } }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW, source: 'lead', taskKeys: { workClass: 'Maintenance', size: 50 } }),
+    )
+    const tree = treeAt(tasks, NOW)
+    expect(tasks.map(t => tree.rankedOf(t)?.score)).toEqual([20, 0.2])
     expect(areaView(tasks, 'po', tree).upNext.map(t => t.id)).toEqual(['T2', 'T1'])
+  })
+
+  test('a task scores on its own size, the default for one with none: the pane reads no spend yet', async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, source: 'lead', taskKeys: { size: 5 } }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW, source: 'lead', taskKeys: { size: 0.5 } }),
+      createLine('T3', { owner: 'po', by: 'po', at: NOW, source: 'lead' }),
+    )
+    const tree = treeAt(tasks, NOW)
+    expect(tasks.map(t => tree.rankedOf(t)?.score)).toEqual([0.2, 2, 3.33])
+    expect(areaView(tasks, 'po', tree).upNext.map(t => t.id)).toEqual(['T3', 'T2', 'T1'])
+  })
+
+  test("the team's focus and owner marker rank the tree: a config that turns an owner's order off, or names another owner, takes its lead", async () => {
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW, source: 'lead', priority: 1 }),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW, priority: 1 }),
+    )
+    const { focus, ownerSource } = SNAPSHOT_SETTINGS
+    const unordered = { ...focus, expedite: { ...focus.expedite, ownerP1: false }, score: { ...focus.score, ownerOrderValues: [] } }
+    const upNext = (settings: Pick<Snapshot, 'focus' | 'ownerSource'>) =>
+      areaView(tasks, 'po', treeOf({ tasks, now: NOW, ...NO_TEAM, ...SNAPSHOT_SETTINGS, ...settings })).upNext.map(t => t.id)
+    expect(upNext({ focus, ownerSource })).toEqual(['T2', 'T1'])
+    expect(upNext({ focus: unordered, ownerSource })).toEqual(['T1', 'T2'])
+    expect(upNext({ focus, ownerSource: 'boss' })).toEqual(['T1', 'T2'])
   })
 
   test('plan order reads the effective due: an undated task a dated one needs comes before a later-dated one', async () => {
@@ -303,6 +347,7 @@ describe('view', () => {
     expect(sameView(base, { ...base, now: NOW + HOUR / 2 })).toBe(true)
     expect(sameView(base, { ...base, now: NOW + 2 * HOUR })).toBe(false)
     expect(sameView(base, { ...base, unreadInbox: 1 })).toBe(false)
+    expect(sameView(base, { ...base, focus: { ...base.focus, expedite: { ...base.focus.expedite, ownerP1: false } } })).toBe(false)
     // The Inbox view: a line read 23 hours before leaves its window an hour on, with no poll; one read an hour before
     // prints with its weekday from the zone's midnight.
     const line = { key: 'inbox:0', at: NOW - 23 * HOUR, from: 'lead', text: 'ship it', unread: false }

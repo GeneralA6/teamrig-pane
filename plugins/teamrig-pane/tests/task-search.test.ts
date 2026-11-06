@@ -83,7 +83,8 @@ describe('search', () => {
   })
 
   test('the active matches first in plan order, then the finished ones newest first', async () => {
-    expect(found('the')).toEqual(['T58', 'T52', 'T50', '|', 'T9', 'T7'])
+    // T58 is the owner's p1, an expedite; T52's p2 is the lead's, which scores nothing, so it ties with T50 and the id settles it.
+    expect(found('the')).toEqual(['T58', 'T50', 'T52', '|', 'T9', 'T7'])
     expect(topResult(search(TASKS, 'the'))?.id).toBe('T58')
     expect(topResult(search(TASKS, 'column'))?.id).toBe('T7')
     expect(topResult(search(TASKS, 'nothing-here'))).toBe(null)
