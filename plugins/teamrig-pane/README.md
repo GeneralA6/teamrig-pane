@@ -6,7 +6,7 @@ an older one:
     /plugin install teamrig-pane --marketplace GeneralA6/teamrig-pane
 
 Docks the session's tasks from teamrig's task register (its tasks folder: `events.jsonl`, with the
-`inbox-marks.jsonl` that `teamrig inbox read` writes; see Where the register is, below) on the right of
+`inbox-marks.jsonl` that `teamrig inbox read` writes and the `goals.jsonl` that ranks the plan; see Where the register is, below) on the right of
 Claude Code's fullscreen UI. It reads files only (the Meetings view and the Teams tab's `[Meet]` aside, which run teamrig's CLI): a stat poll
 every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick moves the due/age
 labels on. No model calls, so no tokens. Every time is on the team's clock and zone-marked
@@ -284,7 +284,7 @@ over the team default:
 
 | Variable | Setting | What it holds |
 | --- | --- | --- |
-| `TEAMRIG_PANE_TASKS_DIR` | `tasksDir` | `events.jsonl`, `inbox-marks.jsonl` |
+| `TEAMRIG_PANE_TASKS_DIR` | `tasksDir` | `events.jsonl`, `inbox-marks.jsonl`, `goals.jsonl` |
 | `TEAMRIG_PANE_INBOX_DIR` | `inboxDir` | one `<area>.md` inbox per area |
 | `TEAMRIG_PANE_GOALS_DOC` | `goalsDoc` | the goals document, a path from the workspace root (unset: no goal items are quoted) |
 
