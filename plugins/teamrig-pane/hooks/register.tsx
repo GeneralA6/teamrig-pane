@@ -166,6 +166,8 @@ const TRAIL_SEPARATOR = ' › '
 const LOG_LABEL = 'Log'
 /** The Stats view's switch button, and the first crumb of a Health count's trail. */
 const STATS_LABEL = 'Stats'
+/** The Teams view's switch button with no count, and the first crumb of the trail of a Stats tab a Teams row opened. */
+const TEAMS_LABEL = 'Teams'
 const BACK_LABEL = '‹ back'
 const FORWARD_LABEL = 'forward ›'
 /** The Done page's steps to the week before and the week after the one it shows. */
@@ -299,6 +301,9 @@ const statsRange = atom({ plugin: 'teamrig-pane', key: 'statsRange' } as const, 
 const NO_STATS_LIST: StatsListKind | null = null
 /** The Health count whose tasks the Stats tab lists in place of its numbers: none until a tile's press picks one, back clears it. */
 const statsList = atom({ plugin: 'teamrig-pane', key: 'statsList' } as const, NO_STATS_LIST)
+const NO_STATS_FROM: string | null = null
+/** The Teams tab row whose [Stats] opened the Stats tab, back's landing: none until such a press, and any view switch drops it. */
+const statsFrom = atom({ plugin: 'teamrig-pane', key: 'statsFrom' } as const, NO_STATS_FROM)
 /** The Stats tab's sections the person opened or closed against their default (stats-rows.ts isSectionOpen), by key: a press on a header flips one. */
 const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as const, NOTHING_TOGGLED)
 /** The Done page's days, groups and `n more` rows the person flipped against their default (done-rows.ts), by key. */
@@ -978,6 +983,8 @@ export const register: Register = on => {
     let logTitle: Span[] | null = null
     /** The title of the Health count whose tasks the Stats tab shows (stats-rows.ts listTitle); null for its numbers or another view. */
     let statsTitle: string | null = null
+    /** Whether the Stats tab shows from a Teams row's [Stats], so its head leads back to that row; never for another view. */
+    let statsBack = false
     /** What a project teamrig is not set up for shows (setup.ts), alone, in every view; null once a register is found. */
     let setupShown: SetupView | null = NOT_SETTING_UP
     let body: Drawn[] = []
@@ -1041,6 +1048,7 @@ export const register: Register = on => {
         logTitle = logShown === null ? null : logPageTitle(logShown, logs, snap)
         const statsShown = setupShown === null && current === 'stats' ? await read($, stats) : null
         statsTitle = statsShown?.kind === 'stats' && statsShown.list !== null ? listTitle(statsShown.list) : null
+        statsBack = statsShown !== null && (await read($, statsFrom)) !== null
         const viewBlocks =
           setupShown !== null
             ? setupBlocks(setupShown)
@@ -1093,8 +1101,10 @@ export const register: Register = on => {
     // scrolled back to where the page was opened from; the Log button shows the sessions, from a session's page too;
     // the Teams button reads the team tree at once; the Meetings button reads the meetings at once, leaving the last
     // start's answer behind; the Stats button folds the registers at once. Every button closes a search, which the
-    // views share: one typed in one view is never found shown in another.
+    // views share: one typed in one view is never found shown in another, and drops a Teams row's back, as the Stats tab
+    // then shows from the switch.
     const switchTo = async (target: PaneView) => {
+      await update($, statsFrom, () => NO_STATS_FROM)
       await update($, view, () => target)
       await sizer?.set('open')
       await go($, current => reset(current, true))
@@ -1111,9 +1121,17 @@ export const register: Register = on => {
       if (target === 'stats') await tallying?.refresh()
     }
     // A press on the Stats tab's scope or range row picks it, and one on a Health count shows its tasks from their top;
-    // either folds the registers at once.
+    // either folds the registers at once. A Teams row's [Stats] shows the tab on that row's scope, its numbers from their
+    // top, and keeps the row for back; the switch has folded the registers by then.
     const pickStats = async (press: StatsPress) => {
       switch (press.kind) {
+        case 'open':
+          await update($, statsScope, () => press.scope)
+          await update($, statsList, () => NO_STATS_LIST)
+          await switchTo('stats')
+          await update($, statsFrom, () => press.row)
+          await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
+          return
         case 'scope':
           await update($, statsScope, () => press.scope)
           break
@@ -1132,6 +1150,12 @@ export const register: Register = on => {
       await update($, statsList, () => NO_STATS_LIST)
       await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
       await tallying?.refresh()
+    }
+    // Back from a Stats tab a Teams row opened shows the Teams tab at that row. Read first: the switch drops it.
+    const closeStatsFrom = async () => {
+      const row = await read($, statsFrom)
+      await switchTo('team')
+      if (row !== null) await scrollTo($, { kind: 'row', key: row }).catch(() => undefined)
     }
     // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Teams tab session's
     // card, or another area's inbox count on it) shows the Tasks view at it, over its list: back shows the list, never the Team
@@ -1560,7 +1584,7 @@ export const register: Register = on => {
     const inboxWords = snap.unreadInbox !== null && snap.unreadInbox > 0 ? `Inbox (${snap.unreadInbox})` : 'Inbox'
     // The Teams button counts the cards waiting on the owner now across the team's sessions; none, it is the word alone.
     const decisions = Object.values(snap.ownerCards).reduce((sum, cards) => sum + cards.due.length, 0)
-    const teamWords = decisions > 0 ? `Teams (${decisions})` : 'Teams'
+    const teamWords = decisions > 0 ? `${TEAMS_LABEL} (${decisions})` : TEAMS_LABEL
     const switchItems = [
       pressed(
         <Button key="tasks" label="Tasks" hotkey="t" variant={current === 'tasks' ? 'primary' : 'secondary'} onPress={() => void switchTo('tasks')} />,
@@ -1929,20 +1953,24 @@ export const register: Register = on => {
             ),
             rows: 3,
           }
-    // A Health count's tasks lead with back (b) to the tab's numbers, then the trail `Stats › Overdue (35)`, then a rule.
+    const statsHeadOf = (onBack: () => void, from: string, shown: string): HeaderPart => ({
+      node: (
+        <Box key="stats-head" flexDirection="column">
+          <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={onBack} />
+          {drawText([{ text: from }, { text: TRAIL_SEPARATOR, dim: true }, { text: shown }], 'truncate-end', 'stats-trail')}
+          <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
+        </Box>
+      ),
+      rows: 3,
+    })
+    // A Health count's tasks lead with back (b) to the tab's numbers, then the trail `Stats › Overdue (35)`, then a rule;
+    // the numbers of a tab a Teams row opened, with back to that row and the trail `Teams › Stats`.
     const statsHead: HeaderPart | null =
-      statsTitle === null
-        ? null
-        : {
-            node: (
-              <Box key="stats-head" flexDirection="column">
-                <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void closeStatsList()} />
-                {drawText([{ text: STATS_LABEL }, { text: TRAIL_SEPARATOR, dim: true }, { text: statsTitle }], 'truncate-end', 'stats-trail')}
-                <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
-              </Box>
-            ),
-            rows: 3,
-          }
+      statsTitle !== null
+        ? statsHeadOf(() => void closeStatsList(), STATS_LABEL, statsTitle)
+        : statsBack
+          ? statsHeadOf(() => void closeStatsFrom(), TEAMS_LABEL, STATS_LABEL)
+          : null
     return drawPane([controls, pageHead, logHead, statsHead, weekRow, statusRows].filter((part): part is HeaderPart => part !== null))
   })
 

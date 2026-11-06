@@ -642,6 +642,8 @@ declare module 'claude-code' {
       statsRange: import('../hooks/core/read/index').StatsRange
       /** The Health count whose tasks the Stats tab lists in place of its numbers (a tile's press picks it, back clears it); null for the numbers. */
       statsList: StatsListKind | null
+      /** The Teams tab row whose [Stats] opened the Stats tab, back's landing; null when the tab shows from its switch. */
+      statsFrom: string | null
       /** The Stats tab's sections the person opened or closed against their default (hooks/stats-rows.ts isSectionOpen), by key. */
       statsToggled: readonly string[]
       /** The Done page's days, groups and `n more` rows the person flipped against their default (hooks/done-rows.ts), by key. */
