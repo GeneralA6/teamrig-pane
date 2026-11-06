@@ -83,7 +83,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   there marks nothing read: `teamrig inbox read` does.
 - **Teams:** the tree of teams the session's team is in, read from teamrig's team folders: each team's counts of
   active and retired sessions, its lead over the sessions each leader leads, the retired ones in a group of their own
-  and the child teams under their parent; each session's row gives its id, its name, how many sessions it leads
+  and the child teams under their parent; each session's row gives its name, how many sessions it leads
   (`(2)`), its roles, each in a colour of its own, and how many of its cards wait on the owner, with a `[Meet]` press
   that has teamrig ask it to bring them now; the pane's own row starts with a green triangle pointing right; the switch's button counts the
   cards, `Teams (2)`. A press on a row closes or opens what lies under it; a session's card adds its hire or retire and

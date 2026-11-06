@@ -616,13 +616,13 @@ gone, amber past that (ahead of plan); behind its plan, a dim `│` marks how fa
 percents are its used and planned parts of the account's week. A team planned no part of the week draws an empty bar
 until it uses some, then an amber one; one with no week file for the running week draws no week. Under it are its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a group of their own, and its child teams (`team.parent`). A session's row gives its
-id (bold), its current name where it differs, how many sessions it leads (`(2)`, dim), its roles, each in a colour of
+current name (bold), how many sessions it leads (`(2)`, dim), its roles, each in a colour of
 its own (lead, `sub-lead` for a leader that is not the lead, delivery owner, security reviewer); then how many of its
 cards wait on the owner (the config's `register.ownerSource`) now, `? 2 decisions`, with a `[Meet]` press, and when the
 next card the owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire days are on its card. The
 row of the session whose pane it is starts with a green `▶`. A retired session is a dim `○`. Docked, a row's presses
 sit on its words: a press on a team's mark or name, or on a retired group's row (a click, Enter or Space), closes it or
-opens it again; on a session's id it opens or closes its card; on a leader's mark it folds the sessions it leads.
+opens it again; on a session's name it opens or closes its card; on a leader's mark it folds the sessions it leads.
 Inline, where a row is one press, the row does the first of these. Each team's and session's row ends in `[Stats]`,
 which opens the Stats tab on that team (its child teams rolled in) or that session (the tasks it owns); `b` then goes
 back to the Teams tab at that row. Inline `[Stats]` is words only, as `[Meet]` is. Teams and leaders start open, a
@@ -638,17 +638,17 @@ answered leads the tab: `Asking web for its cards…`, then `Asked web for its c
 The switch's Teams button counts the cards waiting on the owner now across the team, `Teams (2)`; a card put off counts
 again once it comes back.
 
-A card lists, each only when known: Role (its roles in their colours, and `leads 2 sessions`), Led by, Launch (model
+A card lists, each only when known: Id (where it differs from the name), Role (its roles in their colours, and `leads 2 sessions`), Led by, Launch (model
 and effort), Hired or Rehired (day, by whom, review day), Scope, Reason, Now (its tasks in progress, each id opening its
 page), Tasks (how many it finished of all it owns but the dropped and how many wait on their proof, `1 done of 4 · 1
 verifying`; dim `older ones archived` once a compaction moved the old ones out of the register, dim `no tasks` for
 none), Decisions (its cards waiting on the owner now), Later (those the owner put off, soonest back first, with when
 each comes back), each id opening its page, and Inbox (unread lines, opening its inbox, the pane's own in the Inbox
-view); a retired session's card gives its retire: day, by whom, why, Heir and Handover (a press opens it). Now, Tasks,
+view); a retired session's card gives its id and its retire: day, by whom, why, Heir and Handover (a press opens it). Now, Tasks,
 Decisions, Later, Inbox and the counts of cards on the owner show for the pane's own team only. A page a card opens shows in the Tasks view; back shows the tasks list.
 
 The Find field (`s`) searches the tree: each word matches the start of a word in a session's id, name,
-roles or hire scope, retired ones too. The body counts the matches and draws each under its team and leaders; a press
+roles or hire scope, retired ones too. The body counts the matches and draws each under its team and leaders, an id the name does not hold on a dim line under its row; a press
 opens or closes its card, and Enter with one match opens it. Switching to Tasks closes the search, as Teams does a Tasks
 search. Cleared, the tree draws as before: a match under a closed row stays hidden there.
 
