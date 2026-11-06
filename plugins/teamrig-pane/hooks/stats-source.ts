@@ -39,15 +39,17 @@ export type StatsPick = { readonly scope: StatsChoice; readonly range: StatsRang
 /** Each Health count's tasks as slim rows. */
 export type StatsLists = Readonly<Record<StatsListKind, readonly StatsListRow[]>>
 
-/** A listed row and where plan order places it, its due parsed once. */
+/** A listed row and where its due places it, the due parsed once. */
 type Placed = { readonly row: StatsListRow; readonly place: PlanPlace }
 
 /**
  * The tasks behind each Health count as slim rows, one row per task shared by every list it is in: each list p1
- * first, then by due date, undated last (teamrig's plan order, core register/tree.ts planOrder, as register/views.ts
- * byPlanOrder orders a task's own due), but the owner's waits as teamrig orders them, the oldest wait first. Each
- * task's due is parsed once, with its row: byPlanOrder parses both dues at every comparison, which over the thousands
- * of tasks a range of all lists made the fold four times slower.
+ * first, then by due date, undated last (core register/tree.ts planOrder over a place of the due alone), but the
+ * owner's waits as teamrig orders them, the oldest wait first. The one pane list off teamrig's ranked plan order
+ * (T2087): it spans teams with no tree here and a focus config each, and its rows print the priority and the due, not
+ * a score, so it sorts by the words a reader sees. Each task's due is parsed once, with its row: byPlanOrder parses
+ * both dues at every comparison, which over the thousands of tasks a range of all lists made the fold four times
+ * slower.
  */
 export function listsOf(tasks: StatsTasks, zone: TimeZone): StatsLists {
   const placed = new Map<string, Placed>()
@@ -56,14 +58,14 @@ export function listsOf(tasks: StatsTasks, zone: TimeZone): StatsLists {
     const kept = placed.get(key)
     if (kept !== undefined) return kept
     const row: StatsListRow = { team, id: task.id, title: task.title, owner: task.owner, status: task.status, priority: task.priority, due: task.due }
-    const made: Placed = { row, place: { id: task.id, priority: task.priority, at: dueTime(task, zone) } }
+    const made: Placed = { row, place: { id: task.id, at: dueTime(task, zone) } }
     placed.set(key, made)
     return made
   }
   const planned = (list: readonly StatsTask[]) =>
     list
       .map(placedOf)
-      .sort((a, b) => planOrder(a.place, b.place))
+      .sort((a, b) => a.row.priority - b.row.priority || planOrder(a.place, b.place))
       .map(each => each.row)
   return {
     active: planned(tasks.active),
