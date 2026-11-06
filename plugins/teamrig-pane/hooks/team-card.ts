@@ -1,5 +1,6 @@
 // The card a session's row opens on the Teams tab (team-rows.ts, T780): what the team's files say of the session, one
-// labelled row per fact (card.ts labelled), each only when it has a value. Role: its roles, each in its role's colour
+// labelled row per fact (card.ts labelled), each only when it has a value. Id: its id, where its name differs, as its
+// row draws only the name (T1795). Role: its roles, each in its role's colour
 // (ROLE_COLORS; a leader that is not the lead is a sub-lead), and how many sessions it leads, or the area it owns. Led by: its leaders, nearest first. Launch: the model and effort teamrig starts it on
 // (describeLaunch). Hired or Rehired: the day, who hired it and the day its hire is reviewed; Scope and Reason: its job
 // and why. Now: its tasks in progress, each id a press that opens the task's page, and Tasks: how many it finished of
@@ -20,7 +21,7 @@ import type { Row, Span } from './rows'
 import type { Role, SessionFacts } from './team'
 
 /** A fact a session's card shows on its labelled row, named as its row's key ends. */
-export type TeamCardField = 'role' | 'led-by' | 'launch' | 'hire' | 'scope' | 'reason' | 'now' | 'tasks' | 'decisions' | 'later' | 'inbox' | 'retired' | 'heir' | 'handover'
+export type TeamCardField = 'id' | 'role' | 'led-by' | 'launch' | 'hire' | 'scope' | 'reason' | 'now' | 'tasks' | 'decisions' | 'later' | 'inbox' | 'retired' | 'heir' | 'handover'
 
 /** A role the tab names: one a team config gives (`roles`), or a sub-lead, a session its `leads` lists others under. */
 export type TabRole = Role | 'subLead'
@@ -105,9 +106,11 @@ function handoverLines(retire: NonNullable<SessionFacts['retire']>): Lines {
 /** A session's card rows, keyed `team-card:<team>/<id>:<row>`, each line behind `guide`. */
 export function sessionCard(session: SessionFacts, guide: Span, zone: TimeZone): Row[] {
   const field = (row: TeamCardField, label: string, lines: Lines) => labelled(`team-card:${session.team}/${session.id}:${row}`, label, lines, NO_IDS, guide)
+  const id = field('id', 'Id', session.name === session.id ? [] : [[{ text: session.id }]])
   const retire = session.retire
   if (retire !== null) {
     return [
+      ...id,
       ...field('retired', 'Retired', [[{ text: `${dayWords(retire.at, zone)} by ${retire.by}` }]]),
       ...field('reason', 'Reason', textLines(retire.reason)),
       ...field('heir', 'Heir', textLines(retire.heir ?? null)),
@@ -117,6 +120,7 @@ export function sessionCard(session: SessionFacts, guide: Span, zone: TimeZone):
   const roles = roleParts(session)
   const hire = session.hire
   return [
+    ...id,
     ...field('role', 'Role', [roles.length === 0 ? [{ text: 'area owner' }] : joined(roles)]),
     ...field('led-by', 'Led by', session.ledBy.length === 0 ? [] : [[{ text: session.ledBy.join(', then ') }]]),
     ...field('launch', 'Launch', session.launch === null ? [] : [[{ text: describeLaunch(session.launch) }]]),

@@ -1,4 +1,4 @@
-// A session's card on the Teams tab (hooks/team-card.ts): its roles in their colours, leaders, launch, hire, tasks in progress and counted, and unread
+// A session's card on the Teams tab (hooks/team-card.ts): its id, roles in their colours, leaders, launch, hire, tasks in progress and counted, and unread
 // inbox lines, or its retire, a labelled row a fact, each only when it has a value, its task ids, inbox count and
 // handover presses of their own.
 import { describe, expect, test } from 'claude-code/testing'
@@ -36,6 +36,7 @@ describe('sessionCard', () => {
   test("an area owner's card: its role, its leaders nearest first, its launch, its task in progress, its tasks counted, its cards on the owner and its unread lines", () => {
     const card = sessionCard(sessionOf('acme', 'api'), GUIDE, UTC)
     expect(words(card)).toEqual([
+      line('Id', 'api'),
       line('Role', 'area owner'),
       line('Led by', 'web, then lead'),
       line('Launch', 'the default model and effort'),
@@ -44,7 +45,7 @@ describe('sessionCard', () => {
       line('Decisions', 'T4 Pick the database'),
       line('Inbox', '2 unread'),
     ])
-    expect(card.map(row => row.key)).toEqual(['role', 'led-by', 'launch', 'now', 'tasks', 'decisions', 'inbox'].map(field => `team-card:acme/api:${field}`))
+    expect(card.map(row => row.key)).toEqual(['id', 'role', 'led-by', 'launch', 'now', 'tasks', 'decisions', 'inbox'].map(field => `team-card:acme/api:${field}`))
     expect(card[0]?.hang).toEqual({ text: `${GUIDE.text}${' '.repeat(LABEL_CELLS)}`, dim: true })
   })
 
@@ -68,6 +69,7 @@ describe('sessionCard', () => {
 
   test("the lead's card: its roles and the sessions it leads, no leaders, the lead's launch defaults, nothing in progress", () => {
     expect(words(sessionCard(sessionOf('acme', 'lead'), GUIDE, UTC))).toEqual([
+      line('Id', 'lead'),
       line('Role', 'lead · leads 2 sessions'),
       line('Launch', 'model opus at xhigh effort'),
       line('Now', 'nothing in progress'),
@@ -91,6 +93,7 @@ describe('sessionCard', () => {
 
   test("a hired session's card: its hire's day, who hired it and its review day, its job and why; rehired once retired", () => {
     expect(words(sessionCard(sessionOf('acme', 'ui'), GUIDE, UTC))).toEqual([
+      line('Id', 'ui'),
       line('Role', 'area owner'),
       line('Led by', 'web, then lead'),
       line('Launch', 'model claude-opus-5-5 at xhigh effort'),
@@ -100,7 +103,8 @@ describe('sessionCard', () => {
       line('Now', 'nothing in progress'),
       line('Tasks', 'no tasks'),
     ])
-    expect(words(sessionCard(sessionOf('acme', 'ops'), GUIDE, UTC)).slice(0, 4)).toEqual([
+    expect(words(sessionCard(sessionOf('acme', 'ops'), GUIDE, UTC)).slice(0, 5)).toEqual([
+      line('Id', 'ops'),
       line('Role', 'security reviewer'),
       line('Led by', 'lead'),
       line('Launch', 'the default model and effort'),
@@ -109,8 +113,8 @@ describe('sessionCard', () => {
   })
 
   test("a leader's Role row says how many sessions it leads, one in the singular, after its roles; one not the lead is a sub-lead", () => {
-    expect(words(sessionCard(sessionOf('tools', 'boss'), GUIDE, UTC))[0]).toBe(line('Role', 'lead · leads 1 session'))
-    expect(words(sessionCard(sessionOf('acme', 'web'), GUIDE, UTC))[0]).toBe(line('Role', 'sub-lead · leads 2 sessions'))
+    expect(words(sessionCard(sessionOf('tools', 'boss'), GUIDE, UTC))[1]).toBe(line('Role', 'lead · leads 1 session'))
+    expect(words(sessionCard(sessionOf('acme', 'web'), GUIDE, UTC))[1]).toBe(line('Role', 'sub-lead · leads 2 sessions'))
     expect(roleWords(sessionOf('acme', 'web'))).toEqual(['sub-lead'])
     expect(roleWords(sessionOf('acme', 'api'))).toEqual([])
   })
@@ -137,21 +141,30 @@ describe('sessionCard', () => {
   test("a retired session's card is its retire: the day and who retired it, why, its heir and its handover, a press", () => {
     const qa = sessionOf('acme', 'qa')
     const card = sessionCard(qa, GUIDE, UTC)
-    expect(words(card)).toEqual([line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done'), line('Heir', 'web'), line('Handover', 'handover/qa.md')])
+    expect(words(card)).toEqual([line('Id', 'qa'), line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done'), line('Heir', 'web'), line('Handover', 'handover/qa.md')])
     expect(valueOf(card, 'team-card:acme/qa:handover')).toEqual([{ text: 'handover/qa.md', file: { file: 'handover/qa.md', line: null } }])
 
     const none = { ...qa, retire: retire('qa', NOW - 60 * HOUR, { noHandover: 'its job left no state' }) }
-    expect(words(sessionCard(none, GUIDE, UTC))).toEqual([line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done'), line('Handover', 'none: its job left no state')])
-    expect(words(sessionCard({ ...qa, retire: retire('qa', NOW - 60 * HOUR) }, GUIDE, UTC))).toEqual([line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done')])
+    expect(words(sessionCard(none, GUIDE, UTC))).toEqual([line('Id', 'qa'), line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done'), line('Handover', 'none: its job left no state')])
+    expect(words(sessionCard({ ...qa, retire: retire('qa', NOW - 60 * HOUR) }, GUIDE, UTC))).toEqual([line('Id', 'qa'), line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done')])
+  })
+
+  test('its id leads its card where its name differs, as its row draws only the name; a name that is the id draws no Id row', () => {
+    const api = sessionOf('acme', 'api')
+    expect(words(sessionCard(api, GUIDE, UTC))[0]).toBe(line('Id', 'api'))
+    expect(sessionCard({ ...api, name: 'api' }, GUIDE, UTC).map(row => row.key)[0]).toBe('team-card:acme/api:role')
+    const qa = sessionOf('acme', 'qa')
+    expect(words(sessionCard(qa, GUIDE, UTC))[0]).toBe(line('Id', 'qa'))
+    expect(sessionCard({ ...qa, name: 'qa' }, GUIDE, UTC).map(row => row.key)[0]).toBe('team-card:acme/qa:retired')
   })
 
   test("a peer team's session shows no tasks or unread lines: the pane reads neither its register nor its inbox", () => {
-    expect(words(sessionCard(sessionOf('tools', 'dev'), GUIDE, UTC))).toEqual([line('Role', 'area owner'), line('Led by', 'boss'), line('Launch', 'the default model and effort')])
+    expect(words(sessionCard(sessionOf('tools', 'dev'), GUIDE, UTC))).toEqual([line('Id', 'dev'), line('Role', 'area owner'), line('Led by', 'boss'), line('Launch', 'the default model and effort')])
   })
 
   test("days print on the team's clock", () => {
     const late = { ...sessionOf('acme', 'qa'), retire: retire('qa', Date.UTC(2026, 9, 11, 22, 30)) }
-    expect(words(sessionCard(late, GUIDE, UTC))[0]).toBe(line('Retired', 'Sun 10-11 by lead'))
-    expect(words(sessionCard(late, GUIDE, JERUSALEM))[0]).toBe(line('Retired', 'Mon 10-12 by lead'))
+    expect(words(sessionCard(late, GUIDE, UTC))[1]).toBe(line('Retired', 'Sun 10-11 by lead'))
+    expect(words(sessionCard(late, GUIDE, JERUSALEM))[1]).toBe(line('Retired', 'Mon 10-12 by lead'))
   })
 })
