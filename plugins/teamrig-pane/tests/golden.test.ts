@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow } from '../types'
 import { priorityText, readMarks, readRegister, showStored, waitsText, type TaskTree } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
-import { treeOf, whenWords } from '../hooks/meta'
+import { rankWords, treeOf, whenWords, type PaneTree } from '../hooks/meta'
 import { findPlaces } from '../hooks/places'
 import { paneBlocks, type Block } from '../hooks/rows'
 import { registerPaths, skippedText, TaskRegisterSource } from '../hooks/source'
@@ -36,8 +36,10 @@ const PATHS = registerPaths({ tasksDir: `${KIT}/teams/demo/state`, inboxDir: `${
  * and an active task another session's task needs ends `· needed by T8 (beta, due 10-22)` (neededByText), the due
  * left out when the row's own `(from T8)` names it.
  */
-function listLine(row: TaskRow, tree: TaskTree<TaskRow>): string {
-  const parts = [`${row.id} ${row.status}`, priorityText(row.priority), `owner ${row.owner}`]
+function listLine(row: TaskRow, tree: PaneTree): string {
+  const rank = rankWords(row, tree)
+  const ranked = rank === null ? [] : [rank.workClass, ...(rank.score === null ? [] : [`score ${rank.score}`])]
+  const parts = [`${row.id} ${row.status}`, ...ranked, priorityText(row.priority), `owner ${row.owner}`]
   const due = tree.effectiveDue(row.id)
   if (due !== undefined && due.from !== null) parts.push(`due ${showStored(due.due, tree.zone)} (from ${due.from})`)
   else if (row.due !== null) parts.push(`due ${showStored(row.due, tree.zone)}`)
@@ -63,7 +65,7 @@ function neededBy(row: TaskRow, tree: TaskTree<TaskRow>): string {
 /**
  * The task lines teamrig printed, sorted as the test sorts the pane's. Each loses the ` · ahead: due` tail (aheadText):
  * why the row sorts before the next in teamrig's plan order, a fact of the list's order, not of the task, which the
- * pane, sorting its own way, never draws.
+ * pane never draws.
  */
 const linesOf = (printed: string) =>
   printed
@@ -127,6 +129,9 @@ describe('golden', () => {
     expect(linesOf(GOLDEN.list).length).toBe(8)
     const tree = treeOf(snap)
     expect(snap.tasks.map(row => listLine(row, tree)).sort()).toEqual(linesOf(GOLDEN.list))
+    // teamrig printed them in plan order: fed the same rows, the pane's tree must rank them the same.
+    const printed = GOLDEN.list.split('\n').filter(line => line !== '').map(line => line.split(' ')[0])
+    expect(tree.inPlanOrder(snap.tasks).map(row => row.id)).toEqual(printed)
     expect(`WARN ${snap.problem}`).toBe(warnOf(GOLDEN.warn))
   })
 
