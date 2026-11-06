@@ -154,6 +154,10 @@ export type TeamTreeNode =
 
 /** A session's node, the kind of node the tab's search finds (team-search.ts). */
 export type SessionNode = Extract<TeamTreeNode, { kind: 'session' }>
+/** A team's node. */
+export type TeamNode = Extract<TeamTreeNode, { kind: 'team' }>
+/** A team's retired group's node. */
+export type RetiredNode = Extract<TeamTreeNode, { kind: 'retired' }>
 
 /** A team's own read, with its roster over every session ever on it: the config's sessions, then the retired ones. */
 type TeamPart = { readonly read: TeamRead; readonly roster: Roster; readonly retired: readonly RetireRecord[] }

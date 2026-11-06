@@ -52,21 +52,19 @@ export type Span = {
   stats?: StatsPress
 }
 
-/** A press on the Stats tab (stats-rows.ts): the scope it folds or the range, on the pick rows; or the Health count whose tasks it lists, on a tile. */
+/**
+ * A press on the Stats tab (stats-rows.ts): the scope it folds or the range, on the pick rows; or the Health count whose
+ * tasks it lists, on a tile. Or one that opens the tab, on a Teams tab row (team-rows.ts): the scope it opens on, and the
+ * tree node's key of the `row` back lands on.
+ */
 export type StatsPress =
   | { readonly kind: 'scope'; readonly scope: StatsChoice }
   | { readonly kind: 'range'; readonly range: StatsRange }
   | { readonly kind: 'list'; readonly list: StatsListKind }
+  | { readonly kind: 'open'; readonly scope: StatsChoice; readonly row: string }
 
-/**
- * What a Stats tab press picks, as one word: `tree`, `team:<team>`, `session:<team>/<session>`, `range:<range>` or
- * `list:<count>`, so two presses that pick the same are one style (layout.ts) and the focus ring keys each press apart
- * (press-keys.ts).
- */
-export function statsPressKey(press: StatsPress): string {
-  if (press.kind === 'range') return `range:${press.range}`
-  if (press.kind === 'list') return `list:${press.list}`
-  const { scope } = press
+/** A scope as one word: `tree`, `team:<team>` or `session:<team>/<session>`. */
+function scopeKey(scope: StatsChoice): string {
   switch (scope.kind) {
     case 'tree':
       return 'tree'
@@ -74,6 +72,24 @@ export function statsPressKey(press: StatsPress): string {
       return `team:${scope.team}`
     case 'session':
       return `session:${scope.team}/${scope.session}`
+  }
+}
+
+/**
+ * What a Stats tab press picks, as one word: its scope's (scopeKey), `range:<range>`, `list:<count>` or, for one that
+ * opens the tab, `open:` and its scope's, so two presses that pick the same are one style (layout.ts) and the focus ring
+ * keys each press apart (press-keys.ts).
+ */
+export function statsPressKey(press: StatsPress): string {
+  switch (press.kind) {
+    case 'range':
+      return `range:${press.range}`
+    case 'list':
+      return `list:${press.list}`
+    case 'scope':
+      return scopeKey(press.scope)
+    case 'open':
+      return `open:${scopeKey(press.scope)}`
   }
 }
 /** What an unread count's press opens: the area whose inbox it is, and how many of its newest lines are unread. */

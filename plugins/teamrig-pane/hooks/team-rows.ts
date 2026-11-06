@@ -8,21 +8,23 @@
 // ROLE_COLORS, T1245), how many of its cards wait on the owner now with a [Meet] press that runs `teamrig meet` on it
 // (T1297) and when the next card the owner put off comes back; its hire and retire days are its card's. A retired
 // group's row counts its sessions. The row of the session whose pane it is starts with a green ▶ in the indent's first
-// cell (T1281), so the viewer finds itself at a glance. A press on a team's or a retired group's row opens or closes what lies under it
-// (`folds`). A press on a session's row opens or closes its card (team-card.ts) under it; a
-// leader's row, and docked a row with a [Meet], holds its presses instead, a leader's mark opening or closing the
-// sessions it leads and the id its card (`toggles`), and inline, where a row is one press, its row does the first.
+// cell (T1281), so the viewer finds itself at a glance. A team's and a session's row end in a [Stats] press that opens
+// the Stats tab on it (T1714). A press on a team's or a retired group's row opens or closes what lies under it
+// (`folds`), a press on a session's row its card (team-card.ts) under it, or for a leader the sessions it leads. Docked,
+// a row whose line holds a press draws as its pieces and drops its own, so the row's presses sit on its words
+// (`toggles`): a team's mark and name open or close what lies under it, a leader's mark the sessions it leads, a
+// session's id its card. Inline a row is one press, its `folds`, and [Stats] and [Meet] are words.
 // While the Find field holds a query, the tab draws its search (team-search.ts) on the shared search view
 // (search-view.ts) instead: the count, then the sessions it names under their teams and leaders (team.ts foundRows),
 // the words that matched underlined, a matched hire scope on a dim line under its row, and a press on any session's
-// row opening or closing its card. What the last [Meet] press answered leads the tab, then a WARN line for each team
-// folder the last read could not read (T1234). A card prints its days on the team's clock. Pure.
-import type { MeetAnswer, TeamFolderFailure, TeamView } from '../types'
+// row, docked its id, opening or closing its card. What the last [Meet] press answered leads the tab, then a WARN line
+// for each team folder the last read could not read (T1234). A card prints its days on the team's clock. Pure.
+import type { MeetAnswer, StatsChoice, TeamFolderFailure, TeamView } from '../types'
 import type { TimeZone } from './core/read/index'
 import { META_LINES, SEPARATOR, single, type Block, type Row, type Span } from './rows'
 import { marksOf, type Mark } from './search'
 import { excerpt, markedSpans, resultKey, searchViewBlocks, type Noun } from './search-view'
-import { foundRows, teamRows, type SessionFacts, type SessionNode, type TeamRow, type TeamTreeNode, type TeamWeek } from './team'
+import { foundRows, teamRows, type RetiredNode, type SessionFacts, type SessionNode, type TeamNode, type TeamRow, type TeamTreeNode, type TeamWeek } from './team'
 import { roleSpans, sessionCard } from './team-card'
 import { TEAM_SEARCH_VIEW, teamFieldText, type SessionHit, type TeamSearchedField } from './team-search'
 
@@ -37,6 +39,8 @@ export const TEAM_NOTHING_FOUND = 'Nothing matches. The Teams tab searches every
 const SESSION_NOUN: Noun = { one: 'session', many: 'sessions' }
 /** The press on a session's row that brings the owner its cards (`teamrig meet`). */
 export const MEET_TEXT = '[Meet]'
+/** The press that ends a team's and a session's row: the Stats tab on it, its sub-teams rolled in for a team. */
+export const STATS_TEXT = '[Stats]'
 /**
  * The mark before the row of the session whose pane it is: one cell of plain text in the success colour, a triangle as
  * tall as it is wide (T1793). ▶ (U+25B6) is that triangle, and an emoji in some terminals, so VS15 (U+FE0E) asks for
@@ -97,9 +101,9 @@ function markedRoles(session: SessionFacts, marks: readonly Mark[]): Span[] {
   return spans
 }
 
-/** Whether the session's row holds a [Meet] press: a card of it waits on the owner now. */
-function meetsOwner(session: SessionFacts): boolean {
-  return (session.decisions?.due.length ?? 0) > 0
+/** The [Stats] press that ends the row of tree node `row`, opening the Stats tab on `scope`. */
+function statsSpans(row: string, scope: StatsChoice): Span[] {
+  return [{ text: ' ' }, { text: STATS_TEXT, dim: true, stats: { kind: 'open', scope, row } }]
 }
 
 /**
@@ -121,18 +125,19 @@ function decisionSpans(session: SessionFacts): Span[] {
 }
 
 /**
- * A session's row: its mark, its id (bold on the team, a press that opens or closes its card when `card` names it),
- * its name where it is not the id, how many sessions it leads in brackets, dim, its roles in their colours, its cards
- * on the owner; where `marks` says a search's words matched, underlined. Its hire and retire are its card's.
+ * A session's row: its mark, its id (bold on the team, the press that opens or closes its card), its name where it is
+ * not the id, how many sessions it leads in brackets, dim, its roles in their colours, its cards on the owner, its
+ * [Stats]; where `marks` says a search's words matched, underlined. Its hire and retire are its card's.
  */
-function sessionSpans(session: SessionFacts, card: string | null, marks: Marks): Span[] {
+function sessionSpans({ key, session }: SessionNode, marks: Marks): Span[] {
   const isRetired = !session.active
   const idStyle: Omit<Span, 'text'> = isRetired ? { dim: true } : { bold: true }
-  const spans: Span[] = [isRetired ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.id, marks('id'), card === null ? idStyle : { ...idStyle, toggles: card })]
+  const spans: Span[] = [isRetired ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.id, marks('id'), { ...idStyle, toggles: cardKey(key) })]
   const name = teamFieldText(session, 'name')
   if (name !== null) spans.push(...prefixedSpans('  ', name, marks('name'), { dim: isRetired }))
   if (session.leads > 0) spans.push({ text: ` (${session.leads})`, dim: true })
   spans.push(...markedRoles(session, marks('role')), ...decisionSpans(session))
+  spans.push(...statsSpans(key, { kind: 'session', team: session.team, session: session.id }))
   return spans
 }
 
@@ -169,21 +174,22 @@ function weekSpans(week: TeamWeek | null): Span[] {
   return [SEPARATOR, { text: 'week ', dim: true }, ...bar, { text: ` ${weekPct(week.usedPct)} of ${weekPct(week.plannedPct)}`, dim: true }]
 }
 
-/** A team's or a retired group's own words: the team, its counts and its week, or the group and its count. */
-function groupSpans(node: Exclude<TeamTreeNode, { kind: 'session' }>): Span[] {
-  switch (node.kind) {
-    case 'team':
-      return [
-        { text: node.team.team, bold: true },
-        SEPARATOR,
-        { text: `${node.team.active} active`, dim: true },
-        SEPARATOR,
-        { text: `${node.team.retired} retired`, dim: true },
-        ...weekSpans(node.team.week),
-      ]
-    case 'retired':
-      return [{ text: `retired (${node.children.length})`, dim: true }]
-  }
+/** A team's own words: the team, holding `press`, its counts, its week and its [Stats]. */
+function teamSpans({ key, team }: TeamNode, press: Pick<Span, 'toggles'>): Span[] {
+  return [
+    { text: team.team, bold: true, ...press },
+    SEPARATOR,
+    { text: `${team.active} active`, dim: true },
+    SEPARATOR,
+    { text: `${team.retired} retired`, dim: true },
+    ...weekSpans(team.week),
+    ...statsSpans(key, { kind: 'team', team: team.team }),
+  ]
+}
+
+/** A retired group's own words: the group and its count. */
+function retiredSpan({ children }: RetiredNode): Span {
+  return { text: `retired (${children.length})`, dim: true }
 }
 
 /**
@@ -209,46 +215,40 @@ function openCard(node: SessionNode, hang: Span, toggled: ReadonlySet<string>, z
 }
 
 /**
- * The press a session's id holds on a row that is one press: none, or its card's key when the row holds a [Meet],
- * since docked a row whose line holds a press draws as its pieces and drops its own press (layout.ts dockLayout).
- */
-function idPress(session: SessionFacts, card: string): string | null {
-  return meetsOwner(session) ? card : null
-}
-
-/**
  * One row of the tree: indented by its depth, its open mark, its words; its wrapped lines start under its words. A
- * session's card, while `toggled` holds its key, follows its row.
+ * session's card, while `toggled` holds its key, follows its row. A team's mark and name, and a leader's mark, hold the
+ * press that opens or closes what lies under it, as docked its [Stats] leaves the row no press of its own.
  */
 function rowBlock({ node, depth, open }: TeamRow, toggled: ReadonlySet<string>, zone: TimeZone, own: string | null): Block {
   const { before, hang } = leadOf(depth, isOwn(node, own))
-  if (node.kind !== 'session') {
-    const block = single(node.key, [...before, foldMark(open), ...groupSpans(node)], hang)
-    return open === null ? block : { ...block, folds: node.key }
+  const folded = open === null ? {} : { folds: node.key }
+  const press = open === null ? {} : { toggles: node.key }
+  switch (node.kind) {
+    case 'team':
+      return { ...single(node.key, [...before, { ...foldMark(open), ...press }, ...teamSpans(node, press)], hang), ...folded }
+    case 'retired':
+      return { ...single(node.key, [...before, foldMark(open), retiredSpan(node)], hang), ...folded }
+    case 'session': {
+      const spans = [...before, { ...foldMark(open), ...press }, ...sessionSpans(node, NO_MARKS)]
+      return { ...single(node.key, spans, hang), folds: open === null ? cardKey(node.key) : node.key, ...openCard(node, hang, toggled, zone) }
+    }
   }
-  const card = cardKey(node.key)
-  const opened = openCard(node, hang, toggled, zone)
-  if (open === null) {
-    const spans = [...before, foldMark(open), ...sessionSpans(node.session, idPress(node.session, card), NO_MARKS)]
-    return { ...single(node.key, spans, hang), folds: card, ...opened }
-  }
-  const spans = [...before, { ...foldMark(open), toggles: node.key }, ...sessionSpans(node.session, card, NO_MARKS)]
-  return { ...single(node.key, spans, hang), folds: node.key, ...opened }
 }
 
 /**
- * One row a search draws: a team or a retired group, open over what it leads to, no press; a session the search names,
+ * One row a search draws: a team or a retired group, open over what it leads to, no fold; a session the search names,
  * keyed as its result, its matched words underlined and its matched scope on a dim line under it; a session drawn only
- * to lead to one. A session's row is one press that opens or closes its card, which follows it while open (docked,
- * its id is, on a row that holds a [Meet]).
+ * to lead to one. A session's row is one press that opens or closes its card, which follows it while open (docked, its
+ * id is).
  */
 function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, SessionHit>, toggled: ReadonlySet<string>, zone: TimeZone, own: string | null): Block {
   const { before, hang } = leadOf(depth, isOwn(node, own))
-  if (node.kind !== 'session') return single(node.key, [...before, foldMark(open), ...groupSpans(node)], hang)
+  if (node.kind === 'team') return single(node.key, [...before, foldMark(open), ...teamSpans(node, {})], hang)
+  if (node.kind === 'retired') return single(node.key, [...before, foldMark(open), retiredSpan(node)], hang)
   const hit = hits.get(node.key)
   const marks: Marks = hit === undefined ? NO_MARKS : field => marksOf(hit, field)
   const key = hit === undefined ? node.key : resultKey(TEAM_SEARCH_VIEW, node.key)
-  const rows: Row[] = [{ key, spans: [...before, foldMark(open), ...sessionSpans(node.session, idPress(node.session, cardKey(node.key)), marks)], hang }]
+  const rows: Row[] = [{ key, spans: [...before, foldMark(open), ...sessionSpans(node, marks)], hang }]
   const scope = teamFieldText(node.session, 'scope')
   if (scope !== null && marks('scope').length > 0) {
     const shown = excerpt(scope, marks('scope'))

@@ -5,7 +5,6 @@ import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHIN
 import { LABEL_CELLS } from '../hooks/card'
 import { barKeys, KEY_GROUPS } from '../hooks/keys-page'
 import { POLL_MS } from '../hooks/live'
-import { openKey } from '../hooks/press-keys'
 import { cells } from '../hooks/width'
 import { EVENT_VERSION, type HireRecord, type RetireRecord } from '../hooks/core/read/index'
 import { HOUR, NOW, S1, S2, bigRegister, createLine, iso, markLine, statusLine, updateLine, verifyingLine, waitingLine } from './fixtures'
@@ -2018,28 +2017,28 @@ test("the Teams tab lists the tree of teams the session's team is in; a press on
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
   await pane.press({ key: 'team' })
-  expect(await drawsLine(pane, /^▾ acme · 4 active · 1 retired$/)).toBe(true)
-  expect(await drawsLine(pane, /● api  acme-api$/)).toBe(true)
-  expect(await drawsLine(pane, /● ui  acme-ui$/)).toBe(true)
+  expect(await drawsLine(pane, /^▾ acme · 4 active · 1 retired \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● api  acme-api \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● ui  acme-ui \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /▸ retired \(1\)$/)).toBe(true)
   expect(await drawsLine(pane, /○ qa/)).toBe(false)
-  expect(await drawsLine(pane, /▾ tools · 1 active · 0 retired$/)).toBe(true)
+  expect(await drawsLine(pane, /▾ tools · 1 active · 0 retired \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /\bother\b/)).toBe(false)
   expect(await pane.find({ text: /Add the route/ })).toBeUndefined()
 
   // web leads, so its row holds two presses: its mark closes what it leads and a second opens it again, its id opens its
-  // card. The retired group's row opens the retired sessions; api's row, a press of its own, opens api's card.
+  // card. The retired group's row opens the retired sessions; api's id opens api's card, as every session's does.
   await pane.press({ key: await pressOn(pane, 'session:acme/web') })
-  expect(await drawsLine(pane, /● api  acme-api$/)).toBe(false)
-  expect(await drawsLine(pane, /▸ ● web  acme-web \(2\) · sub-lead$/)).toBe(true)
+  expect(await drawsLine(pane, /● api  acme-api \[Stats\]$/)).toBe(false)
+  expect(await drawsLine(pane, /▸ ● web  acme-web \(2\) · sub-lead \[Stats\]$/)).toBe(true)
   await pane.press({ key: await pressOn(pane, 'session:acme/web') })
-  expect(await drawsLine(pane, /● api  acme-api$/)).toBe(true)
+  expect(await drawsLine(pane, /● api  acme-api \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /│ Role {9}sub-lead · leads 2 sessions$/)).toBe(false)
   await pane.press({ key: await pressOn(pane, 'card:session:acme/web') })
   expect(await drawsLine(pane, /│ Role {9}sub-lead · leads 2 sessions$/)).toBe(true)
   await pane.press({ key: 'retired:acme' })
-  expect(await drawsLine(pane, /○ qa  acme-qa$/)).toBe(true)
-  await pane.press({ key: 'session:acme/api' })
+  expect(await drawsLine(pane, /○ qa  acme-qa \[Stats\]$/)).toBe(true)
+  await pane.press({ key: await pressOn(pane, 'card:session:acme/api') })
   expect(await drawsLine(pane, /│ Led by {7}web, then lead$/)).toBe(true)
   expect(await drawsLine(pane, /│ Now {10}nothing in progress$/)).toBe(true)
   expect(await drawsLine(pane, /│ Tasks {8}0 done of 1$/)).toBe(true)
@@ -2054,9 +2053,9 @@ test("a session's card counts its unread inbox lines, and a press on the count o
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
   await pane.press({ key: 'team' })
-  await pane.press({ key: 'session:acme/api' })
+  await pane.press({ key: await pressOn(pane, 'card:session:acme/api') })
   expect(await drawsLine(pane, /│ Inbox {8}2 unread$/)).toBe(true)
-  const toInbox = buttonKeys(await pane.drawn()).find(key => key.startsWith(`goto:inbox:${openKey('session:acme/api')}:`))
+  const toInbox = buttonKeys(await pane.drawn()).find(key => key.startsWith('goto:inbox:session:acme/api:'))
   if (toInbox === undefined) throw new Error("no press on api's inbox count")
   await pane.press({ key: toInbox })
   const screen = screenOf(await pane.drawn())
@@ -2078,7 +2077,7 @@ test("the Teams tab's Find field draws the sessions it names under their leaders
   await pane.input({ key: 'find', text: 'api', kind: 'change' })
   // The count, then api under its team and the leaders over it; the sessions and teams it leads nowhere near are not drawn.
   expect(await drawsLine(pane, /^1 session matches$/)).toBe(true)
-  expect(await drawsLine(pane, /● api  acme-api$/)).toBe(true)
+  expect(await drawsLine(pane, /● api  acme-api \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /● web  acme-web\b/)).toBe(true)
   expect(await drawsLine(pane, /● ui  acme-ui\b/)).toBe(false)
   expect(await drawsLine(pane, /\btools\b/)).toBe(false)
@@ -2119,7 +2118,7 @@ test("the Teams tab and the Tasks view share one search: a switch between them c
   expect(await drawsLine(pane, /^1 task matches$/)).toBe(true)
   await pane.press({ key: 'team' })
   expect(await drawsLine(pane, /match/)).toBe(false)
-  expect(await drawsLine(pane, /^▾ tools · 1 active · 0 retired$/)).toBe(true)
+  expect(await drawsLine(pane, /^▾ tools · 1 active · 0 retired \[Stats\]$/)).toBe(true)
 })
 
 test('the Teams tab reads no team folder while another view shows, and reads what moved when it shows again', async ($, on) => {
@@ -2137,7 +2136,7 @@ test('the Teams tab reads no team folder while another view shows, and reads wha
 
   await pane.press({ key: 'team' })
   expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
-  expect(await drawsLine(pane, /● dev  tools-dev$/)).toBe(true)
+  expect(await drawsLine(pane, /● dev  tools-dev \[Stats\]$/)).toBe(true)
 })
 
 test('the Teams tab says so when the session has no team', async ($, on) => {
@@ -2165,7 +2164,7 @@ async function olderTreeReadsAsNotRead($: TestEngine, on: On, older: (key: strin
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   await pane.press({ key: 'team' })
-  await pane.press({ key: 'session:acme/api' })
+  await pane.press({ key: await pressOn(pane, 'card:session:acme/api') })
   expect(await drawsLine(pane, /│ Tasks {8}0 done of 1$/)).toBe(true)
 
   isOlderStored = true
@@ -3160,6 +3159,98 @@ test("a press on a Health count lists its tasks under back and the trail `Stats 
   await pane.press({ key: 'stats:list:web/T1' })
   expect(keyedProps(await pane.drawn(), 'tasks')).toMatchObject({ variant: 'primary' })
   expect(await drawsLine(pane, /Ship the pricing page/)).toBe(true)
+})
+
+/** Mounts the pane of a session of team acme on the Teams tab, tall enough to hold every Stats section. */
+async function mountOnTeams($: TestEngine, on: On): Promise<Mounted<'Pane'>> {
+  await startWithTeam(on)
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: STATS_PROPS })
+  await pane.press({ key: 'team' })
+  return pane
+}
+
+/** Presses the [Stats] of the Teams tab row that opens the Stats tab on `scope`, as rows.ts statsPressKey words it. */
+async function pressRowStats(pane: Mounted<'Pane'>, scope: string): Promise<void> {
+  const key = buttonKeys(await pane.drawn()).find(found => found.startsWith(`stats:open:${scope}:`))
+  if (key === undefined) throw new Error(`no [Stats] on the row of ${scope}`)
+  await pane.press({ key })
+}
+
+/** Presses the Health tile's count of the active tasks, which lists them. */
+async function pressActiveCount(pane: Mounted<'Pane'>): Promise<void> {
+  const key = buttonKeys(await pane.drawn()).find(found => found.startsWith('stats:list:active:'))
+  if (key === undefined) throw new Error("no press on the backlog tile's active count")
+  await pane.press({ key })
+}
+
+test("[Stats] on a team's row opens the Stats tab on that team, on a session's on that session, under back and the trail `Teams › Stats`; back shows the Teams tab", async ($, on) => {
+  const pane = await mountOnTeams($, on)
+  expect(keyedProps(await pane.drawn(), 'back')).toBeNull()
+
+  await pressRowStats(pane, 'team:acme')
+  expect(keyedProps(await pane.drawn(), 'stats')).toMatchObject({ variant: 'primary' })
+  expect(await drawsLine(pane, /^Scope {2}tree {2}\[acme\]/)).toBe(true)
+  expect(keyedProps(await pane.drawn(), 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
+  expect(await pane.find({ type: 'Text', text: 'Teams › Stats' })).toMatchObject({ props: { wrap: 'truncate-end' } })
+
+  await pane.press({ key: 'back' })
+  expect(keyedProps(await pane.drawn(), 'team')).toMatchObject({ variant: 'primary' })
+  expect(keyedProps(await pane.drawn(), 'back')).toBeNull()
+
+  await pressRowStats(pane, 'session:acme/api')
+  expect(await drawsLine(pane, /^Scope .*\[api ×\]$/)).toBe(true)
+})
+
+test('back from a Stats tab a Teams row opened brings that row into a dock too short to hold the tree', async ($, on) => {
+  const { disk } = await startWithTeam(on)
+  const sessions = Array.from({ length: 60 }, (_, i) => `s${i + 1}`)
+  disk.write(`${TEAMS}/acme/config.json`, [JSON.stringify({ team: { id: 'acme' }, sessions: ['lead', ...sessions], roles: { lead: 'lead' } })])
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: STATS_PROPS })
+  await pane.press({ key: 'team' })
+  await pressRowStats(pane, 'session:acme/s50')
+  await pane.redraw(WIDE)
+
+  await pane.press({ key: 'back' })
+  expect(await drawsLine(pane, /● s50\b/)).toBe(true)
+  expect(await drawsLine(pane, /● s1\b/)).toBe(false)
+})
+
+test("the Stats switch button drops a Teams row's back, the tab staying on the row's scope", async ($, on) => {
+  const pane = await mountOnTeams($, on)
+  await pressRowStats(pane, 'team:acme')
+
+  await pane.press({ key: 'stats' })
+  expect(keyedProps(await pane.drawn(), 'back')).toBeNull()
+  expect(await pane.find({ type: 'Text', text: 'Teams › Stats' })).toBeUndefined()
+  expect(await drawsLine(pane, /^Scope {2}tree {2}\[acme\]/)).toBe(true)
+})
+
+test("a Health count's list opened under a Teams row's back keeps its own back first; a second back leaves for the Teams tab", async ($, on) => {
+  const pane = await mountOnTeams($, on)
+  await pressRowStats(pane, 'team:acme')
+
+  await pressActiveCount(pane)
+  expect(await pane.find({ type: 'Text', text: /^Stats › Active/ })).toBeDefined()
+
+  await pane.press({ key: 'back' })
+  expect(keyedProps(await pane.drawn(), 'stats')).toMatchObject({ variant: 'primary' })
+  expect(await pane.find({ type: 'Text', text: 'Teams › Stats' })).toBeDefined()
+
+  await pane.press({ key: 'back' })
+  expect(keyedProps(await pane.drawn(), 'team')).toMatchObject({ variant: 'primary' })
+})
+
+test("[Stats] on a Teams row shows the tab's numbers, never a Health count's list left open there", async ($, on) => {
+  const pane = await mountOnTeams($, on)
+  await pane.press({ key: 'stats' })
+  await pressActiveCount(pane)
+  await pane.press({ key: 'team' })
+
+  await pressRowStats(pane, 'team:acme')
+  expect(await pane.find({ type: 'Text', text: 'Teams › Stats' })).toBeDefined()
+  expect(await drawsLine(pane, /^Health$/)).toBe(true)
 })
 
 test('the six sections after Flow draw folded, each header alone answering; a press opens one, and a name in People scopes the tab to that session', async ($, on) => {

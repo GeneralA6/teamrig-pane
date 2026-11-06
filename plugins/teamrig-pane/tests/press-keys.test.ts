@@ -58,6 +58,12 @@ describe('press-keys', () => {
     expect(pieceKey({ kind: 'stats', span: { text: '30 d' }, stats: { kind: 'range', range: '30d' } }, 'stats:pick', 'card:1', 2)).toBe(
       'stats:range:30d:stats:pick:card:1:2',
     )
+    const opensTeam = { kind: 'open', scope: { kind: 'team', team: 'acme' }, row: 'team:acme' } as const
+    expect(pieceKey({ kind: 'stats', span: { text: '[Stats]' }, stats: opensTeam }, 'team:acme', 'card:0', 7)).toBe('stats:open:team:acme:team:acme:card:0:7')
+    const opensSession = { kind: 'open', scope: { kind: 'session', team: 'acme', session: 'api' }, row: 'session:acme/api' } as const
+    expect(pieceKey({ kind: 'stats', span: { text: '[Stats]' }, stats: opensSession }, 'session:acme/api', 'card:0', 7)).toBe(
+      'stats:open:session:acme/api:session:acme/api:card:0:7',
+    )
     expect(diffKey('C1-open', 'f1')).toBe('diff:C1-open:f1')
     expect(pieceKey({ kind: 'act', span: { text: '[Next]' }, acts: { task: 'T5', press: 'next' } }, 'T5-open', 'card:3', 2)).toBe(actKey('next', 'T5'))
   })
