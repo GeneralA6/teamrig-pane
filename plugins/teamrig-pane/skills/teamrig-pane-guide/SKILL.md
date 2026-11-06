@@ -620,11 +620,13 @@ id (bold), its current name where it differs, how many sessions it leads (`(2)`,
 its own (lead, `sub-lead` for a leader that is not the lead, delivery owner, security reviewer); then how many of its
 cards wait on the owner (the config's `register.ownerSource`) now, `? 2 decisions`, with a `[Meet]` press, and when the
 next card the owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire days are on its card. The
-row of the session whose pane it is starts with a green `▶`. A retired session is a dim `○`. A press on a team's or
-retired group's row (a click,
-Enter or Space) closes it or opens it again; on a session's row it opens or closes its card. A leader's row has two
-presses: its mark folds the sessions it leads, its id opens its card. Teams and leaders start open, a retired group
-closed, and the state stays across a hot reload. There are no ← and → keys: the engine binds keys only to buttons. With
+row of the session whose pane it is starts with a green `▶`. A retired session is a dim `○`. Docked, a row's presses
+sit on its words: a press on a team's mark or name, or on a retired group's row (a click, Enter or Space), closes it or
+opens it again; on a session's id it opens or closes its card; on a leader's mark it folds the sessions it leads.
+Inline, where a row is one press, the row does the first of these. Each team's and session's row ends in `[Stats]`,
+which opens the Stats tab on that team (its child teams rolled in) or that session (the tasks it owns); `b` then goes
+back to the Teams tab at that row. Inline `[Stats]` is words only, as `[Meet]` is. Teams and leaders start open, a
+retired group closed, and the state stays across a hot reload. There are no ← and → keys: the engine binds keys only to buttons. With
 no team, no config teamrig can read, or a failed read of the team folder list, or of its own team's folder before one
 worked, the view says which. Any other team folder it cannot read gets a `WARN team <id> could not be read: …` line
 above the tree, and that team draws as last read, or is left out until a read of it works.
@@ -632,9 +634,9 @@ above the tree, and that team draws as last read, or is left out until a read of
 `[Meet]` runs `teamrig meet <session>`: teamrig wakes a running session with an inbox line asking it to bring the owner
 its cards now, or opens it in a new tab to do so, and refuses one with no card waiting on the owner. What teamrig
 answered leads the tab: `Asking web for its cards…`, then `Asked web for its cards:` with teamrig's lines, or
-`web was not asked:` and why. One meet runs at a time, given 60 seconds. Docked, a row with a `[Meet]` holds two
-presses, its id opening its card; inline, the row opens the card. The switch's Teams button counts the cards waiting on
-the owner now across the team, `Teams (2)`; a card put off counts again once it comes back.
+`web was not asked:` and why. One meet runs at a time, given 60 seconds. Inline, a row with a `[Meet]` opens the card.
+The switch's Teams button counts the cards waiting on the owner now across the team, `Teams (2)`; a card put off counts
+again once it comes back.
 
 A card lists, each only when known: Role (its roles in their colours, and `leads 2 sessions`), Led by, Launch (model
 and effort), Hired or Rehired (day, by whom, review day), Scope, Reason, Now (its tasks in progress, each id opening its
@@ -692,6 +694,10 @@ session, whose press goes back to its team) and the range (7, 30, 90 or 180 days
 
     Scope  [tree]  acme  tools
     Range  [7 d]  30 d  90 d  180 d  1 y  all
+
+A Teams tab row's `[Stats]` opens the tab on that row's team or session: `‹ back` (`b`) and the trail `Teams › Stats`
+then lead it, and back shows the Teams tab at that row. A Health count's list keeps its own back first, and a press on
+the switch drops the row's.
 
 | Section | What it shows |
 | --- | --- |

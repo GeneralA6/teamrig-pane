@@ -87,7 +87,8 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   (`(2)`), its roles, each in a colour of its own, and how many of its cards wait on the owner, with a `[Meet]` press
   that has teamrig ask it to bring them now; the pane's own row starts with a green triangle pointing right; the switch's button counts the
   cards, `Teams (2)`. A press on a row closes or opens what lies under it; a session's card adds its hire or retire and
-  how many of its tasks are done and verifying.
+  how many of its tasks are done and verifying. `[Stats]` on a team's or session's row opens the Stats tab on it, and
+  back returns to that row.
 - **Meetings:** the meetings booked for the session's team, by time: each one's time, length, who meets and what it
   settles, the next one marked and a missed one red. A press opens its card (what it is about, who joins, its tasks
   with their status, its brief), and a scheduled one's `[Start meeting]` runs `teamrig meeting start` for you.
