@@ -614,7 +614,8 @@ counts its active and retired sessions, then gives its week with its child teams
 cells for the part of the account's week planned for it, filled as far as it used it, green up to how far the week has
 gone, amber past that (ahead of plan); behind its plan, a dim `│` marks how far the week has gone (`████░│░░░░`). The
 percents are its used and planned parts of the account's week. A team planned no part of the week draws an empty bar
-until it uses some, then an amber one; one with no week file for the running week draws no week. Under it are its lead, each leader over the sessions it leads (the config's
+until it uses some, then an amber one; one with no week file for the running week draws no week. A team's week adds a
+child team's only on one account and one reset: a child team on another keeps its week on its own row. Under it are its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a group of their own, and its child teams (`team.parent`). A session's row gives its
 current name (bold), how many sessions it leads (`(2)`, dim), its roles, each in a colour of
 its own (lead, `sub-lead` for a leader that is not the lead, delivery owner, security reviewer); then how many of its
