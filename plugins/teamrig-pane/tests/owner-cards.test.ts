@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { OwnerSettings } from '../types'
-import { readRegister, TimeZone } from '../hooks/core/read/index'
+import { DEFAULT_FOCUS, readRegister, TimeZone } from '../hooks/core/read/index'
 import { laterWords, ownerCardsOf } from '../hooks/owner-cards'
 import { HOUR, JERUSALEM, NOW, createLine, waitingLine, type CardFields } from './fixtures'
 
-/** teamrig's default: the owner marker `owner`, and a decision on the owner needs a card naming its gate. */
-const SETTINGS: OwnerSettings = { ownerSource: 'owner', requireDecisionCard: true }
+/** teamrig's default: the owner marker `owner`, a decision on the owner needs a card naming its gate, and its ranking. */
+const SETTINGS: OwnerSettings = { ownerSource: 'owner', requireDecisionCard: true, focus: DEFAULT_FOCUS }
 
 const GATED: CardFields = { question: 'Ship the analytics tab?', options: ['A: now', 'B: next week'], recommend: 'A', byDefault: 'B', gate: 'product' }
 const UNGATED: CardFields = { question: 'Which colour?', options: ['A: green', 'B: blue'], recommend: 'A', byDefault: 'A' }
@@ -45,7 +45,7 @@ describe('ownerCardsOf', () => {
       waitingLine('T1', 'pane', NOW - 2 * HOUR, [{ kind: 'decision', who: 'owner' }], null, UNGATED),
     ]
     expect(cardsOf(lines)).toEqual({})
-    expect(cardsOf(lines, { ownerSource: 'owner', requireDecisionCard: false })['pane']?.due.map(card => card.id)).toEqual(['T1'])
+    expect(cardsOf(lines, { ...SETTINGS, requireDecisionCard: false })['pane']?.due.map(card => card.id)).toEqual(['T1'])
   })
 
   test('a decision with no card still counts: check flags it NO-CARD, and the owner still holds it', () => {
@@ -62,7 +62,7 @@ describe('ownerCardsOf', () => {
       waitingLine('T1', 'pane', NOW - 2 * HOUR, [{ kind: 'decision', who: 'boss' }], null, GATED),
     ]
     expect(cardsOf(lines)).toEqual({})
-    expect(cardsOf(lines, { ownerSource: 'boss', requireDecisionCard: true })['pane']?.due.map(card => card.id)).toEqual(['T1'])
+    expect(cardsOf(lines, { ...SETTINGS, ownerSource: 'boss' })['pane']?.due.map(card => card.id)).toEqual(['T1'])
   })
 
   test('a card put off to a day is later, named by its weekday, through that day, and due once it ends', () => {

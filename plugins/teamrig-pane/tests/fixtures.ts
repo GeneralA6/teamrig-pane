@@ -1,5 +1,5 @@
 // Register lines shaped as teamrig writes them (events v2, inbox marks v1), and an in-memory `Files`.
-import { DEFAULT_REGISTER, EVENT_VERSION, MARK_VERSION, TimeZone } from '../hooks/core/read/index'
+import { DEFAULT_FOCUS, DEFAULT_REGISTER, EVENT_VERSION, MARK_VERSION, TimeZone } from '../hooks/core/read/index'
 import { lineHash } from '../hooks/line-hash'
 import { treeOf, type PaneTree } from '../hooks/meta'
 import type { FileStamp, Files } from '../hooks/source'
@@ -17,6 +17,7 @@ export const SNAPSHOT_SETTINGS: DrawnSettings = {
   notPickedUpAfterHours: NOT_PICKED_UP_HOURS,
   timeZone: TimeZone.UTC.name,
   ownerSource: DEFAULT_REGISTER.ownerSource,
+  focus: DEFAULT_FOCUS,
 }
 /** What a team whose config sets none of the pane's settings reads with, on a machine whose zone is UTC. */
 export const TEAM_SETTINGS: TeamSettings = { ...SNAPSHOT_SETTINGS, requireDecisionCard: DEFAULT_REGISTER.requireDecisionCard }

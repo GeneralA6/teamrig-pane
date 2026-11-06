@@ -300,7 +300,7 @@ export class TaskRegisterSource {
     this.paths = paths
     const { requireDecisionCard, ...drawn } = settings
     this.drawn = drawn
-    this.owner = { ownerSource: settings.ownerSource, requireDecisionCard }
+    this.owner = { ownerSource: settings.ownerSource, requireDecisionCard, focus: settings.focus }
     this.zone = zoneNamed(settings.timeZone)
     this.register = new LayoutRegister(files, paths.events)
     this.marks = new WatchedFile(files, paths.marks, readMarks, readMarks(''))
