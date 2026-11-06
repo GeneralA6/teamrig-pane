@@ -83,17 +83,26 @@ function hundredths(pct: number): number {
 }
 
 /**
+ * Whether `file` counts in `first`'s week: it is on the same reset and the two name no two accounts. The account alone
+ * will not do: a reset can move inside a week, so on one account another reset is an idle team's stale week, and adding
+ * it mixes two weeks. A format 1 file names no account, so the reset is all it has.
+ */
+function inWeekOf(first: TeamWeekSummary, file: TeamWeekSummary): boolean {
+  if (file.resetsAt !== first.resetsAt) return false
+  return first.account === undefined || file.account === undefined || file.account === first.account
+}
+
+/**
  * The week of a team and its child teams from their week files, the team's first: those for the week still running at
- * `now` that share the first one's reset, summed. A file on another reset is another account's (stopgap T1777: the
- * file names no account yet) and is left out; one from a week gone by too. Null when no file is left. How far the week
- * is goes in whole percent, so the tree changes about every 1.7 hours, not at every read. The Stats tab's week tile
- * (stats-source.ts) sums its scope's teams with it too.
+ * `now` that count in the first one's week (`inWeekOf`), summed. Any other file is left out, one from a week gone by
+ * too. Null when no file is left. How far the week is goes in whole percent, so the tree changes about every 1.7 hours,
+ * not at every read. The Stats tab's week tile (stats-source.ts) sums its scope's teams with it too.
  */
 export function weekOf(weeks: readonly TeamWeekSummary[], now: number): TeamWeek | null {
   const running = weeks.filter(week => week.resetsAt > now)
   const first = running[0]
   if (first === undefined) return null
-  const same = running.filter(week => week.resetsAt === first.resetsAt)
+  const same = running.filter(week => inWeekOf(first, week))
   const elapsed = Math.min(1, Math.max(0, (now - (first.resetsAt - WEEK_MS)) / WEEK_MS))
   return {
     usedPct: hundredths(same.reduce((sum, week) => sum + week.usedPct, 0)),

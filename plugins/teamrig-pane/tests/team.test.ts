@@ -168,11 +168,27 @@ describe("a team's week", () => {
     expect(weekIn(tenths, 'acme')).toEqual({ usedPct: 0.3, plannedPct: 0.3, elapsedPct: 57 })
   })
 
-  test("a child team's file on another reset is another account's: its parent leaves it out, its own row shows it", () => {
+  test("a child team's file on another reset is another week: its parent leaves it out, its own row shows it", () => {
     const later = WEEK_RESET + 48 * HOUR
     const root = treeOf([{ ...ACME, week: weekFile(35.28, 51.91) }, { ...TOOLS, week: weekFile(3.84, 5.66, later) }], 'acme')
     expect(weekIn(root, 'acme')).toEqual({ usedPct: 35.28, plannedPct: 51.91, elapsedPct: 57 })
     expect(weekIn(root, 'tools')).toEqual({ usedPct: 3.84, plannedPct: 5.66, elapsedPct: 29 })
+  })
+
+  test("a child team's file on another account is another week, on one reset too: its parent leaves it out, its own row shows it", () => {
+    const root = treeOf([{ ...ACME, week: weekFile(35.28, 51.91) }, { ...TOOLS, week: weekFile(3.84, 5.66, WEEK_RESET, 'tools-account') }], 'acme')
+    expect(weekIn(root, 'acme')).toEqual({ usedPct: 35.28, plannedPct: 51.91, elapsedPct: 57 })
+    expect(weekIn(root, 'tools')).toEqual({ usedPct: 3.84, plannedPct: 5.66, elapsedPct: 57 })
+  })
+
+  test('a format 1 file names no account, so its reset alone decides: summed on the same reset, left out on another', () => {
+    const named = weekFile(35.28, 51.91)
+    const unnamed = { ...weekFile(3.84, 5.66), account: undefined }
+    const sum = { usedPct: 39.12, plannedPct: 57.57, elapsedPct: 57 }
+    expect(weekIn(treeOf([{ ...ACME, week: named }, { ...TOOLS, week: unnamed }], 'acme'), 'acme')).toEqual(sum)
+    expect(weekIn(treeOf([{ ...ACME, week: { ...named, account: undefined } }, { ...TOOLS, week: weekFile(3.84, 5.66) }], 'acme'), 'acme')).toEqual(sum)
+    const later = { ...unnamed, resetsAt: WEEK_RESET + 48 * HOUR }
+    expect(weekIn(treeOf([{ ...ACME, week: named }, { ...TOOLS, week: later }], 'acme'), 'acme')).toEqual({ usedPct: 35.28, plannedPct: 51.91, elapsedPct: 57 })
   })
 
   test("a file from a week gone by is left out: the team's week is its child teams', or none", () => {
