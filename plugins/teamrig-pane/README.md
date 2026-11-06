@@ -429,8 +429,9 @@ the part of the account's week planned for it, filled as far as it used it, gree
 amber past that, as it runs ahead of its plan. Behind its plan, a dim `│` marks how far the week has gone
 (`████░│░░░░`). The percents are its used and planned parts of the account's week. A team planned no part of the week
 draws an empty bar until it uses some, then an amber one. The week comes from the week file teamrig's budget hooks
-write in each team's state folder (`usage/team.week.json`); a team with none for the running week draws no week. Under
-it come its lead, each leader over the sessions it leads (the config's
+write in each team's state folder (`usage/team.week.json`); a team with none for the running week draws no week. A
+team's week adds a child team's only on one account and one reset: a child team on another keeps its week on its own
+row. Under it come its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a group of their own (`▸ retired (1)`), and each child team (whose config names it as
 `team.parent`). A session's row is a `●` and its current name in bold, its id staying on its card, then how
 many sessions it leads, when it leads any, dim (`acme-web (2)`), and its roles, each in a colour of its own so the
