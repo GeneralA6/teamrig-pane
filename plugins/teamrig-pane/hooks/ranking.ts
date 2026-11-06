@@ -6,7 +6,7 @@ import { NO_GOALS, ownSizing, treeRanking, type TreeRanking } from './core/read/
 /**
  * The ranking of a team whose config sets `focus` and whose owner reads as `ownerSource`. stopgap T2093: a task is sized
  * by its own size alone, with no spend behind it, until the pane reads the per-task spend file. stopgap T2098: no goals
- * are read, which changes no score while the core serves no ranked goal.
+ * are read, so a task serving a ranked goal scores lower here than on `teamrig list` until the pane reads them.
  */
 export function rankingOf(focus: RankFocus, ownerSource: string): TreeRanking {
   return treeRanking({ focus, ownerSource, goals: NO_GOALS.goals, sizing: ownSizing })
