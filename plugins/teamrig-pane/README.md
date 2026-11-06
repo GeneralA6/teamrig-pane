@@ -432,8 +432,8 @@ draws an empty bar until it uses some, then an amber one. The week comes from th
 write in each team's state folder (`usage/team.week.json`); a team with none for the running week draws no week. Under
 it come its lead, each leader over the sessions it leads (the config's
 `leads`), the retired sessions in a group of their own (`▸ retired (1)`), and each child team (whose config names it as
-`team.parent`). A session's row is a `●` and its id in bold, then its current name where it differs from the id, how
-many sessions it leads, when it leads any, dim (`web  acme-web (2)`), and its roles, each in a colour of its own so the
+`team.parent`). A session's row is a `●` and its current name in bold, its id staying on its card, then how
+many sessions it leads, when it leads any, dim (`acme-web (2)`), and its roles, each in a colour of its own so the
 eye finds a role without reading it: lead, sub-lead (a leader that is not the lead), delivery owner, security reviewer.
 Then come how many of its cards wait on the owner now (`? 2 decisions`) with a `[Meet]` press, and when the next card the
 owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire days are on its card, keeping the row
@@ -446,7 +446,7 @@ read: …` line above the tree names it, and the team draws as it was last read,
 
 Docked, a row's presses sit on its words. A press on a team's mark or name, or on a retired group's row (a click, or
 Enter or Space on it), closes it (`▸`), and a second press opens it again (`▾`). Teams and leaders start open, and a
-retired group starts closed. A press on a session's id opens its card under it, and a second closes it. A leader's mark
+retired group starts closed. A press on a session's name opens its card under it, and a second closes it. A leader's mark
 closes or opens the sessions it leads. Inline, where a row is one press, the row does the first of these. What was
 opened or closed stays so across a hot reload. ↑ and ↓ move between rows. There are no ← and → keys, since the engine
 binds keys only to buttons.
@@ -464,7 +464,7 @@ opens the card. It needs the teamrig plugin 0.209.0 or later installed in Claude
 the cards waiting on the owner now across the team's sessions, `Teams (2)`; a card the owner put off counts again once it
 comes back.
 
-A card has one labelled line per fact the team's files hold, each only when it has a value: Role (its roles in their
+A card has one labelled line per fact the team's files hold, each only when it has a value: Id (where it differs from the name), Role (its roles in their
 colours and how many sessions it leads, `leads 2 sessions`, or the area it owns), Led by (its leaders, nearest first),
 Launch (the model and effort teamrig starts it on), Hired or Rehired (the day, who hired it, the review day), Scope and
 Reason (its job and why), Now (its tasks in progress, each id a press that opens the task's page), Tasks (how many it
@@ -472,7 +472,7 @@ finished of all it owns but the dropped, and how many wait on their proof: `1 do
 ones archived` once a compaction moved the old ones out of the register, so the counts miss them, and a dim `no tasks`
 for none), Decisions (its cards waiting on the owner now) and Later (those the owner put off, soonest back first, each
 with when it comes back), each id a press that opens the task's page, and Inbox (its unread lines, a press that opens
-its inbox at the first of them, the pane's own area's in the Inbox view). A retired session's card is its retire
+its inbox at the first of them, the pane's own area's in the Inbox view). A retired session's card is its id and its retire
 instead: the day and who retired it, why, the session its tasks went to (Heir), and its Handover, a press that opens the
 file, or why it left none. Now, Tasks, Decisions, Later, Inbox and the counts of cards on the owner show only for the
 pane's own team, whose register and inboxes it reads; a session that never marked its
@@ -481,7 +481,7 @@ card opens shows in the Tasks view, and back from it shows the tasks list.
 
 The Find field searches the tree here. Each word must match, case aside, the start of a word in a session's id, name,
 roles or hire scope, retired sessions too. The body counts the sessions it names (`1 session matches`) and
-draws each under its team and the leaders over it, the matched words underlined and a matched scope on a dim line under
+draws each under its team and the leaders over it, the matched words underlined and a matched scope, or an id the name does not hold, on a dim line under
 its row; a press on one opens or closes its card. Enter moves the cursor onto the first match, and with one match opens
 its card too. The Tasks view and the Teams tab share the search, so a switch between them closes it. Cleared, the
 tree draws as it stood: a session found under a closed row stays hidden there, though a card the search opened stays
