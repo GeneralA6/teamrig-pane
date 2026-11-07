@@ -6,7 +6,9 @@
 // retired), its name alone, its id staying on its card (T1795), how many sessions it leads in brackets (T1244), its
 // roles each in its role's colour (team-card.ts
 // ROLE_COLORS, T1245), how many of its cards wait on the owner now with a [Meet] press that runs `teamrig meet` on it
-// (T1297) and when the next card the owner put off comes back; its hire and retire days are its card's. A retired
+// (T1297), which once pressed answers in its place, where the owner pressed (T2206): Asking…, then Asked and when, with
+// no press, so no second ask; a refused one keeps the press and says it was not asked. Then when the next card the
+// owner put off comes back; its hire and retire days are its card's. A retired
 // group's row counts its sessions. The row of the session whose pane it is starts with a green ▶ in the indent's first
 // cell (T1281), so the viewer finds itself at a glance. A team's and a session's row end in a [Stats] press that opens
 // the Stats tab on it (T1714). A press on a team's or a retired group's row opens or closes what lies under it
@@ -17,7 +19,8 @@
 // While the Find field holds a query, the tab draws its search (team-search.ts) on the shared search view
 // (search-view.ts) instead: the count, then the sessions it names under their teams and leaders (team.ts foundRows),
 // the words that matched underlined, a matched id or hire scope on a dim line under its row, and a press on any
-// session's row, docked its name, opening or closing its card. What the last [Meet] press answered leads the tab, then a WARN line
+// session's row, docked its name, opening or closing its card. What the last [Meet] press answered, with the lines the
+// CLI printed, leads the tab, then a WARN line
 // for each team folder the last read could not read (T1234). A card prints its days on the team's clock. Pure.
 import type { MeetAnswer, StatsChoice, TeamFolderFailure, TeamView } from '../types'
 import type { TimeZone } from './core/read/index'
@@ -39,6 +42,8 @@ export const TEAM_NOTHING_FOUND = 'Nothing matches. The Teams tab searches every
 const SESSION_NOUN: Noun = { one: 'session', many: 'sessions' }
 /** The press on a session's row that brings the owner its cards (`teamrig meet`). */
 export const MEET_TEXT = '[Meet]'
+/** What stands in the [Meet] press's place while its run asks the session. */
+export const MEET_ASKING = 'Asking…'
 /** The press that ends a team's and a session's row: the Stats tab on it, its sub-teams rolled in for a team. */
 export const STATS_TEXT = '[Stats]'
 /**
@@ -102,17 +107,37 @@ function statsSpans(row: string, scope: StatsChoice): Span[] {
 }
 
 /**
- * Its cards on the owner: how many wait now, in the Log's colour for the owner, and the [Meet] press; then when the
- * next one the owner put off comes back, dim. Nothing for none, or a team whose register the pane does not read.
+ * The [Meet] press on `session`'s row, or in its place what the last press on it answered (`meet`), so the answer
+ * shows where the owner pressed: Asking… dim while it runs; Asked and when on the team's clock once teamrig asked it,
+ * with no press until the answer clears, as a second press would only ask again; the press again after a refusal,
+ * saying it was not asked (the tab's top line says why).
  */
-function decisionSpans(session: SessionFacts): Span[] {
+function meetSpans(session: SessionFacts, meet: MeetAnswer | null, zone: TimeZone): Span[] {
+  const press: Span = { text: MEET_TEXT, color: 'suggestion', meets: session.id }
+  if (meet === null || meet.session !== session.id) return [press]
+  switch (meet.outcome) {
+    case 'asking':
+      return [{ text: MEET_ASKING, dim: true }]
+    case 'asked':
+      return [{ text: `Asked ${zone.clock(new Date(meet.at))}`, color: 'success' }]
+    case 'refused':
+      return [press, { text: ' not asked', color: 'warning' }]
+  }
+}
+
+/**
+ * Its cards on the owner: how many wait now, in the Log's colour for the owner, and the [Meet] press or what it
+ * answered (meetSpans); then when the next one the owner put off comes back, dim. Nothing for none, or a team whose
+ * register the pane does not read.
+ */
+function decisionSpans(session: SessionFacts, { meet, zone }: Pick<Drawing, 'meet' | 'zone'>): Span[] {
   const decisions = session.decisions
   if (decisions === null) return []
   const spans: Span[] = []
   const due = decisions.due.length
   if (due > 0) {
     spans.push(SEPARATOR, { text: `? ${due} ${due === 1 ? 'decision' : 'decisions'}`, color: 'suggestion' }, { text: ' ' })
-    spans.push({ text: MEET_TEXT, color: 'suggestion', meets: session.id })
+    spans.push(...meetSpans(session, meet, zone))
   }
   const next = decisions.later[0]
   if (next !== undefined) spans.push(SEPARATOR, { text: `later ${next.until}`, dim: true })
@@ -125,13 +150,13 @@ function decisionSpans(session: SessionFacts): Span[] {
  * search's words matched, underlined. Its id, hire and retire are its card's. A name that is the id is searched as the
  * id (teamFieldText), so its marks are the id's.
  */
-function sessionSpans({ key, session }: SessionNode, marks: Marks): Span[] {
+function sessionSpans({ key, session }: SessionNode, marks: Marks, drawing: Drawing): Span[] {
   const isRetired = !session.active
   const nameStyle: Omit<Span, 'text'> = isRetired ? { dim: true } : { bold: true }
   const matched = marks(teamFieldText(session, 'name') === null ? 'id' : 'name')
   const spans: Span[] = [isRetired ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.name, matched, { ...nameStyle, toggles: cardKey(key) })]
   if (session.leads > 0) spans.push({ text: ` (${session.leads})`, dim: true })
-  spans.push(...markedRoles(session, marks('role')), ...decisionSpans(session))
+  spans.push(...markedRoles(session, marks('role')), ...decisionSpans(session, drawing))
   spans.push(...statsSpans(key, { kind: 'session', team: session.team, session: session.id }))
   return spans
 }
@@ -201,9 +226,10 @@ function leadOf(depth: number, own = false): { before: Span[]; hang: Span } {
 
 /**
  * What every row of a drawing reads besides its node: the nodes opened or closed against their default and the cards
- * open (`toggled`), the team's clock, and the node key of the session whose pane it is (`own`, null for none).
+ * open (`toggled`), the team's clock, the node key of the session whose pane it is (`own`, null for none), and what
+ * the last [Meet] press answered (`meet`, null before one), drawn on the row of the session it names.
  */
-type Drawing = { readonly toggled: ReadonlySet<string>; readonly zone: TimeZone; readonly own: string | null }
+type Drawing = { readonly toggled: ReadonlySet<string>; readonly zone: TimeZone; readonly own: string | null; readonly meet: MeetAnswer | null }
 
 /** Whether `node` is the session whose pane it is. */
 function isOwn(node: TeamTreeNode, own: string | null): boolean {
@@ -220,7 +246,8 @@ function openCard(node: SessionNode, hang: Span, toggled: ReadonlySet<string>, z
  * session's card, while `toggled` holds its key, follows its row. A team's mark and name, and a leader's mark, hold the
  * press that opens or closes what lies under it, as docked its [Stats] leaves the row no press of its own.
  */
-function rowBlock({ node, depth, open }: TeamRow, { toggled, zone, own }: Drawing): Block {
+function rowBlock({ node, depth, open }: TeamRow, drawing: Drawing): Block {
+  const { toggled, zone, own } = drawing
   const { before, hang } = leadOf(depth, isOwn(node, own))
   const folded = open === null ? {} : { folds: node.key }
   const press = open === null ? {} : { toggles: node.key }
@@ -230,7 +257,7 @@ function rowBlock({ node, depth, open }: TeamRow, { toggled, zone, own }: Drawin
     case 'retired':
       return { ...single(node.key, [...before, foldMark(open), retiredSpan(node)], hang), ...folded }
     case 'session': {
-      const spans = [...before, { ...foldMark(open), ...press }, ...sessionSpans(node, NO_MARKS)]
+      const spans = [...before, { ...foldMark(open), ...press }, ...sessionSpans(node, NO_MARKS, drawing)]
       return { ...single(node.key, spans, hang), folds: open === null ? cardKey(node.key) : node.key, ...openCard(node, hang, toggled, zone) }
     }
   }
@@ -242,14 +269,15 @@ function rowBlock({ node, depth, open }: TeamRow, { toggled, zone, own }: Drawin
  * not draw them; a session drawn only to lead to one. A session's row is one press that opens or closes its card, which
  * follows it while open (docked, its name is).
  */
-function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, SessionHit>, { toggled, zone, own }: Drawing): Block {
+function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, SessionHit>, drawing: Drawing): Block {
+  const { toggled, zone, own } = drawing
   const { before, hang } = leadOf(depth, isOwn(node, own))
   if (node.kind === 'team') return single(node.key, [...before, foldMark(open), ...teamSpans(node, {})], hang)
   if (node.kind === 'retired') return single(node.key, [...before, foldMark(open), retiredSpan(node)], hang)
   const hit = hits.get(node.key)
   const marks: Marks = hit === undefined ? NO_MARKS : field => marksOf(hit, field)
   const key = hit === undefined ? node.key : resultKey(TEAM_SEARCH_VIEW, node.key)
-  const rows: Row[] = [{ key, spans: [...before, foldMark(open), ...sessionSpans(node, marks)], hang }]
+  const rows: Row[] = [{ key, spans: [...before, foldMark(open), ...sessionSpans(node, marks, drawing)], hang }]
   // A name that holds the id, as most `<team>-<id>` names do, shows it on the row, where a line would only repeat it.
   const unshown: readonly TeamSearchedField[] = node.session.name.includes(node.session.id) ? ['scope'] : ['id', 'scope']
   for (const field of unshown) {
@@ -314,9 +342,9 @@ function treeBlocks(root: TeamTreeNode, search: TeamSearch | null, drawing: Draw
 /**
  * The Teams tab: the tree's rows, with the nodes in `toggled` opened or closed against their default and the sessions
  * whose card key (cardKey) it holds showing their cards, or why none show; while the `extras` search holds the Find
- * field's query, the search's body instead; what the last [Meet] press answered (`meet`) leads either, then a WARN line
- * for each team folder the last read could not read, the no-tree note's too. The row of the `own` session, the one
- * whose pane it is, starts with OWN_MARK.
+ * field's query, the search's body instead; what the last [Meet] press answered (`meet`) leads either, and stands in
+ * its press's place on the row of the session it names, then a WARN line for each team folder the last read could not
+ * read, the no-tree note's too. The row of the `own` session, the one whose pane it is, starts with OWN_MARK.
  */
 export function teamBlocks(view: TeamView, toggled: readonly string[], zone: TimeZone, { search = null, meet = null, own = null }: TeamExtras = {}): Block[] {
   switch (view.kind) {
@@ -329,7 +357,7 @@ export function teamBlocks(view: TeamView, toggled: readonly string[], zone: Tim
     case 'tree': {
       const failures = view.failures.map(failure => failureBlock(TAB, failure))
       if (view.root === null) return [...failures, note(`${TAB}:note`, 'No team tree: the team has no config file teamrig can read, and the tree is read from it.')]
-      return [...(meet === null ? [] : [meetBlock(meet)]), ...failures, ...treeBlocks(view.root, search, { toggled: new Set(toggled), zone, own })]
+      return [...(meet === null ? [] : [meetBlock(meet)]), ...failures, ...treeBlocks(view.root, search, { toggled: new Set(toggled), zone, own, meet })]
     }
   }
 }

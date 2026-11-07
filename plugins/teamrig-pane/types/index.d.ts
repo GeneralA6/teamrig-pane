@@ -465,9 +465,9 @@ export type MeetingStart = { readonly id: string; readonly outcome: 'starting' |
 /**
  * What the last [Meet] press on the Teams tab answered (hooks/owner-meet.ts): the session, whether teamrig is still
  * asking it, asked it to bring the owner its cards, or refused, and the lines it printed (the tab it woke or opened),
- * or why it refused.
+ * or why it refused; and when (`at`, epoch ms): the press while asking, the CLI's answer once asked or refused.
  */
-export type MeetAnswer = { readonly session: string; readonly outcome: 'asking' | 'asked' | 'refused'; readonly lines: readonly string[] }
+export type MeetAnswer = { readonly session: string; readonly outcome: 'asking' | 'asked' | 'refused'; readonly lines: readonly string[]; readonly at: number }
 
 /** The owner's two acts on a task card (hooks/owner-acts.ts): a Note to its session, or putting it Next on its list. */
 export type OwnerActName = 'note' | 'next'
