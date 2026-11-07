@@ -4,7 +4,7 @@
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, type TaskTree } from './core/read/index'
 import { sameLeads } from './leads'
-import { metaText, treeOf, whenWords, type PaneTree } from './meta'
+import { listedTasks, metaText, treeOf, whenWords, type PaneTree } from './meta'
 import { inboxShown } from './inbox'
 import { barCounts, barStatusOf, isFinishedOn, type BarCounts } from './status-bar'
 import { clockOf, dayOf, momentWords } from './zone'
@@ -80,7 +80,7 @@ export function areaView(tasks: readonly TaskRow[], area: string, tree: TaskTree
     asked: asked.slice(0, MAX_ASKED),
     askedTotal: asked.length,
     doneToday: lines('done-today').slice(0, MAX_FINISHED),
-    counts: barCounts(tasks, area, tree.context),
+    counts: barCounts(listedTasks(tasks, tree), area, tree.context),
   }
 }
 
@@ -93,7 +93,7 @@ export function areaView(tasks: readonly TaskRow[], area: string, tree: TaskTree
 export function statusLines(tasks: readonly TaskRow[], area: string, tree: TaskTree<TaskRow>, status: BarStatus): TaskRow[] {
   const { now, zone } = tree.context
   const today = dayOf(now, zone)
-  const lines = tasks.filter(t => barStatusOf(t, area, today, zone) === status)
+  const lines = listedTasks(tasks, tree).filter(t => barStatusOf(t, area, today, zone) === status)
   const ownFirst = (a: TaskRow, b: TaskRow) => Number(b.owner === area) - Number(a.owner === area) || tree.byPlanOrder(a, b)
   return lines.sort(status === 'done-today' ? newestFirst : ownFirst)
 }
@@ -104,7 +104,7 @@ export function statusLines(tasks: readonly TaskRow[], area: string, tree: TaskT
  */
 export function ownerGroups(tasks: readonly TaskRow[], tree: TaskTree<TaskRow>, area: string | null): OwnerGroup[] {
   const byOwner = new Map<string, TaskRow[]>()
-  for (const task of tasks) {
+  for (const task of listedTasks(tasks, tree)) {
     if (!isActive(task)) continue
     byOwner.set(task.owner, [...(byOwner.get(task.owner) ?? []), task])
   }
@@ -163,12 +163,13 @@ function sameValue(a: FieldValue, b: FieldValue): boolean {
 
 /**
  * What the clock and the other tasks change in a drawing of the task: an active one's meta line and its card's
- * `since` words (card.ts: an open task's too, which its meta line leaves out), whether a finished one is done today.
+ * `since` words (card.ts: an open task's too, which its meta line leaves out) and whether it is parked, as the clock
+ * alone parks a quiet task; whether a finished one is done today.
  */
 function timeLabel(task: TaskRow, tree: PaneTree): string {
   const { now, zone } = tree.context
   return isActive(task)
-    ? `${metaText(task, tree)} · ${whenWords(task.statusAt, tree.context)}`
+    ? `${metaText(task, tree)} · ${whenWords(task.statusAt, tree.context)} · ${tree.isParked(task)}`
     : String(isFinishedOn(task, dayOf(now, zone), zone))
 }
 

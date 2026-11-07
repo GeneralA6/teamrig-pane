@@ -52,6 +52,14 @@ export class PaneTree extends TaskTree<TaskRow> {
   }
 }
 
+/**
+ * The tasks the lists hold: every one but those the park rule takes out (core register/park.ts), as `teamrig list`
+ * leaves them out. They stay in the snapshot, so a search still finds one and a card still names it.
+ */
+export function listedTasks(tasks: readonly TaskRow[], tree: TaskTree<TaskRow>): TaskRow[] {
+  return tasks.filter(task => !tree.isParked(task))
+}
+
 /** How a status reads in a sentence: `in progress since 11:55`. */
 export const STATUS_WORDS: Readonly<Record<TaskStatus, string>> = {
   open: 'not started',
