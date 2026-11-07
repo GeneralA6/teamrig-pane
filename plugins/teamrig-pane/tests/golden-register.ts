@@ -1,8 +1,8 @@
-// Written by scripts/golden.ts from teamrig aa588486724032a2e12c5f076826de1c47d98d13: rerun it after a sync, never edit it by hand.
+// Written by scripts/golden.ts from teamrig 46b767c35735af67d61d47d29710691313cd0202: rerun it after a sync, never edit it by hand.
 import type { GoldenRegister } from '../scripts/golden-format'
 
 export const GOLDEN: GoldenRegister = {
-  "pin": "aa588486724032a2e12c5f076826de1c47d98d13",
+  "pin": "46b767c35735af67d61d47d29710691313cd0202",
   "generatedAt": 1792236420000,
   "files": {
     "kit/teams/demo/config.json": "{\n  \"configVersion\": 8,\n  \"team\": {\n    \"id\": \"demo\"\n  },\n  \"sessions\": [\n    \"lead\",\n    \"alpha\",\n    \"beta\"\n  ],\n  \"roles\": {\n    \"lead\": \"lead\"\n  },\n  \"tabStatus\": {\n    \"enabled\": true\n  },\n  \"timeZone\": \"Asia/Jerusalem\",\n  \"register\": {\n    \"priorities\": [\n      {\n        \"id\": 1,\n        \"name\": \"keep the lights on\"\n      },\n      {\n        \"id\": 2,\n        \"name\": \"correctness\"\n      },\n      {\n        \"id\": 3,\n        \"name\": \"scale\"\n      },\n      {\n        \"id\": 4,\n        \"name\": \"this week's owner decisions\"\n      },\n      {\n        \"id\": 5,\n        \"name\": \"if budget allows\"\n      },\n      {\n        \"id\": 7,\n        \"name\": \"icebox\"\n      }\n    ]\n  }\n}\n",
