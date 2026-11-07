@@ -139,17 +139,20 @@ describe('TeamFolder', () => {
     expect((await folder.read(null))?.week).toEqual(ACME_WEEK)
   })
 
-  test("reads a format 2 week file with its account and limits, and a format 1 one as naming no account and no stretch", async () => {
+  test("reads a format 3 week file with where the week counts from, a format 2 one with its account and limits and no start, and a format 1 one as naming no account and no stretch", async () => {
     const disk = teamsDisk()
     const week = `${ACME_STATE}/usage/team.week.json`
     const limits = [{ start: NOW - 2 * HOUR, end: NOW - HOUR }]
-    disk.write(week, JSON.stringify({ v: 2, ...ACME_WEEK, limits }))
+    disk.write(week, JSON.stringify({ v: 3, ...ACME_WEEK, limits }))
     const folder = new TeamFolder(disk, TEAMS, 'acme')
     expect((await folder.read(null))?.week).toEqual({ ...ACME_WEEK, limits })
 
-    const { usedPct, plannedPct, accountUsedPct, resetsAt, at } = ACME_WEEK
+    const { account, usedPct, plannedPct, accountUsedPct, resetsAt, at } = ACME_WEEK
+    disk.write(week, JSON.stringify({ v: 2, account, usedPct, plannedPct, accountUsedPct, resetsAt, at, limits }))
+    expect((await folder.read(null))?.week).toEqual({ ...ACME_WEEK, start: undefined, limits })
+
     disk.write(week, JSON.stringify({ v: 1, usedPct, plannedPct, accountUsedPct, resetsAt, at }))
-    expect((await folder.read(null))?.week).toEqual({ ...ACME_WEEK, account: undefined })
+    expect((await folder.read(null))?.week).toEqual({ ...ACME_WEEK, account: undefined, start: undefined })
   })
 
   test('no config file, or one teamrig refuses, reads as no team; a read that fails throws, and the next one tries again', async () => {

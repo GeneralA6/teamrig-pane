@@ -917,6 +917,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
       (value, itemPath) => read.numberItem(value, itemPath, { min: CONFIG_LIMITS.warnAtPct.itemMin, max: CONFIG_LIMITS.warnAtPct.itemMax }),
       CONFIG_LIMITS.warnAtPct.maxItems,
     ),
+    fiveHourWarnPct: read.number(raw, 'fiveHourWarnPct', path, defaults.fiveHourWarnPct, CONFIG_LIMITS.budgetFiveHourWarnPct),
     paceTolerancePct: read.number(raw, 'paceTolerancePct', path, defaults.paceTolerancePct, CONFIG_LIMITS.paceTolerancePct),
     overAction: isOverAction(overAction) ? overAction : defaults.overAction,
     escalate: isEscalation(escalate) ? escalate : defaults.escalate,
@@ -1300,6 +1301,7 @@ function parseFocus(read: ConfigReader, raw: JsonRecord): FocusConfig {
   const wip = read.section(raw, 'wip', path);
   const mode = read.string(wip, 'mode', `${path}.wip`, defaults.wip.mode, oneOf(WIP_MODES));
   const expedite = read.section(raw, 'expedite', path);
+  const improvementsDay = read.string(raw, 'improvementsDay', path, defaults.improvementsDay, oneOf(WEEKDAYS));
   return {
     ...classes,
     maxActiveKeyResults: read.integer(raw, 'maxActiveKeyResults', path, defaults.maxActiveKeyResults, FOCUS_KEY_RESULTS),
@@ -1315,6 +1317,7 @@ function parseFocus(read: ConfigReader, raw: JsonRecord): FocusConfig {
     leaderWaitMinutes: read.integer(raw, 'leaderWaitMinutes', path, defaults.leaderWaitMinutes, FOCUS_LEADER_WAIT_MINUTES),
     parkAfterDays: read.integer(raw, 'parkAfterDays', path, defaults.parkAfterDays, FOCUS_PARK_AFTER_DAYS),
     plannedTargetPct: read.integer(raw, 'plannedTargetPct', path, defaults.plannedTargetPct, FOCUS_PERCENT),
+    improvementsDay: isWeekday(improvementsDay) ? improvementsDay : defaults.improvementsDay,
   };
 }
 

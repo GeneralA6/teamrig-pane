@@ -13,7 +13,9 @@ export const READ_ENTRY = 'read/index.ts'
  */
 export const CORE_FILES: readonly string[] = [
   READ_ENTRY,
+  'budget/rollup-file.ts',
   'budget/session-week-summary.ts',
+  'budget/task-week-summary.ts',
   'budget/team-week-summary.ts',
   'config/defaults.ts',
   'config/launch.ts',
@@ -42,6 +44,8 @@ export const CORE_FILES: readonly string[] = [
   'names/rename.ts',
   'permissions/allow-rules.ts',
   'readonly-shell/rules.ts',
+  'register/approval.ts',
+  'register/can-move.ts',
   'register/card.ts',
   'register/done-groups.ts',
   'register/events.ts',
@@ -53,6 +57,7 @@ export const CORE_FILES: readonly string[] = [
   'register/marker.ts',
   'register/model.ts',
   'register/owner-waits.ts',
+  'register/park.ts',
   'register/ranking.ts',
   'register/review.ts',
   'register/score.ts',

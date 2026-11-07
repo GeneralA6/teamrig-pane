@@ -46,7 +46,7 @@ export interface RegisterCheckConfig {
   readonly staleAfterHours: number;
   /** An open task its owner has not touched this long after assignment is NOT-PICKED-UP. */
   readonly notPickedUpAfterHours: number;
-  /** A session's in-progress task below its own open top-priority task this long is a PRIORITY-SKIP. */
+  /** A session's in-progress task outranked this long by its own open task, on band and score, is a PRIORITY-SKIP. */
   readonly prioritySkipAfterHours: number;
   /**
    * A session that added more tasks for itself (created by it, asked by no one else) in the last 24 h than this is a
@@ -698,6 +698,11 @@ export interface BudgetConfig {
   readonly pauseByPriority: boolean;
   /** The live warning shows a line as a session passes each of these % of its daily budget. */
   readonly warnAtPct: readonly number[];
+  /**
+   * The five-hour check warns the lead at this % of the account's five-hour window. Its forecast catches a wave early;
+   * this mark is the backstop for a steady rise the forecast keeps under 100%.
+   */
+  readonly fiveHourWarnPct: number;
   /** The team is ahead of its pace line once its used % is more than this many points above it. */
   readonly paceTolerancePct: number;
   readonly overAction: OverAction;
@@ -990,8 +995,9 @@ export interface RefreshConfig {
    * own compaction (trigger `auto`) of its main conversation as long as the context, as Claude Code estimates it, is
    * under this many tokens: the /clear at the turn's end replaces the compaction. Past it a compaction goes through, so
    * a session never runs out of room (a prompt too long for the window is past it too); `/compact` and a subagent's own
-   * compaction are never stopped. 0: never stopped. It also bounds the owner's open daily meeting, which holds the
-   * lead's refresh only under it (src/refresh/decide.ts `meetingHolds`); 0 holds it until the meeting ends.
+   * compaction are never stopped. 0: never stopped. It also bounds an open owner meeting (the lead's daily one, or a
+   * booked one from its `meeting start M<n>`), which holds the refresh of each session in it only under it
+   * (src/refresh/decide.ts `meetingHolds`); 0 holds it until the meeting ends.
    */
   readonly compactCeilingTokens: number;
   /**
@@ -1208,7 +1214,7 @@ export interface FocusConfig {
   readonly score: FocusScoreConfig;
   readonly expedite: FocusExpediteConfig;
   readonly wip: FocusWipConfig;
-  /** The percent of the week's spend each class is planned to take, by class; the shares sum to 100. */
+  /** The percent of the whole week each class is planned to take, by class; the shares sum to 100. */
   readonly allocation: Readonly<Record<string, number>>;
   /** How long a Roadmap task may wait on a leader's decision or approval before it is flagged. */
   readonly leaderWaitMinutes: number;
@@ -1216,6 +1222,8 @@ export interface FocusConfig {
   readonly parkAfterDays: number;
   /** The percent of the week's spend planned work should take. */
   readonly plannedTargetPct: number;
+  /** The UTC weekday whose meeting agenda carries the Improvements decisions, as one batch; no other day's shows them. */
+  readonly improvementsDay: Weekday;
 }
 
 /** Claude Code's effort levels, lowest first: what `claude --effort` and `/effort` take. */

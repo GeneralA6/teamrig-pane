@@ -6,6 +6,7 @@ import type { ItemType, RegisterEvent } from './events.ts';
 import { itemTypeOf } from './item-types.ts';
 import type { ApprovalAnswer, Task } from './fold.ts';
 import { ACTIVE_STATUSES, GITHUB_SOURCE, priorityText, type TaskStatus } from './model.ts';
+import { isUntriaged, type Leaders } from './park.ts';
 import { reviewLines, reviewPartNames } from './review.ts';
 import { decidingKey, planOrder, type RankedPlace, type TaskTree, type Unblocks, type WaitingOnYou } from './tree.ts';
 import { waitsText, weekdayText, type PersonWait } from './waits.ts';
@@ -24,6 +25,10 @@ export interface ListFilter {
   readonly goal?: string;
   /** The item types to show; a task with no type counts as a task. */
   readonly types?: readonly ItemType[];
+  /** True shows only the tasks the park rule takes ({@link TaskTree.isParked}); otherwise those stay out. */
+  readonly parked?: boolean;
+  /** The team's leaders, to show only the tasks that wait for one of them to class them ({@link isUntriaged}). */
+  readonly untriagedFor?: Leaders;
 }
 
 /** A size as printed: percent of the weekly limit, at most two decimals (`1.5%`). */
@@ -66,7 +71,9 @@ export function selectTasks(tasks: Iterable<Task>, filter: ListFilter, tree: Tas
         (dueBefore === undefined || (due !== undefined && due < dueBefore)) &&
         (filter.week === undefined || task.week === filter.week) &&
         (filter.goal === undefined || task.goals.includes(filter.goal)) &&
-        (filter.types === undefined || filter.types.includes(itemTypeOf(task)))
+        (filter.types === undefined || filter.types.includes(itemTypeOf(task))) &&
+        (filter.parked === true) === tree.isParked(task) &&
+        (filter.untriagedFor === undefined || isUntriaged(task, filter.untriagedFor))
       );
     })
     .sort((a, b) => tree.byPlanOrder(a, b));
@@ -205,11 +212,11 @@ export interface PlacedRow {
 
 /**
  * Why `row` sorts ahead of `next`, the row after it, in plan order: the first plan key on which they differ, in words:
- * `expedite`, `score 21.3 (A1 #1)` (its score, and the ranked goal it serves), `in progress`, `due` (the row shows the
- * date), `unblocks T566 p1 +2` (the best task that needs it, its priority and how many more), `in week 01-07`,
- * `size 0.5%`. Undefined when the row shows it already (pinned, or a band the row's class names), when only the number
- * decides (age, the older first), when they tie, or when `next` sorts ahead. Each row is placed by its own register's
- * tree.
+ * `expedite`, `can move` (`next` has a need not finished), `score 21.3 (A1 #1)` (its score, and the ranked goal it
+ * serves), `in progress`, `due` (the row shows the date), `unblocks T566 p1 +2` (the best task that needs it, its
+ * priority and how many more), `in week 01-07`, `size 0.5%`. Undefined when the row shows it already (pinned, or a band
+ * the row's class names), when only the number decides (age, the older first), when they tie, or when `next` sorts
+ * ahead. Each row is placed by its own register's tree.
  */
 export function aheadReason(row: PlacedRow, next: PlacedRow): string | undefined {
   const place = row.tree.placeOf(row.task);
@@ -221,6 +228,8 @@ export function aheadReason(row: PlacedRow, next: PlacedRow): string | undefined
   switch (key) {
     case 'band':
       return place.ranked?.band === 0 ? 'expedite' : undefined;
+    case 'ready':
+      return 'can move';
     case 'score':
       return place.ranked === undefined ? undefined : scoreText(place.ranked);
     case 'started':

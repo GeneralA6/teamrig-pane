@@ -209,6 +209,7 @@ export const DEFAULT_BUDGET: BudgetConfig = {
   sessions: {},
   pauseByPriority: false,
   warnAtPct: [80, 100],
+  fiveHourWarnPct: 80,
   paceTolerancePct: 0.5,
   overAction: 'warn',
   escalate: 'session-and-fleet',
@@ -332,6 +333,7 @@ export const DEFAULT_FOCUS: FocusConfig = {
   leaderWaitMinutes: 60,
   parkAfterDays: 14,
   plannedTargetPct: 70,
+  improvementsDay: 'wed',
 };
 
 /**

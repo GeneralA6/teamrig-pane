@@ -34,7 +34,7 @@ export const WEEK_RESET = NOW + 72 * HOUR
  * parameter fires on undefined, so a format 1 file, which names no account, is `{ ...weekFile(1, 2), account: undefined }`.
  */
 export function weekFile(usedPct: number, plannedPct: number, resetsAt = WEEK_RESET, account = 'acme-account'): TeamWeekSummary {
-  return { account, usedPct, plannedPct, accountUsedPct: 70, resetsAt, at: NOW - HOUR, limits: [] }
+  return { account, usedPct, plannedPct, accountUsedPct: 70, resetsAt, start: resetsAt - 7 * 24 * HOUR, at: NOW - HOUR, limits: [] }
 }
 
 /** The register's tasks after `lines`, as the pane lists them. */

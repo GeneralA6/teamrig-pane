@@ -195,12 +195,13 @@ try {
   as('lead', 'add', '--owner', 'alpha', '--priority', 'p2', '--title', 'Goals task', '--description', 'A task with goals, a due and a week', '--ref', 'doc:1', '--goals', 'G1,roadmap goal', '--due', '2026-10-20', '--week', '2026-10-12', '--class', 'Roadmap')
   as('alpha', 'add', '--owner', 'beta', '--priority', 'p4', '--title', 'Beta task from alpha', '--description', 'A task one session asks of another', '--ref', 'x')
   as('lead', 'add', '--owner', 'alpha', '--priority', 'p5', '--title', 'To be dropped', '--description', 'A task dropped later', '--ref', 'r')
+  // T4 is Roadmap work, which holds a start of T2 (Improvements) while it can move; needing T2, it cannot.
+  as('alpha', 'update', 'T4', '--after', 'T2')
   as('alpha', 'set', 'T2', '--status', 'in-progress')
   // A wait on the owner's decision carries the card the owner decides from; its time is typed on the team's clock.
   as('alpha', 'set', 'T3', '--status', 'waiting', '--waits', 'decision:owner,time:2030-01-09 12:00', '--note', 'waiting on beta',
     '--question', 'Which loader does the demo ship', '--options', 'the fast loader, 2 s a page | the safe loader, 5 s a page',
     '--recommend', 'the fast loader, as beta tested it', '--default', 'the safe loader ships after the wait', '--gate', 'product and design decisions')
-  as('alpha', 'update', 'T4', '--after', 'T2')
   as('beta', 'set', 'T5', '--status', 'done', '--note', 'shipped', '--evidence', 'sha abc', '--skill', 'none', '--followups', 'none')
   as('alpha', 'set', 'T6', '--status', 'dropped', '--note', 'not needed')
   as('lead', 'update', 'T3', '--priority', 'p2')
