@@ -199,6 +199,12 @@ function leadOf(depth: number, own = false): { before: Span[]; hang: Span } {
   return { before: [...mark, ...(rest > 0 ? [blank(rest)] : [])], hang: blank(indent + STEP) }
 }
 
+/**
+ * What every row of a drawing reads besides its node: the nodes opened or closed against their default and the cards
+ * open (`toggled`), the team's clock, and the node key of the session whose pane it is (`own`, null for none).
+ */
+type Drawing = { readonly toggled: ReadonlySet<string>; readonly zone: TimeZone; readonly own: string | null }
+
 /** Whether `node` is the session whose pane it is. */
 function isOwn(node: TeamTreeNode, own: string | null): boolean {
   return node.kind === 'session' && node.key === own
@@ -214,7 +220,7 @@ function openCard(node: SessionNode, hang: Span, toggled: ReadonlySet<string>, z
  * session's card, while `toggled` holds its key, follows its row. A team's mark and name, and a leader's mark, hold the
  * press that opens or closes what lies under it, as docked its [Stats] leaves the row no press of its own.
  */
-function rowBlock({ node, depth, open }: TeamRow, toggled: ReadonlySet<string>, zone: TimeZone, own: string | null): Block {
+function rowBlock({ node, depth, open }: TeamRow, { toggled, zone, own }: Drawing): Block {
   const { before, hang } = leadOf(depth, isOwn(node, own))
   const folded = open === null ? {} : { folds: node.key }
   const press = open === null ? {} : { toggles: node.key }
@@ -236,7 +242,7 @@ function rowBlock({ node, depth, open }: TeamRow, toggled: ReadonlySet<string>, 
  * not draw them; a session drawn only to lead to one. A session's row is one press that opens or closes its card, which
  * follows it while open (docked, its name is).
  */
-function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, SessionHit>, toggled: ReadonlySet<string>, zone: TimeZone, own: string | null): Block {
+function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, SessionHit>, { toggled, zone, own }: Drawing): Block {
   const { before, hang } = leadOf(depth, isOwn(node, own))
   if (node.kind === 'team') return single(node.key, [...before, foldMark(open), ...teamSpans(node, {})], hang)
   if (node.kind === 'retired') return single(node.key, [...before, foldMark(open), retiredSpan(node)], hang)
@@ -257,9 +263,9 @@ function foundBlock({ node, depth, open }: TeamRow, hits: ReadonlyMap<string, Se
 }
 
 /** The search's body over the tree: the hint, the line that says nothing matched, or the count and the found rows. */
-function foundBlocks(root: TeamTreeNode, search: TeamSearch, toggled: ReadonlySet<string>, zone: TimeZone, own: string | null): Block[] {
+function foundBlocks(root: TeamTreeNode, search: TeamSearch, drawing: Drawing): Block[] {
   const hits = new Map(search.hits.map(hit => [hit.row.key, hit]))
-  const results = foundRows(root, new Set(hits.keys())).map(row => foundBlock(row, hits, toggled, zone, own))
+  const results = foundRows(root, new Set(hits.keys())).map(row => foundBlock(row, hits, drawing))
   const total = search.hits.length
   return searchViewBlocks({ key: TEAM_SEARCH_VIEW, query: search.query, hint: TEAM_SEARCH_HINT, nothing: TEAM_NOTHING_FOUND, noun: SESSION_NOUN, results, shown: total, total })
 }
@@ -300,10 +306,9 @@ export type TeamExtras = {
 }
 
 /** The tree's body: the search's while `search` holds a query, else the tree's rows; the `own` session's row marked. */
-function treeBlocks(root: TeamTreeNode, toggled: readonly string[], zone: TimeZone, search: TeamSearch | null, own: string | null): Block[] {
-  const keys = new Set(toggled)
-  if (search !== null) return foundBlocks(root, search, keys, zone, own)
-  return teamRows(root, keys).map(row => rowBlock(row, keys, zone, own))
+function treeBlocks(root: TeamTreeNode, search: TeamSearch | null, drawing: Drawing): Block[] {
+  if (search !== null) return foundBlocks(root, search, drawing)
+  return teamRows(root, drawing.toggled).map(row => rowBlock(row, drawing))
 }
 
 /**
@@ -324,7 +329,7 @@ export function teamBlocks(view: TeamView, toggled: readonly string[], zone: Tim
     case 'tree': {
       const failures = view.failures.map(failure => failureBlock(TAB, failure))
       if (view.root === null) return [...failures, note(`${TAB}:note`, 'No team tree: the team has no config file teamrig can read, and the tree is read from it.')]
-      return [...(meet === null ? [] : [meetBlock(meet)]), ...failures, ...treeBlocks(view.root, toggled, zone, search, own)]
+      return [...(meet === null ? [] : [meetBlock(meet)]), ...failures, ...treeBlocks(view.root, search, { toggled: new Set(toggled), zone, own })]
     }
   }
 }
