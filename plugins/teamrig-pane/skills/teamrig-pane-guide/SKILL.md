@@ -220,7 +220,9 @@ bold heading with its count; an empty section is left out:
    closed. Past them a dim line says how many more, which `o` lists.
 
 A heading's count is the status bar's count for its section, the tasks past a cap included; the bar's `waiting`
-count is Waiting's and Asked of others' together.
+count is Waiting's and Asked of others' together. A parked task (teamrig's park rule: open, classed past Roadmap and
+Maintenance, quiet for `focus.parkAfterDays`) is left out of the sections, their counts, the bar and **all**, as
+`teamrig list` leaves it out; a search still finds it.
 
 The header names the area only for a pin (`web (pinned) · 3 active`); the session's own area goes unnamed, as the
 title line above names the session. The area's unread inbox lines are counted on the switch's Inbox button (see

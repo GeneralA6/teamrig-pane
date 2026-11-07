@@ -31,7 +31,8 @@ its buttons, whose header would take over half its rows, scrolls as one.
   (its own waiting tasks, then the first 8 it asked of other sessions, each saying `on <owner>`) and
   `Done today` (its tasks done or dropped on the team's day, the newest 6). A heading's count is the
   status bar's count for its section, the tasks past a cap included; under a capped section a dim line
-  says how many more and the key that lists them all (`i`, `o`).
+  says how many more and the key that lists them all (`i`, `o`). A parked task (teamrig's park rule) is left
+  out, as `teamrig list` leaves it out; a search still finds it.
 - **all**: every owner's active tasks, each owner's heading with its counts, a count with none left
   out (`api · 4 active · 1 waiting · 1 verifying`), and the verifying tasks first in
   each group.
