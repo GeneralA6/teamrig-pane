@@ -466,7 +466,10 @@ Inline `[Stats]` is words only, as `[Meet]` is.
 `[Meet]` runs `teamrig meet <session>`: teamrig wakes a running session with an inbox line asking it to bring the owner
 its cards now, or opens it in a new tab to do so, and refuses a session with no card waiting on the owner. What teamrig
 answered leads the tab: `Asking web for its cards…`, then `Asked web for its cards:` with teamrig's lines (the tab it
-woke or opened), or `web was not asked:` and why. One meet runs at a time, given 60 s. Inline, a row with a `[Meet]`
+woke or opened), or `web was not asked:` and why. The session's row answers too, in the press's place, so the answer
+shows where it was pressed: `Asking…`, then `Asked 19:41 IST`, when teamrig asked it, on the team's clock, with no
+press until the Teams tab opens again from the switch or the session starts, so it cannot be asked twice; a refused one
+keeps the press, then `not asked`. One meet runs at a time, given 60 s. Inline, a row with a `[Meet]`
 opens the card. It needs the teamrig plugin 0.209.0 or later installed in Claude Code (found as for Meetings, below) and `node` on the PATH. The switch's Teams button counts
 the cards waiting on the owner now across the team's sessions, `Teams (2)`; a card the owner put off counts again once it
 comes back.
