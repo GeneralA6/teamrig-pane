@@ -13,9 +13,10 @@ import type { ThemeKey } from 'claude-code'
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, type TimeZone } from './core/read/index'
 import { wrapRow } from './layout'
+import { listedTasks, treeOf } from './meta'
 import type { Span } from './rows'
 import { cells } from './width'
-import { clockOf, dayOf, type Clock } from './zone'
+import { dayOf, type Clock } from './zone'
 
 /** The bar's statuses in the order they draw: what closed today, what is verifying, then what is left. */
 export const BAR_STATUSES: readonly BarStatus[] = ['done-today', 'verifying', 'working', 'waiting', 'not-started']
@@ -209,14 +210,15 @@ function dimLines(key: string, text: string, columns: number): BarPiece[][] {
 }
 
 /**
- * The bar over the area's tasks, `width` cells wide (one at least), its counts line skipping the statuses
- * with none but the one `filter` names, which stays, at 0 too, so a press can clear it. The filtered
- * segment and count draw bold, the count not dim. Null with no area, a snapshot not yet read, or no task to
+ * The bar over the area's listed tasks (meta.ts listedTasks), `width` cells wide (one at least), its counts line
+ * skipping the statuses with none but the one `filter` names, which stays, at 0 too, so a press can clear it. The
+ * filtered segment and count draw bold, the count not dim. Null with no area, a snapshot not yet read, or no task to
  * show: then no filter holds either.
  */
 export function statusBar(snap: Snapshot, filter: BarStatus | null, width: number): StatusBar | null {
   if (snap.area === null || snap.now === 0) return null
-  const counts = barCounts(snap.tasks, snap.area, clockOf(snap))
+  const tree = treeOf(snap)
+  const counts = barCounts(listedTasks(snap.tasks, tree), snap.area, tree.context)
   if (totalOf(counts) === 0) return null
   const columns = Math.max(1, width)
   const widths = barCells(counts, columns)

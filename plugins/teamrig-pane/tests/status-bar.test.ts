@@ -189,6 +189,14 @@ describe('status bar counts', () => {
     expect(tasks[0]?.updatedAt).not.toBe(tasks[0]?.statusAt)
     expect(barCounts(tasks, 'po', clockAt(NOW))['done-today']).toBe(0)
   })
+
+  test('the bar leaves a parked task out, and draws nothing when it was the only one', async () => {
+    const quiet = NOW - 15 * DAY
+    const parked = createLine('T1', { owner: 'po', by: 'lead', at: quiet, source: 'lead', taskKeys: { workClass: 'Improvements' } })
+    const tasks = rowsOf(parked, createLine('T2', { owner: 'po', by: 'lead', at: quiet, source: 'lead' }))
+    expect(textOf(statusBar(snapshotOf(tasks, 'po'), null, 40)?.lines[1])).toBe('1 not started')
+    expect(statusBar(snapshotOf(rowsOf(parked), 'po'), null, 40)).toBeNull()
+  })
 })
 
 describe('status bar lines', () => {

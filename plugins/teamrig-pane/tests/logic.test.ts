@@ -311,6 +311,22 @@ describe('view', () => {
     expect(ownerGroups(tasks, tree, null).map(g => g.active.map(t => t.id))).toEqual([['T3'], ['T2', 'T1']])
   })
 
+  test('a parked task leaves the sections, their counts and the all view, as `teamrig list` hides it', async () => {
+    const quiet = NOW - 15 * DAY
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'lead', at: quiet, source: 'lead', taskKeys: { workClass: 'Improvements' } }),
+      createLine('T2', { owner: 'po', by: 'lead', at: quiet, source: 'lead' }),
+      createLine('T3', { owner: 'etl', by: 'po', at: quiet, source: 'lead', taskKeys: { workClass: 'Improvements' } }),
+      createLine('T4', { owner: 'po', by: 'lead', at: NOW, source: 'lead', taskKeys: { workClass: 'Improvements' } }),
+    )
+    const tree = treeAt(tasks, NOW)
+    const view = areaView(tasks, 'po', tree)
+    expect(view.upNext.map(t => t.id).sort()).toEqual(['T2', 'T4'])
+    expect(view.askedTotal).toBe(0)
+    expect([view.counts['not-started'], view.counts.waiting]).toEqual([2, 0])
+    expect(ownerGroups(tasks, tree, null).map(g => [g.owner, g.active.length])).toEqual([['po', 2]])
+  })
+
   test('waiting holds its own waiting tasks; up to 8 it asked of others sit apart, all counted, the bar counting both', async () => {
     const asked = Array.from({ length: 10 }, (_, i) => createLine(`T${i + 10}`, { owner: 'etl', by: 'po', at: NOW }))
     const tasks = fold(createLine('T1', { owner: 'po', by: 'po', at: NOW, priority: 4 }), statusLine('T1', 'po', NOW, 'waiting', 'needs owner'), ...asked)
@@ -389,6 +405,15 @@ describe('view', () => {
     const late: Snapshot = { ...base, tasks: done, now: Date.UTC(2026, 9, 13, 23, 58) }
     expect(sameView(late, { ...late, now: Date.UTC(2026, 9, 13, 23, 59) })).toBe(true)
     expect(sameView(late, { ...late, now: Date.UTC(2026, 9, 14, 0, 1) })).toBe(false)
+    // The clock alone parks a quiet task, 14 days after its last change: the tick across that line redraws, one before it
+    // does not. The later update keeps the status's own age words from turning over on the same tick, so the park alone decides.
+    const parksSoon = fold(
+      createLine('T1', { owner: 'po', by: 'lead', at: NOW - 20 * DAY - 6 * HOUR, source: 'lead', taskKeys: { workClass: 'Improvements' } }),
+      updateLine('T1', 'lead', NOW - 14 * DAY + 60_000, { priority: 3 }, 'reprioritized'),
+    )
+    const quiet: Snapshot = { ...base, tasks: parksSoon }
+    expect(sameView(quiet, { ...quiet, now: NOW + 30_000 })).toBe(true)
+    expect(sameView(quiet, { ...quiet, now: NOW + 120_000 })).toBe(false)
     // An open task's card says since when it is open, which its meta line leaves out: `14:00 UTC` that day, `Tue 10-13` from the zone's midnight on.
     const opened: Snapshot = { ...base, tasks: fold(createLine('T1', { owner: 'po', by: 'po', at: NOW })), now: Date.UTC(2026, 9, 13, 23, 58) }
     expect(sameView(opened, { ...opened, now: Date.UTC(2026, 9, 13, 23, 59) })).toBe(true)
