@@ -647,7 +647,10 @@ above the tree, and that team draws as last read, or is left out until a read of
 `[Meet]` runs `teamrig meet <session>`: teamrig wakes a running session with an inbox line asking it to bring the owner
 its cards now, or opens it in a new tab to do so, and refuses one with no card waiting on the owner. What teamrig
 answered leads the tab: `Asking web for its cards…`, then `Asked web for its cards:` with teamrig's lines, or
-`web was not asked:` and why. One meet runs at a time, given 60 seconds. Inline, a row with a `[Meet]` opens the card.
+`web was not asked:` and why. The session's row answers too, in the press's place, so the answer shows where it was
+pressed: `Asking…`, then `Asked 19:41 IST`, when teamrig asked it, on the team's clock, with no press until the Teams
+tab opens again from the switch or the session starts, so it cannot be asked twice; a refused one keeps the press,
+then `not asked`. One meet runs at a time, given 60 seconds. Inline, a row with a `[Meet]` opens the card.
 The switch's Teams button counts the cards waiting on the owner now across the team, `Teams (2)`; a card put off counts
 again once it comes back.
 
