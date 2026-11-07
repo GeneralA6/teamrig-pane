@@ -716,6 +716,7 @@ export const register: Register = on => {
               tell: async answer => {
                 await update($, ownerMeet, () => answer)
               },
+              now: () => $.clock.now(),
             })
       // `teamrig owner note` and `next` find the team from the tab's folder too.
       acting =

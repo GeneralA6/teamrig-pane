@@ -9,7 +9,7 @@ import { TimeZone } from '../hooks/core/read/index'
 import { dockLayout, inlineLayout } from '../hooks/layout'
 import { SEPARATOR, type Block, type Span } from '../hooks/rows'
 import { sessionKey, type TeamTreeNode } from '../hooks/team'
-import { MEET_TEXT, OWN_MARK, STATS_TEXT, TEAM_NOTHING_FOUND, TEAM_SEARCH_HINT, WEEK_CELLS, cardKey, openedWith, teamBlocks, toggledWith } from '../hooks/team-rows'
+import { MEET_ASKING, MEET_TEXT, OWN_MARK, STATS_TEXT, TEAM_NOTHING_FOUND, TEAM_SEARCH_HINT, WEEK_CELLS, cardKey, openedWith, teamBlocks, toggledWith } from '../hooks/team-rows'
 import { searchTeam } from '../hooks/team-search'
 import { cells } from '../hooks/width'
 import { HOUR, JERUSALEM, NOW } from './fixtures'
@@ -132,21 +132,46 @@ describe('teamBlocks', () => {
 
   test('what the last [Meet] press answered leads the tab: asking, asked with what teamrig printed, or why it was refused', () => {
     const led = (answer: MeetAnswer) => teamBlocks(TREE, [], UTC, { meet: answer })[0]
-    const asking = led({ session: 'api', outcome: 'asking', lines: [] })
+    const asking = led({ session: 'api', outcome: 'asking', lines: [], at: NOW })
     expect(asking === undefined ? [] : words([asking])).toEqual([['team:meet', ['Asking api for its cards…']]])
-    const asked = led({ session: 'api', outcome: 'asked', lines: ['WOKE acme-backend (session api)'] })
+    const asked = led({ session: 'api', outcome: 'asked', lines: ['WOKE acme-backend (session api)'], at: NOW })
     expect(asked === undefined ? [] : words([asked])).toEqual([['team:meet', ['Asked api for its cards:', '  WOKE acme-backend (session api)']]])
     expect(asked?.rows.map(row => row.key)).toEqual(['team:meet', 'team:meet:0'])
     expect(asked?.rows[0]?.spans).toEqual([{ text: 'Asked api for its cards:', color: 'success' }])
-    const refused = led({ session: 'api', outcome: 'refused', lines: ['api has no card waiting on owner now'] })
+    const refused = led({ session: 'api', outcome: 'refused', lines: ['api has no card waiting on owner now'], at: NOW })
     expect(refused?.rows.map(row => row.spans)).toEqual([
       [{ text: 'api was not asked:', color: 'warning' }],
       [{ text: '  api has no card waiting on owner now', color: 'warning' }],
     ])
     // It leads a search too, and the tree follows it.
-    const searched = teamBlocks(TREE, [], UTC, { search: { query: 'api', hits: searchTeam(ROOT, 'api') }, meet: { session: 'api', outcome: 'asking', lines: [] } })
+    const searched = teamBlocks(TREE, [], UTC, { search: { query: 'api', hits: searchTeam(ROOT, 'api') }, meet: { session: 'api', outcome: 'asking', lines: [], at: NOW } })
     expect(searched.map(block => block.key).slice(0, 2)).toEqual(['team:meet', 'team-search-count'])
     expect(teamBlocks(TREE, [], UTC, { search: null, meet: null })[0]?.key).toBe('team:acme')
+  })
+
+  test("the [Meet] press answers on the row of the session it names: Asking… and Asked with its time hold no press, a refusal keeps it", () => {
+    const apiRow = (meet: MeetAnswer, zone = UTC) => blockOf(teamBlocks(TREE, [], zone, { meet }), 'session:acme/api').rows[0]?.spans ?? []
+    const textOf = (spans: readonly Span[]) => spans.map(span => span.text).join('')
+    const hasPress = (spans: readonly Span[]) => spans.some(span => span.meets !== undefined)
+    const asking = apiRow({ session: 'api', outcome: 'asking', lines: [], at: NOW })
+    expect(textOf(asking)).toBe('        ● acme-backend · ? 1 decision Asking… [Stats]')
+    expect(asking.slice(-3, -2)).toEqual([{ text: MEET_ASKING, dim: true }])
+    expect(hasPress(asking)).toBe(false)
+    // Asked, on the team's clock, when teamrig answered: no press, so the owner has nothing to press again.
+    const asked = apiRow({ session: 'api', outcome: 'asked', lines: ['WOKE acme-backend (session api)'], at: NOW + HOUR }, JERUSALEM)
+    expect(asked.slice(-3, -2)).toEqual([{ text: `Asked ${JERUSALEM.clock(new Date(NOW + HOUR))}`, color: 'success' }])
+    expect(textOf(asked)).toBe('        ● acme-backend · ? 1 decision Asked 18:00 IDT [Stats]')
+    expect(hasPress(asked)).toBe(false)
+    const refused = apiRow({ session: 'api', outcome: 'refused', lines: ['api has no card waiting on owner now'], at: NOW })
+    expect(refused.slice(-4, -2)).toEqual([{ text: MEET_TEXT, color: 'suggestion', meets: 'api' }, { text: ' not asked', color: 'warning' }])
+    // An answer naming another session leaves this row's press as it was.
+    expect(apiRow({ session: 'web', outcome: 'asking', lines: [], at: NOW }).slice(-3, -2)).toEqual([{ text: MEET_TEXT, color: 'suggestion', meets: 'api' }])
+    // Docked, an asked row draws no [Meet] press of its own.
+    const [drawn] = dockLayout([blockOf(teamBlocks(TREE, [], UTC, { meet: { session: 'api', outcome: 'asked', lines: [], at: NOW } }), 'session:acme/api')], 80)
+    expect(drawn?.parts?.flatMap(part => (part.kind === 'line' ? part.pieces : [])).some(piece => piece.kind === 'meet')).toBe(false)
+    // A search's row of the session answers the same.
+    const searched = teamBlocks(TREE, [], UTC, { search: { query: 'api', hits: searchTeam(ROOT, 'api') }, meet: { session: 'api', outcome: 'asking', lines: [], at: NOW } })
+    expect(words(searched).some(([, lines]) => lines.some(line => line.includes('? 1 decision Asking…')))).toBe(true)
   })
 
   test("a leader's row holds two presses, docked: its mark opens or closes the sessions it leads, its name its card", () => {
@@ -263,7 +288,7 @@ describe('teamBlocks', () => {
     const tools: TeamFolderFailure = { team: 'tools', reason: 'EBUSY: resource busy or locked.', isLastRead: true }
     const docs: TeamFolderFailure = { team: 'docs', reason: 'EACCES: permission denied', isLastRead: false }
     const warned: TeamView = { kind: 'tree', root: ROOT, failures: [tools, docs] }
-    const blocks = teamBlocks(warned, [], UTC, { meet: { session: 'api', outcome: 'asking', lines: [] } })
+    const blocks = teamBlocks(warned, [], UTC, { meet: { session: 'api', outcome: 'asking', lines: [], at: NOW } })
     expect(words(blocks).slice(0, 4)).toEqual([
       ['team:meet', ['Asking api for its cards…']],
       ['team:failure:tools', ['WARN team tools could not be read: EBUSY: resource busy or locked; it shows as last read.']],
