@@ -184,6 +184,7 @@ export type RankFocus = {
   readonly defaultClass: string
   readonly roadmapClass: string
   readonly maintenanceClass: string
+  readonly parkAfterDays: number
   readonly score: {
     readonly rankValues: readonly number[]
     readonly roadmapUnranked: number

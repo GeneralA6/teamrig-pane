@@ -2671,10 +2671,10 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
     '',
     ' 2 tasks match',
     '',
-    ' ○ T50  Load the feed',
+    ' ○ T58  Read the source',
     "        etl's",
     '',
-    ' ○ T58  Read the source',
+    ' ○ T50  Load the feed',
     "        etl's",
   ])
   // The words that matched underlined: `the` in the title, `etl` in the dim line of whose it is.

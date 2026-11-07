@@ -50,6 +50,8 @@ export {
 // A task's WSJF rank (T2076): what builds a tree's ranking and what scores a row, so a reader ranks as the CLI does.
 export { ownSizing, treeRanking, type RankingFocus, type RankingInput, type Sizing } from '../register/ranking.ts';
 export { bandOf, scoreOf, sizePctOf, valueOf, type Band as ScoreBand, type ScoreFacts, type ScoreFocus, type SizeFacts, type TaskScore } from '../register/score.ts';
+// The park and untriaged rules (T2076 part 2C), so a reader hides and flags the rows the CLI does.
+export { isUntriaged, wouldPark, type Leaders, type ParkFocus, type ParkInput, type ParkRow } from '../register/park.ts';
 export { byPlanOrder, dueTime, type PlanOrdered } from '../register/views.ts';
 // The week plan in force (the newest week tag started by now), which a reader's week steps follow, as `plan` does.
 export { currentWeek } from '../register/week.ts';
@@ -187,14 +189,33 @@ export {
 
 // Each team's week (`usage/team.week.json` in its state folder, `TEAM_WEEK_IN_STATE`; the config's `paths.state` can
 // move that folder from `state/` under its home): its used and planned part of the account's week, as its budget hooks
-// last read it, and the stretches the account sat at its usage limit. One file per team; a reader adds a child team's
-// to its parent's.
+// last read it, where the week's use counts from, and the stretches the account sat at its usage limit. One file per
+// team; a reader adds a child team's to its parent's.
 export { parseTeamWeek, TEAM_WEEK_FORMAT, TEAM_WEEK_IN_STATE, type TeamWeekSummary } from '../budget/team-week-summary.ts';
 export type { LimitSpan } from '../register/stats.ts';
+
+// Each team's usage rollup (`usage/rollup/<day>.json` in its state folder, `ROLLUP_IN_STATE`): what each session spent
+// in a closed UTC day, by what the use was for and by task, numbers and ids only. One file per team and day.
+export {
+  parseRollup,
+  ROLLUP_FORMAT,
+  ROLLUP_IN_STATE,
+  rollupFileName,
+  USE_CLASSES,
+  type DayRollup,
+  type TaskRow,
+  type TeamDayRollup,
+  type UseClass,
+  type UseRow,
+} from '../budget/rollup-file.ts';
 
 // Each session's week (`usage/sessions.week.json` in its team's state folder, `SESSIONS_WEEK_IN_STATE`): its use of the
 // account's week so far and its hours with work, by session id, as its team's budget hooks last read them.
 export { parseSessionsWeek, SESSIONS_WEEK_FORMAT, SESSIONS_WEEK_IN_STATE, type SessionsWeekSummary, type SessionWeek } from '../budget/session-week-summary.ts';
+
+// What each task has cost (`usage/tasks.week.json` in its team's state folder, `TASKS_WEEK_IN_STATE`): its spend in
+// percent of the week, by task id, as its team's budget hooks last read it.
+export { parseTasksWeek, TASKS_WEEK_FORMAT, TASKS_WEEK_IN_STATE, type TasksWeekSummary } from '../budget/task-week-summary.ts';
 
 // Each session's turn log (`turn-log/<session id>/<UTC hour>.jsonl`): its prompts, replies and clears, one parsed
 // JSON line at a time.
