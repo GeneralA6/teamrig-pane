@@ -36,8 +36,10 @@ export const CONFIG_LIMITS = {
   overSizeMultiple: { min: 0, max: 10 },
   stopgapFiles: { maxItems: 20, maxLength: 260 },
   persistentFailureHours: { min: 1, max: 720 },
-  /** At least one slice open, so work can ship; 20 is far past the few a cap is for (T2201). */
-  maxOpenSlices: { min: 1, max: 20 },
+  /** At least one slice open, so work can ship; past 5 a session spreads its work as thin as no cap would (T2215). */
+  slicesPerSession: { min: 1, max: 5 },
+  /** At least one, or no slice needing the owner could open; past 20 the owner's queue outgrows a meeting (T2215). */
+  maxOwnerDecisions: { min: 1, max: 20 },
   decisionBatchTimes: { maxItems: 8 },
   decisionBatchAt: { min: 0, max: 50 },
   chainNudgeAt: { min: 0, max: 50 },
@@ -59,6 +61,8 @@ export const CONFIG_LIMITS = {
   githubEveryMinutes: { min: 0, max: 1440 },
   budgetTargetPct: { min: 1, max: 100 },
   budgetReservePct: { min: 0, max: 50 },
+  /** 0 turns the floor off; past 50 one team's floor would leave a second less than its own (T2215). */
+  shareFloorPct: { min: 0, max: 50 },
   weeklyLimitW: { min: 1_000_000, max: 1_000_000_000_000 },
   subagentWeight: { min: 0.1, max: 10 },
   extraWPerUsd: { min: 1_000, max: 1_000_000_000 },
@@ -89,6 +93,7 @@ export const CONFIG_LIMITS = {
   queueMemorySampleSeconds: { min: 0, max: 600 },
   queueMemoryFloorMb: { min: 0, max: 1_048_576 },
   queueSmallReserveMb: { min: 0, max: 1_048_576 },
+  queueHeavyReserveMb: { min: 0, max: 1_048_576 },
   headroomSessionMb: { min: 100, max: 65_536 },
   headroomCommitMaxPct: { min: 50, max: 100 },
   headroomCloseIdleMinutes: { min: 15, max: 10_080 },

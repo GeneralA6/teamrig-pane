@@ -648,7 +648,7 @@ export interface BudgetLiftConfig {
  * leaves one unset takes the team above's, unless it names another account (src/cli/kit.ts openKit), so the teams of
  * a tree read one week alike without a copy that drifts.
  */
-export const ACCOUNT_BUDGET_KEYS = ['enabled', 'account', 'weeklyLimitW', 'subagentWeight', 'extraWPerUsd', 'reset'] as const satisfies readonly (keyof BudgetConfig)[];
+export const ACCOUNT_BUDGET_KEYS = ['enabled', 'account', 'accountLead', 'weeklyLimitW', 'subagentWeight', 'extraWPerUsd', 'reset'] as const satisfies readonly (keyof BudgetConfig)[];
 
 /** The keys of ACCOUNT_BUDGET_KEYS as a team reads them, its own or the team above's. */
 export type AccountBudget = Pick<BudgetConfig, (typeof ACCOUNT_BUDGET_KEYS)[number]>;
@@ -667,6 +667,12 @@ export interface BudgetConfig {
    * account (budget/account.ts `accountsOf`).
    */
   readonly account?: string;
+  /**
+   * The root team whose lead is the account's main lead (owner order T2215): after each reset it splits the week among
+   * the account's root teams and reports the split at the owner's first meeting. Unset: the team above's
+   * (`AccountBudget`), else the root team's own lead, which holds while the account has one root team.
+   */
+  readonly accountLead?: string;
   /** The weekly limit in weighted tokens (W). Unset: the team above's (`AccountBudget`), else derived from the status line's weekly %. */
   readonly weeklyLimitW?: number;
   /**
@@ -686,6 +692,11 @@ export interface BudgetConfig {
   readonly targetPct: number;
   /** Kept back for incidents until shortly before the reset. */
   readonly reservePct: number;
+  /**
+   * The least share of each weekly split a team with planned work gets, in % of the part split (owner order T2215):
+   * the check on a lead that also runs a team in its own split. 0: no floor. The team's own, never the team above's.
+   */
+  readonly shareFloorPct: number;
   /** The pace line reaches `targetPct` this many hours before the reset. */
   readonly paceEndHoursBeforeReset: number;
   /** Each session's part, by id; a session not listed has a share of 1. */
@@ -749,10 +760,16 @@ export interface QueueConfig {
    * ledger record's `peakTreeMb` and `lowFreeMb`; 0 samples nothing.
    */
   readonly memorySampleSeconds: number;
-  /** A small step (`queue --small`) shares the host only while it keeps this many MB free besides those held for the small steps. */
+  /** A queued step, a merge or a deploy starts only while the host keeps this many MB free besides those held for it and for the small steps sharing the host. */
   readonly memoryFloorMb: number;
   /** The MB held for a small step with no ledger record of its peak yet. */
   readonly smallReserveMb: number;
+  /**
+   * The least MB held for a heavy queued step, a merge or a deploy besides memoryFloorMb: it takes the host lock only
+   * while free memory covers both (at most half the host's RAM). A heavy step whose ledger peak and a quarter is more
+   * holds that instead.
+   */
+  readonly heavyReserveMb: number;
 }
 
 /** How a delivery step waits. */
@@ -1212,10 +1229,18 @@ export interface FocusConfig {
   /** The key results (goals with a parent) a team may hold with a target of today or later. */
   readonly maxActiveKeyResults: number;
   /**
-   * The shippable slices (a goal's fewest tasks that ship something working, proven live) the leads keep open across
-   * the tree at once (owner order T2201): spreading every task in parallel ships nothing for a long time.
+   * The shippable slices (a goal's fewest tasks that ship something working, proven live) each session keeps open at
+   * once, one more only while one waits on another session or the owner (owner orders T2201, T2215): spreading every
+   * task in parallel ships nothing for a long time, and a cap per session, unlike one across the tree, leaves no lead
+   * able to keep a child team's slice waiting by filling the slots with its own.
    */
-  readonly maxOpenSlices: number;
+  readonly slicesPerSession: number;
+  /**
+   * The owner decisions that may wait at once across the root team's tree (owner order T2215): a slice whose next step
+   * needs a new one does not open while this many wait, so work only the owner can unblock never outruns the owner's
+   * attention. Each lead's rules print its own team's value, so a tree keeps one value.
+   */
+  readonly maxOwnerDecisions: number;
   readonly score: FocusScoreConfig;
   readonly expedite: FocusExpediteConfig;
   readonly wip: FocusWipConfig;
