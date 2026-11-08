@@ -10,6 +10,24 @@ export type WaitRow =
   | { readonly kind: 'task'; readonly id: string }
   | { readonly kind: 'time'; readonly at: string }
 
+/** The lead's answer to a task's approval wait, as `teamrig approve` wrote it (hooks/log.ts fails to compile when they part). */
+export type AnswerRow = {
+  readonly verdict: 'approved' | 'declined'
+  readonly by: string
+  readonly at: string
+  /** What the lead checked, or why it declined. */
+  readonly note: string | null
+}
+
+/** The owner's decision on a task's card, as a leader recorded it with `teamrig decide` (hooks/log.ts fails to compile when they part). */
+export type DecisionRow = {
+  /** The leader who recorded it. */
+  readonly by: string
+  readonly at: string
+  /** What the owner decided. */
+  readonly note: string | null
+}
+
 /** The first few of a list, and how many it left out. */
 export type Cut<T> = { items: T[]; more: number }
 
@@ -66,6 +84,13 @@ export type TaskRow = {
   ownerSeenAt: string | null
   /** What a waiting task waits for; empty in any other status, and for an old `blocked` line, which reads as waiting. */
   waits: readonly WaitRow[]
+  /**
+   * The lead's answer to the approval the task waits on, since its newest status change; null otherwise. An answered
+   * approval holds the task no longer, either way, so plan order reads it as able to move, as teamrig list does.
+   */
+  answer: AnswerRow | null
+  /** The owner's decision on the task's card, since its newest status change; null otherwise. A decided task goes on once its other waits clear. */
+  decided: DecisionRow | null
   /** The tasks to finish before this one starts (`after T5`, its plan dependency); empty when none. */
   after: readonly string[]
 }

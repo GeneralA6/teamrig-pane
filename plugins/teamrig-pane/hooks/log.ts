@@ -2,7 +2,7 @@
 // read entry (src/read/index.ts) and the modules it reaches, written by scripts/sync-core.ts, so every
 // event, status and line teamrig writes reads here as teamrig's own commands read it (T248). This file
 // only maps a folded task to the row the pane draws.
-import type { RankFocus, TaskRow, TaskStatus, WaitRow } from '../types'
+import type { AnswerRow, DecisionRow, RankFocus, TaskRow, TaskStatus, WaitRow } from '../types'
 import type { RankingFocus, Task, TaskStatus as ReadStatus, WaitReason } from './core/read/index'
 
 /** True only when A and B are the same union. */
@@ -17,6 +17,10 @@ export const WAIT_CONTRACT_MATCHES: Same<WaitRow, WaitReason> = true
 export const ITEM_TYPE_CONTRACT_MATCHES: Same<TaskRow['type'], Task['type']> = true
 // The same for the `focus` keys a ranking reads.
 export const FOCUS_CONTRACT_MATCHES: Same<RankFocus, RankingFocus> = true
+// The same for the lead's answer to an approval wait and the owner's decision on a card, which say whether a
+// waiting task can move (core register/can-move.ts).
+export const ANSWER_CONTRACT_MATCHES: Same<AnswerRow | null, Task['answer']> = true
+export const DECISION_CONTRACT_MATCHES: Same<DecisionRow | null, Task['decided']> = true
 
 /** A task as the pane draws it. */
 export function rowOf(task: Task): TaskRow {
@@ -50,6 +54,8 @@ export function rowOf(task: Task): TaskRow {
     assignedAt: task.assignedAt,
     ownerSeenAt: task.ownerSeenAt,
     waits: task.waits,
+    answer: task.answer,
+    decided: task.decided,
     after: task.after,
   }
 }

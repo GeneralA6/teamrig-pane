@@ -149,6 +149,8 @@ const TASK_FIELDS: { readonly [K in keyof TaskRow]-?: K } = {
   assignedAt: 'assignedAt',
   ownerSeenAt: 'ownerSeenAt',
   waits: 'waits',
+  answer: 'answer',
+  decided: 'decided',
   after: 'after',
 }
 const FIELDS = Object.values(TASK_FIELDS)
