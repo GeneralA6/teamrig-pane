@@ -172,6 +172,16 @@ export function updateLine(id: string, by: string, at: number, changes: Record<s
   return JSON.stringify({ v: EVENT_VERSION, type: 'update', id, at: iso(at), by, changes, note })
 }
 
+/** The lead's answer to a task's approval wait, as `teamrig approve` writes it. */
+export function approveLine(id: string, by: string, at: number, verdict: 'approved' | 'declined', note: string | null = null): string {
+  return JSON.stringify({ v: EVENT_VERSION, type: 'update', id, at: iso(at), by, changes: {}, note, verdict })
+}
+
+/** The owner's decision on a task's card, as a leader records it with `teamrig decide`: the waits left without the owner's. */
+export function decideLine(id: string, by: string, at: number, waits: readonly WaitRow[], note: string | null = null): string {
+  return JSON.stringify({ v: EVENT_VERSION, type: 'update', id, at: iso(at), by, changes: {}, note, waits, decided: true })
+}
+
 /** An `inbox read` mark: `line` lines read, the last of them `lastLine` (null: a mark that read none). */
 export function markLine(area: string, line: number, claudeSession: string, at: number, lastLine: string | null = null): string {
   const lastLineHash = lastLine === null ? null : lineHash(lastLine)

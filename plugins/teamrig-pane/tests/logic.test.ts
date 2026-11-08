@@ -4,7 +4,7 @@ import { LABEL_CELLS } from '../hooks/card'
 import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { EVENT_VERSION, indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
-import { FOCUS_CONTRACT_MATCHES, ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
+import { ANSWER_CONTRACT_MATCHES, DECISION_CONTRACT_MATCHES, FOCUS_CONTRACT_MATCHES, ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, noSessionBlock, paneBlocks, statsPressKey, type Block, type Row, type Span } from '../hooks/rows'
 import { metaText, treeOf } from '../hooks/meta'
@@ -14,7 +14,7 @@ import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessM
 import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
 import { HELD_DAYS } from '../hooks/done'
 import type { TeamFiles } from '../hooks/places'
-import { HOUR, MemoryFiles, NOT_PICKED_UP_HOURS, NOW, NO_TEAM, NO_TREE_GOALS, S1, S2, S3, SNAPSHOT_SETTINGS, TEAM_SETTINGS, bigRegister, clockAt, createLine, iso, markLine, statusLine, treeAt, updateLine, waitingLine, verifyingLine } from './fixtures'
+import { HOUR, MemoryFiles, NOT_PICKED_UP_HOURS, NOW, NO_TEAM, NO_TREE_GOALS, S1, S2, S3, SNAPSHOT_SETTINGS, TEAM_SETTINGS, approveLine, bigRegister, clockAt, createLine, decideLine, iso, markLine, statusLine, treeAt, updateLine, waitingLine, verifyingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
@@ -198,6 +198,31 @@ describe('log', () => {
 
   test("the focus keys the plugin contract spells out are the ones teamrig's ranking reads", async () => {
     expect(FOCUS_CONTRACT_MATCHES).toBe(true)
+  })
+
+  test("a row carries its wait's answer and the owner's decision, so plan order reads an answered wait as teamrig list does: able to move", async () => {
+    expect([ANSWER_CONTRACT_MATCHES, DECISION_CONTRACT_MATCHES]).toEqual([true, true])
+    const tasks = fold(
+      createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      waitingLine('T1', 'po', NOW - HOUR, [{ kind: 'approval', who: 'lead' }], 'push it?'),
+      approveLine('T1', 'lead', NOW, 'approved', 'checked the diff'),
+      createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      waitingLine('T2', 'po', NOW - HOUR, [{ kind: 'approval', who: 'lead' }], 'push it?'),
+      approveLine('T2', 'lead', NOW, 'declined', 'tests first'),
+      createLine('T3', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      waitingLine('T3', 'po', NOW - HOUR, [{ kind: 'decision', who: 'owner' }], 'which copy?'),
+      decideLine('T3', 'lead', NOW, [], 'the short one'),
+      createLine('T4', { owner: 'po', by: 'po', at: NOW - HOUR }),
+      waitingLine('T4', 'po', NOW - HOUR, [{ kind: 'approval', who: 'lead' }], 'push it?'),
+    )
+    const [approved, declined, decided, asked] = tasks
+    expect(approved?.answer).toEqual({ verdict: 'approved', by: 'lead', at: iso(NOW), note: 'checked the diff' })
+    expect(declined?.answer?.verdict).toBe('declined')
+    expect(decided?.decided).toEqual({ by: 'lead', at: iso(NOW), note: 'the short one' })
+    expect([asked?.answer, asked?.decided]).toEqual([null, null])
+    // Core register/can-move.ts: an answered approval, either way, and a decided card hold the task no longer.
+    const tree = treeAt(tasks, NOW)
+    expect(tasks.map(t => tree.placeOf(t).blocked)).toEqual([false, false, false, true])
   })
 
   test('a row carries the size, pin and work class plan order reads, so a pinned row tops the list', async () => {
