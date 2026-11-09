@@ -33,7 +33,7 @@ const CONVERSATION_NOUN: Noun = { one: 'conversation', many: 'conversations' }
 
 /** What a query no conversation matches shows: the list holds those of the last `hours`. */
 export function logNothingFound(hours: number): string {
-  return `Nothing matches. The Log view searches its conversations of the last ${hours} h.`
+  return `Nothing matches. The Conversations view searches the last ${hours} h.`
 }
 
 /** The Find field's query on the Log view's list and the conversations it names (log-search.ts searchLog), in the list's order. */
@@ -97,7 +97,7 @@ export function logListBlocks(list: LogList, clock: Clock, worked: Worked, searc
     case 'reading':
       return [note(`${LIST}:note`, 'Reading the turn logs…')]
     case 'no-team':
-      return [note(`${LIST}:note`, "No team found: the Log view shows a team's turn logs, which teamrig writes for each session.")]
+      return [note(`${LIST}:note`, "No team found: the Conversations view shows a team's turn logs, which teamrig writes for each session.")]
     case 'no-config':
       return [note(`${LIST}:note`, 'No turn logs: the team has no config file, and teamrig writes turn logs only for a team with one.')]
     case 'no-log':
@@ -189,7 +189,7 @@ function pageConversation(page: LogPage, list: LogList): LogConversation | undef
 
 /**
  * The title of the conversation a page shows, as the list draws it, else its session's name bold: the page's own head
- * and the trail over it (`Log › <title>`) both draw it.
+ * and the trail over it (`Conversations › <title>`) both draw it.
  */
 export function logPageTitle(page: LogPage, list: LogList, worked: Worked): Span[] {
   const conversation = pageConversation(page, list)
