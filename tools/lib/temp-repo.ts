@@ -90,6 +90,15 @@ export class TempRepo {
     return this.spawn(this.outside, cli, args, {});
   }
 
+  /**
+   * Runs git in `dir` with `env` over the repo's variables, as `run` merges them, and returns how it ended without
+   * failing the test: for a git command a hook may refuse, such as a commit or a push.
+   */
+  gitWith(env: Readonly<Record<string, string | undefined>>, ...args: readonly string[]): CliRun {
+    const result = spawnSync('git', args, { cwd: this.dir, env: this.merged(env), encoding: 'utf8' });
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  }
+
   private spawn(cwd: string, cli: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>, input?: string): CliRun {
     const result = spawnSync(process.execPath, [cli, ...args], { cwd, env: this.merged(env), encoding: 'utf8', ...(input === undefined ? {} : { input }) });
     return { status: result.status, stdout: result.stdout, stderr: result.stderr };

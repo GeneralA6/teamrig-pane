@@ -1,4 +1,11 @@
 #!/bin/sh
-# Requires a DCO sign-off by the author, then scrubs the commit message.
+# Requires a DCO sign-off by the author, refuses a message line in a secret shape (teamrig secrets message), then
+# scrubs the commit message. teamrig is private, so a clone where it is not on PATH skips the secret scan with a line
+# saying so, and the sign-off check and the scrub still run.
 node tools/dco/cli.ts --message "$1" || exit 1
+if command -v teamrig >/dev/null 2>&1; then
+  teamrig secrets message "$1" || exit 1
+else
+  echo 'commit-msg: teamrig is not on PATH, so the secret scan (teamrig secrets message) is skipped' >&2
+fi
 exec node tools/scrub/cli.ts --message "$1"
