@@ -17,19 +17,19 @@ describe('keys page', () => {
     expect(barKeys()).toBe('o v w i n')
   })
 
-  test('at 48 columns each group is three columns of the widest entry (14 cells) with 2 between, then the bar and the focus keys', () => {
-    expect(wordsOf(keysBlocks(48))).toEqual([
-      [`${'t  Tasks'.padEnd(16)}${'d  Changes'.padEnd(16)}g  Log`, `${'u  Inbox'.padEnd(16)}${'e  Teams'.padEnd(16)}j  Meetings`, 'r  Stats'],
-      [`${'s  Find'.padEnd(16)}${'m  mine'.padEnd(16)}a  all`, `${'h  done'.padEnd(16)}${'c  close cards'.padEnd(16)}k  keys`],
-      [`${'b  back'.padEnd(16)}${'f  forward'.padEnd(16)}p  week before`, 'l  week after'],
+  test('at 52 columns each group is three columns of the widest entry (16 cells) with 2 between, then the bar and the focus keys', () => {
+    expect(wordsOf(keysBlocks(52))).toEqual([
+      [`${'t  Tasks'.padEnd(18)}${'d  Changes'.padEnd(18)}g  Conversations`, `${'u  Inbox'.padEnd(18)}${'e  Teams'.padEnd(18)}j  Meetings`, 'r  Stats'],
+      [`${'s  Find'.padEnd(18)}${'m  mine'.padEnd(18)}a  all`, `${'h  done'.padEnd(18)}${'c  close cards'.padEnd(18)}k  keys`],
+      [`${'b  back'.padEnd(18)}${'f  forward'.padEnd(18)}p  week before`, 'l  week after'],
       ['o v w i n  only that status; again shows all'],
       ['ctrl+x tab, or a click: keys to the pane', 'Esc: keys back to Claude', 'ctrl+x x, or ✕: minimize the pane'],
     ])
   })
 
   test('a narrower body takes fewer columns, one at least, and no row ends in padding', () => {
-    expect(wordsOf(keysBlocks(30))[0]).toEqual([`${'t  Tasks'.padEnd(16)}d  Changes`, `${'g  Log'.padEnd(16)}u  Inbox`, `${'e  Teams'.padEnd(16)}j  Meetings`, 'r  Stats'])
-    expect(wordsOf(keysBlocks(10))[0]).toEqual(['t  Tasks', 'd  Changes', 'g  Log', 'u  Inbox', 'e  Teams', 'j  Meetings', 'r  Stats'])
+    expect(wordsOf(keysBlocks(48))[0]).toEqual([`${'t  Tasks'.padEnd(18)}d  Changes`, `${'g  Conversations'.padEnd(18)}u  Inbox`, `${'e  Teams'.padEnd(18)}j  Meetings`, 'r  Stats'])
+    expect(wordsOf(keysBlocks(10))[0]).toEqual(['t  Tasks', 'd  Changes', 'g  Conversations', 'u  Inbox', 'e  Teams', 'j  Meetings', 'r  Stats'])
   })
 
   test('a key is bold, its words plain; the bar line wraps under its words', () => {

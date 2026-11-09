@@ -144,7 +144,7 @@ describe('logListBlocks', () => {
     }
     const searched = (query: string) => logListBlocks(list, UTC, IDLE, { query, hits: searchLog(list, IDLE, query) })
     expect(words(searched(' '))).toEqual([['log-search-hint', [LOG_SEARCH_HINT]]])
-    expect(words(searched('nothing'))).toEqual([['log-search-none', ['Nothing matches. The Log view searches its conversations of the last 24 h.']]])
+    expect(words(searched('nothing'))).toEqual([['log-search-none', ['Nothing matches. The Conversations view searches the last 24 h.']]])
     const week = searched('week')
     expect(words(week)).toEqual([
       ['log-search-count', ['1 conversation matches']],

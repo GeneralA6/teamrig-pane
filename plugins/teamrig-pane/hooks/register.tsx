@@ -180,8 +180,8 @@ const HEADER_MAX_SHARE = 0.5
 const INLINE_MAX_ROWS = 6
 /** Between two crumbs of a page's trail. */
 const TRAIL_SEPARATOR = ' › '
-/** The Log view's switch button, and the first crumb of a Log page's trail. */
-const LOG_LABEL = 'Log'
+/** The Conversations view's switch button (the view keyed 'log'), and the first crumb of a conversation page's trail. */
+const LOG_LABEL = 'Conversations'
 /** The Stats view's switch button, and the first crumb of a Health count's trail. */
 const STATS_LABEL = 'Stats'
 /** The Teams view's switch button with no count, and the first crumb of the trail of a Stats tab a Teams row opened. */
@@ -2006,8 +2006,8 @@ export const register: Register = on => {
             rows: 1 + trailRows.rows + 1,
           }
         : null
-    // A Log page leads with back (b) to the list, then its trail, `Log › <title>`, as a page of the other views says
-    // where it is, cut at its row's end (back is the press to the list), then a rule.
+    // A conversation's page leads with back (b) to the list, then its trail, `Conversations › <title>`, as a page of
+    // the other views says where it is, cut at its row's end (back is the press to the list), then a rule.
     const logHead: HeaderPart | null =
       logTitle === null
         ? null
