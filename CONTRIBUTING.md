@@ -9,7 +9,10 @@ npm run setup   # the same hook setup, for a clone installed with --ignore-scrip
 ```
 
 The git hooks run the scrub and DCO checks below before each commit, and the [local gate](#the-local-gate) before
-each push. `npm run check` first checks that git runs them, and fails until `npm run setup` ran.
+each push. `npm run check` first checks that git runs them, and fails until `npm run setup` ran. Where teamrig is on
+PATH, each hook first runs its secret scan (`teamrig secrets staged`, `message` and `pushed`), which refuses a commit
+or push that adds a secret, named by place and shape; teamrig is private, so a clone without it skips the scan with
+a line saying so.
 
 ## How we work
 Every contributor, and every Claude Code session opened in this repo, works the same way. [CLAUDE.md](CLAUDE.md) holds
