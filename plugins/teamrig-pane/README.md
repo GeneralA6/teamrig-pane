@@ -14,7 +14,7 @@ labels on. No model calls, so no tokens. Every time is on the team's clock and z
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
 session's `TZ`, else the system's). A switch over the list flips it to the session's git changes, or
 to each team session's prompts and replies, or to its own inbox lines, or to the team's tree, or to the team's
-meetings, or to the tree's flow of work (Tasks, Changes, Log, Inbox, Teams, Meetings and Stats, below). Docked, its first line
+meetings, or to the tree's flow of work (Tasks, Changes, Conversations, Inbox, Teams, Meetings and Stats, below). Docked, its first line
 names the session as its tab title does (`[acme] pane`: the team, then the name without the team's prefix), so
 panes open in several tabs tell apart at a glance. That line and the controls under it stay put, and the body
 scrolls under them in a window of the pane's own: the mouse wheel moves it 3 rows a tick, PgUp and PgDn a
@@ -150,7 +150,7 @@ looks for the file where it looks for the lines a card quotes: an inbox in the i
 folder, a relative path in the session's folder and each folder above it, then in the team's folder. A file it does
 not find lists each path it looked at; one over 256 KiB, or not text, says why it is not shown.
 
-In the Tasks view, the Inbox view, the Changes view, over the Log view's list and on the Teams tab (see Changes, Log,
+In the Tasks view, the Inbox view, the Changes view, over the Conversations list and on the Teams tab (see Changes, Conversations,
 Inbox and Teams, below), the dock shows a Find field under its switch (the Meetings view, a few rows, and the Stats
 tab, numbers, show none); `s` or a click
 puts the cursor in it, and
@@ -221,7 +221,7 @@ cells and count turn bold, and a dim line under the counts reads `showing verify
 for all`. The same press again shows every task; one on another status switches to it. A shown status
 that empties keeps its count at 0 (`0 waiting`), so a press still clears it, and the list says so
 (`Nothing waiting.`). The filter is the pane's own state: it holds while you switch to all (which it
-does not filter) or to Changes or Log, and is never kept across a reload; a new session, or a reload, shows
+does not filter) or to Changes or Conversations, and is never kept across a reload; a new session, or a reload, shows
 every task again.
 
 ## The banner
@@ -238,6 +238,14 @@ prompt input, in the terminal and the desktop app: the one place outside a pane 
 terminal. A survey takes the band while it is up, its `[-]` (or `ctrl+x ctrl+a`) folds it, and a card taller
 than the band scrolls in it. Neither press has a key of its own: a band's key would answer that key typed in an
 empty prompt.
+
+Over the banner, a row names the area's previous conversation, so after a `/clear` the band says what came before:
+a dim `previous ·`, then its title as the Conversations list draws it (the tasks its session worked, else how it
+opened), cut at one line. Its `open in pane` button opens the pane at that conversation's page, and `all
+conversations` at the Conversations list. The previous conversation is the newest one of the session's area, in the
+hours teamrig keeps its turn log, that is not the one running now; it is read again when the session's conversation
+changes (a `/clear`), from the turn-log files only. With none to name, no turn log or a session with no area, the
+band is the banner alone.
 
 ## Minimizing, not closing
 
@@ -300,12 +308,12 @@ too), all of it once when the session starts. When nothing names the register, o
 the pointer file or the team config cannot be used, the pane draws one `WARN` line saying what to set
 or what is wrong.
 
-## Tasks, Changes, Log, Inbox, Teams, Meetings and Stats
+## Tasks, Changes, Conversations, Inbox, Teams, Meetings and Stats
 
-The switch, `[Tasks] [Changes 3] [Log] [Inbox (2)] [Teams] [Meetings] [Stats]`, shows in every state: open, in a dock however narrow (its
+The switch, `[Tasks] [Changes 3] [Conversations] [Inbox (2)] [Teams] [Meetings] [Stats]`, shows in every state: open, in a dock however narrow (its
 buttons wrap under each other rather than clip) under the title line, above the prompt, and as the
 minimized strip. While
-the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Log, `u` Inbox, `e` Teams, `j` Meetings and `r` Stats
+the pane holds the keyboard, `t` presses Tasks, `d` Changes, `g` Conversations, `u` Inbox, `e` Teams, `j` Meetings and `r` Stats
 (`c` already closes the cards, `i` shows the waiting tasks alone, `m` and `w` the session's own and its working ones,
 `n` the not-started ones, and `ctrl+x x` minimizes the pane).
 
@@ -372,9 +380,9 @@ What the host draws and the mod can't change:
 - a mod can't show or focus the built-in Diff pane (`/diff`), so Changes is the plugin's own list of
   git's changes, and its own diff of each file under it.
 
-### Log
+### Conversations
 
-Log shows each session's prompts and replies of the hours teamrig keeps them, from the turn log it writes for every
+Conversations shows each session's prompts and replies of the hours teamrig keeps them, from the turn log it writes for every
 session of the team (`<team state>/turn-log/<session>/<UTC hour>.jsonl`, one file an hour, kept the team config's
 `turnLog.keepHours`, 24 by default), so a `/clear` or a compaction never takes away what a tab showed. It reads each
 line with teamrig's own reader, and files only, only while it shows: no model calls, no tokens.
@@ -397,7 +405,7 @@ with one match opens its page, with more moves the cursor onto the first; back f
 A page draws no field. A switch to another view closes the search.
 
 A press on a conversation (a click, or Enter on it) opens its page under a `back` button (`b`) and the trail
-`Log › <title>`, which says where the page is as a task's page does: its title as the list draws it, over its session and how many lines it shows, then its lines oldest first, so the newest is at the end, where
+`Conversations › <title>`, which says where the page is as a task's page does: its title as the list draws it, over its session and how many lines it shows, then its lines oldest first, so the newest is at the end, where
 the page opens. Each prompt and
 reply is split by who spoke, each part a head line over its words: `owner · 20:05 IDT` for the words typed at the tab,
 `Claude · 20:06 IDT` for a reply, `message from <session>` for another session's message and `subagent report` for a
@@ -410,7 +418,8 @@ says when it left older lines out; a file it could not read is named in a `Not a
 shows.
 
 While it shows, the list or the open page is read again on each 3 s poll: the session folders are listed, and an hour's
-file is read again only when its size or time moved. The Log button, from a page or another view, shows the list.
+file is read again only when its size or time moved. The Conversations button, from a page or another view, shows
+the list.
 Above the prompt the list shows, never a page.
 
 ### Inbox

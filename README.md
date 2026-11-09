@@ -62,9 +62,9 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   back and forward (`b`, `f`) and a trail of where you went. In the dock a card ends in `[Note]`, which sends what you
   type to the task's session through `teamrig owner note`, and `[Next]`, which shows what `teamrig owner next` would
   do and, once confirmed, puts the task atop its session's list.
-- **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Log, Inbox, Teams, Meetings and Stats switch (`s` or a click puts the cursor in it) that lists, as you type, the
+- **Find:** in the Tasks view the dock shows a Find field under its Tasks, Changes, Conversations, Inbox, Teams, Meetings and Stats switch (`s` or a click puts the cursor in it) that lists, as you type, the
   tasks the pane holds whose id, title, owner, goals, note, evidence or ref match your words, the matches underlined; Enter opens the top one's page.
-  On the Inbox view the same field finds lines by sender or words, over the Log view's list conversations by their
+  On the Inbox view the same field finds lines by sender or words, over the Conversations list conversations by their
   tasks, how they opened or their session, on the Changes view changed files by path, repo or branch, and on the Teams
   tab sessions by id, name, roles or hire scope.
   A line under it says where your keys go: into the search, to the pane's keys, or to Claude's prompt.
@@ -72,7 +72,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   and forward over the last 8 days the pane holds, and `teamrig list --status done,dropped` lists older ones.
 - **Changes:** the files changed in each git repo the session works in, each with its lines added and removed;
   a click on a file opens its diff under it, `+` lines green and `-` lines red.
-- **Log:** each conversation of the team's sessions in the last 24 h, from the turn log teamrig writes, so a `/clear`
+- **Conversations:** each conversation of the team's sessions in the last 24 h, from the turn log teamrig writes, so a `/clear`
   or a compaction never takes away what a tab showed: the newest first, each titled by the task its session worked
   while it ran (else by how it opened) over its session, its times and its count of lines; a press opens one, its
   lines oldest first, kept current as it writes, each split by who spoke (owner,

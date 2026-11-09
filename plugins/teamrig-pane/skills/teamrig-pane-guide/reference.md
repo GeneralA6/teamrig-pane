@@ -68,9 +68,9 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | `The teamrig-pane check for Claude Code failed (<reason>).` | The engine gave no version; the pane works on. Report it with the reason. |
 | `WARN the pane could not draw: <error>` | A drawing failed; report it with the error text. |
 | In Changes, `No git repo yet: the session folder is in none, …` | Nothing to list yet: the session's folder is in no git repo, and no file the session or its agents edited is in one. The first file edited (Edit, Write, NotebookEdit) in a repo adds that repo; a file a shell command changes adds none. |
-| In Log, `No turn logs yet: …` | The team has no turn-log folder: teamrig writes one once it runs a version with the turn log, unless the team config sets `turnLog.enabled` to false. |
-| In Log, `The turn logs could not be read: <error>.` | The turn-log folder could not be listed; the pane tries again on the next poll. |
-| On a session's Log page, `Not all read: <file>: <error>.` | One hour's file could not be read; the page shows the rest and tries again on the next poll. |
+| In Conversations, `No turn logs yet: …` | The team has no turn-log folder: teamrig writes one once it runs a version with the turn log, unless the team config sets `turnLog.enabled` to false. |
+| In Conversations, `The turn logs could not be read: <error>.` | The turn-log folder could not be listed; the pane tries again on the next poll. |
+| On a conversation's page, `Not all read: <file>: <error>.` | One hour's file could not be read; the page shows the rest and tries again on the next poll. |
 | In Changes, `WARN <git's first error line>` under a repo | git could not read that repo (or took over 10 seconds); its header then names only the folder. A worktree whose folder was removed shows no warning: it leaves the view. |
 | In Meetings, `The meetings could not be read: no plugin list at <path>: install the teamrig plugin.` (or `no teamrig plugin with its CLI in <path>`) | The view runs the CLI of the teamrig plugin installed in Claude Code, found once a session: `claude plugin install teamrig@teamrig`, then restart or resume the session. |
 | In Meetings, `The meetings could not be read: teamrig printed no meeting list the pane can read: update teamrig.` | The teamrig plugin is older than 0.208.0: update it, then restart or resume the session. |
@@ -97,7 +97,7 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | Quoted ref | 3 lines, 320 characters a line |
 | Card links | 5 a card; an address over 2048 characters, once percent-encoded, is left out |
 | Pages | 20 places kept, the oldest dropped first; the trail names the last 4 |
-| Log | each session's turn log over the hours teamrig keeps it (the team config's `turnLog.keepHours`, 24 by default); a session's page holds the newest 256 KiB of text and notes the older lines it left out |
+| Conversations | each session's turn log over the hours teamrig keeps it (the team config's `turnLog.keepHours`, 24 by default); a session's page holds the newest 256 KiB of text and notes the older lines it left out |
 | A reference file's page | 256 KiB, read whole as the page opens; a larger file, or one that is not text, says why it is not shown |
 | Search results | 30 shown, the active first, under a dim line counting every match |
 | A Claude dialog (a permission prompt, a question) | while it is open, Claude Code sends the pane no keys, clicks or wheel scroll, and tells it nothing: answer the dialog first |
