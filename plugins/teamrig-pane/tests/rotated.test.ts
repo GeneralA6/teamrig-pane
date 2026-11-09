@@ -10,7 +10,7 @@ import { MAX_READ_BYTES, readSegment, TaskRegisterSource, type RegisterPaths } f
 import { HOUR, MemoryFiles, NOW, NO_TREE_GOALS, S1, TEAM_SETTINGS, createLine, iso, statusLine } from './fixtures'
 
 const DAY = 24 * HOUR
-const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', goals: 'R/tasks/goals.jsonl', inboxDir: 'R/inbox' }
+const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', goals: 'R/tasks/goals.jsonl', inboxDir: 'R/inbox', tasksWeek: 'R/tasks/usage/tasks.week.json' }
 const LAYOUT = layoutPaths(PATHS.events)
 const SEGMENT = LAYOUT.segment(1)
 

@@ -4,7 +4,7 @@ import { TimeZone, readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import type { Span } from '../hooks/rows'
 import { ageWords, clockWords, dayWords, dueWords, flagsOf, metaParts, metaText, neededByLines, neededByWords, rankWords, STATUS_WORDS, storedDayWords, storedDueWords, typeWords, waitingWords, whenWords } from '../hooks/meta'
-import { HOUR, JERUSALEM, NOT_PICKED_UP_HOURS, NOW, clockAt, createLine, iso, statusLine, treeAt, waitingLine } from './fixtures'
+import { HOUR, JERUSALEM, LIKE_MEDIANS, NOT_PICKED_UP_HOURS, NOW, clockAt, createLine, iso, statusLine, treeAt, waitingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
@@ -324,6 +324,18 @@ describe('meta rank words', () => {
 
   test('a task classed by hand reads that class, and its size moves its score', async () => {
     expect(wordsOf(taskOf(own({ workClass: 'Roadmap', size: 2 })))).toBe('Roadmap · score 1.5 · p2')
+  })
+
+  test("an unsized task is sized by its like tasks' median from the tasks' week file, as teamrig list sizes it", async () => {
+    const task = taskOf(own())
+    // The default size of 0.3% of the week scores it 3.33; the plain Improvements median of 0.5% scores it 2.
+    expect(metaText(task, treeAt([task], NOW, undefined, undefined, null, {}, { spentPct: {}, likeMedians: LIKE_MEDIANS }))).toBe('Improvements · score 2 · p2')
+  })
+
+  test('a task scores by what is left of its size past what it spent this week', async () => {
+    const task = taskOf(own({ workClass: 'Roadmap', size: 2 }))
+    // 2% less the 1.5% spent leaves 0.5%: the Roadmap value of 3 over it scores 6, where the whole size scored 1.5.
+    expect(metaText(task, treeAt([task], NOW, undefined, undefined, null, {}, { spentPct: { T1: 1.5 }, likeMedians: [] }))).toBe('Roadmap · score 6 · p2')
   })
 
   test('a pinned task says so after its priority, ahead of its type: nothing else on the row says why it tops the list', async () => {

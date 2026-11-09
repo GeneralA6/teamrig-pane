@@ -1,12 +1,14 @@
 // Register lines shaped as teamrig writes them (events v2, inbox marks v1), and an in-memory `Files`.
+import { formatTasksWeek } from '../hooks/core/budget/task-week-summary'
 import { DEFAULT_FOCUS, DEFAULT_REGISTER, EVENT_VERSION, MARK_VERSION, TimeZone } from '../hooks/core/read/index'
 import { GOAL_RECORD_VERSION } from '../hooks/core/register/goals'
 import { lineHash } from '../hooks/line-hash'
 import { treeOf, type PaneTree } from '../hooks/meta'
+import { NO_SPEND } from '../hooks/ranking'
 import type { FileStamp, Files, GoalSource } from '../hooks/source'
 import { NO_TASK_COUNTS } from '../hooks/task-counts'
 import { zoneNamed, type Clock } from '../hooks/zone'
-import type { DrawnSettings, GoalRanks, Snapshot, TaskRow, TeamLeads, TeamSettings, WaitRow } from '../types'
+import type { DrawnSettings, GoalRanks, Snapshot, TaskRow, TaskSpend, TeamLeads, TeamSettings, WaitRow } from '../types'
 
 export const NOW = Date.UTC(2026, 9, 13, 14, 0)
 export const HOUR = 3_600_000
@@ -24,20 +26,32 @@ export const SNAPSHOT_SETTINGS: DrawnSettings = {
 export const TEAM_SETTINGS: TeamSettings = { ...SNAPSHOT_SETTINGS, requireDecisionCard: DEFAULT_REGISTER.requireDecisionCard }
 /**
  * A snapshot's team fields when the pane found no team, on an empty register: no team name, no session name, no leads,
- * no work marks, no goals, no cards on the owner and no tasks counted.
+ * no work marks, no goals, no spend read, no cards on the owner and no tasks counted.
  */
-export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work' | 'goals' | 'ownerCards' | 'taskCounts'> = {
+export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work' | 'goals' | 'spend' | 'ownerCards' | 'taskCounts'> = {
   team: null,
   areaName: null,
   leads: null,
   work: [],
   goals: {},
+  spend: NO_SPEND,
   ownerCards: {},
   taskCounts: NO_TASK_COUNTS,
 }
 
 /** A tree that holds no goals and never moves: a source whose test is not about them. */
 export const NO_TREE_GOALS: GoalSource = { refresh: async () => false, current: {} }
+
+/** The medians of two kinds of task, as teamrig's budget hooks write them: a plain Improvements task and a Roadmap bug. */
+export const LIKE_MEDIANS: TaskSpend['likeMedians'] = [
+  { workClass: 'Improvements', type: null, pct: 0.5 },
+  { workClass: 'Roadmap', type: 'bug', pct: 1.2 },
+]
+
+/** The tasks' week file (`usage/tasks.week.json`) as teamrig writes it at NOW, holding `spend`. */
+export function tasksWeekText(spend: TaskSpend): string {
+  return formatTasksWeek({ at: NOW, spentPct: spend.spentPct, likeMedians: spend.likeMedians })
+}
 
 /** A goal's first record, as `teamrig goal add` writes it. */
 export function goalLine(tag: string, parent: string | null = null): string {
@@ -73,7 +87,7 @@ export const INBOX_UNREAD_FROM = 3
 
 /**
  * The tree of `tasks` at `now`, for a team whose config sets `notPickedUpAfterHours` (teamrig's default when unset)
- * and the zone named `timeZone` (UTC unless given), with `leads` and `goals` (none read unless given).
+ * and the zone named `timeZone` (UTC unless given), with `leads`, `goals` and `spend` (none read unless given).
  */
 export function treeAt(
   tasks: readonly TaskRow[],
@@ -82,8 +96,9 @@ export function treeAt(
   timeZone = TimeZone.UTC.name,
   leads: TeamLeads | null = null,
   goals: GoalRanks = {},
+  spend: TaskSpend = NO_SPEND,
 ): PaneTree {
-  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone, leads, focus: DEFAULT_FOCUS, ownerSource: DEFAULT_REGISTER.ownerSource, goals })
+  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone, leads, focus: DEFAULT_FOCUS, ownerSource: DEFAULT_REGISTER.ownerSource, goals, spend })
 }
 
 /** The clock at `now` in `zone`, UTC unless given. */

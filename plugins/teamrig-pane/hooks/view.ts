@@ -217,6 +217,7 @@ export function sameView(a: Snapshot, b: Snapshot): boolean {
     a.ownerSource !== b.ownerSource ||
     JSON.stringify(a.focus) !== JSON.stringify(b.focus) ||
     JSON.stringify(a.goals) !== JSON.stringify(b.goals) ||
+    JSON.stringify(a.spend) !== JSON.stringify(b.spend) ||
     JSON.stringify(a.ownerCards) !== JSON.stringify(b.ownerCards) ||
     JSON.stringify(a.taskCounts) !== JSON.stringify(b.taskCounts)
   )

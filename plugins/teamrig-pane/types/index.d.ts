@@ -184,6 +184,11 @@ export type Snapshot = {
    */
   goals: GoalRanks
   /**
+   * What the snapshot's tasks have cost, as the team's tasks' week file last read (hooks/source.ts): what a task's size
+   * and so its score read, as `teamrig list` sizes them. Moves when the file does.
+   */
+  spend: TaskSpend
+  /**
    * Each session's cards on the owner, keyed by its id, as the last poll found them (hooks/owner-cards.ts): recounted
    * when the register moves and, while a card is put off, each minute, so one comes back with no file change. A
    * session with none is absent.
@@ -200,6 +205,19 @@ export type Snapshot = {
  * not a Map, as a snapshot crosses `$.state`.
  */
 export type GoalRanks = Readonly<Record<string, { readonly parent: string | null; readonly rank: number | null }>>
+
+/** The median spend of the tasks of one class and type done lately, in percent of the week: what an unsized one of them is sized by. */
+export type LikeMedianRow = { readonly workClass: string; readonly type: TaskRow['type']; readonly pct: number }
+
+/**
+ * What tasks have cost, as teamrig's `usage/tasks.week.json` holds it (core register/ranking.ts StoredSpend): each
+ * task's spend past its size base in percent of the week by id (none: nothing spent), and the like tasks' medians.
+ * This contract cannot import, so it spells them out, and hooks/log.ts holds the two equal.
+ */
+export type TaskSpend = {
+  readonly spentPct: Readonly<Record<string, number>>
+  readonly likeMedians: readonly LikeMedianRow[]
+}
 
 /**
  * The `focus` keys a ranking reads, as teamrig's config sets them (core register/ranking.ts RankingFocus). This contract

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { GoalRanks, OwnerSettings } from '../types'
+import type { GoalRanks, OwnerSettings, TaskSpend } from '../types'
 import { DEFAULT_FOCUS, readRegister, TimeZone } from '../hooks/core/read/index'
 import { laterWords, ownerCardsOf } from '../hooks/owner-cards'
+import { NO_SPEND } from '../hooks/ranking'
 import { HOUR, JERUSALEM, NOW, createLine, waitingLine, type CardFields } from './fixtures'
 
 /** teamrig's default: the owner marker `owner`, a decision on the owner needs a card naming its gate, and its ranking. */
@@ -10,8 +11,8 @@ const SETTINGS: OwnerSettings = { ownerSource: 'owner', requireDecisionCard: tru
 const GATED: CardFields = { question: 'Ship the analytics tab?', options: ['A: now', 'B: next week'], recommend: 'A', byDefault: 'B', gate: 'product' }
 const UNGATED: CardFields = { question: 'Which colour?', options: ['A: green', 'B: blue'], recommend: 'A', byDefault: 'A' }
 
-function cardsOf(lines: readonly string[], settings: OwnerSettings = SETTINGS, now: number = NOW, zone: TimeZone = TimeZone.UTC, goals: GoalRanks = {}) {
-  return ownerCardsOf(readRegister(lines.join('\n')).state.tasks, now, zone, settings, goals)
+function cardsOf(lines: readonly string[], settings: OwnerSettings = SETTINGS, now: number = NOW, zone: TimeZone = TimeZone.UTC, goals: GoalRanks = {}, spend: TaskSpend = NO_SPEND) {
+  return ownerCardsOf(readRegister(lines.join('\n')).state.tasks, now, zone, settings, goals, spend)
 }
 
 describe('ownerCardsOf', () => {
@@ -132,6 +133,20 @@ describe('ownerCardsOf', () => {
     const focus = { ...DEFAULT_FOCUS, expedite: { ...DEFAULT_FOCUS.expedite, ownerP1: false }, score: { ...DEFAULT_FOCUS.score, ownerOrderValues: [] } }
     expect(cardsOf(lines)['pane']?.due.map(card => card.id)).toEqual(['T2', 'T1'])
     expect(cardsOf(lines, { ...SETTINGS, focus })['pane']?.due.map(card => card.id)).toEqual(['T1', 'T2'])
+  })
+
+  test('a session’s cards follow what its tasks spent this week: a task with little of its size left moves ahead', () => {
+    const lines = [
+      createLine('T1', { owner: 'pane', by: 'lead', at: NOW - 3 * HOUR, priority: 3 }),
+      createLine('T2', { owner: 'pane', by: 'lead', at: NOW - 3 * HOUR, priority: 3 }),
+      waitingLine('T1', 'pane', NOW - 2 * HOUR, [{ kind: 'approval', who: 'owner' }]),
+      waitingLine('T2', 'pane', NOW - 2 * HOUR, [{ kind: 'approval', who: 'owner' }]),
+    ]
+    // Two equal tasks tie on score, so their ids settle them.
+    expect(cardsOf(lines)['pane']?.due.map(card => card.id)).toEqual(['T1', 'T2'])
+    // T2 spent 0.28% of its default 0.3%: the little left of it scores it past T1.
+    const spent = cardsOf(lines, SETTINGS, NOW, TimeZone.UTC, {}, { spentPct: { T2: 0.28 }, likeMedians: [] })
+    expect(spent['pane']?.due.map(card => card.id)).toEqual(['T2', 'T1'])
   })
 })
 
