@@ -174,11 +174,11 @@ describe('golden', () => {
   test("reads teamrig's own register fixtures as teamrig lists them, with the lines it skips counted alike", async () => {
     expect(GOLDEN.fixtures.map(fixture => fixture.name)).toEqual(['events-v0.jsonl', 'events-v1.jsonl', 'events-v2.jsonl'])
     // teamrig listed each with the demo team's config, so its settings, zone and leads.
-    const { notPickedUpAfterHours, timeZone, leads, focus, ownerSource, goals } = await paneSnapshot(goldenFiles())
+    const { notPickedUpAfterHours, timeZone, leads, focus, ownerSource, goals, spend } = await paneSnapshot(goldenFiles())
     for (const fixture of GOLDEN.fixtures) {
       const register = readRegister(fixture.events)
       const rows = [...register.state.tasks.values()].map(task => rowOf(task))
-      const tree = treeOf({ tasks: rows, now: GOLDEN.generatedAt, notPickedUpAfterHours, timeZone, leads, focus, ownerSource, goals })
+      const tree = treeOf({ tasks: rows, now: GOLDEN.generatedAt, notPickedUpAfterHours, timeZone, leads, focus, ownerSource, goals, spend })
       const lines = rows.map(row => listLine(row, tree)).sort()
       expect({ fixture: fixture.name, lines }).toEqual({ fixture: fixture.name, lines: linesOf(fixture.list) })
       const skipped = skippedText(PATHS, register, readMarks(''))

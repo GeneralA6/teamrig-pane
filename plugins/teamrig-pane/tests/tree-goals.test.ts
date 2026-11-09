@@ -5,7 +5,7 @@ import { TaskRegisterSource, type RegisterPaths } from '../hooks/source'
 import { TreeGoals } from '../hooks/tree-goals'
 import { HOUR, MemoryFiles, NOW, S1, TEAM_SETTINGS, createLine, goalLine, goalRankLine, goalTitleLine, waitingLine, type CardFields } from './fixtures'
 
-const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', goals: 'R/tasks/goals.jsonl', inboxDir: 'R/inbox' }
+const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', goals: 'R/tasks/goals.jsonl', inboxDir: 'R/inbox', tasksWeek: 'R/tasks/usage/tasks.week.json' }
 const WEB: TeamFiles = { team: 'web', dir: 'K/teams/web', teamsDir: 'K/teams', config: 'K/teams/web/config.json', renames: 'R/tasks/renames.jsonl', turnLog: null }
 const ACME_GOALS = 'K/teams/acme/state/goals.jsonl'
 const MID_GOALS = 'K/teams/mid/state/goals.jsonl'

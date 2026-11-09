@@ -4,21 +4,22 @@ import { LABEL_CELLS } from '../hooks/card'
 import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { EVENT_VERSION, indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
-import { ANSWER_CONTRACT_MATCHES, DECISION_CONTRACT_MATCHES, FOCUS_CONTRACT_MATCHES, ITEM_TYPE_CONTRACT_MATCHES, rowOf, STATUS_CONTRACT_MATCHES } from '../hooks/log'
+import { ANSWER_CONTRACT_MATCHES, DECISION_CONTRACT_MATCHES, FOCUS_CONTRACT_MATCHES, ITEM_TYPE_CONTRACT_MATCHES, rowOf, SPEND_CONTRACT_MATCHES, STATUS_CONTRACT_MATCHES } from '../hooks/log'
 import { cardParts, dockLayout, failedDrawing, inlineLayout, merged, piecesOf, rowParts, wrapRow, type Drawn } from '../hooks/layout'
 import { GLYPH, GLYPH_COLOR, NOTHING_EXPANDED, moreText, noneActiveText, noSessionBlock, paneBlocks, statsPressKey, type Block, type Row, type Span } from '../hooks/rows'
 import { metaText, treeOf } from '../hooks/meta'
+import { NO_SPEND } from '../hooks/ranking'
 import { barCounts } from '../hooks/status-bar'
 import { cells, graphemes } from '../hooks/width'
 import { MAX_READ_BYTES, TaskRegisterSource, registerPaths, skippedText, unlessMissing, type RegisterPaths } from '../hooks/source'
 import { areaView, MAX_FINISHED, ownerGroups, sameView } from '../hooks/view'
 import { HELD_DAYS } from '../hooks/done'
 import type { TeamFiles } from '../hooks/places'
-import { HOUR, MemoryFiles, NOT_PICKED_UP_HOURS, NOW, NO_TEAM, NO_TREE_GOALS, S1, S2, S3, SNAPSHOT_SETTINGS, TEAM_SETTINGS, approveLine, bigRegister, clockAt, createLine, decideLine, iso, markLine, statusLine, treeAt, updateLine, waitingLine, verifyingLine } from './fixtures'
+import { HOUR, LIKE_MEDIANS, MemoryFiles, NOT_PICKED_UP_HOURS, NOW, NO_TEAM, NO_TREE_GOALS, S1, S2, S3, SNAPSHOT_SETTINGS, TEAM_SETTINGS, approveLine, bigRegister, clockAt, createLine, decideLine, iso, markLine, statusLine, tasksWeekText, treeAt, updateLine, waitingLine, verifyingLine } from './fixtures'
 
 const DAY = 24 * HOUR
 
-const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', goals: 'R/tasks/goals.jsonl', inboxDir: 'R/inbox' }
+const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', goals: 'R/tasks/goals.jsonl', inboxDir: 'R/inbox', tasksWeek: 'R/tasks/usage/tasks.week.json' }
 
 /** The rows the pane draws from event lines, read by teamrig's reader, in the order the tasks were created. */
 function rowsOf(lines: readonly string[]): TaskRow[] {
@@ -198,6 +199,10 @@ describe('log', () => {
 
   test("the focus keys the plugin contract spells out are the ones teamrig's ranking reads", async () => {
     expect(FOCUS_CONTRACT_MATCHES).toBe(true)
+  })
+
+  test("the spend the plugin contract spells out is the one teamrig's stored sizing reads", async () => {
+    expect(SPEND_CONTRACT_MATCHES).toBe(true)
   })
 
   test("a row carries its wait's answer and the owner's decision, so plan order reads an answered wait as teamrig list does: able to move", async () => {
@@ -390,6 +395,7 @@ describe('view', () => {
     expect(sameView(base, { ...base, unreadInbox: 1 })).toBe(false)
     expect(sameView(base, { ...base, focus: { ...base.focus, expedite: { ...base.focus.expedite, ownerP1: false } } })).toBe(false)
     expect(sameView(base, { ...base, goals: { A1: { parent: null, rank: 1 } } })).toBe(false)
+    expect(sameView(base, { ...base, spend: { spentPct: { T1: 0.2 }, likeMedians: [] } })).toBe(false)
     // The Inbox view: a line read 23 hours before leaves its window an hour on, with no poll; one read an hour before
     // prints with its weekday from the zone's midnight.
     const line = { key: 'inbox:0', at: NOW - 23 * HOUR, from: 'lead', text: 'ship it', unread: false }
@@ -1374,6 +1380,7 @@ describe('source', () => {
       marks: 'D:/team/state/inbox-marks.jsonl',
       goals: 'D:/team/state/goals.jsonl',
       inboxDir: 'D:/team/state/inbox',
+      tasksWeek: 'D:/team/state/usage/tasks.week.json',
     })
   })
 
@@ -1505,6 +1512,24 @@ describe('source', () => {
     const source = new TaskRegisterSource(new MemoryFiles(), PATHS, TEAM_SETTINGS, null, NO_TREE_GOALS)
     const snap = await source.poll({ claudeSession: S1, pinned: 'etl', now: NOW })
     expect(snap).toEqual({ tasks: [], area: 'etl', areaSource: 'pinned', unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...SNAPSHOT_SETTINGS, now: NOW })
+  })
+
+  test("a snapshot carries what its own tasks spent from the team's tasks' week file, and every median", async () => {
+    const files = new MemoryFiles()
+    files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'lead', at: NOW }))
+    files.write(PATHS.tasksWeek, tasksWeekText({ spentPct: { T1: 0.2, T7: 1 }, likeMedians: LIKE_MEDIANS }))
+    const snap = await new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null, NO_TREE_GOALS).poll({ claudeSession: S1, pinned: 'po', now: NOW })
+    expect(snap?.spend).toEqual({ spentPct: { T1: 0.2 }, likeMedians: LIKE_MEDIANS })
+  })
+
+  test("the tasks' week file moving alone gives a new snapshot: a task's size, and so its place, moved with no register event", async () => {
+    const files = new MemoryFiles()
+    files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'lead', at: NOW }))
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null, NO_TREE_GOALS)
+    expect((await source.poll({ claudeSession: S1, pinned: 'po', now: NOW }))?.spend).toEqual(NO_SPEND)
+    expect(await source.poll({ claudeSession: S1, pinned: 'po', now: NOW })).toBe(null)
+    files.write(PATHS.tasksWeek, tasksWeekText({ spentPct: { T1: 0.2 }, likeMedians: [] }))
+    expect((await source.poll({ claudeSession: S1, pinned: 'po', now: NOW }))?.spend).toEqual({ spentPct: { T1: 0.2 }, likeMedians: [] })
   })
 
   test("each snapshot carries the team config's settings the source was made with: its NOT PICKED UP hours, zone and owner marker", async () => {
