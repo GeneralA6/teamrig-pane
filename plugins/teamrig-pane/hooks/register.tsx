@@ -485,6 +485,49 @@ function drawKeysLine({ Text }: FindComponents, keys: KeysAt, text: string) {
   )
 }
 
+/** The readers a view switch refreshes, each null until the session starts or with nothing to read. */
+type ViewLives = {
+  readonly sizer: PaneSizer | null
+  readonly tracked: LiveChanges | null
+  readonly logging: LiveLog | null
+  readonly teaming: LiveTeam | null
+  readonly scheduling: LiveMeetings | null
+  readonly tallying: LiveStats | null
+}
+
+/**
+ * A press on the switch's buttons. The Tasks button shows the list, from a page too, scrolled back to where the page
+ * was opened from; the Log button shows the sessions, from a session's page too; the Teams button reads the team tree
+ * at once; the Meetings button reads the meetings at once, leaving the last start's answer behind; the Stats button
+ * folds the registers at once. Every button closes a search, which the views share: one typed in one view is never
+ * found shown in another, and drops a Teams row's back, as the Stats tab then shows from the switch. It is a top-level
+ * function, the readers passed in, because the engine loads a hooks module only when each function `$` is passed to
+ * is declared at the top of the file or imported; the band's buttons take the same step.
+ */
+async function switchView($: Context, target: PaneView, lives: ViewLives): Promise<void> {
+  await update($, statsFrom, () => NO_STATS_FROM)
+  await update($, view, () => target)
+  await lives.sizer?.set('open')
+  await go($, current => reset(current, true))
+  if (target === 'changes') await lives.tracked?.refresh()
+  if (target === 'log') await lives.logging?.close()
+  if (target === 'team') {
+    await update($, ownerMeet, () => NO_MEET)
+    await lives.teaming?.refresh()
+  }
+  if (target === 'meetings') {
+    await update($, meetingStart, () => NO_START)
+    await lives.scheduling?.refresh()
+  }
+  if (target === 'stats') await lives.tallying?.refresh()
+}
+
+/** A press on a conversation in the Log view's list opens its page, read now, at its end: the newest lines are last. */
+async function openConversation($: Context, conversation: LogRead, logging: LiveLog | null): Promise<void> {
+  await logging?.open(conversation)
+  await update($, bodyScroll, current => scrolledTo(current, { kind: 'end' }))
+}
+
 export const register: Register = on => {
   let live: LiveRegister | null = null
   /** The team `/teamrig-pane <session>` looks its word up in; set when the session starts, null with no team. */
@@ -527,6 +570,8 @@ export const register: Register = on => {
     const unquoted: TaskDetail = { ref: task.ref, quotes: [], goals: [] }
     return details === null ? unquoted : details.load(task).catch(() => unquoted)
   }
+  /** The readers a view switch refreshes, as the session's start last set them: read at the press. */
+  const livesNow = (): ViewLives => ({ sizer, tracked, logging, teaming, scheduling, tallying })
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -1104,29 +1149,7 @@ export const register: Register = on => {
       const detail = await detailOf(task)
       await update($, expanded, current => ({ ...current, [id]: detail }))
     }
-    // A press on the switch's buttons. The Tasks button shows the list, from a page too,
-    // scrolled back to where the page was opened from; the Log button shows the sessions, from a session's page too;
-    // the Teams button reads the team tree at once; the Meetings button reads the meetings at once, leaving the last
-    // start's answer behind; the Stats button folds the registers at once. Every button closes a search, which the
-    // views share: one typed in one view is never found shown in another, and drops a Teams row's back, as the Stats tab
-    // then shows from the switch.
-    const switchTo = async (target: PaneView) => {
-      await update($, statsFrom, () => NO_STATS_FROM)
-      await update($, view, () => target)
-      await sizer?.set('open')
-      await go($, current => reset(current, true))
-      if (target === 'changes') await tracked?.refresh()
-      if (target === 'log') await logging?.close()
-      if (target === 'team') {
-        await update($, ownerMeet, () => NO_MEET)
-        await teaming?.refresh()
-      }
-      if (target === 'meetings') {
-        await update($, meetingStart, () => NO_START)
-        await scheduling?.refresh()
-      }
-      if (target === 'stats') await tallying?.refresh()
-    }
+    const switchTo = (target: PaneView) => switchView($, target, livesNow())
     // A press on the Stats tab's scope or range row picks it, and one on a Health count shows its tasks from their top;
     // either folds the registers at once. A Teams row's [Stats] shows the tab on that row's scope, its numbers from their
     // top, and keeps the row for back; the switch has folded the registers by then.
@@ -1203,13 +1226,9 @@ export const register: Register = on => {
       const found = await readFilePage(file)
       await openPlace({ kind: 'file', file, line: unreadLine(found, press.unread) }, from)
     }
-    // A press on a conversation in the Log view's list opens its page, read now, at its end: the newest lines are
-    // last. Back shows the list, read again, from its top, or the search the page was opened from: the page drew no
-    // Find field, so it comes back a fresh round holding the search's words (fieldAnew).
-    const openLog = async (conversation: LogRead) => {
-      await logging?.open(conversation)
-      await update($, bodyScroll, current => scrolledTo(current, { kind: 'end' }))
-    }
+    // Back from a conversation's page shows the list, read again, from its top, or the search the page was opened from:
+    // the page drew no Find field, so it comes back a fresh round holding the search's words (fieldAnew).
+    const openLog = (conversation: LogRead) => openConversation($, conversation, logging)
     const closeLog = async () => {
       await logging?.close()
       const shown = await read($, nav)
