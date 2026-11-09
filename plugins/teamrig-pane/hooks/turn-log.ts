@@ -146,6 +146,8 @@ export class TurnLogReader {
   private readonly files: LogFiles
   private readonly log: TurnLogPlace
   private listReads = new Map<string, ListRead>()
+  /** The previous conversation's reads, apart from the list's: the band reads one session, the list every one. */
+  private previousReads = new Map<string, ListRead>()
   private pageReads = new Map<string, FileRead>()
   /** The page it last read, and what it was read from: an unmoved read answers that same page. */
   private lastPage: { page: LogPage; from: string } | null = null
@@ -165,7 +167,7 @@ export class TurnLogReader {
       const ids = entries.filter(entry => entry.kind === 'dir' && SESSION_NAME.test(entry.name)).map(entry => entry.name)
       const kept = new Map<string, ListRead>()
       const conversations: LogConversation[] = []
-      for (const id of ids) conversations.push(...conversationsOf(id, await this.windowEntries(id, start, kept)))
+      for (const id of ids) conversations.push(...conversationsOf(id, await this.windowEntries(id, start, this.listReads, kept)))
       this.listReads = kept
       conversations.sort((a, b) => b.lastAt - a.lastAt || a.session.localeCompare(b.session) || a.claude.localeCompare(b.claude))
       return { kind: 'conversations', hours: keepHours, conversations }
@@ -222,21 +224,22 @@ export class TurnLogReader {
 
   /**
    * The session's conversation in the window at `now` with the newest last line, `claude` (the one it works in now)
-   * aside: the band names it above the prompt (T2249). Null with none. It reads only that session's folder, and
-   * keeps none of its reads for the list: the band reads it again only when the conversation moves. A failed read
-   * throws.
+   * aside: the band names it above the prompt (T2249). Null with none. It reads only that session's folder, each
+   * file again only when it moved since its own last read. A failed read throws.
    */
   async previous(session: string, claude: string, now: number): Promise<LogConversation | null> {
-    const entries = await this.windowEntries(session, windowStart(now, this.log.keepHours), new Map())
+    const kept = new Map<string, ListRead>()
+    const entries = await this.windowEntries(session, windowStart(now, this.log.keepHours), this.previousReads, kept)
+    this.previousReads = kept
     const others = conversationsOf(session, entries).filter(conversation => conversation.claude !== claude)
     return others.reduce<LogConversation | null>((newest, each) => (newest === null || each.lastAt > newest.lastAt ? each : newest), null)
   }
 
-  /** The session's entries of the window from `start`, oldest first; each file's read goes into `kept`. */
-  private async windowEntries(id: string, start: number, kept: Map<string, ListRead>): Promise<ListEntry[]> {
+  /** The session's entries of the window from `start`, oldest first, each file read unless `known` holds it unmoved; each read goes into `kept`. */
+  private async windowEntries(id: string, start: number, known: ReadonlyMap<string, ListRead>, kept: Map<string, ListRead>): Promise<ListEntry[]> {
     const inWindow: ListEntry[] = []
     for (const hour of await this.hours(this.log.dir, id, start)) {
-      const read = await this.listRead(hour)
+      const read = await this.listRead(hour, known)
       kept.set(hour.path, read)
       inWindow.push(...read.entries.filter(entry => entry.at >= start))
     }
@@ -257,9 +260,9 @@ export class TurnLogReader {
       .map(found => found.file)
   }
 
-  /** The file's entries as the list keeps them, read again only when its stamp moved. */
-  private async listRead(hour: HourFile): Promise<ListRead> {
-    const known = this.listReads.get(hour.path)
+  /** The file's entries as the list keeps them, read again only when its stamp moved from the read `reads` holds. */
+  private async listRead(hour: HourFile, reads: ReadonlyMap<string, ListRead>): Promise<ListRead> {
+    const known = reads.get(hour.path)
     if (known?.stamp === hour.stamp) return known
     const entries = parseTurnLines(await this.files.read(hour.path)).flatMap(entry => listEntry(entry) ?? [])
     return { stamp: hour.stamp, entries }
@@ -294,7 +297,7 @@ function sameOpening(a: LogOpening | null, b: LogOpening | null): boolean {
 }
 
 /** Two conversations that draw the same. */
-function sameConversation(a: LogConversation, b: LogConversation): boolean {
+export function sameConversation(a: LogConversation, b: LogConversation): boolean {
   return (
     a.session === b.session &&
     a.claude === b.claude &&

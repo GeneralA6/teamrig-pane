@@ -692,6 +692,8 @@ declare module 'claude-code' {
       logList: Shaped<LogList>
       /** The conversation page the Log view shows, as last read; null while it shows the list. */
       logPage: Shaped<LogPage | null>
+      /** The area's conversation before the one Claude Code runs now (hooks/previous-conversation.ts), which the band names; null for none. */
+      previousConversation: Shaped<LogConversation | null>
       requirements: RequirementProblem[]
       /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
       filter: BarStatus | null

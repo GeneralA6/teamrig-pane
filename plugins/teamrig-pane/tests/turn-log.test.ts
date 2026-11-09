@@ -299,13 +299,19 @@ describe('TurnLogReader.previous', () => {
     expect(await reader.previous('web', 'c-1', NOW)).toBe(null)
   })
 
-  test("reads only the session's own folder, and throws on a failed read", async () => {
+  test("reads only the session's own folder, each file again only when it moved, and throws on a failed read", async () => {
     const disk = fakeDisk()
     disk.write('lead', '2026-10-19T19', [line('2026-10-19T19:05:00Z', 'prompt', 'before', { claude: 'c-1' })])
     disk.write('api', '2026-10-19T19', [line('2026-10-19T19:06:00Z', 'prompt', 'other session', { claude: 'c-5' })])
     const reader = new TurnLogReader(disk.ports, LOG)
     expect((await reader.previous('lead', 'c-2', NOW))?.claude).toBe('c-1')
     expect(disk.reads).toEqual(['lead/2026-10-19T19.jsonl'])
+    // The list's reads and the previous conversation's are kept apart: neither drops the other's.
+    await reader.list(NOW)
+    disk.reads.length = 0
+    expect((await reader.previous('lead', 'c-2', NOW))?.claude).toBe('c-1')
+    await reader.list(NOW)
+    expect(disk.reads).toEqual([])
     disk.write('lead', '2026-10-19T19', [line('2026-10-19T19:05:00Z', 'prompt', 'moved', { claude: 'c-1' })])
     disk.fail.set(`${DIR}/lead/2026-10-19T19.jsonl`, new Error('EBUSY: resource busy'))
     const failed = await reader.previous('lead', 'c-2', NOW).then(
