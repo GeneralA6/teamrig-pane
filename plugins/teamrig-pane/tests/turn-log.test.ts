@@ -266,6 +266,56 @@ describe('TurnLogReader.list', () => {
   })
 })
 
+describe('TurnLogReader.previous', () => {
+  test("picks the session's conversation with the newest last line other than the one it works in now", async () => {
+    const disk = fakeDisk()
+    disk.write('lead', '2026-10-19T18', [line('2026-10-19T18:05:00Z', 'prompt', 'oldest', { claude: 'c-1' })])
+    disk.write('lead', '2026-10-19T19', [
+      line('2026-10-19T19:05:00Z', 'prompt', 'plan the week', { claude: 'c-2' }),
+      line('2026-10-19T19:40:00Z', 'reply', 'planned', { claude: 'c-2' }),
+    ])
+    disk.write('lead', '2026-10-19T20', [line('2026-10-19T20:10:00Z', 'prompt', 'now', { claude: 'c-3' })])
+
+    expect(await new TurnLogReader(disk.ports, LOG).previous('lead', 'c-3', NOW)).toEqual({
+      session: 'lead',
+      claude: 'c-2',
+      firstAt: Date.parse('2026-10-19T19:05:00Z'),
+      lastAt: Date.parse('2026-10-19T19:40:00Z'),
+      nextAt: Date.parse('2026-10-19T20:10:00Z'),
+      lines: 2,
+      opening: { by: 'owner', line: 'plan the week' },
+    })
+    // Before the conversation of now wrote a line, the newest one is the previous.
+    expect((await new TurnLogReader(disk.ports, LOG).previous('lead', 'c-4', NOW))?.claude).toBe('c-3')
+  })
+
+  test('answers null with only the conversation of now, none in the window, or no folder for the session', async () => {
+    const disk = fakeDisk()
+    disk.write('lead', '2026-10-19T18', [line('2026-10-19T18:05:00Z', 'prompt', 'now', { claude: 'c-1' })])
+    disk.write('api', '2026-10-18T19', [line('2026-10-18T19:10:00Z', 'prompt', 'too old', { claude: 'c-9' })])
+    const reader = new TurnLogReader(disk.ports, LOG)
+    expect(await reader.previous('lead', 'c-1', NOW)).toBe(null)
+    expect(await reader.previous('api', 'c-1', NOW)).toBe(null)
+    expect(await reader.previous('web', 'c-1', NOW)).toBe(null)
+  })
+
+  test("reads only the session's own folder, and throws on a failed read", async () => {
+    const disk = fakeDisk()
+    disk.write('lead', '2026-10-19T19', [line('2026-10-19T19:05:00Z', 'prompt', 'before', { claude: 'c-1' })])
+    disk.write('api', '2026-10-19T19', [line('2026-10-19T19:06:00Z', 'prompt', 'other session', { claude: 'c-5' })])
+    const reader = new TurnLogReader(disk.ports, LOG)
+    expect((await reader.previous('lead', 'c-2', NOW))?.claude).toBe('c-1')
+    expect(disk.reads).toEqual(['lead/2026-10-19T19.jsonl'])
+    disk.write('lead', '2026-10-19T19', [line('2026-10-19T19:05:00Z', 'prompt', 'moved', { claude: 'c-1' })])
+    disk.fail.set(`${DIR}/lead/2026-10-19T19.jsonl`, new Error('EBUSY: resource busy'))
+    const failed = await reader.previous('lead', 'c-2', NOW).then(
+      () => 'read',
+      (error: unknown) => (error instanceof Error ? error.message : 'no error'),
+    )
+    expect(failed).toBe('EBUSY: resource busy')
+  })
+})
+
 describe('TurnLogReader.page', () => {
   test("holds the conversation's lines of the last 24 h oldest first, across its hour files, its clears included", async () => {
     const disk = fakeDisk()

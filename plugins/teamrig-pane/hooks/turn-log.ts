@@ -165,15 +165,7 @@ export class TurnLogReader {
       const ids = entries.filter(entry => entry.kind === 'dir' && SESSION_NAME.test(entry.name)).map(entry => entry.name)
       const kept = new Map<string, ListRead>()
       const conversations: LogConversation[] = []
-      for (const id of ids) {
-        const inWindow: ListEntry[] = []
-        for (const hour of await this.hours(dir, id, start)) {
-          const read = await this.listRead(hour)
-          kept.set(hour.path, read)
-          inWindow.push(...read.entries.filter(entry => entry.at >= start))
-        }
-        conversations.push(...conversationsOf(id, inWindow))
-      }
+      for (const id of ids) conversations.push(...conversationsOf(id, await this.windowEntries(id, start, kept)))
       this.listReads = kept
       conversations.sort((a, b) => b.lastAt - a.lastAt || a.session.localeCompare(b.session) || a.claude.localeCompare(b.claude))
       return { kind: 'conversations', hours: keepHours, conversations }
@@ -226,6 +218,29 @@ export class TurnLogReader {
     const page: LogPage = { session, claude, hours: keepHours, entries, isCut, problem }
     this.lastPage = { page, from }
     return page
+  }
+
+  /**
+   * The session's conversation in the window at `now` with the newest last line, `claude` (the one it works in now)
+   * aside: the band names it above the prompt (T2249). Null with none. It reads only that session's folder, and
+   * keeps none of its reads for the list: the band reads it again only when the conversation moves. A failed read
+   * throws.
+   */
+  async previous(session: string, claude: string, now: number): Promise<LogConversation | null> {
+    const entries = await this.windowEntries(session, windowStart(now, this.log.keepHours), new Map())
+    const others = conversationsOf(session, entries).filter(conversation => conversation.claude !== claude)
+    return others.reduce<LogConversation | null>((newest, each) => (newest === null || each.lastAt > newest.lastAt ? each : newest), null)
+  }
+
+  /** The session's entries of the window from `start`, oldest first; each file's read goes into `kept`. */
+  private async windowEntries(id: string, start: number, kept: Map<string, ListRead>): Promise<ListEntry[]> {
+    const inWindow: ListEntry[] = []
+    for (const hour of await this.hours(this.log.dir, id, start)) {
+      const read = await this.listRead(hour)
+      kept.set(hour.path, read)
+      inWindow.push(...read.entries.filter(entry => entry.at >= start))
+    }
+    return inWindow
   }
 
   /** The session's hour files that end inside the window, oldest first; none when its folder is gone. */
