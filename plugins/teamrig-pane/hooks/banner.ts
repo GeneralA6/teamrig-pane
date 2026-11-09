@@ -5,11 +5,14 @@
 // order), after a dim `next`. With neither, a dim line says so. It leads with the session's name (T824), the band's one
 // line that stays in view while the pane scrolls. A press opens it to the card's facts the person reads
 // first (what it is, where it stands, when it is due) and a second press closes it. At the band's right end a button
-// opens the pane, minimized or never opened too, at the task's page, over the list at the task's row (T775). Pure: one block
-// of rows that layout.ts wraps and register.tsx draws as one press, and the row the button's page goes back to.
-import type { Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
+// opens the pane, minimized or never opened too, at the task's page, over the list at the task's row (T775). Over the
+// banner, the area's previous conversation (T2249), so after a /clear the band names what came before: its title, a
+// button that opens its page in the pane and one that opens the pane's list of conversations. Pure: the blocks of rows
+// that layout.ts wraps and register.tsx draws, and the row the button's page goes back to.
+import type { LogConversation, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
 import { cardRows, type CardField } from './card'
 import type { TaskTree } from './core/read/index'
+import { titleSpans, type Worked } from './log-title'
 import type { PaneTree } from './meta'
 import { SEPARATOR, indentOf, listRowKey, titleRow, type Block, type Row, type Span } from './rows'
 import { newestFirst } from './view'
@@ -23,9 +26,18 @@ export const BANNER_OPEN_KEY = 'banner-open'
 export const BANNER_OPEN_LABEL = 'open in pane'
 /** The key of the Box around the banner's press that takes the band's free columns, so the open button ends the row. */
 export const BANNER_FILL_KEY = 'banner-fill'
+/** The key of the previous conversation's row, and of the Box around it that takes the free columns before its buttons. */
+export const PREVIOUS_KEY = 'previous'
+/** The key of its button that opens the pane at its page; the label is BANNER_OPEN_LABEL. */
+export const PREVIOUS_OPEN_KEY = 'previous-open'
+/** The key and label of its button that opens the pane at the list of conversations. */
+export const PREVIOUS_ALL_KEY = 'previous-all'
+export const PREVIOUS_ALL_LABEL = 'all conversations'
 
 /** Before the title of the task up next, when none is in progress. */
 const NEXT: Span = { text: 'next ', dim: true }
+/** Before the previous conversation's title. */
+const PREVIOUS: Span = { text: 'previous', dim: true }
 /** The card's facts an open banner shows. */
 const BANNER_FACTS: ReadonlySet<CardField> = new Set<CardField>(['description', 'status', 'note', 'proof', 'priority', 'due'])
 /** A banner reads nothing beyond the register: its card shows no quote and no goal item. */
@@ -66,4 +78,12 @@ export function bannerBlock(current: Current | null, isOpen: boolean, tree: Pane
   const hang = cells(before.map(span => span.text).join('')) + cells(indentOf(task).text)
   const head: Row = { ...title, spans: [...before, ...title.spans], hang: { text: ' '.repeat(hang) } }
   return { key: BANNER_KEY, rows: isOpen ? [head, ...cardRows(BANNER_KEY, task, UNREAD, tree, null, BANNER_FACTS)] : [head] }
+}
+
+/**
+ * The previous conversation's block: `previous · <its title>` cut at one line, the title as the Log view's list draws
+ * it (log-title.ts titleSpans): the tasks its session worked while it ran, else how it opened.
+ */
+export function previousBlock(conversation: LogConversation, worked: Worked): Block {
+  return { key: PREVIOUS_KEY, rows: [{ key: PREVIOUS_KEY, spans: [PREVIOUS, SEPARATOR, ...titleSpans(conversation, worked)], maxLines: 1 }] }
 }
