@@ -158,7 +158,7 @@ describe('the pane guide states the limits the code holds', () => {
     ['Quoted ref', [constant('details.ts', 'MAX_QUOTED_LINES'), constant('details.ts', 'MAX_QUOTE_CHARS')]],
     ['Card links', [constant('links.ts', 'MAX_LINKS'), constant('links.ts', 'MAX_ADDRESS_CHARS')]],
     ['Search results', [constant('task-search.ts', 'MAX_RESULTS')]],
-    ['Log', [Number(captured('core/config/defaults.ts', /DEFAULT_TURN_LOG\b[^=]*= \{[^}]*\bkeepHours: (\d+)/)), constant('turn-log.ts', 'LOG_PAGE_CHARS')]],
+    ['Conversations', [Number(captured('core/config/defaults.ts', /DEFAULT_TURN_LOG\b[^=]*= \{[^}]*\bkeepHours: (\d+)/)), constant('turn-log.ts', 'LOG_PAGE_CHARS')]],
     ['Done page', [constant('done-rows.ts', 'GROUP_ROWS'), constant('done.ts', 'HELD_DAYS')]],
   ];
 

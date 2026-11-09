@@ -1,6 +1,6 @@
 ---
 name: teamrig-pane-guide
-description: Use when running the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes, Log, Inbox, Teams, Meetings, Stats views, where it finds the register, requirements.
+description: Use when running the teamrig task pane, or to learn what it shows, its /teamrig-pane command, keys, Changes, Conversations, Inbox, Teams, Meetings, Stats views, where it finds the register, requirements.
 ---
 
 # teamrig-pane guide
@@ -100,7 +100,7 @@ groups (the views, the list's own, a page's steps, the status bar's) and how the
 | --- | --- |
 | `t` | The Tasks view |
 | `d` | The Changes view |
-| `g` | The Log view: each conversation of the team's sessions, titled by its task (see [The Log view](#the-log-view)) |
+| `g` | The Conversations view: each conversation of the team's sessions, titled by its task (see [The Conversations view](#the-conversations-view)) |
 | `u` | The Inbox view: this session's inbox lines of the last 24 hours and every unread one (see [The Inbox view](#the-inbox-view)) |
 | `e` | The Teams tab: the tree of teams the session's team is in, each lead over the sessions it leads (see [The Teams tab](#the-teams-tab)) |
 | `j` | The Meetings view: the team's booked meetings by time, each a press that opens its card, where a scheduled one starts (see [The Meetings view](#the-meetings-view)) |
@@ -121,9 +121,11 @@ groups (the views, the list's own, a page's steps, the status bar's) and how the
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
 | A click on the banner's `open in pane` | Opens the pane, minimized or never opened too, at the current task's page; back shows the list at its row |
-| `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's Log page, back to the list; on a Stats list of tasks, back to the numbers |
+| A click on the previous conversation's `open in pane`, over the banner | Opens the pane at that conversation's page in the Conversations view |
+| A click on `all conversations`, over the banner | Opens the pane at the Conversations list |
+| `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's page, back to the list; on a Stats list of tasks, back to the numbers |
 | `f` | Forward to the place back left, while there is one |
-| `s` | In the dock's Tasks, Inbox, Changes and Teams views and on the Log view's list: puts the cursor in the Find field under the switch, which searches what the view holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
+| `s` | In the dock's Tasks, Inbox, Changes and Teams views and on the Conversations list: puts the cursor in the Find field under the switch, which searches what the view holds (see [Find](#find)); emptying it, or `clear`, closes the search; Esc hands the keys back to Claude's prompt |
 | `h` | In the dock: `done ›`, the Done page of this week's finished tasks (see [Done](#done)) |
 | `p` | On the Done page: the week before, while the pane holds it |
 | `l` | On the Done page: the week after, up to this week |
@@ -141,7 +143,13 @@ right end beside the `[-]`, opens the
 pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
 band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
-Minimized, the pane is the `[Tasks] [Changes n] [Log] [Inbox (n)] [Teams] [Meetings] [Stats]` switch, then a dim `· minimized, press a view`
+Over the banner, a row names the area's previous conversation, so after a `/clear` the band says what came before:
+a dim `previous ·`, then its title as the Conversations list draws it, cut at one line, with `open in pane` (its
+page) and `all conversations` (the list). It is the area's newest conversation in the kept hours of the turn log
+other than the one running now, read again only when the session's conversation changes. With none to name, no
+turn log or a session with no area, the band is the banner alone.
+
+Minimized, the pane is the `[Tasks] [Changes n] [Conversations] [Inbox (n)] [Teams] [Meetings] [Stats]` switch, then a dim `· minimized, press a view`
 (on a row of its own, with no `·`, in a dock too narrow for both). A
 click on any of its buttons, `t`, `d`, `g`, `u`, `e`, `j` or `r`, or `/teamrig-pane` opens it in full again. Its size (open or minimized) is kept for the next
 session.
@@ -171,7 +179,7 @@ draws no title.
 ## The Tasks view
 
 In a project teamrig is not set up for (no `.teamrig.json` up from the session's folder, no `$TEAMRIG_TEAM`, no
-folder named), the pane shows how to set it up and nothing else, in every view: no Tasks / Changes / Log switch, no
+folder named), the pane shows how to set it up and nothing else, in every view: no Tasks / Changes / Conversations switch, no
 Find row, no mine / all / done (the minimized strip keeps its switch, and a press opens the setup):
 
 ```text
@@ -301,7 +309,7 @@ click or key again shows every task; another status switches to it. A shown stat
 `0 waiting`, so it can still be cleared, and the list says `Nothing waiting.` (`Nothing done today.`, `Nothing
 to verify.`, `Nothing in progress.`, `Nothing left to start.` for the others).
 
-The filter belongs to the pane: it holds while you switch to **all** (which it does not filter) or to Changes or Log, and
+The filter belongs to the pane: it holds while you switch to **all** (which it does not filter) or to Changes or Conversations, and
 is never kept across a reload: a new session, `/reload-plugins` or a restart shows every task again.
 
 ### A task's card
@@ -436,8 +444,8 @@ not shown. The page shows the file as it was when the page opened: open it again
 
 ### Find
 
-In the Tasks view, the Inbox view, the Changes view, over the Log view's list and on the Teams tab (see
-[The Changes view](#the-changes-view), [The Log view](#the-log-view), [The Inbox view](#the-inbox-view) and
+In the Tasks view, the Inbox view, the Changes view, over the Conversations list and on the Teams tab (see
+[The Changes view](#the-changes-view), [The Conversations view](#the-conversations-view), [The Inbox view](#the-inbox-view) and
 [The Teams tab](#the-teams-tab)), the dock shows a Find field under its switch. `s` or a click puts the cursor in it; it
 never takes the keys by itself, so the pane's other keys keep working. As you type, the body counts the tasks
 the pane holds that every word matches, on a dim line, then lists them, the matched words underlined:
@@ -561,9 +569,9 @@ blocks a commit), and while it has changed files one `git diff HEAD --numstat -z
 PowerShell call, every 60 seconds, and at once on a switch to Changes; each open diff of a repo's file is one more `git diff` then.
 A count git can't give is left out, with no warning, and git never runs in a folder that is gone.
 
-## The Log view
+## The Conversations view
 
-`g`, or Log on the switch, lists each conversation of the team's sessions that wrote a prompt or a reply in the hours
+`g`, or Conversations on the switch, lists each conversation of the team's sessions that wrote a prompt or a reply in the hours
 teamrig keeps their turn log (the team config's `turnLog.keepHours`, 24 by default), the one with the newest line first.
 A conversation is what one session said from a `/clear` to its next one; a compaction keeps it. Each is titled by the
 tasks its session worked while it ran (a task it owns whose status or details it changed, from the register), each
@@ -580,13 +588,13 @@ matches (`1 conversation matches`) and draws them as the list does, the matched 
 opens its page, with more moves the cursor onto the first; back from the page returns to the results. A page draws no
 field; switching views closes the search.
 
-A press on a conversation (a click, or Enter on it) opens its page under `back` (`b`) and the trail `Log › <title>`: its title, then its lines oldest
+A press on a conversation (a click, or Enter on it) opens its page under `back` (`b`) and the trail `Conversations › <title>`: its title, then its lines oldest
 first, the newest at the end where the page opens. Each prompt and reply is split by who spoke, each part a head line over its words:
 `owner · 20:05 IDT` (the words typed at the tab), `Claude` (a reply), `message from <session>` and `subagent report`.
 The harness's notices and reminders in a prompt are dim lines led by their time, without their tags and ids, and
 markdown is drawn as styles (bold, code, links, headings, items, quotes, code blocks, rules, tables), never as its
 marks. A `/clear` is a dim rule. teamrig keeps a text's last 64,000 characters, and a cut one says `cut, its end kept`. The page holds the newest
-256 KiB of text and says when it left older lines out. Log, from a page or another view, shows the list; above the
+256 KiB of text and says when it left older lines out. Conversations, from a page or another view, shows the list; above the
 prompt the list shows, never a page.
 
 While the view shows, it lists the session folders on each 3 second poll and reads an hour's file again only when
