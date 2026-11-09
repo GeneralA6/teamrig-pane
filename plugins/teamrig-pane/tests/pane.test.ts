@@ -1,7 +1,7 @@
 // The plugin through the engine: env, clock, store, session id and fs answered beneath it.
 import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiFocusInput, UiScrollInput } from 'claude-code'
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
-import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT } from '../hooks/banner'
+import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT, PREVIOUS_ALL_KEY, PREVIOUS_ALL_LABEL, PREVIOUS_KEY, PREVIOUS_OPEN_KEY } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
 import { barKeys, KEY_GROUPS } from '../hooks/keys-page'
 import { POLL_MS } from '../hooks/live'
@@ -1436,6 +1436,62 @@ test("the band's open button opens the pane, minimized or on another view, at th
   drawn = await pane.drawn()
   expect(buttonKeys(drawn)).toContain('back')
   expect(keyedProps(drawn, 'tasks')).toMatchObject({ variant: 'primary' })
+})
+
+test("over the banner the band names the area's previous conversation; its buttons open the pane at its page or at the list of conversations", async ($, on) => {
+  const { clock, disk, opened } = await startWithLogs(on)
+  disk.write('/Homes/tester/.teamrig/teams/web/config.json', [JSON.stringify({ sessions: ['lead', 'api'], turnLog: { keepHours: 2 } })])
+  // The conversation Claude Code runs now (S1) began after api's /clear: the band names the one before it.
+  const nowLine = (minutes: number, text: string) => JSON.stringify({ v: 1, at: iso(NOW - minutes * 60_000), kind: 'prompt', text, claude: S1 })
+  disk.write(`${WEB_LOG}/api/2026-10-13T13.jsonl`, [
+    turnLine(40, 'prompt', 'Ship the log view'),
+    turnLine(39, 'reply', 'Shipped it'),
+    turnLine(38, 'clear', 'context cleared (/clear)'),
+    nowLine(1, 'Carry on'),
+  ])
+  await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
+  const run = (args: string) => $.command.run({ command: 'teamrig-pane', args, origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+  await run('api')
+  const band = await mountBand($)
+  // Before the first poll the band is the banner's alone.
+  expect(buttonKeys(await band.drawn())).toEqual([BANNER_KEY])
+
+  await clock.advance(POLL_MS)
+  const drawn = await band.drawn()
+  expect(buttonKeys(drawn)).toEqual([PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY, BANNER_KEY])
+  expect(await band.find({ type: 'Text', text: /^previous · Ship the log view$/ })).toBeDefined()
+  // Its title takes the free columns, so its buttons end the row; neither has a hotkey.
+  const [previousRow] = childrenOf(drawn)
+  expect(childrenOf(previousRow).map(child => elementKey(propsOf(child)))).toEqual([PREVIOUS_KEY, PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY])
+  expect(numberProp(keyedProps(drawn, PREVIOUS_KEY), 'flexGrow')).toBe(1)
+  expect(keyedProps(drawn, PREVIOUS_OPEN_KEY)).toMatchObject({ label: BANNER_OPEN_LABEL, variant: 'secondary' })
+  expect(keyedProps(drawn, PREVIOUS_ALL_KEY)).toMatchObject({ label: PREVIOUS_ALL_LABEL, variant: 'secondary' })
+  for (const key of [PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY]) expect('hotkey' in (keyedProps(drawn, key) ?? {})).toBe(false)
+
+  // Its open button opens the pane at the conversation's page; back shows the list.
+  opened.length = 0
+  await band.press({ key: PREVIOUS_OPEN_KEY })
+  expect(opened).toEqual(['teamrig-pane'])
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
+  expect(await drawnLines(pane)).toContain('Log › Ship the log view')
+  expect(keyedProps(await pane.drawn(), 'log')).toMatchObject({ variant: 'primary' })
+  await pane.press({ key: 'back' })
+  expect(buttonKeys(await pane.drawn())).toContain('log:conv:api:c-1')
+
+  // From another view, all conversations shows the list.
+  await pane.press({ key: 'tasks' })
+  await band.press({ key: PREVIOUS_ALL_KEY })
+  const list = buttonKeys(await pane.drawn())
+  expect(list).toContain('log:conv:api:c-1')
+  expect(list).not.toContain('back')
+  expect(keyedProps(await pane.drawn(), 'log')).toMatchObject({ variant: 'primary' })
+
+  // An area whose turn log holds only the conversation of now draws no previous row.
+  disk.write(`${WEB_LOG}/lead/2026-10-13T13.jsonl`, [nowLine(5, 'Plan the day')])
+  await run('lead')
+  await clock.advance(POLL_MS)
+  expect(buttonKeys(await band.drawn())).toEqual([BANNER_KEY])
+  expect(await band.find({ type: 'Text', text: /^previous · / })).toBeUndefined()
 })
 
 test('a survey takes the band: the plugin passes it to the engine, and draws the banner again once the survey is gone', async ($, on) => {

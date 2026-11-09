@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { Snapshot, TaskRow, ViewMode } from '../types'
-import { BANNER_KEY, NOTHING_CURRENT, bannerBlock, currentRowKey, currentTask, type Current } from '../hooks/banner'
+import type { LogConversation, Snapshot, TaskRow, ViewMode } from '../types'
+import { BANNER_KEY, NOTHING_CURRENT, PREVIOUS_KEY, bannerBlock, currentRowKey, currentTask, previousBlock, type Current } from '../hooks/banner'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { treeOf } from '../hooks/meta'
@@ -117,5 +117,35 @@ describe('bannerBlock', () => {
     expect(bannerBlock(null, false, tree, 'po').rows).toEqual([
       { key: BANNER_KEY, spans: [{ text: 'po', bold: true }, SEPARATOR, { text: NOTHING_CURRENT, dim: true }] },
     ])
+  })
+})
+
+describe('previousBlock', () => {
+  /** po's conversation of the two hours before the last half hour, opened by the owner. */
+  const before: LogConversation = {
+    session: 'po',
+    claude: 'c-1',
+    firstAt: NOW - 2 * HOUR,
+    lastAt: NOW - HOUR,
+    nextAt: NOW - 30 * 60_000,
+    lines: 4,
+    opening: { by: 'owner', line: 'Plan the week' },
+  }
+
+  test('one row cut at one line: a dim previous, then how the conversation opened', () => {
+    expect(previousBlock(before, snapOf(LINES))).toEqual({
+      key: PREVIOUS_KEY,
+      rows: [{ key: PREVIOUS_KEY, spans: [{ text: 'previous', dim: true }, SEPARATOR, { text: 'Plan the week' }], maxLines: 1 }],
+    })
+  })
+
+  test('the tasks its session worked while it ran in place of how it opened, never work after the next conversation began', () => {
+    const work = [
+      { session: 'po', task: 'T4', at: NOW - 90 * 60_000 },
+      { session: 'po', task: 'T2', at: NOW - 10 * 60_000 },
+    ]
+    const block = previousBlock(before, { ...snapOf(LINES), work })
+    expect(block.rows.map(textOf)).toEqual(['previous · T4 Started last'])
+    expect(block.rows[0]?.spans[2]).toEqual({ text: 'T4', bold: true })
   })
 })

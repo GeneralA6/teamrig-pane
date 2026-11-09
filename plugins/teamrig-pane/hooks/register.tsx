@@ -40,6 +40,7 @@ import type {
   ExpandedTasks,
   FilePages,
   FindField,
+  LogConversation,
   LogList,
   LogPage,
   LogRead,
@@ -81,7 +82,21 @@ import { buttonCells, packGroups, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
 import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, type FrameSlot, type Placed, type View } from './frame'
 import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
-import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, bannerBlock, currentRowKey, currentTask } from './banner'
+import {
+  BANNER_FILL_KEY,
+  BANNER_KEY,
+  BANNER_OPEN_KEY,
+  BANNER_OPEN_LABEL,
+  PREVIOUS_ALL_KEY,
+  PREVIOUS_ALL_LABEL,
+  PREVIOUS_KEY,
+  PREVIOUS_OPEN_KEY,
+  bannerBlock,
+  currentRowKey,
+  currentTask,
+  previousBlock,
+  type Current,
+} from './banner'
 import { sessionName, titleSpans } from './session-title'
 import { NOTHING_EXPANDED, NOTHING_FOLDED, paneBlocks, type Block, type InboxPress, type Span, type StatsPress } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
@@ -93,6 +108,7 @@ import { changesResultKey, diffKeyOf, searchChanges, type ChangeHit } from './ch
 import { LiveDiffs, NO_DIFFS } from './diff'
 import { LiveCopies, NO_COPIES } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
+import { LivePrevious } from './previous-conversation'
 import { logListBlocks, logPageBlocks, logPageTitle } from './log-rows'
 import { logResultKey, searchLog, type LogHit } from './log-search'
 import { inboxBlocks } from './inbox-rows'
@@ -244,6 +260,11 @@ const NO_CONFIG_LOG: LogList = { kind: 'no-config' }
 const logList = atom({ plugin: 'teamrig-pane', key: 'logList' } as const, LOG_READING, { shape: LOG_SHAPE })
 const AT_LOG_LIST: LogPage | null = null
 const logPage = atom({ plugin: 'teamrig-pane', key: 'logPage' } as const, AT_LOG_LIST, { shape: LOG_SHAPE })
+/** The area's conversation before the one of now, for the band (previous-conversation.ts); null for none. */
+const NO_PREVIOUS: LogConversation | null = null
+const previousConversation = atom({ plugin: 'teamrig-pane', key: 'previousConversation' } as const, NO_PREVIOUS, {
+  shape: LOG_SHAPE,
+})
 const NOTHING_MISSING: RequirementProblem[] = []
 /** What the pane lacks (requirements.ts); each session start checks again and writes it anew, a hot reload's too. */
 const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, NOTHING_MISSING)
@@ -546,6 +567,8 @@ export const register: Register = on => {
   let copying: LiveCopies | null = null
   /** Reads the Log view's list or page again while it shows; set when the session starts. */
   let logging: LiveLog | null = null
+  /** Reads the area's previous conversation for the band until it settles; set when the session starts, null with no turn log. */
+  let recalling: LivePrevious | null = null
   /** Reads the Teams tab's tree again while it shows; set when the session starts, null with no team. */
   let teaming: LiveTeam | null = null
   /** Reads the Meetings view's list again while it shows and starts a meeting on a press; set when the session starts, null with no team. */
@@ -582,6 +605,7 @@ export const register: Register = on => {
     live?.stop()
     tracked?.stop()
     logging?.stop()
+    recalling?.stop()
     teaming?.stop()
     scheduling?.stop()
     tallying?.stop()
@@ -639,6 +663,7 @@ export const register: Register = on => {
     const bind = async (places: Exclude<Places, { kind: 'unset' }>): Promise<void> => {
       live?.stop()
       logging?.stop()
+      recalling?.stop()
       teaming?.stop()
       scheduling?.stop()
       tallying?.stop()
@@ -690,10 +715,24 @@ export const register: Register = on => {
               },
             })
       logging = logLive
+      const previousLive =
+        turnLog === null
+          ? null
+          : new LivePrevious({
+              reader: new TurnLogReader(logFiles, turnLog),
+              now: () => $.clock.now(),
+              area: async () => (await read($, snapshot)).area,
+              claude: () => $.session.id(),
+              publish: async previous => {
+                await update($, previousConversation, () => previous)
+              },
+            })
+      recalling = previousLive
       if (logLive === null) {
         // No team, or one with no config file, which teamrig refuses and writes no turn log for: nothing to poll.
         await update($, logList, () => (team === null ? NO_TEAM_LOG : NO_CONFIG_LOG))
         await update($, logPage, () => AT_LOG_LIST)
+        await update($, previousConversation, () => NO_PREVIOUS)
       }
       const teamLive =
         team === null
@@ -779,6 +818,7 @@ export const register: Register = on => {
       await started.refresh()
       started.startTimers((ms, fn) => $.clock.every(ms, fn))
       logLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
+      previousLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
       teamLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
       meetingsLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
       statsLive?.startTimers((ms, fn) => $.clock.every(ms, fn))
@@ -853,6 +893,7 @@ export const register: Register = on => {
       details = null
       refFiles = null
       logging = null
+      recalling = null
       teaming = null
       scheduling = null
       tallying = null
@@ -860,6 +901,7 @@ export const register: Register = on => {
       acting = null
       await update($, logList, () => NO_TEAM_LOG)
       await update($, logPage, () => AT_LOG_LIST)
+      await update($, previousConversation, () => NO_PREVIOUS)
       await update($, teamTree, () => NO_TEAM_TREE)
       await update($, meetings, () => NO_TEAM_MEETINGS)
       await update($, stats, () => NO_TEAM_STATS)
@@ -2002,12 +2044,16 @@ export const register: Register = on => {
 
   /** The banner's own: each layout settles its cache, so one shared with the pane's body would drop its rows. */
   const bannerWraps = new WrapCache()
+  /** The previous conversation's row's own, for the same reason. */
+  const previousWraps = new WrapCache()
   // The band above the prompt (AbovePrompt): the banner (banner.ts), the task the session works on now, one press that
   // opens its card and a second that closes it, wrapped at the band's width. A survey takes the band, and a session
   // with no area draws none, so a session outside a team gets no band from the pane. The engine scrolls a card
   // taller than the band and folds the band from its [-] (ctrl+x ctrl+a), a mark no mod can hide. With a current task,
-  // a button at the band's right end, beside that [-], opens the pane at its page (T775). Neither press has a hotkey:
-  // a band's hotkey answers a bare key typed in an empty prompt.
+  // a button at the band's right end, beside that [-], opens the pane at its page (T775). Over the banner, the area's
+  // previous conversation (previous-conversation.ts) with a button that opens its page and one the list of
+  // conversations (T2249); none when the turn log holds none. No press has a hotkey: a band's hotkey answers a bare key
+  // typed in an empty prompt.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
     const snap = await read($, snapshot)
@@ -2026,25 +2072,53 @@ export const register: Register = on => {
         {drawSpans({ Text, Link }, banner.spans, banner.wrap)}
       </Button>
     )
-    if (current === null) return <Box>{press}</Box>
     // Opens the pane as /teamrig-pane does, minimized or never opened too, at the task's page (read as its card's is)
     // over the list at the task's row (nav.ts fromList): back shows the list scrolled to it.
-    const openInPane = async () => {
+    const openInPane = async (shown: Current) => {
       await sizer?.set('open')
       await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
-      const detail = await detailOf(current.task)
-      await update($, pages, kept => ({ ...kept, [current.task.id]: detail }))
+      const detail = await detailOf(shown.task)
+      await update($, pages, kept => ({ ...kept, [shown.task.id]: detail }))
       await update($, view, () => 'tasks')
-      const row = currentRowKey(current, await read($, mode))
-      await go($, () => fromList(row, { kind: 'task', id: current.task.id }))
+      const row = currentRowKey(shown, await read($, mode))
+      await go($, () => fromList(row, { kind: 'task', id: shown.task.id }))
     }
     // The banner's Box takes the columns the banner leaves free, so the button ends the row, beside the engine's [-].
-    return (
-      <Box flexDirection="row" columnGap={1}>
-        <Box key={BANNER_FILL_KEY} flexGrow={1}>
-          {press}
+    const bannerRow =
+      current === null ? (
+        <Box>{press}</Box>
+      ) : (
+        <Box flexDirection="row" columnGap={1}>
+          <Box key={BANNER_FILL_KEY} flexGrow={1}>
+            {press}
+          </Box>
+          <Button key={BANNER_OPEN_KEY} label={BANNER_OPEN_LABEL} variant="secondary" onPress={() => void openInPane(current)} />
         </Box>
-        <Button key={BANNER_OPEN_KEY} label={BANNER_OPEN_LABEL} variant="secondary" onPress={() => void openInPane()} />
+      )
+    const previous = await read($, previousConversation)
+    if (previous === null) return bannerRow
+    // Its two buttons and the gaps before them take their cells from its title's width.
+    const previousButtons =
+      buttonCells({ label: BANNER_OPEN_LABEL, plain: false, hotkey: null }) + buttonCells({ label: PREVIOUS_ALL_LABEL, plain: false, hotkey: null }) + 2
+    const [line] = dockLayout([previousBlock(previous, snap)], e.props.bodyColumns - previousButtons, previousWraps)
+    if (line === undefined) return bannerRow
+    // Opens the pane as /teamrig-pane does on the list of conversations, and with `conversation` at its page.
+    const openConversations = async (conversation: LogRead | null) => {
+      await switchView($, 'log', livesNow())
+      await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
+      if (conversation !== null) await openConversation($, conversation, logging)
+    }
+    const shown: LogRead = { session: previous.session, claude: previous.claude }
+    return (
+      <Box flexDirection="column">
+        <Box flexDirection="row" columnGap={1}>
+          <Box key={PREVIOUS_KEY} flexGrow={1}>
+            {drawSpans({ Text, Link }, line.spans, line.wrap)}
+          </Box>
+          <Button key={PREVIOUS_OPEN_KEY} label={BANNER_OPEN_LABEL} variant="secondary" onPress={() => void openConversations(shown)} />
+          <Button key={PREVIOUS_ALL_KEY} label={PREVIOUS_ALL_LABEL} variant="secondary" onPress={() => void openConversations(null)} />
+        </Box>
+        {bannerRow}
       </Box>
     )
   })
