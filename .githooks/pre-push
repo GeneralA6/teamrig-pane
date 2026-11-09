@@ -1,5 +1,13 @@
 #!/bin/sh
-# Refuses a push to main, which changes only through a pull request, then runs every check CI runs on the
-# pushed commits (tools/ci/local.ts), once per tree: a tree that passed is recorded and not checked again.
-# There is no skip: never push with --no-verify.
-exec node tools/ci/local.ts --pre-push
+# Refuses a pushed commit that adds a secret (teamrig secrets pushed), then a push to main, which changes only through
+# a pull request, then runs every check CI runs on the pushed commits (tools/ci/local.ts), once per tree: a tree that
+# passed is recorded and not checked again. Both read the refs git writes to stdin, so it is read once for both.
+# teamrig is private, so a clone where it is not on PATH skips the secret scan with a line saying so, and the local
+# gate still runs. Never push with --no-verify.
+updates=$(cat)
+if command -v teamrig >/dev/null 2>&1; then
+  printf '%s\n' "$updates" | teamrig secrets pushed "$1" || exit 1
+else
+  echo 'pre-push: teamrig is not on PATH, so the secret scan (teamrig secrets pushed) is skipped' >&2
+fi
+printf '%s\n' "$updates" | node tools/ci/local.ts --pre-push

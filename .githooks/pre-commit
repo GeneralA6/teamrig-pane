@@ -1,3 +1,10 @@
 #!/bin/sh
-# Blocks a commit whose staged files or paths match the generic scrub rules or the private denylist.
+# Refuses a staged line in a secret shape or a staged secret file (teamrig secrets staged), then blocks a commit whose
+# staged files or paths match the generic scrub rules or the private denylist. teamrig is private, so a clone where it
+# is not on PATH skips the secret scan with a line saying so, and the scrub still runs.
+if command -v teamrig >/dev/null 2>&1; then
+  teamrig secrets staged || exit 1
+else
+  echo 'pre-commit: teamrig is not on PATH, so the secret scan (teamrig secrets staged) is skipped' >&2
+fi
 exec node tools/scrub/cli.ts --staged
