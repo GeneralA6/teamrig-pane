@@ -91,11 +91,14 @@ export class TempRepo {
   }
 
   private spawn(cwd: string, cli: string, args: readonly string[], env: Readonly<Record<string, string | undefined>>, input?: string): CliRun {
+    const result = spawnSync(process.execPath, [cli, ...args], { cwd, env: this.merged(env), encoding: 'utf8', ...(input === undefined ? {} : { input }) });
+    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+  }
+
+  private merged(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
     const overridden = new Set(Object.keys(env).map((name) => name.toUpperCase()));
     const inherited = Object.entries(this.env).filter(([name]) => !overridden.has(name.toUpperCase()));
-    const merged = [...inherited, ...Object.entries(env)].filter((entry): entry is [string, string] => entry[1] !== undefined);
-    const result = spawnSync(process.execPath, [cli, ...args], { cwd, env: Object.fromEntries(merged), encoding: 'utf8', ...(input === undefined ? {} : { input }) });
-    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
+    return Object.fromEntries([...inherited, ...Object.entries(env)].filter((entry): entry is [string, string] => entry[1] !== undefined));
   }
 
   remove(): void {
