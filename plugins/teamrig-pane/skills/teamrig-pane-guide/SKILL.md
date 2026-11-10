@@ -737,12 +737,13 @@ the switch drops the row's.
 | --- | --- |
 | Health | Under its heading, a tile a measure, its `●` green, amber or red beside teamrig's words for it (the HEALTH line of `teamrig stats`, but for its `backlog clears` forecast), and the scope's week against its plan. Each count of tasks above none (`64 closed`, `81 opened`, `308 active`, the overdue count and its `p1 10`, the owner decisions) is a press that lists those tasks (see below) |
 | Flow | Its header is its range and headline, `last 7 d · opened · closed (dropped) · net`, so it answers folded; a press folds it (`▸`) and opens it. Open: the active tasks at each day's end, the newest 14 days with bars of what opened and closed, the burn-up and the cumulative flow over the range, each part after a blank row and each day's bar a blank column from the next (no `$` limit-day marks yet: the pane has no source for those days) |
-| New work | Closed by default, like the five after it; its header is `N in 7 d · M with no goal`. Open: where the new tasks came from (another session, self-made, the owner, the lead, GitHub) as a share bar over its legend, then their type, priority and how many have no goal |
+| New work | Closed by default, like the six after it; its header is `N in 7 d · M with no goal`. Open: where the new tasks came from (another session, self-made, the owner, the lead, GitHub) as a share bar over its legend, then their type, priority and how many have no goal |
 | Speed | Header: the range of the teams' lead time medians and the tasks done never started. Open: each team's lead and cycle time, median and p85, as a table (a line a team where it does not fit), then the active tasks by age |
 | Delays | Header: the overdue count and its p1. Open: those counts, each a press that lists the tasks, each team's when the scope holds two or more, the share done by its due date as a bar a team, the days late and the dues moved |
 | Waits | Header: the waiting count and the owner's decisions with the oldest's age. Open: what the waiting tasks wait on as a share bar over its legend (a note when one task waiting on two things makes them add past the count), and the owner's decisions, a press that lists them |
 | Bugs | Header: the active bugs, those opened and fixed in the range. Open: opened and fixed as bars on one scale, their share of new work and the dropped share of the closes |
 | People | Header: how many sessions closed a task done in the range. Open: the 8 that closed the most, each name over a bar and a press that scopes the tab to that session, then a dim line counting the rest |
+| Goals | The goals the scope's tasks can serve, its teams' and the teams' above them, over their whole history whatever the range. Header: the goals at risk and late, else how many (`no goals` with none). Open: a row a goal, its tag, a timeline on one axis for every goal (`░` its start to its target, `█` a day a task of it was done, `│` today; left out where the pane is too narrow), its done of all its tasks, the day its open tasks end at its 14-day pace (`—` with none), and its state, `late N d`, `at risk`, `on track` or `done` in red, amber, green or dim. A press on a row opens the goal's card: its title, start and target, parent, each move of its target, its pace and its tasks. Last, a dim line counting the range's done tasks that served no goal |
 
 A press on a Health count draws its tasks in place of the numbers, under `‹ back` and a trail such as
 `Stats › Overdue (35)`: a dim line saying what the list holds in the scope (and the range, for the opened and closed
@@ -750,8 +751,8 @@ ones) and its order (p1 first, then by due date; the owner decisions the oldest 
 dim line of its owner, priority, due date and, for another team's task, that team. A press on one of the own team's
 tasks that the pane holds opens its page; `b` or `‹ back` returns to the numbers. An empty list says `No tasks.`
 
-It reads files only, every 3 seconds while it shows and at once on a press: the team folders, and each scoped team's
-register history once a scope takes it in. A folder or register it cannot read is a `WARN` line naming it, its
+It reads files only, every 3 seconds while it shows and at once on a press: the team folders, each scoped team's
+register history once a scope takes it in, and the goals of those teams and the teams above them. A folder or register it cannot read is a `WARN` line naming it, its
 numbers kept from the last read. It has no Find field.
 
 ## How it relates to the teamrig CLI
