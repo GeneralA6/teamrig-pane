@@ -23,7 +23,7 @@ const LINES = [createLine('T1', { at: NOW - 3 * DAY, by: 'lead', owner: 'api', t
 const EVENTS = readEvents(LINES.map(line => `${line}\n`).join('')).events
 /** teamrig's fold of one small register less its tasks, as the view holds it: the fields a test does not set. */
 const { tasks, goals, ...TALLIES } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
-const BASE: StatsNumbers = { ...TALLIES, goals: goalsOf(goals, TimeZone.UTC) }
+const BASE: StatsNumbers = { ...TALLIES, goals: goalsOf(goals, TimeZone.UTC, TimeZone.UTC.day(new Date(NOW))) }
 /** The design's Health of 10-31: four red, one amber. */
 const HEALTH: RegisterHealth = {
   closeOpen: { level: 'bad', ratio: 0.79 },

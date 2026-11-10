@@ -98,10 +98,12 @@ export function listsOf(tasks: StatsTasks, zone: TimeZone, placedOf: PlacedOf = 
 
 /**
  * Each goal's progress with its tasks as slim rows: the active ones p1 first, then by due date, as the lists order
- * them, then the done ones, the latest done first. A dropped task, which counts for neither, is left out.
+ * them, then the done ones, the latest done first. A dropped task, which counts for neither, is left out. `today` is
+ * the team's day the goals' states were counted on.
  */
-export function goalsOf(goals: GoalStats, zone: TimeZone, placedOf: PlacedOf = placerOf(zone)): StatsGoals {
+export function goalsOf(goals: GoalStats, zone: TimeZone, today: string, placedOf: PlacedOf = placerOf(zone)): StatsGoals {
   return {
+    today,
     offGoal: goals.offGoal,
     doneInRange: goals.doneInRange,
     goals: goals.goals.map(({ tasks, ...goal }) => {
@@ -334,7 +336,7 @@ export class LiveStats {
     const session = scope.kind === 'session' ? { session: { team: scope.team, session: scope.session } } : {}
     const { tasks, goals: progress, ...stats } = registerStats({ teams, range, now: new Date(at), zone, ownerMarker, goals, ...session })
     const placedOf = placerOf(zone)
-    return { key, stats: { ...stats, goals: goalsOf(progress, zone, placedOf) }, health: registerHealth(stats), lists: listsOf(tasks, zone, placedOf) }
+    return { key, stats: { ...stats, goals: goalsOf(progress, zone, zone.day(new Date(at)), placedOf) }, health: registerHealth(stats), lists: listsOf(tasks, zone, placedOf) }
   }
 
   /**

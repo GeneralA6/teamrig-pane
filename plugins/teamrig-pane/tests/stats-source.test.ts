@@ -96,7 +96,7 @@ type FoldedAt = { readonly at?: number; readonly session?: StatsScope; readonly 
 function folded(teams: readonly StatsTeam[], pick: StatsPick, { at = NOW, session, goals = new Map() }: FoldedAt = {}): StatsView {
   const { tasks, goals: progress, ...stats } = registerStats({ teams, range: pick.range, now: new Date(at), zone: TimeZone.UTC, ownerMarker: 'owner', goals, ...(session === undefined ? {} : { session }) })
   const list = pick.list === null ? null : { kind: pick.list, rows: listsOf(tasks, TimeZone.UTC)[pick.list] }
-  return { kind: 'stats', scope: pick.scope, range: pick.range, teams: ['acme', 'tools'], stats: { ...stats, goals: goalsOf(progress, TimeZone.UTC) }, health: registerHealth(stats), list, week: null, failures: [] }
+  return { kind: 'stats', scope: pick.scope, range: pick.range, teams: ['acme', 'tools'], stats: { ...stats, goals: goalsOf(progress, TimeZone.UTC, TimeZone.UTC.day(new Date(at))) }, health: registerHealth(stats), list, week: null, failures: [] }
 }
 
 /** Each goal of the view as its tag and title, in the view's order. */
@@ -159,7 +159,7 @@ function teamsDisk(): MemoryFiles {
  * A LiveStats over the fake disk and a fake folder list, with whether the tab shows, the tab's pick and the clock's now
  * set by the test, and each write it made. A closed gate holds `choice` (after it took the pick) until it opens.
  */
-function fakeStats(disk: MemoryFiles) {
+function fakeStats(disk: MemoryFiles, settings: StatsSettings = SETTINGS) {
   const files = new FailingFiles(disk)
   const shown = { tab: true }
   const clock = { now: NOW }
@@ -168,7 +168,7 @@ function fakeStats(disk: MemoryFiles) {
   const gate: { held: Promise<void> | null } = { held: null }
   const views: StatsView[] = []
   const writes = { fail: false }
-  const live = new LiveStats(files, FILES, SETTINGS, {
+  const live = new LiveStats(files, FILES, settings, {
     folders: async dir => {
       if (listed.failure !== null) throw new Error(listed.failure)
       return dir === TEAMS ? listed.names : []
@@ -390,6 +390,19 @@ describe('LiveStats', () => {
     expect(goalTitles(views.at(-1))[0]).toEqual(['G10.2', 'Ship the release'])
   })
 
+  test("the goals' day is the team's, from the minute the fold counted them at", async () => {
+    const zone = TimeZone.of('Pacific/Kiritimati')
+    if (zone === undefined) throw new Error('the host knows no Pacific/Kiritimati')
+    const days: string[] = []
+    for (const settings of [SETTINGS, { ...SETTINGS, zone }]) {
+      const { live, views } = fakeStats(teamsDisk(), settings)
+      await live.refresh()
+      const view = views[0]
+      days.push(view?.kind === 'stats' ? view.stats.goals.today : '')
+    }
+    expect(days).toEqual(['2026-10-13', '2026-10-14'])
+  })
+
   test('a goals file is read again only when its stamp moves, and a change folds again inside the minute', async () => {
     const disk = teamsDisk()
     disk.write(OWN_GOALS, text(ACME_GOAL_LINES))
@@ -566,15 +579,15 @@ describe('goalsOf', () => {
 
   test('lists the active tasks p1 first, then by due date, then the done ones, the latest done first; a dropped one is left out', () => {
     const tasks = [closed('T12'), closed('T10'), planned('T9'), planned('T4'), closed('T11'), planned('T6')]
-    const { goals, ...counts } = goalsOf({ goals: [progress(tasks)], offGoal: 1, doneInRange: 3 }, TimeZone.UTC)
-    expect(counts).toEqual({ offGoal: 1, doneInRange: 3 })
+    const { goals, ...counts } = goalsOf({ goals: [progress(tasks)], offGoal: 1, doneInRange: 3 }, TimeZone.UTC, '2026-10-31')
+    expect(counts).toEqual({ today: '2026-10-31', offGoal: 1, doneInRange: 3 })
     expect(goals.map(goal => [goal.tag, goal.state, goal.rows.map(row => row.id)])).toEqual([['G10.2', 'on track', ['T4', 'T6', 'T9', 'T11', 'T10']]])
   })
 
   test("a task the Health lists hold too is the same row, its due parsed once", () => {
     const placedOf = placerOf(TimeZone.UTC)
     const lists = listsOf({ active: [planned('T4')], opened: [], closed: [], overdue: [], overdueP1: [], ownerDecisions: [] }, TimeZone.UTC, placedOf)
-    const { goals } = goalsOf({ goals: [progress([planned('T4')])], offGoal: 0, doneInRange: 0 }, TimeZone.UTC, placedOf)
+    const { goals } = goalsOf({ goals: [progress([planned('T4')])], offGoal: 0, doneInRange: 0 }, TimeZone.UTC, '2026-10-31', placedOf)
     expect(goals[0]?.rows[0]).toBe(lists.active[0])
   })
 })
