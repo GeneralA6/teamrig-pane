@@ -781,7 +781,7 @@ export const register: Register = on => {
           : new LiveStats(
               files,
               team.paths,
-              { events: registerAt.paths.events, zone: zoneNamed(registerAt.settings.timeZone), ownerMarker: registerAt.settings.ownerSource },
+              { events: registerAt.paths.events, goals: registerAt.paths.goals, zone: zoneNamed(registerAt.settings.timeZone), ownerMarker: registerAt.settings.ownerSource },
               {
                 folders,
                 isShown: async () => (await read($, view)) === 'stats' && (await read($, size)) !== 'minimized',

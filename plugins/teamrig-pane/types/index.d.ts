@@ -414,10 +414,20 @@ export type StatsChoice =
   | { readonly kind: 'session'; readonly team: string; readonly session: string }
 
 /**
- * teamrig's stats fold less the tasks behind its counts (core register/stats.ts RegisterStats.tasks): the view keeps
- * only the list a Health tile's press opened, as slim rows (StatsList), never the register's tasks, which are heavy.
+ * teamrig's stats fold less the tasks behind its counts (core register/stats.ts RegisterStats.tasks) and behind each
+ * goal (GoalProgress.tasks): the view keeps only the list a Health tile's press opened and each goal's tasks, as slim
+ * rows (StatsListRow), never the register's tasks, which are heavy.
  */
-export type StatsNumbers = Omit<import('../hooks/core/read/index').RegisterStats, 'tasks'>
+export type StatsNumbers = Omit<import('../hooks/core/read/index').RegisterStats, 'tasks' | 'goals'> & { readonly goals: StatsGoals }
+
+/** The goals' progress (core register/goal-stats.ts GoalStats), each goal's tasks as slim rows. */
+export type StatsGoals = Omit<import('../hooks/core/read/index').GoalStats, 'goals'> & { readonly goals: readonly StatsGoal[] }
+
+/**
+ * One goal's progress over its whole history (core register/goal-stats.ts GoalProgress), its tasks as slim rows
+ * (hooks/stats-source.ts goalsOf): the active ones p1 first, then by due date, then the done ones, the latest first.
+ */
+export type StatsGoal = Omit<import('../hooks/core/read/index').GoalProgress, 'tasks'> & { readonly rows: readonly StatsListRow[] }
 
 /**
  * The tasks behind a Health count a tile's press lists (core register/stats.ts StatsTasks): the active ones, those
