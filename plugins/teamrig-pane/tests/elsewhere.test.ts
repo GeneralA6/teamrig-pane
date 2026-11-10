@@ -1,10 +1,13 @@
 import { describe, expect, test } from 'claude-code/testing'
-import type { TaskElsewhere, TaskRow } from '../types'
+import type { Snapshot, TaskElsewhere, TaskRow } from '../types'
 import { readRegister, type Task } from '../hooks/core/read/index'
 import { neededElsewhere, NO_ELSEWHERE, type ElsewhereSource, type TasksElsewhere } from '../hooks/elsewhere'
 import { rowOf } from '../hooks/log'
+import { listedTasks, metaText } from '../hooks/meta'
+import { NO_SPEND } from '../hooks/ranking'
 import { TaskRegisterSource, type RegisterPaths } from '../hooks/source'
-import { HOUR, MemoryFiles, NOW, NO_TREE_GOALS, S1, TEAM_SETTINGS, createLine, statusLine, waitingLine } from './fixtures'
+import { areaView, sameView } from '../hooks/view'
+import { HOUR, MemoryFiles, NOW, NO_TEAM, NO_TREE_GOALS, S1, SNAPSHOT_SETTINGS, TEAM_SETTINGS, createLine, statusLine, treeAt, waitingLine } from './fixtures'
 
 /** The tasks teamrig's reader folds from event lines. */
 function tasksOf(lines: readonly string[]): Task[] {
@@ -144,6 +147,49 @@ describe("TaskRegisterSource with the tree's other registers", () => {
     expect((await poll(source))?.problem).toBe("events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task; web's register: locked")
     elsewhere.set(heldBy('web', [T20]))
     expect((await poll(source))?.problem).toBe('events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task')
+  })
+})
+
+const DAY = 24 * HOUR
+
+/** The tasks of another team's register a snapshot carries, as the source picks them (neededElsewhere). */
+const awayOf = (team: string, lines: readonly string[]): TaskElsewhere[] => [...heldBy(team, lines).values()]
+
+function rowIn(rows: readonly TaskRow[], id: string): TaskRow {
+  const row = rows.find(task => task.id === id)
+  if (row === undefined) throw new Error(`no ${id} in the rows`)
+  return row
+}
+
+describe("the plan order, the park rule and the redraw with the tree's other registers", () => {
+  const own = rowsOf([OWN_AFTER_T20, createLine('T2', { owner: 'api', by: 'lead', at: AT })])
+  const treeWith = (rows: readonly TaskRow[], elsewhere: readonly TaskElsewhere[]) => treeAt(rows, NOW, undefined, undefined, null, {}, NO_SPEND, elsewhere)
+  const upNext = (elsewhere: readonly TaskElsewhere[]) => areaView(own, 'api', treeWith(own, elsewhere)).upNext.map(task => task.id)
+
+  test("an own task after another team's open task waits behind the own ones that can move, as `teamrig list` orders it", () => {
+    const open = awayOf('web', [T20])
+    expect(upNext(open)).toEqual(['T2', 'T1'])
+    expect(metaText(rowIn(own, 'T1'), treeWith(own, open))).toContain('after T20')
+  })
+
+  test("once another team's task is done, or with no register holding it, the own task after it moves as any other", () => {
+    const done = awayOf('web', [T20, statusLine('T20', 'ui', AT, 'done')])
+    expect(upNext(done)).toEqual(['T1', 'T2'])
+    expect(metaText(rowIn(own, 'T1'), treeWith(own, done))).not.toContain('after T20')
+    expect(upNext([])).toEqual(['T1', 'T2'])
+  })
+
+  test("an own task another team's active task needs stays listed, though the park rule takes it out otherwise", () => {
+    const quiet = rowsOf([createLine('T1', { owner: 'po', by: 'lead', at: NOW - 15 * DAY, source: 'lead', taskKeys: { workClass: 'Improvements' } })])
+    const listed = (elsewhere: readonly TaskElsewhere[]) => listedTasks(quiet, treeWith(quiet, elsewhere)).map(task => task.id)
+    expect(listed([])).toEqual([])
+    expect(listed(awayOf('web', [createLine('T20', { owner: 'ui', by: 'lead', at: AT, taskKeys: { after: ['T1'] } })]))).toEqual(['T1'])
+  })
+
+  test('two snapshots draw differently when only the tasks of the other registers differ', () => {
+    const base: Snapshot = { tasks: own, area: 'api', areaSource: 'pinned', unreadInbox: 0, inbox: [], problem: null, ...NO_TEAM, ...SNAPSHOT_SETTINGS, now: NOW }
+    expect(sameView(base, { ...base, elsewhere: awayOf('web', [T20]) })).toBe(false)
+    expect(sameView({ ...base, elsewhere: awayOf('web', [T20]) }, { ...base, elsewhere: awayOf('web', [T20]) })).toBe(true)
   })
 })
 

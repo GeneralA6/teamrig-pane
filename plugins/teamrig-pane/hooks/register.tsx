@@ -77,6 +77,8 @@ import { RefFileReader } from './ref-file'
 import { DEFAULT_FOCUS, DEFAULT_REGISTER, TimeZone, type StatsRange } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { NO_GOAL_RANKS, TreeGoals } from './tree-goals'
+import { TreeRegisters } from './tree-registers'
+import { NO_ELSEWHERE } from './elsewhere'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { diffKey, noteKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
 import { buttonCells, packGroups, packRows, type ButtonLook } from './pack'
@@ -692,7 +694,14 @@ export const register: Register = on => {
         source:
           'missing' in registerAt
             ? registerAt
-            : new TaskRegisterSource(files, registerAt.paths, registerAt.settings, teamFiles, new TreeGoals(files, registerAt.paths.goals, teamFiles)),
+            : new TaskRegisterSource(
+                files,
+                registerAt.paths,
+                registerAt.settings,
+                teamFiles,
+                new TreeGoals(files, registerAt.paths.goals, teamFiles),
+                teamFiles === null ? NO_ELSEWHERE : new TreeRegisters(files, teamFiles, folders),
+              ),
         sessionId: () => $.session.id(),
         now: () => $.clock.now(),
         publish: async change => {

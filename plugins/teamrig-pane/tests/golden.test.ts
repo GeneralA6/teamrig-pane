@@ -178,7 +178,7 @@ describe('golden', () => {
     for (const fixture of GOLDEN.fixtures) {
       const register = readRegister(fixture.events)
       const rows = [...register.state.tasks.values()].map(task => rowOf(task))
-      const tree = treeOf({ tasks: rows, now: GOLDEN.generatedAt, notPickedUpAfterHours, timeZone, leads, focus, ownerSource, goals, spend })
+      const tree = treeOf({ tasks: rows, elsewhere: [], now: GOLDEN.generatedAt, notPickedUpAfterHours, timeZone, leads, focus, ownerSource, goals, spend })
       const lines = rows.map(row => listLine(row, tree)).sort()
       expect({ fixture: fixture.name, lines }).toEqual({ fixture: fixture.name, lines: linesOf(fixture.list) })
       const skipped = skippedText(PATHS, register, readMarks(''))

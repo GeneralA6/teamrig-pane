@@ -2211,8 +2211,11 @@ test('the Teams tab reads no team folder while another view shows, and reads wha
   disk.reads.length = 0
   disk.write(`${TEAMS}/tools/config.json`, [JSON.stringify({ ...TOOLS_CONFIG, sessions: ['boss', 'dev'] })])
   await clock.advance(POLL_MS)
-  expect(teamReads()).toEqual([])
+  // The task list's read of the tree's other registers (tree-registers.ts) reads the changed config once on its own
+  // poll, as its plan order needs them whatever view shows; a Teams tab read while hidden would read it a second time.
+  expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
 
+  disk.reads.length = 0
   await pane.press({ key: 'team' })
   expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
   expect(await drawsLine(pane, /● tools-dev \[Wake\] \[Stats\]$/)).toBe(true)
