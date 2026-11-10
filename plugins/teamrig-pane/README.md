@@ -575,7 +575,7 @@ row and each day's bar a blank column from the next. (A `$` is to mark a day the
 quiet day there is not read as slack; the pane has no source for those days yet, so none shows.) A team's charts say
 where a split moved tasks out of it, as only the tree's are whole before one.
 
-Six more sections follow Flow, closed by default, each header answering the glance on its own; a press on one opens
+Seven more sections follow Flow, closed by default, each header answering the glance on its own; a press on one opens
 it:
 
     ▸ New work · 556 in 7 d · 548 with no goal
@@ -584,6 +584,7 @@ it:
     ▸ Waits · 84 waiting · owner decisions 8, oldest 15.5 d
     ▸ Bugs · 108 active · opened 138, fixed 79 in 7 d
     ▸ People · done in 7 d · 19 sessions
+    ▸ Goals · 1 at risk · 1 late
 
 New work draws where the range's new tasks came from (another session, self-made, the owner, the lead, GitHub) as a
 share bar over its legend, then their type, priority and how many have no goal. Speed draws each team's lead and cycle
@@ -596,8 +597,29 @@ draws the bugs opened and fixed as bars on one scale, their share of new work an
 People draws the 8 sessions that closed the most tasks done, each name over a bar and a press that scopes the tab to
 that session, then a dim line counting the rest.
 
-It reads files only: the team folders as the Teams tab reads them, and the whole history of each team's register the
-scope takes in, each read only once a scope needs it. It reads every 3 s while it shows, and only then; a press reads
+Goals holds the goals the scope's tasks can serve, its teams' and those of the teams above them, each over its whole
+history whatever the range; its header names the goals at risk and late, else counts them (`no goals` with none). Open,
+it draws a row a goal under a dim row naming the columns:
+
+    ▾ Goals · 1 at risk · 1 late
+        goal   09-20                  11-22  done  forecast  state
+      ▸ G10.2  ░░░█░░░█░░░░░  │              1/5   11-22     late 3 d
+      ▸ A2           ░░░█░░░█░│░░░░░░░       3/5   10-23     on track
+      ▸ A4               ░░░░░│░░░░░░░░░░    0/3   —         at risk
+      ▸ O1     ░░░░█░░░█░     │              2/2   —         done
+      off goal: 750 of 774 done tasks (97%)
+
+The timeline puts every goal on one axis, its first and last day over it: `░` a goal's days from its start to its
+target, `█` a day a task of it was done, `│` today; a pane too narrow for it leaves it out. Then the goal's done tasks
+of all its tasks, the day its open tasks end at its pace of the last 14 days (`—` with no pace or none open), and its
+state: `late N d` in red, `at risk` amber, `on track` green, `done` dim. A press on a goal's row opens its card under
+it: its title, its start and target days and its parent goal, each move of its target (from, to, when, by whom and
+why), its pace, then its tasks, the active ones p1 first and by due date, then the done ones, the latest first. The dim
+line under the goals counts the range's done tasks that served no goal; with no goals, a note says
+`No goals: teamrig goal add sets one.` over it.
+
+It reads files only: the team folders as the Teams tab reads them, the whole history of each team's register the scope
+takes in, each read only once a scope needs it, and the goals of those teams and the teams above them. It reads every 3 s while it shows, and only then; a press reads
 at once. It folds again only when a history, the scope, the range or the minute moved. A team folder or a register it
 cannot read draws as it last read, or is left out before then, on a `WARN` line naming it and why; with no team, or
 the pane's own register unread, the tab says why. There is no Find field.
