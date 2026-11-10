@@ -20,7 +20,7 @@ type Folded = Extract<StatsView, { kind: 'stats' }>
 const EVENTS = readEvents(`${createLine('T1', { at: NOW, by: 'lead', owner: 'api', title: 'Add the route' })}\n`).events
 /** teamrig's fold of a one-task register less its tasks: the fields a test does not set. */
 const { tasks, goals, ...TALLIES } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
-const BASE: StatsNumbers = { ...TALLIES, goals: goalsOf(goals, TimeZone.UTC) }
+const BASE: StatsNumbers = { ...TALLIES, goals: goalsOf(goals, TimeZone.UTC, TimeZone.UTC.day(new Date(NOW))) }
 /** The Health tiles' levels, which no section reads. */
 const HEALTH: RegisterHealth = {
   closeOpen: { level: 'good', ratio: 1 },

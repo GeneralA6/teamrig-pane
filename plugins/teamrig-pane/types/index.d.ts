@@ -420,8 +420,11 @@ export type StatsChoice =
  */
 export type StatsNumbers = Omit<import('../hooks/core/read/index').RegisterStats, 'tasks' | 'goals'> & { readonly goals: StatsGoals }
 
-/** The goals' progress (core register/goal-stats.ts GoalStats), each goal's tasks as slim rows. */
-export type StatsGoals = Omit<import('../hooks/core/read/index').GoalStats, 'goals'> & { readonly goals: readonly StatsGoal[] }
+/**
+ * The goals' progress (core register/goal-stats.ts GoalStats), each goal's tasks as slim rows, and the team's day the
+ * fold counted them on (`YYYY-MM-DD`), which the Goals section's timeline marks and its late days count from.
+ */
+export type StatsGoals = Omit<import('../hooks/core/read/index').GoalStats, 'goals'> & { readonly goals: readonly StatsGoal[]; readonly today: string }
 
 /**
  * One goal's progress over its whole history (core register/goal-stats.ts GoalProgress), its tasks as slim rows
