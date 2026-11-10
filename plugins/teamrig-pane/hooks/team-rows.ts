@@ -6,7 +6,7 @@
 // retired), its name alone, its id staying on its card (T1795), how many sessions it leads in brackets (T1244), its
 // roles each in its role's colour (team-card.ts
 // ROLE_COLORS, T1245), how many of its cards wait on the owner now with a [Meet] press that runs `teamrig meet` on it
-// (T1297), which once pressed answers in its place, where the owner pressed (T2206): Asking…, then Asked and when, with
+// (T1297, session-acts.ts), which once pressed answers in its place, where the owner pressed (T2206): Asking…, then Asked and when, with
 // no press, so no second ask; a refused one keeps the press and says it was not asked. Then when the next card the
 // owner put off comes back; its hire and retire days are its card's. A retired
 // group's row counts its sessions. The row of the session whose pane it is starts with a green ▶ in the indent's first
@@ -19,10 +19,10 @@
 // While the Find field holds a query, the tab draws its search (team-search.ts) on the shared search view
 // (search-view.ts) instead: the count, then the sessions it names under their teams and leaders (team.ts foundRows),
 // the words that matched underlined, a matched id or hire scope on a dim line under its row, and a press on any
-// session's row, docked its name, opening or closing its card. What the last [Meet] press answered, with the lines the
+// session's row, docked its name, opening or closing its card. What the last session act answered, with the lines the
 // CLI printed, leads the tab, then a WARN line
 // for each team folder the last read could not read (T1234). A card prints its days on the team's clock. Pure.
-import type { MeetAnswer, StatsChoice, TeamFolderFailure, TeamView } from '../types'
+import type { SessionAct, SessionAnswer, SessionPress, StatsChoice, TeamFolderFailure, TeamView } from '../types'
 import type { TimeZone } from './core/read/index'
 import { META_LINES, SEPARATOR, single, type Block, type Row, type Span } from './rows'
 import { marksOf, type Mark } from './search'
@@ -44,6 +44,35 @@ const SESSION_NOUN: Noun = { one: 'session', many: 'sessions' }
 export const MEET_TEXT = '[Meet]'
 /** What stands in the [Meet] press's place while its run asks the session. */
 export const MEET_ASKING = 'Asking…'
+
+/**
+ * How a session act (session-acts.ts) draws: its press and the press's style; on its row, what stands in the press's
+ * place while it runs, the word before when it did it, and what follows the press after a refusal; and the top line
+ * of the tab, about the session, while it runs, once done and after a refusal.
+ */
+type ActLook = {
+  readonly press: string
+  readonly style: Omit<Span, 'text'>
+  readonly running: string
+  readonly done: string
+  readonly refused: string
+  readonly runningHead: (session: string) => string
+  readonly doneHead: (session: string) => string
+  readonly refusedHead: (session: string) => string
+}
+
+const ACT_LOOKS: { readonly [act in SessionAct]: ActLook } = {
+  meet: {
+    press: MEET_TEXT,
+    style: { color: 'suggestion' },
+    running: MEET_ASKING,
+    done: 'Asked',
+    refused: ' not asked',
+    runningHead: session => `Asking ${session} for its cards…`,
+    doneHead: session => `Asked ${session} for its cards:`,
+    refusedHead: session => `${session} was not asked:`,
+  },
+}
 /** The press that ends a team's and a session's row: the Stats tab on it, its sub-teams rolled in for a team. */
 export const STATS_TEXT = '[Stats]'
 /**
@@ -106,38 +135,45 @@ function statsSpans(row: string, scope: StatsChoice): Span[] {
   return [{ text: ' ' }, { text: STATS_TEXT, dim: true, stats: { kind: 'open', scope, row } }]
 }
 
+/** Whether `answer` is to `press`: the same act on the same session of the same team. */
+function isAnswerTo(answer: SessionAnswer, press: SessionPress): boolean {
+  return answer.act === press.act && answer.team === press.team && answer.session === press.session
+}
+
 /**
- * The [Meet] press on `session`'s row, or in its place what the last press on it answered (`meet`), so the answer
- * shows where the owner pressed: Asking… dim while it runs; Asked and when on the team's clock once teamrig asked it,
- * with no press until the answer clears, as a second press would only ask again; the press again after a refusal,
- * saying it was not asked (the tab's top line says why).
+ * The `act` press on `session`'s row, or in its place what the last press of it answered (`answer`), so the answer
+ * shows where the owner pressed: dim while it runs ([Meet]: Asking…); the word and when on the team's clock once
+ * teamrig did it (Asked), with no press until the answer clears, as a second press would only do it again; the press
+ * again after a refusal, saying it was not done (not asked; the tab's top line says why).
  */
-function meetSpans(session: SessionFacts, meet: MeetAnswer | null, zone: TimeZone): Span[] {
-  const press: Span = { text: MEET_TEXT, color: 'suggestion', meets: session.id }
-  if (meet === null || meet.session !== session.id) return [press]
-  switch (meet.outcome) {
-    case 'asking':
-      return [{ text: MEET_ASKING, dim: true }]
-    case 'asked':
-      return [{ text: `Asked ${zone.clock(new Date(meet.at))}`, color: 'success' }]
+function actSpans(act: SessionAct, session: SessionFacts, answer: SessionAnswer | null, zone: TimeZone): Span[] {
+  const look = ACT_LOOKS[act]
+  const sessionAct: SessionPress = { act, team: session.team, session: session.id }
+  const press: Span = { text: look.press, ...look.style, sessionAct }
+  if (answer === null || !isAnswerTo(answer, sessionAct)) return [press]
+  switch (answer.outcome) {
+    case 'running':
+      return [{ text: look.running, dim: true }]
+    case 'done':
+      return [{ text: `${look.done} ${zone.clock(new Date(answer.at))}`, color: 'success' }]
     case 'refused':
-      return [press, { text: ' not asked', color: 'warning' }]
+      return [press, { text: look.refused, color: 'warning' }]
   }
 }
 
 /**
  * Its cards on the owner: how many wait now, in the Log's colour for the owner, and the [Meet] press or what it
- * answered (meetSpans); then when the next one the owner put off comes back, dim. Nothing for none, or a team whose
+ * answered (actSpans); then when the next one the owner put off comes back, dim. Nothing for none, or a team whose
  * register the pane does not read.
  */
-function decisionSpans(session: SessionFacts, { meet, zone }: Pick<Drawing, 'meet' | 'zone'>): Span[] {
+function decisionSpans(session: SessionFacts, { answer, zone }: Pick<Drawing, 'answer' | 'zone'>): Span[] {
   const decisions = session.decisions
   if (decisions === null) return []
   const spans: Span[] = []
   const due = decisions.due.length
   if (due > 0) {
     spans.push(SEPARATOR, { text: `? ${due} ${due === 1 ? 'decision' : 'decisions'}`, color: 'suggestion' }, { text: ' ' })
-    spans.push(...meetSpans(session, meet, zone))
+    spans.push(...actSpans('meet', session, answer, zone))
   }
   const next = decisions.later[0]
   if (next !== undefined) spans.push(SEPARATOR, { text: `later ${next.until}`, dim: true })
@@ -227,9 +263,9 @@ function leadOf(depth: number, own = false): { before: Span[]; hang: Span } {
 /**
  * What every row of a drawing reads besides its node: the nodes opened or closed against their default and the cards
  * open (`toggled`), the team's clock, the node key of the session whose pane it is (`own`, null for none), and what
- * the last [Meet] press answered (`meet`, null before one), drawn on the row of the session it names.
+ * the last session act answered (`answer`, null before one), drawn on the row of the session it names.
  */
-type Drawing = { readonly toggled: ReadonlySet<string>; readonly zone: TimeZone; readonly own: string | null; readonly meet: MeetAnswer | null }
+type Drawing = { readonly toggled: ReadonlySet<string>; readonly zone: TimeZone; readonly own: string | null; readonly answer: SessionAnswer | null }
 
 /** Whether `node` is the session whose pane it is. */
 function isOwn(node: TeamTreeNode, own: string | null): boolean {
@@ -298,18 +334,19 @@ function foundBlocks(root: TeamTreeNode, search: TeamSearch, drawing: Drawing): 
   return searchViewBlocks({ key: TEAM_SEARCH_VIEW, query: search.query, hint: TEAM_SEARCH_HINT, nothing: TEAM_NOTHING_FOUND, noun: SESSION_NOUN, results, shown: total, total })
 }
 
-/** What the last [Meet] press answered: asking, asked with what teamrig did, or why it refused. */
-function meetBlock(answer: MeetAnswer): Block {
-  const key = `${TAB}:meet`
+/** What the last session act answered: that it runs, what teamrig did, or why it refused; keyed `team:<act>`. */
+function answerBlock(answer: SessionAnswer): Block {
+  const look = ACT_LOOKS[answer.act]
+  const key = `${TAB}:${answer.act}`
   const style: Omit<Span, 'text'> = answer.outcome === 'refused' ? { color: 'warning' } : { dim: true }
   const lines = answer.lines.map((line, i): Row => ({ key: `${key}:${i}`, spans: [{ ...style, text: `  ${line}` }], hang: { text: '    ' } }))
   switch (answer.outcome) {
-    case 'asking':
-      return single(key, [{ text: `Asking ${answer.session} for its cards…`, dim: true }])
-    case 'asked':
-      return { key, rows: [{ key, spans: [{ text: `Asked ${answer.session} for its cards:`, color: 'success' }] }, ...lines] }
+    case 'running':
+      return single(key, [{ text: look.runningHead(answer.session), dim: true }])
+    case 'done':
+      return { key, rows: [{ key, spans: [{ text: look.doneHead(answer.session), color: 'success' }] }, ...lines] }
     case 'refused':
-      return { key, rows: [{ key, spans: [{ text: `${answer.session} was not asked:`, color: 'warning' }] }, ...lines] }
+      return { key, rows: [{ key, spans: [{ text: look.refusedHead(answer.session), color: 'warning' }] }, ...lines] }
   }
 }
 
@@ -323,12 +360,12 @@ export function failureBlock(view: string, failure: TeamFolderFailure): Block {
   return single(`${view}:failure:${failure.team}`, [{ text, color: 'warning' }], { text: '  ' })
 }
 
-/** What the tab draws besides the tree: the Find field's search, and what the last [Meet] press answered. */
+/** What the tab draws besides the tree: the Find field's search, and what the last session act answered. */
 export type TeamExtras = {
   /** The Find field's query and the sessions it names; null or absent outside a search. */
   readonly search?: TeamSearch | null
-  /** What the last [Meet] press answered; null or absent before one. */
-  readonly meet?: MeetAnswer | null
+  /** What the last session act answered; null or absent before one. */
+  readonly answer?: SessionAnswer | null
   /** The node key (team.ts sessionKey) of the session whose pane it is, its row marked; null or absent for none. */
   readonly own?: string | null
 }
@@ -342,11 +379,11 @@ function treeBlocks(root: TeamTreeNode, search: TeamSearch | null, drawing: Draw
 /**
  * The Teams tab: the tree's rows, with the nodes in `toggled` opened or closed against their default and the sessions
  * whose card key (cardKey) it holds showing their cards, or why none show; while the `extras` search holds the Find
- * field's query, the search's body instead; what the last [Meet] press answered (`meet`) leads either, and stands in
+ * field's query, the search's body instead; what the last session act answered (`answer`) leads either, and stands in
  * its press's place on the row of the session it names, then a WARN line for each team folder the last read could not
  * read, the no-tree note's too. The row of the `own` session, the one whose pane it is, starts with OWN_MARK.
  */
-export function teamBlocks(view: TeamView, toggled: readonly string[], zone: TimeZone, { search = null, meet = null, own = null }: TeamExtras = {}): Block[] {
+export function teamBlocks(view: TeamView, toggled: readonly string[], zone: TimeZone, { search = null, answer = null, own = null }: TeamExtras = {}): Block[] {
   switch (view.kind) {
     case 'reading':
       return [note(`${TAB}:note`, 'Reading the team…')]
@@ -357,7 +394,7 @@ export function teamBlocks(view: TeamView, toggled: readonly string[], zone: Tim
     case 'tree': {
       const failures = view.failures.map(failure => failureBlock(TAB, failure))
       if (view.root === null) return [...failures, note(`${TAB}:note`, 'No team tree: the team has no config file teamrig can read, and the tree is read from it.')]
-      return [...(meet === null ? [] : [meetBlock(meet)]), ...failures, ...treeBlocks(view.root, search, { toggled: new Set(toggled), zone, own, meet })]
+      return [...(answer === null ? [] : [answerBlock(answer)]), ...failures, ...treeBlocks(view.root, search, { toggled: new Set(toggled), zone, own, answer })]
     }
   }
 }

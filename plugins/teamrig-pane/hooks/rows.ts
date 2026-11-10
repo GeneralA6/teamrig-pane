@@ -6,7 +6,7 @@
 // opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
-import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, Snapshot, StatsChoice, StatsListKind, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, SessionPress, Snapshot, StatsChoice, StatsListKind, TaskRow, TaskStatus, ViewMode } from '../types'
 import { actRows, type CardActs } from './act-rows'
 import { cardRows, GUIDE } from './card'
 import { COMMAND } from './command'
@@ -27,8 +27,8 @@ import { cells } from './width'
  * (team-rows.ts): a leader's fold mark its node, its id its card; never split. With `pins` the text is a session's id
  * a press on ties the tab to, as `/teamrig-pane <session>` does (a tab tied to no session, noSessionBlock); never split.
  * With `starts` the text is a press that starts that meeting (a scheduled meeting's card, meetings-rows.ts); never
- * split. With `meets` the text is a press that runs `teamrig meet` on that session, which brings the owner its cards
- * (a Teams tab row's [Meet], team-rows.ts); never split. With `acts` the text is a press of the owner's Note or Next on
+ * split. With `sessionAct` the text is a press that runs that act on that session (session-acts.ts): a Teams tab row's
+ * [Meet], team-rows.ts, which brings the owner its cards; never split. With `acts` the text is a press of the owner's Note or Next on
  * a task's card (owner-acts.ts); never split. With `stats` the text is a press on the Stats tab's scope or range row
  * that picks that scope or range, or a Health tile's count that lists its tasks (stats-rows.ts); never split.
  * `underline` marks the words a search matched
@@ -47,7 +47,7 @@ export type Span = {
   toggles?: string
   pins?: string
   starts?: string
-  meets?: string
+  sessionAct?: SessionPress
   acts?: ActPress
   stats?: StatsPress
 }

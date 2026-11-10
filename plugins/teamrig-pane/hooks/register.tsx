@@ -24,7 +24,7 @@
 // press on the header's unread count opening it, and the Teams tab: the tree of teams the
 // session's team is in, each team's lead over the sessions it leads and its retired ones (team.ts, team-source.ts), a
 // press on a row opening or closing what lies under it, a session's cards on the owner counted on its row and on the
-// switch (`Teams (2)`), its [Meet] press running `teamrig meet` on it (owner-meet.ts), and the Meetings view: the
+// switch (`Teams (2)`), its [Meet] press running `teamrig meet` on it (session-acts.ts), and the Meetings view: the
 // team's scheduled and started meetings by time (meetings.ts, meetings-rows.ts), a press on one opening its card,
 // whose [Start meeting] press starts it. The band above the prompt shows the session's
 // name and the task it works on now
@@ -44,7 +44,6 @@ import type {
   LogList,
   LogPage,
   LogRead,
-  MeetAnswer,
   MeetingStart,
   MeetingsView,
   Nav,
@@ -56,6 +55,7 @@ import type {
   RefFileRead,
   RequirementProblem,
   RingLandings,
+  SessionAnswer,
   SetupView,
   Snapshot,
   StatsChoice,
@@ -124,7 +124,7 @@ import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
 import type { CardActs } from './act-rows'
 import { NoteHold } from './note-hold'
-import { OwnerMeet } from './owner-meet'
+import { SessionActs } from './session-acts'
 import { meetingsBlocks } from './meetings-rows'
 import { listTitle, statsBlocks } from './stats-rows'
 import { LiveStats } from './stats-source'
@@ -334,9 +334,9 @@ const statsFrom = atom({ plugin: 'teamrig-pane', key: 'statsFrom' } as const, NO
 const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as const, NOTHING_TOGGLED)
 /** The Done page's days, groups and `n more` rows the person flipped against their default (done-rows.ts), by key. */
 const doneToggled = atom({ plugin: 'teamrig-pane', key: 'doneToggled' } as const, NOTHING_TOGGLED)
-const NO_MEET: MeetAnswer | null = null
-/** What the last [Meet] press on the Teams tab answered (owner-meet.ts): cleared at each session start and each switch to the tab. */
-const ownerMeet = atom({ plugin: 'teamrig-pane', key: 'ownerMeet' } as const, NO_MEET)
+const NO_ANSWER: SessionAnswer | null = null
+/** What the last press on a Teams tab session row ([Meet]) answered (session-acts.ts): cleared at each session start and each switch to the tab. */
+const sessionAnswer = atom({ plugin: 'teamrig-pane', key: 'sessionAnswer' } as const, NO_ANSWER)
 const NO_ACT: OwnerAct | null = null
 /** Where the owner's Note or Next on a task's card stands (owner-acts.ts): cleared at each session start. */
 const ownerAct = atom({ plugin: 'teamrig-pane', key: 'ownerAct' } as const, NO_ACT)
@@ -533,7 +533,7 @@ async function switchView($: Context, target: PaneView, lives: ViewLives): Promi
   if (target === 'changes') await lives.tracked?.refresh()
   if (target === 'log') await lives.logging?.close()
   if (target === 'team') {
-    await update($, ownerMeet, () => NO_MEET)
+    await update($, sessionAnswer, () => NO_ANSWER)
     await lives.teaming?.refresh()
   }
   if (target === 'meetings') {
@@ -575,8 +575,8 @@ export const register: Register = on => {
   let scheduling: LiveMeetings | null = null
   /** Folds the Stats tab's numbers from the registers' history again while it shows; set when the session starts, null with no team or no register. */
   let tallying: LiveStats | null = null
-  /** Runs `teamrig meet` on a Teams tab row's [Meet] press; set when the session starts, null with no team. */
-  let meeting: OwnerMeet | null = null
+  /** Runs the teamrig CLI on a Teams tab session row's press ([Meet]); set when the session starts, null with no team. */
+  let pressing: SessionActs | null = null
   /** Runs the owner's Note and Next on a task's card; set when the session starts, null with no team. */
   let acting: OwnerActs | null = null
   /** The snapshot drawn docked while the Note field is open: the one of its opening (note-hold.ts). */
@@ -614,7 +614,7 @@ export const register: Register = on => {
     await update($, barFilter, () => null)
     // A start's answer is to its press: a new session, or a hot reload, shows none.
     await update($, meetingStart, () => NO_START)
-    await update($, ownerMeet, () => NO_MEET)
+    await update($, sessionAnswer, () => NO_ANSWER)
     await update($, ownerAct, () => NO_ACT)
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
     // The teamrig CLI the Meetings view runs: the installed plugin's (teamrig-cli.ts), found once.
@@ -794,13 +794,13 @@ export const register: Register = on => {
       tallying = statsLive
       if (statsLive === null) await update($, stats, () => NO_TEAM_STATS)
       // `teamrig meet` finds the team from the tab's folder, the team whose register the pane reads.
-      meeting =
+      pressing =
         team === null
           ? null
-          : new OwnerMeet(cli, {
+          : new SessionActs(cli, {
               run: (argv, timeoutMs) => $.process.run(argv, { cwd: e.cwd, timeoutMs }),
               tell: async answer => {
-                await update($, ownerMeet, () => answer)
+                await update($, sessionAnswer, () => answer)
               },
               now: () => $.clock.now(),
             })
@@ -897,7 +897,7 @@ export const register: Register = on => {
       teaming = null
       scheduling = null
       tallying = null
-      meeting = null
+      pressing = null
       acting = null
       await update($, logList, () => NO_TEAM_LOG)
       await update($, logPage, () => AT_LOG_LIST)
@@ -1153,7 +1153,7 @@ export const register: Register = on => {
                 : current === 'team'
                   ? teamBlocks(team, await read($, teamToggled), clockOf(snap).zone, {
                       search: place.kind === 'search' ? { query: place.query, hits: teamFound } : null,
-                      meet: await read($, ownerMeet),
+                      answer: await read($, sessionAnswer),
                       own: snap.team === null || snap.area === null ? null : sessionKey(snap.team, snap.area),
                     })
                   : current === 'meetings'
@@ -1346,8 +1346,8 @@ export const register: Register = on => {
      * one that opens the inbox's, keyed `goto:inbox:`, each Teams tab key one that opens or closes it in its span's
      * style, keyed `team:`, each session of a tab tied to none one that ties the tab to it as `/teamrig-pane
      * <session>` does, keyed `pin:`, a scheduled meeting's [Start meeting] one that starts it, keyed `start:`, a Team
-     * tab row's [Meet] one that runs `teamrig meet` on its session, keyed `meet:`, then where it is drawn (`from`, the
-     * card's element); a Changes file's row one press that opens or closes its diff, keyed `diff:`, then where it is
+     * tab session row's [Meet] one that runs `teamrig meet` on its session, keyed `<act>:<team>/<session>:`, then
+     * where it is drawn (`from`, the card's element); a Changes file's row one press that opens or closes its diff, keyed `diff:`, then where it is
      * drawn and the row; a task card's owner act (Note, Next, Send, Cancel, Confirm) one press keyed `act:`, the task's
      * Note field an Input keyed `note:`, each by its task alone (press-keys.ts). The field draws no value, ever: the
      * engine drops typed text when the drawn value changes, so what is typed stays with the acts.
@@ -1421,11 +1421,11 @@ export const register: Register = on => {
                   </Button>
                 )
               }
-              case 'meet': {
-                const id = piece.meets
+              case 'session-act': {
+                const press = piece.sessionAct
                 return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void meeting?.meet(id)}>
-                    {drawPress(piece.span, 'meet')}
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void pressing?.press(press)}>
+                    {drawPress(piece.span, press.act)}
                   </Button>
                 )
               }
