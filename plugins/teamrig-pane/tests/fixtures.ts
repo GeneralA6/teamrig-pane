@@ -26,9 +26,9 @@ export const SNAPSHOT_SETTINGS: DrawnSettings = {
 export const TEAM_SETTINGS: TeamSettings = { ...SNAPSHOT_SETTINGS, requireDecisionCard: DEFAULT_REGISTER.requireDecisionCard }
 /**
  * A snapshot's team fields when the pane found no team, on an empty register: no team name, no session name, no leads,
- * no work marks, no goals, no spend read, no cards on the owner and no tasks counted.
+ * no work marks, no goals, no spend read, no cards on the owner, no tasks counted and no task of another register read.
  */
-export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work' | 'goals' | 'spend' | 'ownerCards' | 'taskCounts'> = {
+export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work' | 'goals' | 'spend' | 'ownerCards' | 'taskCounts' | 'elsewhere'> = {
   team: null,
   areaName: null,
   leads: null,
@@ -37,6 +37,7 @@ export const NO_TEAM: Pick<Snapshot, 'team' | 'areaName' | 'leads' | 'work' | 'g
   spend: NO_SPEND,
   ownerCards: {},
   taskCounts: NO_TASK_COUNTS,
+  elsewhere: [],
 }
 
 /** A tree that holds no goals and never moves: a source whose test is not about them. */
