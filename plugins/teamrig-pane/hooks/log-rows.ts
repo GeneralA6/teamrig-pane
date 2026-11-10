@@ -59,20 +59,24 @@ function lineCount(count: number): string {
   return `${count} ${count === 1 ? 'line' : 'lines'}`
 }
 
+/** When the conversation's first and last lines of the window came on `clock`, one time when they are the same, and how many: `21:04 IDT–21:40 IDT · 3 lines`. */
+export function conversationWhen(conversation: LogConversation, clock: Clock): string {
+  const first = timeWords(new Date(conversation.firstAt).toISOString(), clock)
+  const last = timeWords(new Date(conversation.lastAt).toISOString(), clock)
+  return `${first === last ? first : `${first}–${last}`} · ${lineCount(conversation.lines)}`
+}
+
 /**
  * A conversation's row keyed `key`: `title`, over its session (`sessionMarks` underlined), when its first and last
- * lines of the window came and how many; a press opens its page.
+ * lines of the window came and how many (conversationWhen); a press opens its page.
  */
 function conversationBlock(conversation: LogConversation, clock: Clock, key: string, title: Span[], sessionMarks: readonly Mark[]): Block {
   const read: LogRead = { session: conversation.session, claude: conversation.claude }
-  const first = timeWords(new Date(conversation.firstAt).toISOString(), clock)
-  const last = timeWords(new Date(conversation.lastAt).toISOString(), clock)
-  const when = first === last ? first : `${first}–${last}`
   return {
     key,
     rows: [
       { key, spans: title, maxLines: TITLE_LINES },
-      { key: `${key}:what`, spans: markedSpans(`${conversation.session} · ${when} · ${lineCount(conversation.lines)}`, sessionMarks, { dim: true }) },
+      { key: `${key}:what`, spans: markedSpans(`${conversation.session} · ${conversationWhen(conversation, clock)}`, sessionMarks, { dim: true }) },
     ],
     reads: read,
   }
