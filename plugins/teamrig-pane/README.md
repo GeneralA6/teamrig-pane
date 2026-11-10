@@ -239,9 +239,11 @@ terminal. A survey takes the band while it is up, its `[-]` (or `ctrl+x ctrl+a`)
 than the band scrolls in it. Neither press has a key of its own: a band's key would answer that key typed in an
 empty prompt.
 
-Over the banner, a row names the area's previous conversation, so after a `/clear` the band says what came before:
-a dim `previous ·`, then its title as the Conversations list draws it (the tasks its session worked, else how it
-opened), cut at one line. Its `open in pane` button opens the pane at that conversation's page, and `all
+Over the banner, a row in a dim round frame of its own names the area's previous conversation, so after a `/clear`
+the band says what came before: a dim `previous ·`, then its title as the Conversations list draws it (the tasks its
+session worked, else how it opened), cut at one line. A click on its title opens it: each task its session worked
+on a row of its own with its whole title, then when it ran and its count of lines, then how it opened when its tasks
+title it; a second click closes it. Its `open in pane` button opens the pane at that conversation's page, and `all
 conversations` at the Conversations list. The previous conversation is the newest one of the session's area, in the
 hours teamrig keeps its turn log, that is not the one running now; it is read again when the session's conversation
 changes (a `/clear`), from the turn-log files only. With none to name, no turn log or a session with no area, the

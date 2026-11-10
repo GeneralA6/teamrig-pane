@@ -122,6 +122,7 @@ groups (the views, the list's own, a page's steps, the status bar's) and how the
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
 | A click on the banner's `open in pane` | Opens the pane, minimized or never opened too, at the current task's page; back shows the list at its row |
+| A click on the previous conversation's title, over the banner | Opens its tasks' whole titles, when it ran and how it opened under it; again closes them |
 | A click on the previous conversation's `open in pane`, over the banner | Opens the pane at that conversation's page in the Conversations view |
 | A click on `all conversations`, over the banner | Opens the pane at the Conversations list |
 | `b` | On a page: back to the place before it; on the list, shown only while a page lies ahead; on a conversation's page, back to the list; on a Stats list of tasks, back to the numbers |
@@ -144,9 +145,10 @@ right end beside the `[-]`, opens the
 pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
 band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
-Over the banner, a row names the area's previous conversation, so after a `/clear` the band says what came before:
-a dim `previous ·`, then its title as the Conversations list draws it, cut at one line, with `open in pane` (its
-page) and `all conversations` (the list). It is the area's newest conversation in the kept hours of the turn log
+Over the banner, a row in a dim round frame names the area's previous conversation, so after a `/clear` the band
+says what came before: a dim `previous ·`, then its title as the Conversations list draws it, cut at one line, with
+`open in pane` (its page) and `all conversations` (the list). A click on its title opens each task it worked with
+its whole title, when it ran with its count of lines, and how it opened; a second click closes them. It is the area's newest conversation in the kept hours of the turn log
 other than the one running now, read again only when the session's conversation changes. With none to name, no
 turn log or a session with no area, the band is the banner alone.
 
