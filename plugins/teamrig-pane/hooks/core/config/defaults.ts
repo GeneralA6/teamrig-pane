@@ -287,9 +287,11 @@ export const DEFAULT_REFRESH: RefreshConfig = {
 /**
  * A session is counted at 1.2 GB (on 10-19, 18 sessions held 21.9 GB with their helpers and MCP servers), and the
  * commit charge stays at most 92% with it (it reached 100% that morning, and Claude Code then killed running steps).
- * A session quiet an hour may be closed: the owner's pick on 10-19.
+ * A session quiet an hour may be closed: the owner's pick on 10-19. A new tab holds its MB 5 minutes, an estimate of
+ * how long a resumed session takes to load its transcript and MCP servers (not measured yet); a longer hold only counts
+ * a loaded tab twice, both in free memory and in its hold, for longer.
  */
-export const DEFAULT_HEADROOM: HeadroomConfig = { sessionMb: 1200, commitMaxPct: 92, closeIdleMinutes: 60 };
+export const DEFAULT_HEADROOM: HeadroomConfig = { sessionMb: 1200, commitMaxPct: 92, closeIdleMinutes: 60, loadMinutes: 5 };
 
 /**
  * The idle pass closes and reopens sessions unless the team sets it to dry-run or off, so an idle tab spends no tokens
@@ -350,9 +352,26 @@ export const QUEUE_TTL_MARGIN_MINUTES = 10;
 
 /**
  * A host lock lasts 150 minutes and a queued step at most 45 of them, a small step at most 10; a step waits up to an hour
- * for the lock, and its memory is sampled every 15 seconds while it runs.
+ * for the lock, and its memory is sampled every 15 seconds while it runs. The line is in arrival order with one heavy step
+ * at a time (`serial`); in `pipeline` order a waiting step's priority rises a level each 15 minutes, with at most 2 steps
+ * of one session running. `serial` stays the default while a team's own deploy tool may take the lock file without
+ * reading the shares: under `pipeline` heavy steps run as shares with the lock file free, so such a tool could start a
+ * roll beside 2 heavy builds (stopgap T2250: back to `pipeline` once that tool waits for the shares).
  */
-export const DEFAULT_QUEUE: QueueConfig = { lockTtlMinutes: 150, maxRunMinutes: 45, smallMaxRunMinutes: 10, waitMinutes: 60, memorySampleSeconds: 15, memoryFloorMb: 4096, smallReserveMb: 2048, heavyReserveMb: 2048 };
+export const DEFAULT_QUEUE: QueueConfig = {
+  lockTtlMinutes: 150,
+  maxRunMinutes: 45,
+  smallMaxRunMinutes: 10,
+  waitMinutes: 60,
+  memorySampleSeconds: 15,
+  memoryFloorMb: 4096,
+  smallReserveMb: 2048,
+  heavyReserveMb: 2048,
+  admission: 'serial',
+  agingMinutes: 15,
+  perSessionRunning: 2,
+  maxHeavyParallel: 2,
+};
 
 /** A waiting delivery step looks again every 30 seconds; a deploy step waits up to an hour for freezes and the host lock. */
 export const DEFAULT_DELIVERY_WAIT: DeliveryWaitConfig = { pollSeconds: 30, maxMinutes: 60 };

@@ -3,6 +3,8 @@ import { MS_PER_DAY } from '../core/time.ts';
 import type { TimeZone } from '../core/zone.ts';
 import type { MovedEvent, RegisterEvent } from './events.ts';
 import { foldEvents, type Task } from './fold.ts';
+import { goalStats, type GoalStats } from './goal-stats.ts';
+import type { Goal } from './goals.ts';
 import { GITHUB_SOURCE, type TaskStatus } from './model.ts';
 import { waitsOnOwner } from './owner-waits.ts';
 import { dueTime } from './views.ts';
@@ -71,6 +73,8 @@ export interface StatsInput {
   readonly session?: StatsScope;
   /** The stretches the account's week sat at its usage limit (budget/extra.ts `limitSpansOf`); none when unread. */
   readonly limits?: readonly LimitSpan[];
+  /** The goal records by tag, those of the teams above too: a team's tasks serve goals its own file may not hold. */
+  readonly goals?: ReadonlyMap<string, Goal>;
 }
 
 /** A stretch the account's week sat at its usage limit, in ms: from its 100% crossing up to, not including, `end`. */
@@ -232,6 +236,7 @@ export interface RegisterStats {
   /** Oldest first. */
   readonly splits: readonly Split[];
   readonly tasks: StatsTasks;
+  readonly goals: GoalStats;
 }
 
 const TOP_PRIORITY = 1;
@@ -345,6 +350,7 @@ export function registerStats(input: StatsInput): RegisterStats {
       overdueP1: overdue.filter((each) => each.task.priority === TOP_PRIORITY),
       ownerDecisions: onOwner,
     },
+    goals: goalStats({ goals: input.goals ?? new Map<string, Goal>(), tasks: held, doneInRange: done, now: input.now, zone, scoped: session !== undefined }),
   };
 }
 
