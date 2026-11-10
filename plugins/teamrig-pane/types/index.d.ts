@@ -96,6 +96,13 @@ export type TaskRow = {
 }
 
 /**
+ * A task another register of the team tree holds (one numbering across the tree), with that register's team: what
+ * teamrig's TaskTree reads a need the pane's own tasks lack from (core register/tree.ts TaskElsewhere). Its task is
+ * teamrig's folded task, plain data, so it crosses `$.state` as it is.
+ */
+export type TaskElsewhere = { readonly team: string; readonly task: import('../hooks/core/read/index').Task }
+
+/**
  * How the pane knows this session's area: pinned by /teamrig-pane, or its newest `inbox read` mark, which teamrig's
  * prompt hook also writes when it binds a tab by its Claude Code title.
  */
