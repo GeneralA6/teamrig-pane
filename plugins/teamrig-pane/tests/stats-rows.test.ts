@@ -6,6 +6,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { readEvents, registerStats, TimeZone, type ActiveCounts, type RegisterHealth, type StatsDay } from '../hooks/core/read/index'
 import type { Block, Row, Span } from '../hooks/rows'
 import { activeChart, bar } from '../hooks/stats-chart'
+import { GOALS_KEY } from '../hooks/stats-goals'
 import { rangeLabel } from '../hooks/stats-parts'
 import { goalsOf } from '../hooks/stats-source'
 import { DAY_ROWS, FLOW_KEY, HEALTH_DOT, dayLabel, isSectionOpen, listTitle, statsBlocks, type StatsOwn } from '../hooks/stats-rows'
@@ -403,7 +404,7 @@ describe('statsBlocks: Flow', () => {
 describe('statsBlocks: unread team folders', () => {
   test('draw a WARN line each under the pick rows, before the Health tiles', () => {
     const blocks = statsBlocks(viewOf({ failures: [{ team: 'tools', reason: 'EPERM.', isLastRead: true }] }), [], WIDE, OWN)
-    expect(blocks.map(block => block.key)).toEqual(['stats:pick', 'stats:failure:tools', 'stats:health', FLOW_KEY, ...SECTION_KEYS])
+    expect(blocks.map(block => block.key)).toEqual(['stats:pick', 'stats:failure:tools', 'stats:health', FLOW_KEY, ...SECTION_KEYS, GOALS_KEY])
     expect(blockOf(blocks, 'stats:failure:tools').rows.map(lineOf)).toEqual(['WARN team tools could not be read: EPERM; it shows as last read.'])
   })
 })
