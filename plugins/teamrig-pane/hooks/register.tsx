@@ -223,6 +223,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
   spend: NO_SPEND,
   ownerCards: {},
   taskCounts: NO_TASK_COUNTS,
+  elsewhere: [],
   now: 0,
 }
 /**
@@ -231,7 +232,7 @@ const EMPTY_SNAPSHOT: Snapshot = {
  * value reads as absent (the empty snapshot, until the reload's first poll). Bump it whenever the
  * Snapshot or TaskRow type in ../types changes shape.
  */
-const SNAPSHOT_SHAPE = 'register-v16'
+const SNAPSHOT_SHAPE = 'register-v17'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */

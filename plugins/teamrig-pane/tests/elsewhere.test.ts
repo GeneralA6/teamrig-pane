@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TaskElsewhere, TaskRow } from '../types'
 import { readRegister, type Task } from '../hooks/core/read/index'
-import { neededElsewhere, NO_ELSEWHERE, type TasksElsewhere } from '../hooks/elsewhere'
+import { neededElsewhere, NO_ELSEWHERE, type ElsewhereSource, type TasksElsewhere } from '../hooks/elsewhere'
 import { rowOf } from '../hooks/log'
-import { HOUR, NOW, createLine, statusLine, waitingLine } from './fixtures'
+import { TaskRegisterSource, type RegisterPaths } from '../hooks/source'
+import { HOUR, MemoryFiles, NOW, NO_TREE_GOALS, S1, TEAM_SETTINGS, createLine, statusLine, waitingLine } from './fixtures'
 
 /** The tasks teamrig's reader folds from event lines. */
 function tasksOf(lines: readonly string[]): Task[] {
@@ -71,6 +72,78 @@ describe('neededElsewhere', () => {
     const own = rowsOf([createLine('T1', { owner: 'api', by: 'lead', at: AT })])
     const peer = heldBy('web', [createLine('T20', { owner: 'ui', by: 'lead', at: AT, taskKeys: { after: ['T2'] } })])
     expect(neededElsewhere(own, NONE_OWN, peer)).toEqual([])
+  })
+})
+
+const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', goals: 'R/tasks/goals.jsonl', inboxDir: 'R/inbox', tasksWeek: 'R/tasks/usage/tasks.week.json' }
+
+/** The tree's other registers as a test sets them: a refresh says they moved once after each `set`. */
+class SetElsewhere implements ElsewhereSource {
+  current: TasksElsewhere = new Map()
+  problem: string | null = null
+  private moved = false
+
+  set(current: TasksElsewhere, problem: string | null = null): void {
+    this.current = current
+    this.problem = problem
+    this.moved = true
+  }
+
+  async refresh(): Promise<boolean> {
+    const moved = this.moved
+    this.moved = false
+    return moved
+  }
+}
+
+/** A register source over `own` event lines, reading the tree's other registers from `elsewhere`. */
+function sourceOver(own: readonly string[], elsewhere: ElsewhereSource): { files: MemoryFiles; source: TaskRegisterSource } {
+  const files = new MemoryFiles()
+  files.write(PATHS.events, own.join('\n'))
+  return { files, source: new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null, NO_TREE_GOALS, elsewhere) }
+}
+
+const poll = (source: TaskRegisterSource) => source.poll({ claudeSession: S1, pinned: null, now: NOW })
+const OWN_AFTER_T20 = createLine('T1', { owner: 'api', by: 'lead', at: AT, taskKeys: { after: ['T20'] } })
+const T20 = createLine('T20', { owner: 'ui', by: 'lead', at: AT })
+const T22 = createLine('T22', { owner: 'ui', by: 'lead', at: AT })
+
+describe("TaskRegisterSource with the tree's other registers", () => {
+  test('a snapshot holds the tasks of another register its tasks are judged by, and no other', async () => {
+    const elsewhere = new SetElsewhere()
+    elsewhere.set(heldBy('web', [T20, T22]))
+    const snap = await poll(sourceOver([OWN_AFTER_T20], elsewhere).source)
+    expect(ids(snap?.elsewhere ?? [])).toEqual(['web:T20'])
+  })
+
+  test('a move of a task an own task needs makes a new snapshot; one of a task no own task touches makes none', async () => {
+    const elsewhere = new SetElsewhere()
+    elsewhere.set(heldBy('web', [T20, T22]))
+    const { source } = sourceOver([OWN_AFTER_T20], elsewhere)
+    await poll(source)
+    elsewhere.set(heldBy('web', [T20, T22, statusLine('T22', 'ui', NOW, 'done')]))
+    expect(await poll(source)).toBe(null)
+    elsewhere.set(heldBy('web', [T20, statusLine('T20', 'ui', NOW, 'done'), T22]))
+    const moved = await poll(source)
+    expect(moved?.elsewhere.map(({ task }) => task.status)).toEqual(['done'])
+  })
+
+  test('picks again when an own task comes to need a task of another register, though that register did not move', async () => {
+    const elsewhere = new SetElsewhere()
+    elsewhere.set(heldBy('web', [T20, T22]))
+    const { files, source } = sourceOver([OWN_AFTER_T20], elsewhere)
+    await poll(source)
+    files.write(PATHS.events, [OWN_AFTER_T20, createLine('T2', { owner: 'api', by: 'lead', at: NOW, taskKeys: { after: ['T22'] } })].join('\n'))
+    expect(ids((await poll(source))?.elsewhere ?? [])).toEqual(['web:T20', 'web:T22'])
+  })
+
+  test("names the registers it could not read after the lines teamrig's reader skipped, and drops the name once read", async () => {
+    const elsewhere = new SetElsewhere()
+    elsewhere.set(heldBy('web', [T20]), "web's register: locked")
+    const { source } = sourceOver([OWN_AFTER_T20, '{damaged'], elsewhere)
+    expect((await poll(source))?.problem).toBe("events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task; web's register: locked")
+    elsewhere.set(heldBy('web', [T20]))
+    expect((await poll(source))?.problem).toBe('events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task')
   })
 })
 

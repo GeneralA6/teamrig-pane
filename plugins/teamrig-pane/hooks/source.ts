@@ -3,7 +3,7 @@
 // and the register put together by teamrig's own read entry (hooks/core/read), so the pane shows what
 // teamrig's commands show, on a register never rotated and on a rotated one alike.
 // File access goes through `Files`, which register.tsx backs with $.fs and tests with a fake.
-import type { AreaSource, DrawnSettings, GoalRanks, OwnerSettings, SessionOwnerCards, Snapshot, TaskCounts, TaskRow, TaskSpend, TeamLeads, TeamSettings, WorkMark } from '../types'
+import type { AreaSource, DrawnSettings, GoalRanks, OwnerSettings, SessionOwnerCards, Snapshot, TaskCounts, TaskElsewhere, TaskRow, TaskSpend, TeamLeads, TeamSettings, WorkMark } from '../types'
 import {
   assemble,
   GOALS_FILE,
@@ -33,6 +33,7 @@ import {
 } from './core/read/index'
 import { lineHash } from './line-hash'
 import { isHeldFinished } from './done'
+import { neededElsewhere, NO_ELSEWHERE, type ElsewhereSource } from './elsewhere'
 import { inboxItems } from './inbox'
 import { teamLeads } from './leads'
 import { rowOf } from './log'
@@ -145,6 +146,12 @@ export function skippedText(paths: RegisterPaths, register: RegisterSnapshot, ma
   return parts.length > 0 ? parts.join('; ') : null
 }
 
+/** A snapshot's problem from each part's: those it has, joined as skippedText joins its own; null when none has one. */
+function joinedProblems(parts: readonly (string | null)[]): string | null {
+  const named = parts.flatMap(part => (part === null ? [] : [part]))
+  return named.length > 0 ? named.join('; ') : null
+}
+
 /** One file's parsed content, refreshed when its stamp moves; a missing file reads as `empty`. */
 export class WatchedFile<T> {
   private stampKey: string | null = null
@@ -235,9 +242,10 @@ export async function readSegment(files: Files, paths: LayoutPaths, n: number): 
  * the archive segments it does not cover, then the tail. A register never rotated has neither snapshot nor
  * segments, so it is its tail alone, as before rotation. The snapshot is refreshed before the tail, as
  * teamrig reads them: a rotation replaces the tail before it writes the snapshot, so a snapshot read first
- * never covers more than the tail read after it names.
+ * never covers more than the tail read after it names. The team tree's other registers are read the same way
+ * (tree-registers.ts).
  */
-class LayoutRegister {
+export class LayoutRegister {
   private readonly snapshot: WatchedFile<SnapshotRead>
   private readonly tail: WatchedFile<EventLogRead>
   /** The segments the last read plan named, by number: a segment is never rewritten, so each is read once. */
@@ -314,11 +322,21 @@ export class TaskRegisterSource {
   private readonly goals: GoalSource
   /** What the team's tasks cost this week, which a task's size, and so its score and the owner's cards' order, read. */
   private readonly spend: WatchedFile<TaskSpend>
+  /** The tasks the team tree's other registers hold, which an own task's needs are read from. */
+  private readonly elsewhere: ElsewhereSource
+  /** The few of them the snapshot's tasks are judged by (elsewhere.ts neededElsewhere), as last picked. */
+  private needed: TaskElsewhere[] = []
+  /** Their JSON as last picked: a peer's event on a task no own task touches leaves it, and so the snapshot, as it was. */
+  private neededText = '[]'
+  /** The registers of the tree it could not read, as last picked. */
+  private elsewhereProblem: string | null = null
 
-  constructor(files: Files, paths: RegisterPaths, settings: TeamSettings, team: TeamFiles | null, goals: GoalSource) {
+  /** `elsewhere`: the team tree's other registers (tree-registers.ts); a register in no tree reads none. */
+  constructor(files: Files, paths: RegisterPaths, settings: TeamSettings, team: TeamFiles | null, goals: GoalSource, elsewhere: ElsewhereSource = NO_ELSEWHERE) {
     this.files = files
     this.paths = paths
     this.goals = goals
+    this.elsewhere = elsewhere
     const { requireDecisionCard, ...drawn } = settings
     this.drawn = drawn
     this.owner = { ownerSource: settings.ownerSource, requireDecisionCard, focus: settings.focus }
@@ -346,6 +364,8 @@ export class TaskRegisterSource {
     // Before the cards: a moved rank or spend reorders them with no register event.
     const goalsChanged = await this.goals.refresh()
     const spendChanged = await this.spend.refresh()
+    const elsewhereMoved = await this.elsewhere.refresh()
+    const elsewhereChanged = (registerChanged || elsewhereMoved) && this.pickElsewhere()
     const ownerChanged = this.refreshOwnerCards(registerChanged || goalsChanged || spendChanged, now)
     const marksChanged = await this.marks.refresh()
     const { byArea, areaBySession } = indexMarks(this.marks.current.marks)
@@ -357,7 +377,7 @@ export class TaskRegisterSource {
     this.lastArea = area
     const inboxChanged = this.inbox ? await this.inbox.refresh() : false
     const namesChanged = this.names ? await this.names.refresh() : false
-    if (!force && !registerChanged && !goalsChanged && !spendChanged && !ownerChanged && !marksChanged && !areaChanged && !inboxChanged && !namesChanged) return null
+    if (!force && !registerChanged && !goalsChanged && !spendChanged && !elsewhereChanged && !ownerChanged && !marksChanged && !areaChanged && !inboxChanged && !namesChanged) return null
 
     // An area that never ran `inbox read` has no mark: its count is unknown, not everything.
     const mark = area === null ? undefined : byArea.get(area)
@@ -373,14 +393,30 @@ export class TaskRegisterSource {
       work: this.work,
       unreadInbox: unread === null ? null : unread.lines.length,
       inbox: inboxItems(lines, unread === null ? null : unread.total - unread.lines.length, now),
-      problem: skippedText(this.paths, this.register.current, this.marks.current),
+      problem: joinedProblems([skippedText(this.paths, this.register.current, this.marks.current), this.elsewhereProblem]),
       ...this.drawn,
       goals: this.goals.current,
       spend: spendFor(this.spend.current, this.tasks.map(task => task.id)),
       ownerCards: this.ownerCards,
       taskCounts: this.taskCounts,
+      elsewhere: this.needed,
       now,
     }
+  }
+
+  /**
+   * Picks again the tree's tasks the snapshot's tasks are judged by, after the register or the tree's other registers
+   * moved; true when the pick or its problem changed.
+   */
+  private pickElsewhere(): boolean {
+    const needed = neededElsewhere(this.tasks, this.register.current.state.tasks, this.elsewhere.current)
+    const text = JSON.stringify(needed)
+    const { problem } = this.elsewhere
+    if (text === this.neededText && problem === this.elsewhereProblem) return false
+    this.needed = needed
+    this.neededText = text
+    this.elsewhereProblem = problem
+    return true
   }
 
   /**

@@ -203,6 +203,12 @@ export type Snapshot = {
   ownerCards: Readonly<Record<string, SessionOwnerCards>>
   /** Each session's tasks counted, as the register last folded (hooks/task-counts.ts): recounted when it moves. */
   taskCounts: TaskCounts
+  /**
+   * The tasks the team tree's other registers hold that the snapshot's tasks are judged by, in task order
+   * (hooks/elsewhere.ts): those they need and the active ones that need them, as the last poll found them. Plan order
+   * holds an own task back behind one, as `teamrig list` does. Empty with no team or a team in no tree.
+   */
+  elsewhere: readonly TaskElsewhere[]
   /** When it was built, so due and age labels move on without a file change. */
   now: number
 }
