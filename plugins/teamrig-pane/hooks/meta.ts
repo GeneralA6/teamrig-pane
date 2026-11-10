@@ -8,8 +8,9 @@
 // snapshot's clock. Pure: the words change with the clock and the other tasks' statuses, so view.ts's sameView compares
 // them to know when a poll must redraw.
 import type { ThemeKey } from 'claude-code'
-import type { GoalRanks, RankFocus, TaskRow, TaskSpend, TaskStatus, TeamLeads } from '../types'
+import type { GoalRanks, RankFocus, TaskElsewhere, TaskRow, TaskSpend, TaskStatus, TeamLeads } from '../types'
 import { ACTIVE_STATUSES, dueTime, priorityText, TaskTree, TimeZone, unfinishedAfter, waitText, type EffectiveDue, type TreeRanking, type WaitContext } from './core/read/index'
+import type { TasksElsewhere } from './elsewhere'
 import { rankingOf } from './ranking'
 import type { Span } from './rows'
 import { dayOf, zoneNamed, type Clock } from './zone'
@@ -22,10 +23,12 @@ export type Flag = 'overdue' | 'new' | 'unseen'
 
 /**
  * What treeOf reads from a snapshot (types/index.d.ts Snapshot): its tasks, its clock, the team's NOT PICKED UP hours
- * and zone, who leads whom, and what its ranking reads: the team's focus, owner marker and goals, and what its tasks cost.
+ * and zone, who leads whom, what its ranking reads (the team's focus, owner marker and goals, and what its tasks cost),
+ * and the tasks of the tree's other registers its tasks are judged by (elsewhere.ts).
  */
 export type TreeSource = {
   readonly tasks: readonly TaskRow[]
+  readonly elsewhere: readonly TaskElsewhere[]
   readonly now: number
   readonly notPickedUpAfterHours: number
   readonly timeZone: string
@@ -39,15 +42,24 @@ export type TreeSource = {
 /**
  * teamrig's dependency tree of the snapshot's tasks at its clock in the team's zone (core register/tree.ts), with how
  * long a task may stand untouched by its owner before teamrig's `register check` flags it NOT-PICKED-UP (the team
- * config's `register.check.notPickedUpAfterHours`), who leads whom for the card's Lead row (leads.ts), and the ranking
- * its plan order reads (ranking.ts): with none, priority would order nothing.
+ * config's `register.check.notPickedUpAfterHours`), who leads whom for the card's Lead row (leads.ts), the tasks of the
+ * tree's other registers a need the snapshot lacks is read from, so a task after another team's open one stays back as
+ * in `teamrig list`, and the ranking its plan order reads (ranking.ts): with none, priority would order nothing.
  */
 export class PaneTree extends TaskTree<TaskRow> {
   readonly notPickedUpMs: number
   readonly leads: TeamLeads | null
 
-  constructor(tasks: ReadonlyMap<string, TaskRow>, now: Date, zone: TimeZone, notPickedUpAfterHours: number, leads: TeamLeads | null, ranking: TreeRanking) {
-    super(tasks, now, zone, undefined, undefined, ranking)
+  constructor(
+    tasks: ReadonlyMap<string, TaskRow>,
+    now: Date,
+    zone: TimeZone,
+    notPickedUpAfterHours: number,
+    leads: TeamLeads | null,
+    elsewhere: TasksElsewhere,
+    ranking: TreeRanking,
+  ) {
+    super(tasks, now, zone, undefined, elsewhere, ranking)
     this.notPickedUpMs = notPickedUpAfterHours * HOUR_MS
     this.leads = leads
   }
@@ -210,7 +222,15 @@ export function lateWords(task: TaskRow, tree: TaskTree<TaskRow>): string | null
  * as in teamrig.
  */
 export function treeOf(snap: TreeSource): PaneTree {
-  return new PaneTree(new Map(snap.tasks.map(task => [task.id, task])), new Date(snap.now), zoneNamed(snap.timeZone), snap.notPickedUpAfterHours, snap.leads, rankingOf(snap.focus, snap.ownerSource, snap.goals, snap.spend))
+  return new PaneTree(
+    new Map(snap.tasks.map(task => [task.id, task])),
+    new Date(snap.now),
+    zoneNamed(snap.timeZone),
+    snap.notPickedUpAfterHours,
+    snap.leads,
+    new Map(snap.elsewhere.map(away => [away.task.id, away])),
+    rankingOf(snap.focus, snap.ownerSource, snap.goals, snap.spend),
+  )
 }
 
 /**

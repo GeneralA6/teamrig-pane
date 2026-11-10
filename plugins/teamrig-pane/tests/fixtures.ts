@@ -8,7 +8,7 @@ import { NO_SPEND } from '../hooks/ranking'
 import type { FileStamp, Files, GoalSource } from '../hooks/source'
 import { NO_TASK_COUNTS } from '../hooks/task-counts'
 import { zoneNamed, type Clock } from '../hooks/zone'
-import type { DrawnSettings, GoalRanks, Snapshot, TaskRow, TaskSpend, TeamLeads, TeamSettings, WaitRow } from '../types'
+import type { DrawnSettings, GoalRanks, Snapshot, TaskElsewhere, TaskRow, TaskSpend, TeamLeads, TeamSettings, WaitRow } from '../types'
 
 export const NOW = Date.UTC(2026, 9, 13, 14, 0)
 export const HOUR = 3_600_000
@@ -98,8 +98,9 @@ export function treeAt(
   leads: TeamLeads | null = null,
   goals: GoalRanks = {},
   spend: TaskSpend = NO_SPEND,
+  elsewhere: readonly TaskElsewhere[] = [],
 ): PaneTree {
-  return treeOf({ tasks, now, notPickedUpAfterHours, timeZone, leads, focus: DEFAULT_FOCUS, ownerSource: DEFAULT_REGISTER.ownerSource, goals, spend })
+  return treeOf({ tasks, elsewhere, now, notPickedUpAfterHours, timeZone, leads, focus: DEFAULT_FOCUS, ownerSource: DEFAULT_REGISTER.ownerSource, goals, spend })
 }
 
 /** The clock at `now` in `zone`, UTC unless given. */
