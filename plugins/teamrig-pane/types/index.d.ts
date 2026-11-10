@@ -506,11 +506,20 @@ export type MeetingsView =
 export type MeetingStart = { readonly id: string; readonly outcome: 'starting' | 'started' | 'refused'; readonly lines: readonly string[] }
 
 /**
- * What the last [Meet] press on the Teams tab answered (hooks/owner-meet.ts): the session, whether teamrig is still
- * asking it, asked it to bring the owner its cards, or refused, and the lines it printed (the tab it woke or opened),
- * or why it refused; and when (`at`, epoch ms): the press while asking, the CLI's answer once asked or refused.
+ * A press on a session's row of the Teams tab that runs the teamrig CLI on that session (hooks/session-acts.ts):
+ * [Meet] runs `teamrig meet`, which asks it to bring the owner its cards.
  */
-export type MeetAnswer = { readonly session: string; readonly outcome: 'asking' | 'asked' | 'refused'; readonly lines: readonly string[]; readonly at: number }
+export type SessionAct = 'meet'
+
+/** A session act pressed on a session's row: which act, and the session it acts on, by its team and id. */
+export type SessionPress = { readonly act: SessionAct; readonly team: string; readonly session: string }
+
+/**
+ * What the last session act pressed on the Teams tab answered (hooks/session-acts.ts): the press, whether teamrig
+ * still runs it, did it, or refused, and the lines it printed (what it did) or why it refused; and when (`at`, epoch
+ * ms): the press while it runs, the CLI's answer once done or refused.
+ */
+export type SessionAnswer = SessionPress & { readonly outcome: 'running' | 'done' | 'refused'; readonly lines: readonly string[]; readonly at: number }
 
 /** The owner's two acts on a task card (hooks/owner-acts.ts): a Note to its session, or putting it Next on its list. */
 export type OwnerActName = 'note' | 'next'
@@ -721,8 +730,8 @@ declare module 'claude-code' {
       meetingsOpen: readonly string[]
       /** What the last [Start meeting] press answered; null before one, and after a session start or a switch to the view. */
       meetingStart: MeetingStart | null
-      /** What the last [Meet] press on the Teams tab answered; null before one, and after a session start or a switch to the tab. */
-      ownerMeet: MeetAnswer | null
+      /** What the last session act pressed on the Teams tab answered; null before one, and after a session start or a switch to the tab. */
+      sessionAnswer: SessionAnswer | null
       /** Where the owner's Note or Next on a task card stands (hooks/owner-acts.ts); null before one, after a cancel and after a session start. */
       ownerAct: OwnerAct | null
       /** The Stats tab's numbers (hooks/stats-source.ts), as last folded. */
