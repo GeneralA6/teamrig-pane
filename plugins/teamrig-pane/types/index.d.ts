@@ -507,9 +507,10 @@ export type MeetingStart = { readonly id: string; readonly outcome: 'starting' |
 
 /**
  * A press on a session's row of the Teams tab that runs the teamrig CLI on that session (hooks/session-acts.ts):
- * [Meet] runs `teamrig meet`, which asks it to bring the owner its cards.
+ * [Meet] runs `teamrig meet`, which asks it to bring the owner its cards; [Wake] runs `teamrig owner wake`, which wakes
+ * it by hand to work its task list.
  */
-export type SessionAct = 'meet'
+export type SessionAct = 'meet' | 'wake'
 
 /** A session act pressed on a session's row: which act, and the session it acts on, by its team and id. */
 export type SessionPress = { readonly act: SessionAct; readonly team: string; readonly session: string }

@@ -28,7 +28,7 @@ import { cells } from './width'
  * a press on ties the tab to, as `/teamrig-pane <session>` does (a tab tied to no session, noSessionBlock); never split.
  * With `starts` the text is a press that starts that meeting (a scheduled meeting's card, meetings-rows.ts); never
  * split. With `sessionAct` the text is a press that runs that act on that session (session-acts.ts): a Teams tab row's
- * [Meet], team-rows.ts, which brings the owner its cards; never split. With `acts` the text is a press of the owner's Note or Next on
+ * [Meet], team-rows.ts, which brings the owner its cards, or its [Wake], which wakes the session; never split. With `acts` the text is a press of the owner's Note or Next on
  * a task's card (owner-acts.ts); never split. With `stats` the text is a press on the Stats tab's scope or range row
  * that picks that scope or range, or a Health tile's count that lists its tasks (stats-rows.ts); never split.
  * `underline` marks the words a search matched

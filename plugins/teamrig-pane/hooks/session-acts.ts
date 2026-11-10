@@ -1,26 +1,36 @@
 // The Teams tab's presses on a session's row that run the teamrig CLI on that session (T2298), each act its words:
 // [Meet] (T1297) runs `teamrig meet <session>`, which wakes a running session with an inbox line asking it to bring the
 // owner its cards, or opens it fresh in a new tab to do so, and refuses a session with no card waiting on the owner now.
+// [Wake] runs `teamrig owner wake <team>/<session>`, the owner's wake by hand: an idle running session gets an inbox
+// line that wakes it to work its task list, one not running opens in a new tab, and a tab in a turn, at a tool call or
+// waiting on the person is refused with nothing posted.
 // One run at a time, of any act: it tells that it runs, then what the CLI answered, its lines on success and its
 // refusal verbatim, each stamped with when (the press, then the CLI's answer), as the session's row shows it
-// (team-rows.ts, T2206). The CLI finds the team from the tab's folder, the team whose register the pane reads, as the
-// Teams tab's cards are that team's alone. Runs the CLI only; no model calls.
+// (team-rows.ts, T2206). A meet's CLI finds the team from the tab's folder, the team whose register the pane reads, as
+// the Teams tab's cards are that team's alone; a wake names the team, as any session of the tree can be woken. Runs
+// the CLI only; no model calls.
 import type { SessionAct, SessionAnswer, SessionPress } from '../types'
 import { messageOf } from './errors'
 import { cliArgv, failureLines, linesOf, type CliRun, type TeamrigCli } from './teamrig-cli'
 
 /** A meet reads the register and the host's processes, then posts an inbox line or opens a tab: far under this. */
 export const MEET_TIMEOUT_MS = 60_000
+/** A wake that opens the session starts a tab and waits for it to come up, so it gets twice a meet's time. */
+export const WAKE_TIMEOUT_MS = 120_000
 
 /** How an act runs: the CLI's words for the session it acts on, and how long a run may take. */
 type ActRun = { readonly words: (press: SessionPress) => readonly string[]; readonly timeoutMs: number }
 
-/** Each act's run: [Meet] names the session alone, as `teamrig meet` finds its team from the tab's folder. */
+/**
+ * Each act's run: [Meet] names the session alone, as `teamrig meet` finds its team from the tab's folder; [Wake] names
+ * it with its team, as the owner wakes any session of the tree.
+ */
 const ACT_RUNS: { readonly [act in SessionAct]: ActRun } = {
   meet: { words: ({ session }) => ['meet', session], timeoutMs: MEET_TIMEOUT_MS },
+  wake: { words: ({ team, session }) => ['owner', 'wake', `${team}/${session}`], timeoutMs: WAKE_TIMEOUT_MS },
 }
 
-/** The CLI's words for `press`: `meet <session>`. */
+/** The CLI's words for `press`: `meet <session>`, `owner wake <team>/<session>`. */
 export function actWords(press: SessionPress): readonly string[] {
   return ACT_RUNS[press.act].words(press)
 }

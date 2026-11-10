@@ -1,15 +1,16 @@
 // The Teams tab as rows (hooks/team-rows.ts): a node a row, indented by its depth behind its open mark, a team's counts
 // and its week bar, a session's name, how many it leads, roles in their colours (never a name it no longer runs under,
 // nor a hire or retire day: its card has them), a retired group's count, a press on each row that opens what lies under
-// it or a session's card, a leader's two, the [Stats] press that ends a team's and a session's row, the notes for a tree
-// it cannot show, and a WARN line for each team folder it could not read.
+// it or a session's card, a leader's two, an active session's [Meet] and [Wake] and what each answered, the [Stats] press
+// that ends a team's and a session's row, the notes for a tree it cannot show, and a WARN line for each team folder it
+// could not read.
 import { describe, expect, test } from 'claude-code/testing'
 import type { SessionAnswer, SessionPress, TeamFolderFailure, TeamView } from '../types'
 import { TimeZone } from '../hooks/core/read/index'
 import { dockLayout, inlineLayout } from '../hooks/layout'
 import { SEPARATOR, type Block, type Span } from '../hooks/rows'
 import { sessionKey, type TeamTreeNode } from '../hooks/team'
-import { MEET_ASKING, MEET_TEXT, OWN_MARK, STATS_TEXT, TEAM_NOTHING_FOUND, TEAM_SEARCH_HINT, WEEK_CELLS, cardKey, openedWith, teamBlocks, toggledWith } from '../hooks/team-rows'
+import { MEET_ASKING, MEET_TEXT, OWN_MARK, STATS_TEXT, TEAM_NOTHING_FOUND, TEAM_SEARCH_HINT, WAKE_TEXT, WEEK_CELLS, cardKey, openedWith, teamBlocks, toggledWith } from '../hooks/team-rows'
 import { searchTeam } from '../hooks/team-search'
 import { cells } from '../hooks/width'
 import { HOUR, JERUSALEM, NOW } from './fixtures'
@@ -22,6 +23,10 @@ const ROOT = treeOf([ACME, TOOLS], 'acme')
 const TREE: TeamView = { kind: 'tree', root: ROOT, failures: [] }
 /** The [Meet] press on acme's api row. */
 const MEET_API: SessionPress = { act: 'meet', team: 'acme', session: 'api' }
+/** The [Wake] press on acme's api row. */
+const WAKE_API: SessionPress = { act: 'wake', team: 'acme', session: 'api' }
+/** The [Wake] press on acme's api row as its row draws it. */
+const WAKE_PRESS: Span = { text: WAKE_TEXT, dim: true, sessionAct: WAKE_API }
 
 function blockOf(blocks: Block[], key: string): Block {
   const block = blocks.find(found => found.key === key)
@@ -33,15 +38,15 @@ describe('teamBlocks', () => {
   test('a row a node, depth first: each indented by its depth behind ▾ open, ▸ closed or blank, its words after', () => {
     expect(words(teamBlocks(TREE, [], UTC))).toEqual([
       ['team:acme', ['▾ acme · 5 active · 1 retired [Stats]']],
-      ['session:acme/lead', ['  ▾ ● acme-lead (2) · lead [Stats]']],
-      ['session:acme/web', ['    ▾ ● acme-web (2) · sub-lead · later Mon 11-02 [Stats]']],
-      ['session:acme/api', ['        ● acme-backend · ? 1 decision [Meet] [Stats]']],
-      ['session:acme/ui', ['        ● acme-ui [Stats]']],
-      ['session:acme/ops', ['      ● acme-ops · security reviewer [Stats]']],
+      ['session:acme/lead', ['  ▾ ● acme-lead (2) · lead [Wake] [Stats]']],
+      ['session:acme/web', ['    ▾ ● acme-web (2) · sub-lead · later Mon 11-02 [Wake] [Stats]']],
+      ['session:acme/api', ['        ● acme-backend · ? 1 decision [Meet] [Wake] [Stats]']],
+      ['session:acme/ui', ['        ● acme-ui [Wake] [Stats]']],
+      ['session:acme/ops', ['      ● acme-ops · security reviewer [Wake] [Stats]']],
       ['retired:acme', ['  ▸ retired (1)']],
       ['team:tools', ['  ▾ tools · 2 active · 0 retired [Stats]']],
-      ['session:tools/boss', ['    ▾ ● tools-boss (1) · lead [Stats]']],
-      ['session:tools/dev', ['        ● tools-dev [Stats]']],
+      ['session:tools/boss', ['    ▾ ● tools-boss (1) · lead [Wake] [Stats]']],
+      ['session:tools/dev', ['        ● tools-dev [Wake] [Stats]']],
     ])
   })
 
@@ -75,22 +80,23 @@ describe('teamBlocks', () => {
   test("a session's row counts its cards waiting on the owner, with a [Meet] press, and names when the next put off comes back", () => {
     const blocks = teamBlocks(TREE, [], UTC)
     const api = blockOf(blocks, 'session:acme/api').rows[0]?.spans ?? []
-    expect(api.slice(-6, -2)).toEqual([SEPARATOR, { text: '? 1 decision', color: 'suggestion' }, { text: ' ' }, { text: MEET_TEXT, color: 'suggestion', sessionAct: MEET_API }])
-    expect(blockOf(blocks, 'session:acme/web').rows[0]?.spans.slice(-4, -2)).toEqual([SEPARATOR, { text: 'later Mon 11-02', dim: true }])
+    expect(api.slice(-8, -4)).toEqual([SEPARATOR, { text: '? 1 decision', color: 'suggestion' }, { text: ' ' }, { text: MEET_TEXT, color: 'suggestion', sessionAct: MEET_API }])
+    expect(blockOf(blocks, 'session:acme/web').rows[0]?.spans.slice(-6, -4)).toEqual([SEPARATOR, { text: 'later Mon 11-02', dim: true }])
     const two = { ...ACME, ownerCards: { api: { due: [{ id: 'T4', title: 'Pick the database' }, { id: 'T7', title: 'Pick the queue' }], later: [] } } }
     const twice = teamBlocks({ kind: 'tree', root: treeOf([two], 'acme'), failures: [] }, [], UTC)
-    expect(words(twice).find(([key]) => key === 'session:acme/api')?.[1]).toEqual(['        ● acme-backend · ? 2 decisions [Meet] [Stats]'])
+    expect(words(twice).find(([key]) => key === 'session:acme/api')?.[1]).toEqual(['        ● acme-backend · ? 2 decisions [Meet] [Wake] [Stats]'])
     // A team whose register the pane does not read shows no cards, and no [Meet].
-    expect(blocks.some(block => block.key.startsWith('session:tools/') && block.rows.some(row => row.spans.some(span => span.sessionAct !== undefined)))).toBe(false)
+    expect(blocks.some(block => block.key.startsWith('session:tools/') && block.rows.some(row => row.spans.some(span => span.sessionAct?.act === 'meet')))).toBe(false)
   })
 
-  test('docked, a row with a [Meet] draws its name as the press that opens its card and the [Meet] and [Stats] as presses of their own', () => {
+  test('docked, a row with a [Meet] draws its name as the press that opens its card and the [Meet], [Wake] and [Stats] as presses of their own', () => {
     const [drawn] = dockLayout([blockOf(teamBlocks(TREE, [], UTC), 'session:acme/api')], 80)
     const pieces = drawn?.parts?.flatMap(part => (part.kind === 'line' ? part.pieces : [])) ?? []
     const stats = { kind: 'open', scope: { kind: 'session', team: 'acme', session: 'api' }, row: 'session:acme/api' } as const
     expect(pieces.filter(piece => piece.kind !== 'words')).toEqual([
       { kind: 'toggle', span: { text: 'acme-backend', bold: true, toggles: cardKey('session:acme/api') }, toggles: cardKey('session:acme/api') },
       { kind: 'session-act', span: { text: MEET_TEXT, color: 'suggestion', sessionAct: MEET_API }, sessionAct: MEET_API },
+      { kind: 'session-act', span: WAKE_PRESS, sessionAct: WAKE_API },
       { kind: 'stats', span: { text: STATS_TEXT, dim: true, stats }, stats },
     ])
   })
@@ -154,27 +160,75 @@ describe('teamBlocks', () => {
   test("the [Meet] press answers on the row of the session it names: Asking… and Asked with its time hold no press, a refusal keeps it", () => {
     const apiRow = (answer: SessionAnswer, zone = UTC) => blockOf(teamBlocks(TREE, [], zone, { answer }), 'session:acme/api').rows[0]?.spans ?? []
     const textOf = (spans: readonly Span[]) => spans.map(span => span.text).join('')
-    const hasPress = (spans: readonly Span[]) => spans.some(span => span.sessionAct !== undefined)
+    const hasPress = (spans: readonly Span[]) => spans.some(span => span.sessionAct?.act === 'meet')
     const asking = apiRow({ ...MEET_API, outcome: 'running', lines: [], at: NOW })
-    expect(textOf(asking)).toBe('        ● acme-backend · ? 1 decision Asking… [Stats]')
-    expect(asking.slice(-3, -2)).toEqual([{ text: MEET_ASKING, dim: true }])
+    expect(textOf(asking)).toBe('        ● acme-backend · ? 1 decision Asking… [Wake] [Stats]')
+    expect(asking.slice(-5, -4)).toEqual([{ text: MEET_ASKING, dim: true }])
     expect(hasPress(asking)).toBe(false)
     // Asked, on the team's clock, when teamrig answered: no press, so the owner has nothing to press again.
     const asked = apiRow({ ...MEET_API, outcome: 'done', lines: ['WOKE acme-backend (session api)'], at: NOW + HOUR }, JERUSALEM)
-    expect(asked.slice(-3, -2)).toEqual([{ text: `Asked ${JERUSALEM.clock(new Date(NOW + HOUR))}`, color: 'success' }])
-    expect(textOf(asked)).toBe('        ● acme-backend · ? 1 decision Asked 18:00 IDT [Stats]')
+    expect(asked.slice(-5, -4)).toEqual([{ text: `Asked ${JERUSALEM.clock(new Date(NOW + HOUR))}`, color: 'success' }])
+    expect(textOf(asked)).toBe('        ● acme-backend · ? 1 decision Asked 18:00 IDT [Wake] [Stats]')
     expect(hasPress(asked)).toBe(false)
     const refused = apiRow({ ...MEET_API, outcome: 'refused', lines: ['api has no card waiting on owner now'], at: NOW })
-    expect(refused.slice(-4, -2)).toEqual([{ text: MEET_TEXT, color: 'suggestion', sessionAct: MEET_API }, { text: ' not asked', color: 'warning' }])
+    expect(refused.slice(-6, -4)).toEqual([{ text: MEET_TEXT, color: 'suggestion', sessionAct: MEET_API }, { text: ' not asked', color: 'warning' }])
     // An answer naming another session, or a session of the same id on another team, leaves this row's press as it was.
-    expect(apiRow({ ...MEET_API, session: 'web', outcome: 'running', lines: [], at: NOW }).slice(-3, -2)).toEqual([{ text: MEET_TEXT, color: 'suggestion', sessionAct: MEET_API }])
-    expect(apiRow({ ...MEET_API, team: 'tools', outcome: 'running', lines: [], at: NOW }).slice(-3, -2)).toEqual([{ text: MEET_TEXT, color: 'suggestion', sessionAct: MEET_API }])
+    expect(apiRow({ ...MEET_API, session: 'web', outcome: 'running', lines: [], at: NOW }).slice(-5, -4)).toEqual([{ text: MEET_TEXT, color: 'suggestion', sessionAct: MEET_API }])
+    expect(apiRow({ ...MEET_API, team: 'tools', outcome: 'running', lines: [], at: NOW }).slice(-5, -4)).toEqual([{ text: MEET_TEXT, color: 'suggestion', sessionAct: MEET_API }])
     // Docked, an asked row draws no [Meet] press of its own.
     const [drawn] = dockLayout([blockOf(teamBlocks(TREE, [], UTC, { answer: { ...MEET_API, outcome: 'done', lines: [], at: NOW } }), 'session:acme/api')], 80)
-    expect(drawn?.parts?.flatMap(part => (part.kind === 'line' ? part.pieces : [])).some(piece => piece.kind === 'session-act')).toBe(false)
+    expect(drawn?.parts?.flatMap(part => (part.kind === 'line' ? part.pieces : [])).some(piece => piece.kind === 'session-act' && piece.sessionAct.act === 'meet')).toBe(false)
     // A search's row of the session answers the same.
     const searched = teamBlocks(TREE, [], UTC, { search: { query: 'api', hits: searchTeam(ROOT, 'api') }, answer: { ...MEET_API, outcome: 'running', lines: [], at: NOW } })
     expect(words(searched).some(([, lines]) => lines.some(line => line.includes('? 1 decision Asking…')))).toBe(true)
+  })
+
+  test("an active session's row, another team's too, holds a [Wake] press before its [Stats]; a retired one's and the pane's own hold none", () => {
+    const blocks = teamBlocks(TREE, ['retired:acme'], UTC, { own: sessionKey('acme', 'web') })
+    const wakesOf = (key: string) => blockOf(blocks, key).rows[0]?.spans.filter(span => span.sessionAct?.act === 'wake')
+    expect(wakesOf('session:acme/api')).toEqual([WAKE_PRESS])
+    expect(blockOf(blocks, 'session:acme/api').rows[0]?.spans.slice(-4, -1)).toEqual([{ text: ' ' }, WAKE_PRESS, { text: ' ' }])
+    // The owner wakes any session of the tree, so a team whose register the pane does not read has it too.
+    expect(wakesOf('session:tools/dev')).toEqual([{ text: WAKE_TEXT, dim: true, sessionAct: { act: 'wake', team: 'tools', session: 'dev' } }])
+    // A retired session has no tab to wake; the pane's own session is the tab the owner types in.
+    expect(wakesOf('session:acme/qa')).toEqual([])
+    expect(wakesOf('session:acme/web')).toEqual([])
+    expect(wakesOf('team:acme')).toEqual([])
+  })
+
+  test('the [Wake] press answers on its row: Waking… and Woke with its time hold no press, a refusal keeps it; a [Meet] answer leaves it as it was', () => {
+    const apiRow = (answer: SessionAnswer, zone = UTC) => blockOf(teamBlocks(TREE, [], zone, { answer }), 'session:acme/api').rows[0]?.spans ?? []
+    const textOf = (spans: readonly Span[]) => spans.map(span => span.text).join('')
+    const hasWake = (spans: readonly Span[]) => spans.some(span => span.sessionAct?.act === 'wake')
+    const waking = apiRow({ ...WAKE_API, outcome: 'running', lines: [], at: NOW })
+    expect(textOf(waking)).toBe('        ● acme-backend · ? 1 decision [Meet] Waking… [Stats]')
+    expect(waking.slice(-3, -2)).toEqual([{ text: 'Waking…', dim: true }])
+    expect(hasWake(waking)).toBe(false)
+    // Its [Meet] stays a press while the wake runs.
+    expect(waking.some(span => span.sessionAct?.act === 'meet')).toBe(true)
+    const woke = apiRow({ ...WAKE_API, outcome: 'done', lines: ['WAKES acme-backend (session api) within about 15 s'], at: NOW + HOUR }, JERUSALEM)
+    expect(woke.slice(-3, -2)).toEqual([{ text: `Woke ${JERUSALEM.clock(new Date(NOW + HOUR))}`, color: 'success' }])
+    expect(textOf(woke)).toBe('        ● acme-backend · ? 1 decision [Meet] Woke 18:00 IDT [Stats]')
+    expect(hasWake(woke)).toBe(false)
+    const refused = apiRow({ ...WAKE_API, outcome: 'refused', lines: ['REFUSED acme-backend (session api) is in a turn, so nothing was posted'], at: NOW })
+    expect(refused.slice(-4, -2)).toEqual([WAKE_PRESS, { text: ' not woken', color: 'warning' }])
+    // A [Meet] answer, or a wake of the same id on another team, leaves this row's [Wake] as it was.
+    expect(apiRow({ ...MEET_API, outcome: 'running', lines: [], at: NOW }).slice(-3, -2)).toEqual([WAKE_PRESS])
+    expect(apiRow({ ...WAKE_API, team: 'tools', outcome: 'running', lines: [], at: NOW }).slice(-3, -2)).toEqual([WAKE_PRESS])
+  })
+
+  test('what the last [Wake] press answered leads the tab: waking, woke with what teamrig printed, or why it was refused', () => {
+    const led = (answer: SessionAnswer) => teamBlocks(TREE, [], UTC, { answer })[0]
+    const waking = led({ ...WAKE_API, outcome: 'running', lines: [], at: NOW })
+    expect(waking === undefined ? [] : words([waking])).toEqual([['team:wake', ['Waking api…']]])
+    const woke = led({ ...WAKE_API, outcome: 'done', lines: ['WAKES acme-backend (session api) within about 15 s'], at: NOW })
+    expect(woke === undefined ? [] : words([woke])).toEqual([['team:wake', ['Woke api:', '  WAKES acme-backend (session api) within about 15 s']]])
+    expect(woke?.rows[0]?.spans).toEqual([{ text: 'Woke api:', color: 'success' }])
+    const refused = led({ ...WAKE_API, outcome: 'refused', lines: ['REFUSED acme-backend (session api) is in a turn, so nothing was posted'], at: NOW })
+    expect(refused?.rows.map(row => row.spans)).toEqual([
+      [{ text: 'api was not woken:', color: 'warning' }],
+      [{ text: '  REFUSED acme-backend (session api) is in a turn, so nothing was posted', color: 'warning' }],
+    ])
   })
 
   test("a leader's row holds two presses, docked: its mark opens or closes the sessions it leads, its name its card", () => {
@@ -218,9 +272,9 @@ describe('teamBlocks', () => {
   test("a row's roles each in its role's colour, a leader not the lead a sub-lead; an area owner's row shows no role", () => {
     const blocks = teamBlocks(TREE, [], UTC)
     const spansOf = (key: string) => blockOf(blocks, key).rows[0]?.spans ?? []
-    expect(spansOf('session:acme/lead').slice(-4, -2)).toEqual([SEPARATOR, { text: 'lead', color: 'claude' }])
-    expect(spansOf('session:acme/web').slice(-6, -4)).toEqual([SEPARATOR, { text: 'sub-lead', color: 'warning' }])
-    expect(spansOf('session:acme/ops').slice(-4, -2)).toEqual([SEPARATOR, { text: 'security reviewer', color: 'error' }])
+    expect(spansOf('session:acme/lead').slice(-6, -4)).toEqual([SEPARATOR, { text: 'lead', color: 'claude' }])
+    expect(spansOf('session:acme/web').slice(-8, -6)).toEqual([SEPARATOR, { text: 'sub-lead', color: 'warning' }])
+    expect(spansOf('session:acme/ops').slice(-6, -4)).toEqual([SEPARATOR, { text: 'security reviewer', color: 'error' }])
     expect(spansOf('session:acme/ui').some(span => span.color !== undefined)).toBe(false)
   })
 
@@ -228,7 +282,7 @@ describe('teamBlocks', () => {
     const late = { ...ACME, hires: [hire('ui', Date.UTC(2026, 9, 11, 22, 30))] }
     const tree: TeamView = { kind: 'tree', root: treeOf([late], 'acme'), failures: [] }
     const ui = (zone: TimeZone) => blockOf(teamBlocks(tree, [cardKey('session:acme/ui')], zone), 'session:acme/ui')
-    expect(words([ui(UTC)])[0]?.[1]).toEqual(['        ● acme-ui [Stats]'])
+    expect(words([ui(UTC)])[0]?.[1]).toEqual(['        ● acme-ui [Wake] [Stats]'])
     const hired = (zone: TimeZone) => ui(zone).card?.find(row => row.key === 'team-card:acme/ui:hire')?.spans.map(span => span.text).join('')
     expect(hired(UTC)).toContain('Sun 10-11 by lead')
     expect(hired(JERUSALEM)).toContain('Mon 10-12 by lead')
@@ -239,7 +293,7 @@ describe('teamBlocks', () => {
     const renamed = { ...named, renames: [{ v: 1, id: 'lead', from: 'acme-lead', to: 'lead', at: new Date(NOW - HOUR).toISOString(), by: 'lead' }] }
     expect(words(teamBlocks({ kind: 'tree', root: treeOf([renamed], 'acme'), failures: [] }, [], UTC))).toEqual([
       ['team:acme', ['▾ acme · 1 active · 0 retired [Stats]']],
-      ['session:acme/lead', ['    ● lead · lead [Stats]']],
+      ['session:acme/lead', ['    ● lead · lead [Wake] [Stats]']],
     ])
   })
 
@@ -354,9 +408,9 @@ describe('teamBlocks with a search', () => {
     expect(words(blocks)).toEqual([
       ['team-search-count', ['1 session matches']],
       ['team:acme', ['▾ acme · 5 active · 1 retired [Stats]']],
-      ['session:acme/lead', ['  ▾ ● acme-lead (2) · lead [Stats]']],
-      ['session:acme/web', ['    ▾ ● acme-web (2) · sub-lead · later Mon 11-02 [Stats]']],
-      ['team-search:session:acme/api', ['        ● acme-backend · ? 1 decision [Meet] [Stats]', '        id api']],
+      ['session:acme/lead', ['  ▾ ● acme-lead (2) · lead [Wake] [Stats]']],
+      ['session:acme/web', ['    ▾ ● acme-web (2) · sub-lead · later Mon 11-02 [Wake] [Stats]']],
+      ['team-search:session:acme/api', ['        ● acme-backend · ? 1 decision [Meet] [Wake] [Stats]', '        id api']],
     ])
     const api = blockOf(blocks, 'team-search:session:acme/api').rows[0]?.spans ?? []
     // Its name is the press that opens its card, docked; the words that matched its id are on the line under it.
