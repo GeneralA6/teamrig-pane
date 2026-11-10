@@ -730,6 +730,8 @@ declare module 'claude-code' {
       ring: Shaped<RingLandings>
       /** Whether the banner (hooks/banner.ts) in the band above the prompt shows its task's card; a press on it opens and closes it. */
       banner: boolean
+      /** Whether the band's previous conversation (hooks/banner.ts previousBlock) shows its whole titles and facts; a press on its title opens and closes it. */
+      previousOpen: boolean
       /** What the Tasks view shows in a project teamrig is not set up for (hooks/setup.ts), null once a register is found. */
       setup: Shaped<SetupView | null>
       /** Where the docked body's window is to stand: the last step that moved it (hooks/body-scroll.ts). */

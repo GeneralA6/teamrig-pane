@@ -49,6 +49,10 @@ declare module 'claude-code' {
     readonly flexShrink?: number
     /** `hidden` cuts what its children draw past the Box's edges. */
     readonly overflow?: 'visible' | 'hidden'
+    /** A border round the Box in its outer cells, a column each side and a row above and below: `round`, its corners rounded. */
+    readonly borderStyle?: 'round'
+    /** Draws the border dim. */
+    readonly borderDimColor?: boolean
     readonly children?: Child
   }
   export type TextProps = {
