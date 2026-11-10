@@ -7,6 +7,7 @@ import { readEvents, registerStats, TimeZone, type ActiveCounts, type RegisterHe
 import type { Block, Row, Span } from '../hooks/rows'
 import { activeChart, bar } from '../hooks/stats-chart'
 import { rangeLabel } from '../hooks/stats-parts'
+import { goalsOf } from '../hooks/stats-source'
 import { DAY_ROWS, FLOW_KEY, HEALTH_DOT, dayLabel, isSectionOpen, listTitle, statsBlocks, type StatsOwn } from '../hooks/stats-rows'
 import { SECTION_KEYS, SPEED_KEY } from '../hooks/stats-sections'
 import type { TeamWeek } from '../hooks/team'
@@ -21,7 +22,8 @@ const NARROW = 40
 const LINES = [createLine('T1', { at: NOW - 3 * DAY, by: 'lead', owner: 'api', title: 'Add the route' }), statusLine('T1', 'api', NOW - 2 * DAY, 'in-progress')]
 const EVENTS = readEvents(LINES.map(line => `${line}\n`).join('')).events
 /** teamrig's fold of one small register less its tasks, as the view holds it: the fields a test does not set. */
-const { tasks, ...BASE } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
+const { tasks, goals, ...TALLIES } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
+const BASE: StatsNumbers = { ...TALLIES, goals: goalsOf(goals, TimeZone.UTC) }
 /** The design's Health of 10-31: four red, one amber. */
 const HEALTH: RegisterHealth = {
   closeOpen: { level: 'bad', ratio: 0.79 },

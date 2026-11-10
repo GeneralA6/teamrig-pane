@@ -9,15 +9,23 @@
 // peer's register whose read fails draws as it last read, or is left out before one, named with why; the own team's
 // folder or register, never read yet, fails the view. The view holds the fold's numbers and, while a Health tile's
 // press picked one (T1864), the tasks behind that count as slim rows; the register's tasks never leave the fold.
-import type { StatsChoice, StatsListKind, StatsListRow, StatsNumbers, StatsView, TeamFolderFailure } from '../types'
+// Each goal's progress (T1420) folds over the goals the scoped teams' tasks can serve, as `teamrig stats` reads them
+// (core cli/tree-goals.ts): each scoped team's goals file and those of the teams above it, a tag two teams hold read
+// as the nearer team's; each file re-read only when its stamp moves, one whose read fails kept as last read and named.
+import type { StatsChoice, StatsGoals, StatsListKind, StatsListRow, StatsNumbers, StatsView, TeamFolderFailure } from '../types'
 import {
+  ACTIVE_STATUSES,
   dueTime,
+  GOALS_FILE,
   planOrder,
+  readGoals,
   registerHealth,
   registerStats,
   Roster,
   TeamTree,
   teamNodeOf,
+  type Goal,
+  type GoalStats,
   type PlanPlace,
   type RegisterHealth,
   type StatsRange,
@@ -29,7 +37,7 @@ import {
 import { POLL_MS, TICK_MS, type Timer } from './live'
 import { teamIds, teamStateDir, type TeamFiles } from './places'
 import { RegisterHistory } from './register-history'
-import type { Files } from './source'
+import { WatchedFile, type Files } from './source'
 import { weekOf, type TeamRead } from './team'
 import { TeamFolder } from './team-source'
 
@@ -42,6 +50,31 @@ export type StatsLists = Readonly<Record<StatsListKind, readonly StatsListRow[]>
 /** A listed row and where its due places it, the due parsed once. */
 type Placed = { readonly row: StatsListRow; readonly place: PlanPlace }
 
+/** A task's slim row and due place, made once however many lists hold the task. */
+export type PlacedOf = (each: StatsTask) => Placed
+
+/** Makes each task's row and due place on its first ask, and hands the same one back after. */
+export function placerOf(zone: TimeZone): PlacedOf {
+  const placed = new Map<string, Placed>()
+  return ({ team, task }) => {
+    const key = `${team}/${task.id}`
+    const kept = placed.get(key)
+    if (kept !== undefined) return kept
+    const row: StatsListRow = { team, id: task.id, title: task.title, owner: task.owner, status: task.status, priority: task.priority, due: task.due }
+    const made: Placed = { row, place: { id: task.id, at: dueTime(task, zone) } }
+    placed.set(key, made)
+    return made
+  }
+}
+
+/** `list` as rows, p1 first, then by due date, undated last. */
+function plannedRows(list: readonly StatsTask[], placedOf: PlacedOf): StatsListRow[] {
+  return list
+    .map(placedOf)
+    .sort((a, b) => a.row.priority - b.row.priority || planOrder(a.place, b.place))
+    .map(each => each.row)
+}
+
 /**
  * The tasks behind each Health count as slim rows, one row per task shared by every list it is in: each list p1
  * first, then by due date, undated last (core register/tree.ts planOrder over a place of the due alone), but the
@@ -51,22 +84,8 @@ type Placed = { readonly row: StatsListRow; readonly place: PlanPlace }
  * both dues at every comparison, which over the thousands of tasks a range of all lists made the fold four times
  * slower.
  */
-export function listsOf(tasks: StatsTasks, zone: TimeZone): StatsLists {
-  const placed = new Map<string, Placed>()
-  const placedOf = ({ team, task }: StatsTask): Placed => {
-    const key = `${team}/${task.id}`
-    const kept = placed.get(key)
-    if (kept !== undefined) return kept
-    const row: StatsListRow = { team, id: task.id, title: task.title, owner: task.owner, status: task.status, priority: task.priority, due: task.due }
-    const made: Placed = { row, place: { id: task.id, at: dueTime(task, zone) } }
-    placed.set(key, made)
-    return made
-  }
-  const planned = (list: readonly StatsTask[]) =>
-    list
-      .map(placedOf)
-      .sort((a, b) => a.row.priority - b.row.priority || planOrder(a.place, b.place))
-      .map(each => each.row)
+export function listsOf(tasks: StatsTasks, zone: TimeZone, placedOf: PlacedOf = placerOf(zone)): StatsLists {
+  const planned = (list: readonly StatsTask[]) => plannedRows(list, placedOf)
   return {
     active: planned(tasks.active),
     opened: planned(tasks.opened),
@@ -77,10 +96,28 @@ export function listsOf(tasks: StatsTasks, zone: TimeZone): StatsLists {
   }
 }
 
+/**
+ * Each goal's progress with its tasks as slim rows: the active ones p1 first, then by due date, as the lists order
+ * them, then the done ones, the latest done first. A dropped task, which counts for neither, is left out.
+ */
+export function goalsOf(goals: GoalStats, zone: TimeZone, placedOf: PlacedOf = placerOf(zone)): StatsGoals {
+  return {
+    offGoal: goals.offGoal,
+    doneInRange: goals.doneInRange,
+    goals: goals.goals.map(({ tasks, ...goal }) => {
+      const active = tasks.filter(({ task }) => ACTIVE_STATUSES.includes(task.status))
+      const done = tasks.filter(({ task }) => task.status === 'done').sort((a, b) => Date.parse(b.task.statusAt) - Date.parse(a.task.statusAt))
+      return { ...goal, rows: [...plannedRows(active, placedOf), ...done.map(each => placedOf(each).row)] }
+    }),
+  }
+}
+
 /** How the own team folds: its register's events (the pane's register), its calendar's zone and the owner's marker. */
 export type StatsSettings = {
   /** The own team's register events (source.ts registerPaths), which may sit outside its state folder. */
   readonly events: string
+  /** The own team's goal records, beside its events (source.ts registerPaths). */
+  readonly goals: string
   /** The own team's zone: a day is a calendar day of it, for every team the fold takes in, as `teamrig stats` folds. */
   readonly zone: TimeZone
   /** The own team's `register.ownerSource`: the owner's work and waits. */
@@ -101,6 +138,28 @@ export type StatsPorts = {
 
 /** A team's register history and the events file it reads: a config that moves its state folder reads anew. */
 type TeamHistory = { readonly path: string; readonly history: RegisterHistory }
+
+/** No goal records: a team with no goals file, or one never read. */
+const NO_RECORDS: ReadonlyMap<string, Goal> = new Map()
+
+/** A team's goal records, by tag, and how many reads changed them: the fold key holds the count, not the goals. */
+class TeamGoals {
+  readonly file: WatchedFile<ReadonlyMap<string, Goal>>
+  /** 0 before a read worked. */
+  version = 0
+
+  constructor(files: Files, path: string) {
+    this.file = new WatchedFile(files, path, text => readGoals(text).goals, NO_RECORDS)
+  }
+
+  /** Reads the file again when its stamp moved; it rejects when the read fails, keeping the goals as last read. */
+  async refresh(): Promise<void> {
+    if (await this.file.refresh()) this.version += 1
+  }
+}
+
+/** The goals a fold takes in, by tag, and each file's version for the fold key. */
+type ReadGoals = { readonly goals: ReadonlyMap<string, Goal>; readonly versions: readonly (string | number)[][] }
 
 /** The last fold and what it folded, its counts' tasks as rows: a read whose key has not moved takes it as is. */
 type Fold = { readonly key: string; readonly stats: StatsNumbers; readonly health: RegisterHealth; readonly lists: StatsLists }
@@ -128,6 +187,8 @@ export class LiveStats {
   private readonly folders = new Map<string, TeamFolder>()
   /** Each scoped team's register history, by id, read once a scope took it in; dropped with its folder. */
   private readonly histories = new Map<string, TeamHistory>()
+  /** Each team's goal records, by id, read once a scoped team is it or under it; dropped with its folder. */
+  private readonly goals = new Map<string, TeamGoals>()
   private timers: Timer[] = []
   private isRefreshing = false
   /** True when a refresh was asked while one ran: the running one reads again, so the press is not lost. */
@@ -213,6 +274,7 @@ export class LiveStats {
     const ids = teamIds(await this.ports.folders(this.team.teamsDir))
     for (const id of [...this.folders.keys()]) if (!ids.includes(id)) this.folders.delete(id)
     for (const id of [...this.histories.keys()]) if (!ids.includes(id)) this.histories.delete(id)
+    for (const id of [...this.goals.keys()]) if (!ids.includes(id)) this.goals.delete(id)
     const reads = new Map<string, TeamRead>()
     for (const id of ids) {
       const folder = this.folders.get(id) ?? new TeamFolder(this.files, this.team.teamsDir, id)
@@ -253,21 +315,64 @@ export class LiveStats {
       statsTeams.push({ team: read.team, lead: read.config.roles.lead, events: history.events })
       versions.push([read.team, read.config.roles.lead, path, history.version])
     }
+    const goals = await this.treeGoals(tree, scoped, reads, failures)
     const minute = Math.floor(now / TICK_MS)
-    const key = JSON.stringify({ scope, range: pick.range, versions, minute })
-    const fold = this.fold?.key === key ? this.fold : this.foldOf(key, scope, pick.range, statsTeams, minute * TICK_MS)
+    const key = JSON.stringify({ scope, range: pick.range, versions, goals: goals.versions, minute })
+    const fold = this.fold?.key === key ? this.fold : this.foldOf(key, scope, pick.range, statsTeams, goals.goals, minute * TICK_MS)
     this.fold = fold
     const week = weekOf(scopedReads.flatMap(read => read.week ?? []), now)
     const list = pick.list === null ? null : { kind: pick.list, rows: fold.lists[pick.list] }
     return { kind: 'stats', scope, range: pick.range, teams, stats: fold.stats, health: fold.health, list, week, failures }
   }
 
-  /** The stats of `teams` at the minute `at` starts, with the Health tiles over them and their counts' tasks as rows. */
-  private foldOf(key: string, scope: StatsChoice, range: StatsRange, teams: readonly StatsTeam[], at: number): Fold {
+  /**
+   * The stats of `teams` and the progress of `goals` at the minute `at` starts, with the Health tiles over them, and
+   * their counts' and goals' tasks as rows.
+   */
+  private foldOf(key: string, scope: StatsChoice, range: StatsRange, teams: readonly StatsTeam[], goals: ReadonlyMap<string, Goal>, at: number): Fold {
     const { zone, ownerMarker } = this.settings
     const session = scope.kind === 'session' ? { session: { team: scope.team, session: scope.session } } : {}
-    const { tasks, ...stats } = registerStats({ teams, range, now: new Date(at), zone, ownerMarker, ...session })
-    return { key, stats, health: registerHealth(stats), lists: listsOf(tasks, zone) }
+    const { tasks, goals: progress, ...stats } = registerStats({ teams, range, now: new Date(at), zone, ownerMarker, goals, ...session })
+    const placedOf = placerOf(zone)
+    return { key, stats: { ...stats, goals: goalsOf(progress, zone, placedOf) }, health: registerHealth(stats), lists: listsOf(tasks, zone, placedOf) }
+  }
+
+  /**
+   * The goals the `scoped` teams' tasks can serve: each one's goal records and those of the teams above it, the root
+   * first, so a tag two teams hold reads as the nearer team's, as `teamrig stats` reads them (core cli/tree-goals.ts).
+   * A file whose read fails counts as last read, or as no goals before one, and is named in `failures` unless its team
+   * is already: a team's failure lines share a key.
+   */
+  private async treeGoals(tree: TeamTree, scoped: readonly string[], reads: ReadonlyMap<string, TeamRead>, failures: TeamFolderFailure[]): Promise<ReadGoals> {
+    const goals = new Map<string, Goal>()
+    const versions: (string | number)[][] = []
+    const refreshed = new Set<string>()
+    for (const team of scoped.flatMap(each => [...tree.ancestorsOf(each), each])) {
+      const read = reads.get(team)
+      if (read === undefined) continue
+      const records = this.goalsOf(read)
+      if (!refreshed.has(team)) {
+        refreshed.add(team)
+        try {
+          await records.refresh()
+        } catch (error) {
+          if (!failures.some(failure => failure.team === team)) failures.push({ team, reason: reasonOf(error), isLastRead: records.version > 0 })
+        }
+        versions.push([team, records.file.path, records.version])
+      }
+      for (const [tag, goal] of records.file.current) goals.set(tag, goal)
+    }
+    return { goals, versions }
+  }
+
+  /** The team's goal records: the own team's beside the pane's register, a peer's in the state folder its config names. */
+  private goalsOf(read: TeamRead): TeamGoals {
+    const path = read.team === this.team.team ? this.settings.goals : `${teamStateDir(`${this.team.teamsDir}/${read.team}`, read.config)}/${GOALS_FILE}`
+    const kept = this.goals.get(read.team)
+    if (kept?.file.path === path) return kept
+    const made = new TeamGoals(this.files, path)
+    this.goals.set(read.team, made)
+    return made
   }
 
   /** The team's register history: the own team's at the pane's register, a peer's in the state folder its config names. */
