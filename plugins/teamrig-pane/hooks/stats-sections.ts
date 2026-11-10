@@ -13,7 +13,7 @@ import { joined } from './card'
 import { priorityText, WAIT_KINDS, WORK_SOURCES, type Band, type PersonDone, type Spread, type StatsRange, type TeamStats, type WaitKind, type WorkSource } from './core/read/index'
 import { SEPARATOR, type Block, type Row, type Span } from './rows'
 import { bar } from './stats-chart'
-import { daysText, INDENT, rangeLabel, sectionBlock, VIEW } from './stats-parts'
+import { daysText, dim, INDENT, noteRow, padded, percent, plural, rangeLabel, sectionBlock, title, VIEW } from './stats-parts'
 import { cells } from './width'
 
 export const NEW_KEY = `${VIEW}:new`
@@ -79,28 +79,6 @@ function rangeWords(range: StatsRange): string {
   return range === 'all' ? 'in all days' : `in ${rangeLabel(range)}`
 }
 
-function dim(text: string): Span {
-  return { text, dim: true }
-}
-
-function title(text: string): Span {
-  return { text, bold: true }
-}
-
-/** `text` padded with blanks to `width` cells. */
-function padded(text: string, width: number): string {
-  return text + ' '.repeat(Math.max(0, width - cells(text)))
-}
-
-/** `part` as a whole percent of `whole`. */
-function percent(part: number, whole: number): string {
-  return `${Math.round((100 * part) / whole)}%`
-}
-
-function plural(count: number, one: string, many: string): string {
-  return count === 1 ? one : many
-}
-
 /** The cells a label column takes: its widest label and the gap after it. */
 function labelCells(labels: readonly string[]): number {
   return Math.max(...labels.map(label => cells(label))) + GAP
@@ -109,11 +87,6 @@ function labelCells(labels: readonly string[]): number {
 /** A row under INDENT: its dim label padded to `width` cells, then its value; a wrapped line starts under the value. */
 function labelled(key: string, label: string, width: number, spans: readonly Span[]): Row {
   return { key, spans: [INDENT, dim(padded(label, width)), ...spans], hang: { text: ' '.repeat(cells(INDENT.text) + width) } }
-}
-
-/** A dim line under INDENT: what a section says when it has nothing to draw, or a note under its rows. */
-function noteRow(key: string, text: string): Row {
-  return { key, spans: [INDENT, dim(text)], hang: INDENT }
 }
 
 /** A count bar's cells: what `free` cells leave, within MIN_BAR_CELLS and MAX_BAR_CELLS. */

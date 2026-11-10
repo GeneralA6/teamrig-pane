@@ -1,8 +1,10 @@
 // The pieces the Stats tab's sections share (stats-rows.ts draws Health and Flow, stats-sections.ts the sections
-// after Flow): the indents, a section's foldable header, and the words for a number, a duration and a range. Pure.
+// after Flow): the indents, a section's foldable header, a note row, the dim and bold spans, and the words for a
+// number, a share, a duration and a range. Pure.
 import { joined } from './card'
 import type { StatsRange } from './core/read/index'
 import { FOLDED_MARK, OPEN_MARK, type Block, type Row, type Span } from './rows'
+import { cells } from './width'
 
 /** The Stats tab's view name, which leads each of its block keys. */
 export const VIEW = 'stats'
@@ -10,6 +12,33 @@ export const VIEW = 'stats'
 export const INDENT: Span = { text: '  ' }
 /** Leads a wrapped line of a row INDENT leads. */
 export const HANG: Span = { text: '    ' }
+
+export function dim(text: string): Span {
+  return { text, dim: true }
+}
+
+export function title(text: string): Span {
+  return { text, bold: true }
+}
+
+/** `text` padded with blanks to `width` cells. */
+export function padded(text: string, width: number): string {
+  return text + ' '.repeat(Math.max(0, width - cells(text)))
+}
+
+/** `part` as a whole percent of `whole`. */
+export function percent(part: number, whole: number): string {
+  return `${Math.round((100 * part) / whole)}%`
+}
+
+export function plural(count: number, one: string, many: string): string {
+  return count === 1 ? one : many
+}
+
+/** A dim line under INDENT: what a section says when it has nothing to draw, or a note under its rows. */
+export function noteRow(key: string, text: string): Row {
+  return { key, spans: [INDENT, dim(text)], hang: INDENT }
+}
 
 /** `value` with its sign: `+3`, `-2`, `0`. */
 export function signed(value: number): string {
