@@ -33,7 +33,9 @@ its buttons, whose header would take over half its rows, scrolls as one.
   `Done today` (its tasks done or dropped on the team's day, the newest 6). A heading's count is the
   status bar's count for its section, the tasks past a cap included; under a capped section a dim line
   says how many more and the key that lists them all (`i`, `o`). A parked task (teamrig's park rule) is left
-  out, as `teamrig list` leaves it out; a search still finds it.
+  out, as `teamrig list` leaves it out; a search still finds it. Both read the tasks the team tree's other
+  registers hold, as teamrig does: a task after another team's open task waits behind those that can move, and
+  one another team's active task needs is never parked.
 - **all**: every owner's active tasks, each owner's heading with its counts, a count with none left
   out (`api · 4 active · 1 waiting · 1 verifying`), and the verifying tasks first in
   each group.

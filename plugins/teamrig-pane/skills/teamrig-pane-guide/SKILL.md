@@ -233,7 +233,9 @@ bold heading with its count; an empty section is left out:
 A heading's count is the status bar's count for its section, the tasks past a cap included; the bar's `waiting`
 count is Waiting's and Asked of others' together. A parked task (teamrig's park rule: open, classed past Roadmap and
 Maintenance, quiet for `focus.parkAfterDays`) is left out of the sections, their counts, the bar and **all**, as
-`teamrig list` leaves it out; a search still finds it.
+`teamrig list` leaves it out; a search still finds it. The plan order and the park rule read the tasks the team
+tree's other registers hold, as teamrig does: a task after another team's open task waits behind those that can
+move, and one another team's active task needs is never parked.
 
 The header names the area only for a pin (`web (pinned) · 3 active`); the session's own area goes unnamed, as the
 title line above names the session. The area's unread inbox lines are counted on the switch's Inbox button (see
