@@ -56,6 +56,9 @@ describe('press-keys', () => {
     )
     const meetsApi = { act: 'meet', team: 'acme', session: 'api' } as const
     expect(pieceKey({ kind: 'session-act', span: { text: '[Meet]' }, sessionAct: meetsApi }, 'session:acme/api', 'row', 9)).toBe('meet:acme/api:session:acme/api:row:9')
+    // Its [Wake] on the same row is a press of its own.
+    const wakesApi = { act: 'wake', team: 'acme', session: 'api' } as const
+    expect(pieceKey({ kind: 'session-act', span: { text: '[Wake]' }, sessionAct: wakesApi }, 'session:acme/api', 'row', 9)).toBe('wake:acme/api:session:acme/api:row:9')
     expect(pieceKey({ kind: 'stats', span: { text: '30 d' }, stats: { kind: 'range', range: '30d' } }, 'stats:pick', 'card:1', 2)).toBe(
       'stats:range:30d:stats:pick:card:1:2',
     )

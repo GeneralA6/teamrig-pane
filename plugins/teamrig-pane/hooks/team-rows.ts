@@ -8,14 +8,16 @@
 // ROLE_COLORS, T1245), how many of its cards wait on the owner now with a [Meet] press that runs `teamrig meet` on it
 // (T1297, session-acts.ts), which once pressed answers in its place, where the owner pressed (T2206): Asking…, then Asked and when, with
 // no press, so no second ask; a refused one keeps the press and says it was not asked. Then when the next card the
-// owner put off comes back; its hire and retire days are its card's. A retired
+// owner put off comes back; its hire and retire days are its card's. An active session's row, but for the one whose
+// pane it is (the owner types in that tab), holds a [Wake] press that runs `teamrig owner wake` on it (T2298) and
+// answers in its place the same way: Waking…, then Woke and when, or not woken. A retired
 // group's row counts its sessions. The row of the session whose pane it is starts with a green ▶ in the indent's first
 // cell (T1281), so the viewer finds itself at a glance. A team's and a session's row end in a [Stats] press that opens
 // the Stats tab on it (T1714). A press on a team's or a retired group's row opens or closes what lies under it
 // (`folds`), a press on a session's row its card (team-card.ts) under it, or for a leader the sessions it leads. Docked,
 // a row whose line holds a press draws as its pieces and drops its own, so the row's presses sit on its words
 // (`toggles`): a team's mark and name open or close what lies under it, a leader's mark the sessions it leads, a
-// session's name its card. Inline a row is one press, its `folds`, and [Stats] and [Meet] are words.
+// session's name its card. Inline a row is one press, its `folds`, and [Stats], [Meet] and [Wake] are words.
 // While the Find field holds a query, the tab draws its search (team-search.ts) on the shared search view
 // (search-view.ts) instead: the count, then the sessions it names under their teams and leaders (team.ts foundRows),
 // the words that matched underlined, a matched id or hire scope on a dim line under its row, and a press on any
@@ -44,6 +46,8 @@ const SESSION_NOUN: Noun = { one: 'session', many: 'sessions' }
 export const MEET_TEXT = '[Meet]'
 /** What stands in the [Meet] press's place while its run asks the session. */
 export const MEET_ASKING = 'Asking…'
+/** The press on an active session's row that wakes it by hand (`teamrig owner wake`). */
+export const WAKE_TEXT = '[Wake]'
 
 /**
  * How a session act (session-acts.ts) draws: its press and the press's style; on its row, what stands in the press's
@@ -71,6 +75,16 @@ const ACT_LOOKS: { readonly [act in SessionAct]: ActLook } = {
     runningHead: session => `Asking ${session} for its cards…`,
     doneHead: session => `Asked ${session} for its cards:`,
     refusedHead: session => `${session} was not asked:`,
+  },
+  wake: {
+    press: WAKE_TEXT,
+    style: { dim: true },
+    running: 'Waking…',
+    done: 'Woke',
+    refused: ' not woken',
+    runningHead: session => `Waking ${session}…`,
+    doneHead: session => `Woke ${session}:`,
+    refusedHead: session => `${session} was not woken:`,
   },
 }
 /** The press that ends a team's and a session's row: the Stats tab on it, its sub-teams rolled in for a team. */
@@ -182,9 +196,9 @@ function decisionSpans(session: SessionFacts, { answer, zone }: Pick<Drawing, 'a
 
 /**
  * A session's row: its mark, its name (bold on the team, the press that opens or closes its card), how many sessions
- * it leads in brackets, dim, its roles in their colours, its cards on the owner, its [Stats]; where `marks` says a
- * search's words matched, underlined. Its id, hire and retire are its card's. A name that is the id is searched as the
- * id (teamFieldText), so its marks are the id's.
+ * it leads in brackets, dim, its roles in their colours, its cards on the owner, its [Wake] while it is active and the
+ * pane is not its own, its [Stats]; where `marks` says a search's words matched, underlined. Its id, hire and retire
+ * are its card's. A name that is the id is searched as the id (teamFieldText), so its marks are the id's.
  */
 function sessionSpans({ key, session }: SessionNode, marks: Marks, drawing: Drawing): Span[] {
   const isRetired = !session.active
@@ -193,6 +207,7 @@ function sessionSpans({ key, session }: SessionNode, marks: Marks, drawing: Draw
   const spans: Span[] = [isRetired ? { text: '○ ', dim: true } : { text: '● ' }, ...markedSpans(session.name, matched, { ...nameStyle, toggles: cardKey(key) })]
   if (session.leads > 0) spans.push({ text: ` (${session.leads})`, dim: true })
   spans.push(...markedRoles(session, marks('role')), ...decisionSpans(session, drawing))
+  if (!isRetired && drawing.own !== key) spans.push({ text: ' ' }, ...actSpans('wake', session, drawing.answer, drawing.zone))
   spans.push(...statsSpans(key, { kind: 'session', team: session.team, session: session.id }))
   return spans
 }

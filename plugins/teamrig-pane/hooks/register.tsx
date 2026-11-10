@@ -24,7 +24,8 @@
 // press on the header's unread count opening it, and the Teams tab: the tree of teams the
 // session's team is in, each team's lead over the sessions it leads and its retired ones (team.ts, team-source.ts), a
 // press on a row opening or closing what lies under it, a session's cards on the owner counted on its row and on the
-// switch (`Teams (2)`), its [Meet] press running `teamrig meet` on it (session-acts.ts), and the Meetings view: the
+// switch (`Teams (2)`), its [Meet] press running `teamrig meet` on it and its [Wake] press running `teamrig owner wake`
+// on it (session-acts.ts), and the Meetings view: the
 // team's scheduled and started meetings by time (meetings.ts, meetings-rows.ts), a press on one opening its card,
 // whose [Start meeting] press starts it. The band above the prompt shows the session's
 // name and the task it works on now
@@ -335,7 +336,7 @@ const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as con
 /** The Done page's days, groups and `n more` rows the person flipped against their default (done-rows.ts), by key. */
 const doneToggled = atom({ plugin: 'teamrig-pane', key: 'doneToggled' } as const, NOTHING_TOGGLED)
 const NO_ANSWER: SessionAnswer | null = null
-/** What the last press on a Teams tab session row ([Meet]) answered (session-acts.ts): cleared at each session start and each switch to the tab. */
+/** What the last press on a Teams tab session row ([Meet], [Wake]) answered (session-acts.ts): cleared at each session start and each switch to the tab. */
 const sessionAnswer = atom({ plugin: 'teamrig-pane', key: 'sessionAnswer' } as const, NO_ANSWER)
 const NO_ACT: OwnerAct | null = null
 /** Where the owner's Note or Next on a task's card stands (owner-acts.ts): cleared at each session start. */
@@ -575,7 +576,7 @@ export const register: Register = on => {
   let scheduling: LiveMeetings | null = null
   /** Folds the Stats tab's numbers from the registers' history again while it shows; set when the session starts, null with no team or no register. */
   let tallying: LiveStats | null = null
-  /** Runs the teamrig CLI on a Teams tab session row's press ([Meet]); set when the session starts, null with no team. */
+  /** Runs the teamrig CLI on a Teams tab session row's press ([Meet], [Wake]); set when the session starts, null with no team. */
   let pressing: SessionActs | null = null
   /** Runs the owner's Note and Next on a task's card; set when the session starts, null with no team. */
   let acting: OwnerActs | null = null
@@ -1346,7 +1347,8 @@ export const register: Register = on => {
      * one that opens the inbox's, keyed `goto:inbox:`, each Teams tab key one that opens or closes it in its span's
      * style, keyed `team:`, each session of a tab tied to none one that ties the tab to it as `/teamrig-pane
      * <session>` does, keyed `pin:`, a scheduled meeting's [Start meeting] one that starts it, keyed `start:`, a Team
-     * tab session row's [Meet] one that runs `teamrig meet` on its session, keyed `<act>:<team>/<session>:`, then
+     * tab session row's [Meet] or [Wake] one that runs `teamrig meet` or `teamrig owner wake` on its session, keyed
+     * `<act>:<team>/<session>:`, then
      * where it is drawn (`from`, the card's element); a Changes file's row one press that opens or closes its diff, keyed `diff:`, then where it is
      * drawn and the row; a task card's owner act (Note, Next, Send, Cancel, Confirm) one press keyed `act:`, the task's
      * Note field an Input keyed `note:`, each by its task alone (press-keys.ts). The field draws no value, ever: the

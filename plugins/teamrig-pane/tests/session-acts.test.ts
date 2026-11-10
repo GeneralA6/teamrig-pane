@@ -1,9 +1,10 @@
 // The Teams tab's presses on a session's row (hooks/session-acts.ts): [Meet] runs `teamrig meet <session>` from the
-// tab's folder, one press at a time of any act, and tells that it runs, then what the CLI printed, or why it refused,
-// verbatim; each with its time, the press's while running, the CLI's answer's after.
+// tab's folder, [Wake] `teamrig owner wake <team>/<session>`, one press at a time of any act, and tells that it runs,
+// then what the CLI printed, or why it refused, verbatim; each with its time, the press's while running, the CLI's
+// answer's after.
 import { describe, expect, test } from 'claude-code/testing'
 import type { SessionAnswer, SessionPress } from '../types'
-import { MEET_TIMEOUT_MS, SessionActs, actOutcome, actWords, type SessionActPorts } from '../hooks/session-acts'
+import { MEET_TIMEOUT_MS, SessionActs, WAKE_TIMEOUT_MS, actOutcome, actWords, type SessionActPorts } from '../hooks/session-acts'
 import { cliArgv, type CliRun, type TeamrigCli } from '../hooks/teamrig-cli'
 import { NOW } from './fixtures'
 
@@ -16,6 +17,9 @@ const RUN_MS = 90_000
 const ANSWERED = NOW + RUN_MS
 const MEET_API: SessionPress = { act: 'meet', team: 'acme', session: 'api' }
 const MEET_WEB: SessionPress = { act: 'meet', team: 'acme', session: 'web' }
+const WAKE_API: SessionPress = { act: 'wake', team: 'acme', session: 'api' }
+const WAKES = 'WAKES acme-api (session api) within about 15 s: an inbox line wakes it to work its task list'
+const BUSY = 'REFUSED acme-api (session api) is in a turn, so nothing was posted: press again once it is idle'
 
 function ok(stdout: string): CliRun {
   return { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false }
@@ -50,6 +54,11 @@ describe('actWords', () => {
   test('a meet names the session alone, as teamrig meet finds its team from the tab folder', () => {
     expect(actWords(MEET_API)).toEqual(['meet', 'api'])
   })
+
+  test('a wake names the session with its team, as the owner wakes any session of the tree', () => {
+    expect(actWords(WAKE_API)).toEqual(['owner', 'wake', 'acme/api'])
+    expect(actWords({ ...WAKE_API, team: 'tools', session: 'dev' })).toEqual(['owner', 'wake', 'tools/dev'])
+  })
 })
 
 describe('actOutcome', () => {
@@ -73,6 +82,25 @@ describe('SessionActs', () => {
       { ...MEET_API, outcome: 'running', lines: [], at: NOW },
       { ...MEET_API, outcome: 'done', lines: [WOKE], at: ANSWERED },
     ])
+  })
+
+  test('a wake runs teamrig owner wake on the team and session with its own time, then tells what it answered', async () => {
+    const ports = portsOf(ok(`${WAKES}\n`))
+    await new SessionActs(CLI, ports).press(WAKE_API)
+    expect(ports.runs).toEqual([{ args: ['node', CLI.main, 'owner', 'wake', 'acme/api'], timeoutMs: WAKE_TIMEOUT_MS }])
+    expect(ports.told).toEqual([
+      { ...WAKE_API, outcome: 'running', lines: [], at: NOW },
+      { ...WAKE_API, outcome: 'done', lines: [WAKES], at: ANSWERED },
+    ])
+  })
+
+  test('a refused wake tells the REFUSED line verbatim; one that does not finish names its words', async () => {
+    const busy = portsOf(failed(2, `${BUSY}\n`))
+    await new SessionActs(CLI, busy).press(WAKE_API)
+    expect(busy.told[1]).toEqual({ ...WAKE_API, outcome: 'refused', lines: [BUSY], at: ANSWERED })
+    const stuck = portsOf(new Error('timed out'))
+    await new SessionActs(CLI, stuck).press(WAKE_API)
+    expect(stuck.told[1]).toEqual({ ...WAKE_API, outcome: 'refused', lines: ['teamrig owner wake acme/api did not finish: timed out'], at: ANSWERED })
   })
 
   test('a refused meet tells why, and when the CLI answered', async () => {

@@ -2080,8 +2080,8 @@ test("the Teams tab lists the tree of teams the session's team is in; a press on
 
   await pane.press({ key: 'team' })
   expect(await drawsLine(pane, /^▾ acme · 4 active · 1 retired \[Stats\]$/)).toBe(true)
-  expect(await drawsLine(pane, /● acme-api \[Stats\]$/)).toBe(true)
-  expect(await drawsLine(pane, /● acme-ui \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-api \[Wake\] \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-ui \[Wake\] \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /▸ retired \(1\)$/)).toBe(true)
   expect(await drawsLine(pane, /○ acme-qa/)).toBe(false)
   expect(await drawsLine(pane, /▾ tools · 1 active · 0 retired \[Stats\]$/)).toBe(true)
@@ -2091,10 +2091,10 @@ test("the Teams tab lists the tree of teams the session's team is in; a press on
   // web leads, so its row holds two presses: its mark closes what it leads and a second opens it again, its name opens its
   // card. The retired group's row opens the retired sessions; api's name opens api's card, as every session's does.
   await pane.press({ key: await pressOn(pane, 'session:acme/web') })
-  expect(await drawsLine(pane, /● acme-api \[Stats\]$/)).toBe(false)
-  expect(await drawsLine(pane, /▸ ● acme-web \(2\) · sub-lead \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-api \[Wake\] \[Stats\]$/)).toBe(false)
+  expect(await drawsLine(pane, /▸ ● acme-web \(2\) · sub-lead \[Wake\] \[Stats\]$/)).toBe(true)
   await pane.press({ key: await pressOn(pane, 'session:acme/web') })
-  expect(await drawsLine(pane, /● acme-api \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-api \[Wake\] \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /│ Role {9}sub-lead · leads 2 sessions$/)).toBe(false)
   await pane.press({ key: await pressOn(pane, 'card:session:acme/web') })
   expect(await drawsLine(pane, /│ Role {9}sub-lead · leads 2 sessions$/)).toBe(true)
@@ -2139,7 +2139,7 @@ test("the Teams tab's Find field draws the sessions it names under their leaders
   await pane.input({ key: 'find', text: 'api', kind: 'change' })
   // The count, then api under its team and the leaders over it; the sessions and teams it leads nowhere near are not drawn.
   expect(await drawsLine(pane, /^1 session matches$/)).toBe(true)
-  expect(await drawsLine(pane, /● acme-api \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● acme-api \[Wake\] \[Stats\]$/)).toBe(true)
   expect(await drawsLine(pane, /● acme-web\b/)).toBe(true)
   expect(await drawsLine(pane, /● acme-ui\b/)).toBe(false)
   expect(await drawsLine(pane, /\btools\b/)).toBe(false)
@@ -2198,7 +2198,7 @@ test('the Teams tab reads no team folder while another view shows, and reads wha
 
   await pane.press({ key: 'team' })
   expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
-  expect(await drawsLine(pane, /● tools-dev \[Stats\]$/)).toBe(true)
+  expect(await drawsLine(pane, /● tools-dev \[Wake\] \[Stats\]$/)).toBe(true)
 })
 
 test('the Teams tab says so when the session has no team', async ($, on) => {
