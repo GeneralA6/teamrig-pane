@@ -53,6 +53,12 @@ export function titleOf(conversation: LogConversation, { work, tasks }: Worked):
   return ids.flatMap((id, i): Span[] => [...(i === 0 ? [] : [SEPARATOR]), ...taskSpans(id, titles.get(id), max)])
 }
 
+/** Each task the conversation worked, in the order first worked, its id bold before its whole title: none when it worked none. */
+export function workedTitles(conversation: LogConversation, { work, tasks }: Worked): Span[][] {
+  const titles = new Map(tasks.map(task => [task.id, task.title]))
+  return tasksOf(conversation, work).map(id => taskSpans(id, titles.get(id), Number.POSITIVE_INFINITY))
+}
+
 /** A conversation's title as drawn: titleOf, else a dim line that it has no prompt or reply. */
 export function titleSpans(conversation: LogConversation, worked: Worked): Span[] {
   return titleOf(conversation, worked) ?? [UNTITLED]

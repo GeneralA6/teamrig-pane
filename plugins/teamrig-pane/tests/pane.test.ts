@@ -1,7 +1,7 @@
 // The plugin through the engine: env, clock, store, session id and fs answered beneath it.
 import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiFocusInput, UiScrollInput } from 'claude-code'
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
-import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT, PREVIOUS_ALL_KEY, PREVIOUS_ALL_LABEL, PREVIOUS_KEY, PREVIOUS_OPEN_KEY } from '../hooks/banner'
+import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT, PREVIOUS_ALL_KEY, PREVIOUS_ALL_LABEL, PREVIOUS_FRAME_KEY, PREVIOUS_KEY, PREVIOUS_OPEN_KEY, PREVIOUS_PRESS_KEY } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
 import { barKeys, KEY_GROUPS } from '../hooks/keys-page'
 import { POLL_MS } from '../hooks/live'
@@ -1332,9 +1332,14 @@ function mountBand($: TestEngine, props: AbovePromptProps = BAND_PROPS): Promise
 }
 
 /** The banner's text in the band, its card's rows too when open; null when the band draws none. */
-async function bannerText(band: Mounted<'AbovePrompt'>): Promise<string | null> {
+function bannerText(band: Mounted<'AbovePrompt'>): Promise<string | null> {
+  return pressText(band, BANNER_KEY)
+}
+
+/** The text of the band's press keyed `key`, its open rows too; null when the band draws none. */
+async function pressText(band: Mounted<'AbovePrompt'>, key: string): Promise<string | null> {
   const buttons = await band.findAll({ type: 'Button' })
-  return buttons.find(button => button.props['key'] === BANNER_KEY)?.text ?? null
+  return buttons.find(button => button.props['key'] === key)?.text ?? null
 }
 
 /** What the engine draws in the band once the plugin passes it: the test stands for it, as nothing sits beneath the test. */
@@ -1458,15 +1463,27 @@ test("over the banner the band names the area's previous conversation; its butto
 
   await clock.advance(POLL_MS)
   const drawn = await band.drawn()
-  expect(buttonKeys(drawn)).toEqual([PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY, BANNER_KEY])
+  expect(buttonKeys(drawn)).toEqual([PREVIOUS_PRESS_KEY, PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY, BANNER_KEY])
   expect(await band.find({ type: 'Text', text: /^previous · Ship the log view$/ })).toBeDefined()
-  // Its title takes the free columns, so its buttons end the row; neither has a hotkey.
+  // Its row sits in a dim round frame of its own, so it never reads as the banner.
   const [previousRow] = childrenOf(drawn)
+  expect(elementKey(propsOf(previousRow))).toBe(PREVIOUS_FRAME_KEY)
+  expect(keyedProps(drawn, PREVIOUS_FRAME_KEY)).toMatchObject({ borderStyle: 'round', borderDimColor: true, paddingX: 1 })
+  // Its title takes the free columns, so its buttons end the row; no press has a hotkey.
   expect(childrenOf(previousRow).map(child => elementKey(propsOf(child)))).toEqual([PREVIOUS_KEY, PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY])
   expect(numberProp(keyedProps(drawn, PREVIOUS_KEY), 'flexGrow')).toBe(1)
   expect(keyedProps(drawn, PREVIOUS_OPEN_KEY)).toMatchObject({ label: BANNER_OPEN_LABEL, variant: 'secondary' })
   expect(keyedProps(drawn, PREVIOUS_ALL_KEY)).toMatchObject({ label: PREVIOUS_ALL_LABEL, variant: 'secondary' })
-  for (const key of [PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY]) expect('hotkey' in (keyedProps(drawn, key) ?? {})).toBe(false)
+  for (const key of [PREVIOUS_PRESS_KEY, PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY]) expect('hotkey' in (keyedProps(drawn, key) ?? {})).toBe(false)
+
+  // A press on its title opens it to when it ran and its count of lines, hung under the title and wrapped there in the
+  // columns its buttons leave, and a second closes it.
+  await band.press({ key: PREVIOUS_PRESS_KEY })
+  const openRows = (await pressText(band, PREVIOUS_PRESS_KEY)) ?? ''
+  expect(openRows).toMatch(/^previous · Ship the log view\n {11}13:20 UTC/)
+  expect(openRows.replace(/\s+/g, ' ')).toBe('previous · Ship the log view 13:20 UTC–13:22 UTC · 3 lines')
+  await band.press({ key: PREVIOUS_PRESS_KEY })
+  expect(await pressText(band, PREVIOUS_PRESS_KEY)).toBe('previous · Ship the log view')
 
   // Its open button opens the pane at the conversation's page; back shows the list.
   opened.length = 0

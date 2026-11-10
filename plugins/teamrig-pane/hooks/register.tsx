@@ -90,8 +90,12 @@ import {
   BANNER_OPEN_LABEL,
   PREVIOUS_ALL_KEY,
   PREVIOUS_ALL_LABEL,
+  PREVIOUS_FRAME_CELLS,
+  PREVIOUS_FRAME_KEY,
+  PREVIOUS_FRAME_PADDING,
   PREVIOUS_KEY,
   PREVIOUS_OPEN_KEY,
+  PREVIOUS_PRESS_KEY,
   bannerBlock,
   currentRowKey,
   currentTask,
@@ -293,6 +297,8 @@ const RING_SHAPE = 'ring-v1'
 const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS, { shape: RING_SHAPE })
 /** Whether the banner (banner.ts) in the band above the prompt shows its task's card: a press on it opens and closes it. */
 const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, false)
+/** Whether the band's previous conversation (banner.ts previousBlock) shows its whole titles and facts: a press on its title opens and closes it. */
+const previousOpen = atom({ plugin: 'teamrig-pane', key: 'previousOpen' } as const, false)
 /** Where the docked body's window is to stand (body-scroll.ts), kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when BodyScroll or ScrollTarget changes shape. */
 const SCROLL_SHAPE = 'scroll-v1'
 const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, AT_TOP, { shape: SCROLL_SHAPE })
@@ -2054,7 +2060,8 @@ export const register: Register = on => {
   // taller than the band and folds the band from its [-] (ctrl+x ctrl+a), a mark no mod can hide. With a current task,
   // a button at the band's right end, beside that [-], opens the pane at its page (T775). Over the banner, the area's
   // previous conversation (previous-conversation.ts) with a button that opens its page and one the list of
-  // conversations (T2249); none when the turn log holds none. No press has a hotkey: a band's hotkey answers a bare key
+  // conversations (T2249); none when the turn log holds none. Its row has a dim frame, so it never reads as the
+  // banner, and a press on its title opens and closes it as the banner's does (T2302). No press has a hotkey: a band's hotkey answers a bare key
   // typed in an empty prompt.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
@@ -2102,7 +2109,9 @@ export const register: Register = on => {
     // Its two buttons and the gaps before them take their cells from its title's width.
     const previousButtons =
       buttonCells({ label: BANNER_OPEN_LABEL, plain: false, hotkey: null }) + buttonCells({ label: PREVIOUS_ALL_LABEL, plain: false, hotkey: null }) + 2
-    const [line] = dockLayout([previousBlock(previous, snap)], e.props.bodyColumns - previousButtons, previousWraps)
+    const isPreviousOpen = await read($, previousOpen)
+    const previousColumns = e.props.bodyColumns - previousButtons - PREVIOUS_FRAME_CELLS
+    const [line] = dockLayout([previousBlock(previous, snap, isPreviousOpen, clockOf(snap))], previousColumns, previousWraps)
     if (line === undefined) return bannerRow
     // Opens the pane as /teamrig-pane does on the list of conversations, and with `conversation` at its page.
     const openConversations = async (conversation: LogRead | null) => {
@@ -2113,9 +2122,18 @@ export const register: Register = on => {
     const shown: LogRead = { session: previous.session, claude: previous.claude }
     return (
       <Box flexDirection="column">
-        <Box flexDirection="row" columnGap={1}>
+        <Box
+          key={PREVIOUS_FRAME_KEY}
+          flexDirection="row"
+          columnGap={1}
+          borderStyle="round"
+          borderDimColor
+          paddingX={PREVIOUS_FRAME_PADDING}
+        >
           <Box key={PREVIOUS_KEY} flexGrow={1}>
-            {drawSpans({ Text, Link }, line.spans, line.wrap)}
+            <Button key={PREVIOUS_PRESS_KEY} plain onPress={() => void update($, previousOpen, wasOpen => !wasOpen)}>
+              {drawSpans({ Text, Link }, line.spans, line.wrap)}
+            </Button>
           </Box>
           <Button key={PREVIOUS_OPEN_KEY} label={BANNER_OPEN_LABEL} variant="secondary" onPress={() => void openConversations(shown)} />
           <Button key={PREVIOUS_ALL_KEY} label={PREVIOUS_ALL_LABEL} variant="secondary" onPress={() => void openConversations(null)} />

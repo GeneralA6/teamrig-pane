@@ -3,8 +3,11 @@ import type { LogConversation, Snapshot, TaskRow, ViewMode } from '../types'
 import { BANNER_KEY, NOTHING_CURRENT, PREVIOUS_KEY, bannerBlock, currentRowKey, currentTask, previousBlock, type Current } from '../hooks/banner'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
+import { conversationWhen } from '../hooks/log-rows'
+import { UNTITLED } from '../hooks/log-title'
 import { treeOf } from '../hooks/meta'
 import { SEPARATOR, paneBlocks, type Row } from '../hooks/rows'
+import { clockOf } from '../hooks/zone'
 import { HOUR, NOW, NO_TEAM, SNAPSHOT_SETTINGS, createLine, statusLine, treeAt } from './fixtures'
 
 function rowsOf(lines: readonly string[]): TaskRow[] {
@@ -132,8 +135,12 @@ describe('previousBlock', () => {
     opening: { by: 'owner', line: 'Plan the week' },
   }
 
+  const clock = clockOf(snapOf(LINES))
+  /** The cells under its title, past `previous · `. */
+  const under = ' '.repeat('previous · '.length)
+
   test('one row cut at one line: a dim previous, then how the conversation opened', () => {
-    expect(previousBlock(before, snapOf(LINES))).toEqual({
+    expect(previousBlock(before, snapOf(LINES), false, clock)).toEqual({
       key: PREVIOUS_KEY,
       rows: [{ key: PREVIOUS_KEY, spans: [{ text: 'previous', dim: true }, SEPARATOR, { text: 'Plan the week' }], maxLines: 1 }],
     })
@@ -144,8 +151,57 @@ describe('previousBlock', () => {
       { session: 'po', task: 'T4', at: NOW - 90 * 60_000 },
       { session: 'po', task: 'T2', at: NOW - 10 * 60_000 },
     ]
-    const block = previousBlock(before, { ...snapOf(LINES), work })
+    const block = previousBlock(before, { ...snapOf(LINES), work }, false, clock)
     expect(block.rows.map(textOf)).toEqual(['previous · T4 Started last'])
     expect(block.rows[0]?.spans[2]).toEqual({ text: 'T4', bold: true })
+  })
+
+  test('open, it is cut at no line: how it opened, then when it ran and its count of lines, under the title', () => {
+    const block = previousBlock(before, snapOf(LINES), true, clock)
+    expect(block.rows.map(textOf)).toEqual(['previous · Plan the week', `${under}${conversationWhen(before, clock)}`])
+    expect(conversationWhen(before, clock)).toMatch(/–.* · 4 lines$/)
+    expect(block.rows.map(row => row.maxLines)).toEqual([undefined, undefined])
+    expect(block.rows.map(row => row.hang?.text)).toEqual([under, under])
+    expect(block.rows[1]?.spans.at(-1)?.dim).toBe(true)
+  })
+
+  test('open, each task it worked a row with its whole title, then its times, then how it opened', () => {
+    const long = 'A title far past the forty-eight characters a shared title keeps'
+    const lines = [...LINES, createLine('T7', { owner: 'po', by: 'lead', at: NOW - 3 * HOUR, title: long })]
+    const work = [
+      { session: 'po', task: 'T4', at: NOW - 100 * 60_000 },
+      { session: 'po', task: 'T7', at: NOW - 80 * 60_000 },
+      { session: 'po', task: 'T9', at: NOW - 70 * 60_000 },
+    ]
+    const worked = { ...snapOf(lines), work }
+    expect(textOf(previousBlock(before, worked, false, clock).rows[0] ?? { key: '', spans: [] })).not.toContain(long)
+    const block = previousBlock(before, worked, true, clock)
+    expect(block.rows.map(textOf)).toEqual([
+      'previous · T4 Started last',
+      `${under}T7 ${long}`,
+      `${under}T9`,
+      `${under}${conversationWhen(before, clock)}`,
+      `${under}opened · Plan the week`,
+    ])
+    expect(block.rows.map(row => row.key)).toEqual([
+      PREVIOUS_KEY,
+      `${PREVIOUS_KEY}:task:1`,
+      `${PREVIOUS_KEY}:task:2`,
+      `${PREVIOUS_KEY}:when`,
+      `${PREVIOUS_KEY}:opened`,
+    ])
+    expect(block.rows[1]?.spans[1]).toEqual({ text: 'T7', bold: true })
+  })
+
+  test('open, a conversation of harness notices alone has its dim title and its times, and no opened row', () => {
+    const block = previousBlock({ ...before, opening: null }, snapOf(LINES), true, clock)
+    expect(block.rows.map(textOf)).toEqual([`previous · ${UNTITLED.text}`, `${under}${conversationWhen(before, clock)}`])
+  })
+
+  test("a Claude opening is dim in the open block's opened row as in its title", () => {
+    const claudeOpened: LogConversation = { ...before, opening: { by: 'claude', line: 'Read the handover' } }
+    const work = [{ session: 'po', task: 'T4', at: NOW - 90 * 60_000 }]
+    const block = previousBlock(claudeOpened, { ...snapOf(LINES), work }, true, clock)
+    expect(block.rows.at(-1)?.spans.at(-1)).toEqual({ text: 'Read the handover', dim: true })
   })
 })
