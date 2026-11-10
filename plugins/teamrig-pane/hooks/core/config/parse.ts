@@ -1,4 +1,5 @@
 // Copied from teamrig's src/config/parse.ts by scripts/sync-core.ts: change it there, then run the sync.
+import { ADMISSION_MODES, isAdmissionMode } from '../delivery/admission.ts';
 import { deployTargetsOf } from '../delivery/targets.ts';
 import { ADDRESS_PATTERN, splitAddress } from '../core/address.ts';
 import { isRecord, type JsonRecord } from '../core/guards.ts';
@@ -862,6 +863,7 @@ function parseQueue(read: ConfigReader, raw: JsonRecord): QueueConfig {
   if (smallMaxRunMinutes > longestRun) {
     read.report(`${path}.smallMaxRunMinutes`, `must be at most maxRunMinutes (${longestRun})`);
   }
+  const admission = read.string(raw, 'admission', path, DEFAULT_QUEUE.admission, oneOf(ADMISSION_MODES));
   return {
     ...(lockPath === undefined ? {} : { lockPath }),
     lockTtlMinutes,
@@ -872,6 +874,10 @@ function parseQueue(read: ConfigReader, raw: JsonRecord): QueueConfig {
     memoryFloorMb: read.integer(raw, 'memoryFloorMb', path, DEFAULT_QUEUE.memoryFloorMb, CONFIG_LIMITS.queueMemoryFloorMb),
     smallReserveMb: read.integer(raw, 'smallReserveMb', path, DEFAULT_QUEUE.smallReserveMb, CONFIG_LIMITS.queueSmallReserveMb),
     heavyReserveMb: read.integer(raw, 'heavyReserveMb', path, DEFAULT_QUEUE.heavyReserveMb, CONFIG_LIMITS.queueHeavyReserveMb),
+    admission: isAdmissionMode(admission) ? admission : DEFAULT_QUEUE.admission,
+    agingMinutes: read.integer(raw, 'agingMinutes', path, DEFAULT_QUEUE.agingMinutes, CONFIG_LIMITS.queueAgingMinutes),
+    perSessionRunning: read.integer(raw, 'perSessionRunning', path, DEFAULT_QUEUE.perSessionRunning, CONFIG_LIMITS.queuePerSessionRunning),
+    maxHeavyParallel: read.integer(raw, 'maxHeavyParallel', path, DEFAULT_QUEUE.maxHeavyParallel, CONFIG_LIMITS.queueMaxHeavyParallel),
   };
 }
 
@@ -1231,10 +1237,13 @@ function parseIdle(read: ConfigReader, raw: JsonRecord, sessions: readonly strin
 /** `open.headroom`: the room a new session needs on the host. */
 function parseHeadroom(read: ConfigReader, raw: JsonRecord): HeadroomConfig {
   const path = 'open.headroom';
+  const floorMb = read.optionalInteger(raw, 'floorMb', path, CONFIG_LIMITS.headroomFloorMb);
   return {
     sessionMb: read.integer(raw, 'sessionMb', path, DEFAULT_HEADROOM.sessionMb, CONFIG_LIMITS.headroomSessionMb),
     commitMaxPct: read.integer(raw, 'commitMaxPct', path, DEFAULT_HEADROOM.commitMaxPct, CONFIG_LIMITS.headroomCommitMaxPct),
     closeIdleMinutes: read.integer(raw, 'closeIdleMinutes', path, DEFAULT_HEADROOM.closeIdleMinutes, CONFIG_LIMITS.headroomCloseIdleMinutes),
+    ...(floorMb === undefined ? {} : { floorMb }),
+    loadMinutes: read.integer(raw, 'loadMinutes', path, DEFAULT_HEADROOM.loadMinutes, CONFIG_LIMITS.headroomLoadMinutes),
   };
 }
 

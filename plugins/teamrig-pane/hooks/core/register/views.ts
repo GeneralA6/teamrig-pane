@@ -3,6 +3,7 @@ import { parseDeadline, showStored, storedText } from '../core/time.ts';
 import type { TimeZone } from '../core/zone.ts';
 import { cardLines } from './card.ts';
 import type { ItemType, RegisterEvent } from './events.ts';
+import { shortSha256, type HandStepAudit, type RunFiles } from './hand-step.ts';
 import { itemTypeOf } from './item-types.ts';
 import type { ApprovalAnswer, Task } from './fold.ts';
 import { ACTIVE_STATUSES, GITHUB_SOURCE, priorityText, type TaskStatus } from './model.ts';
@@ -351,6 +352,11 @@ function changeText(name: string, value: unknown, zone: TimeZone): string {
   return Array.isArray(value) ? value.join(',') : String(value);
 }
 
+/** A hand step file an audit pins on its task (T2312), as `show` prints it: path, short sha256, auditor and when. */
+function auditText(audit: HandStepAudit, zone: TimeZone): string {
+  return `audit: ${audit.path}   (sha256 ${shortSha256(audit.sha256)}, audited by ${audit.by} at ${zone.minute(new Date(audit.at))})`;
+}
+
 /** One line per event, for `show`, its times in the team's `zone`. */
 export function formatEvent(event: RegisterEvent, zone: TimeZone): string {
   const head = `${zone.minute(new Date(event.at))} ${event.by} ${event.type}`;
@@ -397,7 +403,8 @@ export function formatEvent(event: RegisterEvent, zone: TimeZone): string {
         .map(([name, value]) => `${name}=${changeText(name, value, zone)}`);
       const verdict = event.verdict === undefined ? [] : [`verdict=${event.verdict}`];
       const decided = event.decided === true ? ['decided'] : [];
-      return `${[head, ...fields, ...verdict, ...decided].join(' ')}${note}`;
+      const audit = event.audit === undefined ? [] : [`audit=${event.audit.path}@${shortSha256(event.audit.sha256)}`];
+      return `${[head, ...fields, ...verdict, ...decided, ...audit].join(' ')}${note}`;
     }
     case 'moved':
       return `${head} to=${event.to}`;
@@ -407,10 +414,14 @@ export function formatEvent(event: RegisterEvent, zone: TimeZone): string {
 /** What a size, in percent of the weekly limit, costs in other words (such as `about 9.75M W`); undefined when unknown. */
 export type SizeCost = (pct: number) => string | undefined;
 
-/** What `show` adds to a task's own fields: its size's cost in other words, and its files line (T1457). */
+/**
+ * What `show` adds to a task's own fields: its size's cost in other words, its files line (T1457), and what its
+ * card's hand step file hashes to now (T2312).
+ */
 export interface DetailExtras {
   readonly sizeCost?: SizeCost;
   readonly files?: string;
+  readonly runFiles: RunFiles;
 }
 
 /**
@@ -418,7 +429,7 @@ export interface DetailExtras {
  * its files, then its history; `tree` reads the task line as {@link formatTask} does, and `extras.sizeCost` words its
  * size's cost beside the percent.
  */
-export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], tree: TaskTree, extras: DetailExtras = {}): string {
+export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], tree: TaskTree, extras: DetailExtras): string {
   const lines = [formatTask(task, undefined, tree)];
   if (task.description !== null) {
     const [first = '', ...rest] = task.description.split('\n');
@@ -437,8 +448,10 @@ export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], t
   if (task.note !== null) {
     lines.push(`note: ${task.note}`);
   }
+  // Each pin before the card, so the owner of the task sees what its reviewer pinned before a card hands it (T2312).
+  lines.push(...task.audits.map((audit) => auditText(audit, tree.zone)));
   if (task.card !== null) {
-    lines.push('card:', ...cardLines(task.card, '  '));
+    lines.push('card:', ...cardLines(task.card, '  ', task.audits, extras.runFiles));
   }
   if (task.answer !== null) {
     lines.push(`answer: ${task.answer.by} ${task.answer.verdict} at ${tree.zone.minute(new Date(task.answer.at))}${task.answer.note === null ? '' : `: ${task.answer.note}`}`);

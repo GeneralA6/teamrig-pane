@@ -1,6 +1,7 @@
 // Copied from teamrig's src/config/types.ts by scripts/sync-core.ts: change it there, then run the sync.
 import type { TaskStatus } from '../register/model.ts';
 import type { CoreRuleKey } from '../rules/keys.ts';
+import type { AdmissionMode } from '../delivery/admission.ts';
 
 /** The config format this code reads and writes. Older files are migrated in memory on load. */
 export const CONFIG_VERSION = 8;
@@ -757,19 +758,38 @@ export interface QueueConfig {
   readonly waitMinutes: number;
   /**
    * While a queued step runs, its process tree's memory and the host's free memory are sampled this often, for its
-   * ledger record's `peakTreeMb` and `lowFreeMb`; 0 samples nothing.
+   * ledger record's `peakTreeMb`, `startFreeMb` and `lowFreeMb`, and for a killed step the host's free memory
+   * (`endFreeMb`) and commit charge (`commitMb`, `commitLimitMb`) at the kill; 0 samples nothing and records none.
    */
   readonly memorySampleSeconds: number;
   /** A queued step, a merge or a deploy starts only while the host keeps this many MB free besides those held for it and for the small steps sharing the host. */
   readonly memoryFloorMb: number;
-  /** The MB held for a small step with no ledger record of its peak yet. */
+  /** The MB held for a small step whose need is neither learned from its past runs in the ledger nor declared with --memory-mb. */
   readonly smallReserveMb: number;
   /**
    * The least MB held for a heavy queued step, a merge or a deploy besides memoryFloorMb: it takes the host lock only
-   * while free memory covers both (at most half the host's RAM). A heavy step whose ledger peak and a quarter is more
-   * holds that instead.
+   * while free memory covers both (at most half the host's RAM). A heavy step whose need, learned from its past runs in
+   * the ledger or declared with --memory-mb, is more holds that instead.
    */
   readonly heavyReserveMb: number;
+  /**
+   * How the host lock's line is ordered: `pipeline` lets the most urgent step in first (a p0 step at once, then by class
+   * turn, priority raised by agingMinutes waited, and arrival), with at most perSessionRunning steps of one session
+   * running and maxHeavyParallel heavy steps sharing the host at once; `serial` keeps the line in arrival order with no
+   * cap and one heavy step at a time, as before, and is the default while a team's own deploy tool may take the lock
+   * file without reading the shares.
+   */
+  readonly admission: AdmissionMode;
+  /** In `pipeline` admission, a waiting step's priority rises one level per this many minutes waited, never to p0; 0 ages nothing. */
+  readonly agingMinutes: number;
+  /** In `pipeline` admission, a session with this many steps running (the host lock or a share of the host) waits for one to end, and later steps pass it; 0 caps nothing. */
+  readonly perSessionRunning: number;
+  /**
+   * In `pipeline` admission, at most this many heavy queued steps share the host at once, each let in only while the
+   * memory gate has room for it beside the steps already sharing it; a merge and a deploy still take the whole host,
+   * waiting for every share to end.
+   */
+  readonly maxHeavyParallel: number;
 }
 
 /** How a delivery step waits. */
@@ -1120,6 +1140,13 @@ export interface HeadroomConfig {
   readonly commitMaxPct: number;
   /** How long, in minutes, a session stays quiet before `teamrig close` may end it. */
   readonly closeIdleMinutes: number;
+  /**
+   * The MB free memory must keep with a new tab and the tabs still loading counted; unset, what queued steps keep free
+   * plus one heavy step's reserve (`delivery.queue.memoryFloorMb` + `heavyReserveMb`), so a new tab leaves a heavy step room.
+   */
+  readonly floorMb?: number;
+  /** How long, in minutes, a tab just opened holds the MB it was counted at, while it loads and free memory does not show it yet. */
+  readonly loadMinutes: number;
 }
 
 /**
