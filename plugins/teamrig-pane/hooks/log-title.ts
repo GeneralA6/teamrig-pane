@@ -26,24 +26,31 @@ function tasksOf(conversation: LogConversation, work: Worked['work']): string[] 
   return [...new Set(worked.map(mark => mark.task))]
 }
 
+/** A task's id bold before its title cut to `max` characters, the id alone for a task the snapshot does not hold. */
+function taskSpans(id: string, title: string | undefined, max: number): Span[] {
+  return [{ text: id, bold: true }, ...(title === undefined ? [] : [{ text: ` ${cut(title, max)}` }])]
+}
+
+/** How the conversation opened, the owner's words plain and Claude's dim; null for one that holds harness notices alone. */
+export function openingSpan(conversation: LogConversation): Span | null {
+  const opening = conversation.opening
+  if (opening === null) return null
+  return opening.by === 'owner' ? { text: opening.line } : { text: opening.line, dim: true }
+}
+
 /**
  * A conversation's title: each task it worked, its id bold before its title (cut when it worked several; the id
- * alone for a task the snapshot does not hold), else how it opened, the owner's words plain and Claude's dim; null
- * for one with neither.
+ * alone for a task the snapshot does not hold), else how it opened (openingSpan); null for one with neither.
  */
 export function titleOf(conversation: LogConversation, { work, tasks }: Worked): Span[] | null {
   const ids = tasksOf(conversation, work)
   if (ids.length === 0) {
-    const opening = conversation.opening
-    if (opening === null) return null
-    return [opening.by === 'owner' ? { text: opening.line } : { text: opening.line, dim: true }]
+    const opening = openingSpan(conversation)
+    return opening === null ? null : [opening]
   }
   const titles = new Map(tasks.map(task => [task.id, task.title]))
-  return ids.flatMap((id, i): Span[] => {
-    const title = titles.get(id)
-    const words: Span[] = title === undefined ? [] : [{ text: ` ${ids.length === 1 ? title : cut(title, SHARED_TITLE_CHARS)}` }]
-    return [...(i === 0 ? [] : [SEPARATOR]), { text: id, bold: true }, ...words]
-  })
+  const max = ids.length === 1 ? Number.POSITIVE_INFINITY : SHARED_TITLE_CHARS
+  return ids.flatMap((id, i): Span[] => [...(i === 0 ? [] : [SEPARATOR]), ...taskSpans(id, titles.get(id), max)])
 }
 
 /** A conversation's title as drawn: titleOf, else a dim line that it has no prompt or reply. */
