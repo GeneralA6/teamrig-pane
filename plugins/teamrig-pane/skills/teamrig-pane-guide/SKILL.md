@@ -8,7 +8,8 @@ description: Use when running the teamrig task pane, or to learn what it shows, 
 teamrig-pane is a Claude Code plugin that shows a session's teamrig tasks, and the files it changed in git,
 beside the conversation. It only reads: the [teamrig](https://github.com/GeneralA6/teamrig) CLI writes the task
 register and the inboxes, and the pane draws what is there. Two places run teamrig's CLI instead: the Meetings view, to
-list the team's meetings and to start one, and the Teams tab's `[Meet]`, to have a session bring the owner its cards.
+list the team's meetings and to start one, and the Teams tab's `[Meet]`, to have a session bring the owner its cards,
+and `[Wake]`, to wake a session by hand.
 It makes no model calls and uses no tokens.
 
 The pane is pre-release: it runs on Claude Code's function hooks (`hooks/hooks.json` loads `./register.tsx` as a
@@ -27,9 +28,9 @@ module in Claude Code's own runtime), an early-access plugin surface that may ch
 | Claude Code | 2.1.295 or later | CI runs the plugin's tests on 2.1.295, the oldest release they pass on; earlier test kits cannot draw a pane. On an older one the pane draws a `WARN` line with the fix. |
 | Fullscreen layout | `"tui": "fullscreen"` in `~/.claude/settings.json` | Only the fullscreen layout docks the pane on the right. Without it the pane sits above the prompt. |
 | Terminal width | 110 columns to dock, 144 to open by itself | Narrower, the pane sits above the prompt; `/teamrig-pane` opens it at any width. |
-| teamrig | a team with a register; for the Meetings view, the teamrig plugin 0.208.0 or later installed in Claude Code, and for the Teams tab's `[Meet]`, 0.209.0 or later | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). The Meetings view and `[Meet]` run the CLI of the teamrig plugin it finds in Claude Code's plugin list. |
+| teamrig | a team with a register; for the Meetings view, the teamrig plugin 0.208.0 or later installed in Claude Code, for the Teams tab's `[Meet]`, 0.209.0 or later, and for its `[Wake]`, 0.319.0 or later | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). The Meetings view, `[Meet]` and `[Wake]` run the CLI of the teamrig plugin it finds in Claude Code's plugin list. |
 | git | on the PATH | Only for the Changes tab, which runs `git status` per repo, `git diff` and `git grep` to count the changed lines, and `git diff` for each file's diff you open. Without it the pane draws a `WARN` line with the fix. |
-| Node.js | `node` on the PATH for the Meetings view and `[Meet]`, as teamrig needs; 22.18 or later to develop it | The pane runs inside Claude Code; the Meetings view and `[Meet]` run teamrig's CLI with `node`. The repository's tools and tests run on Node (`engines` in `package.json`). |
+| Node.js | `node` on the PATH for the Meetings view, `[Meet]` and `[Wake]`, as teamrig needs; 22.18 or later to develop it | The pane runs inside Claude Code; the Meetings view, `[Meet]` and `[Wake]` run teamrig's CLI with `node`. The repository's tools and tests run on Node (`engines` in `package.json`). |
 | Operating system | Linux, Windows or macOS | CI runs the tests on ubuntu, windows and macos, each on Node 22 and 24, and the plugin tests in Claude Code on each. CI checks only once the repository is public: until then each change is tested before it is pushed on one machine, Node and Claude Code release, so the others go unchecked. |
 
 The pane checks the Claude Code version and git once a session, when it starts, and draws one `WARN` line
@@ -640,13 +641,14 @@ child team's only on one account and one reset: a child team on another keeps it
 current name (bold), how many sessions it leads (`(2)`, dim), its roles, each in a colour of
 its own (lead, `sub-lead` for a leader that is not the lead, delivery owner, security reviewer); then how many of its
 cards wait on the owner (the config's `register.ownerSource`) now, `? 2 decisions`, with a `[Meet]` press, and when the
-next card the owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire days are on its card. The
+next card the owner put off comes back (`later Mon 11-02`, dim), then a `[Wake]` press on an active session's row. Its
+hire, review and retire days are on its card. The
 row of the session whose pane it is starts with a green `▶`. A retired session is a dim `○`. Docked, a row's presses
 sit on its words: a press on a team's mark or name, or on a retired group's row (a click, Enter or Space), closes it or
 opens it again; on a session's name it opens or closes its card; on a leader's mark it folds the sessions it leads.
 Inline, where a row is one press, the row does the first of these. Each team's and session's row ends in `[Stats]`,
 which opens the Stats tab on that team (its child teams rolled in) or that session (the tasks it owns); `b` then goes
-back to the Teams tab at that row. Inline `[Stats]` is words only, as `[Meet]` is. Teams and leaders start open, a
+back to the Teams tab at that row. Inline `[Stats]` is words only, as `[Meet]` and `[Wake]` are. Teams and leaders start open, a
 retired group closed, and the state stays across a hot reload. There are no ← and → keys: the engine binds keys only to buttons. With
 no team, no config teamrig can read, or a failed read of the team folder list, or of its own team's folder before one
 worked, the view says which. Any other team folder it cannot read gets a `WARN team <id> could not be read: …` line
@@ -658,9 +660,17 @@ answered leads the tab: `Asking web for its cards…`, then `Asked web for its c
 `web was not asked:` and why. The session's row answers too, in the press's place, so the answer shows where it was
 pressed: `Asking…`, then `Asked 19:41 IST`, when teamrig asked it, on the team's clock, with no press until the Teams
 tab opens again from the switch or the session starts, so it cannot be asked twice; a refused one keeps the press,
-then `not asked`. One meet runs at a time, given 60 seconds. Inline, a row with a `[Meet]` opens the card.
-The switch's Teams button counts the cards waiting on the owner now across the team, `Teams (2)`; a card put off counts
-again once it comes back.
+then `not asked`. One press runs at a time, a meet or a wake; a meet is given 60 seconds. Inline, a row with a `[Meet]`
+opens the card. The switch's Teams button counts the cards waiting on the owner now across the team, `Teams (2)`; a
+card put off counts again once it comes back.
+
+`[Wake]` runs `teamrig owner wake <team>/<id>`, the owner's wake by hand of any session of the tree: an idle running
+session gets an inbox line that wakes it to work its task list, one not running opens in a new tab, and one in a turn,
+at a tool call or waiting on the person is refused with nothing posted. Its answer shows as a meet's does: `Waking web…`,
+then `Woke web:` with teamrig's line, or `web was not woken:` and why, leads the tab, and the row shows `Waking…`, then
+`Woke 19:41 IST` with no press, or the press again, then `not woken`. A wake is given 120 seconds, as opening a tab
+waits for it to come up. A retired session's row has none, nor the row of the session whose pane it is, the tab the
+owner types in.
 
 A card lists, each only when known: Id (where it differs from the name), Role (its roles in their colours, and `leads 2 sessions`), Led by, Launch (model
 and effort), Hired or Rehired (day, by whom, review day), Scope, Reason, Now (its tasks in progress, each id opening its
@@ -747,7 +757,7 @@ numbers kept from the last read. It has no Find field.
 ## How it relates to the teamrig CLI
 
 The pane never writes, but for the Meetings view's `[Start meeting]`, which runs `teamrig meeting start`, the Teams
-tab's `[Meet]`, which runs `teamrig meet`, and a card's `[Note]` and `[Next]`, which run `teamrig owner note` and
+tab's `[Meet]` and `[Wake]`, which run `teamrig meet` and `teamrig owner wake`, and a card's `[Note]` and `[Next]`, which run `teamrig owner note` and
 `teamrig owner next` (see [Note and Next](#note-and-next)). To change
 what it shows, run teamrig (see the
 [teamrig guide](https://github.com/GeneralA6/teamrig/blob/main/plugins/teamrig/skills/teamrig-guide/commands.md)):
@@ -762,7 +772,7 @@ what it shows, run teamrig (see the
 | book a meeting (shows in Meetings) | `teamrig meeting schedule --meets <session> --at <time> --about "..." --session <you>` |
 
 The pane reads the register with teamrig's own read modules, copied into the plugin at a pinned teamrig commit,
-and a golden test holds its rows to what `teamrig list` prints. Besides the Meetings view and `[Meet]`, which run teamrig's CLI, it
+and a golden test holds its rows to what `teamrig list` prints. Besides the Meetings view, `[Meet]` and `[Wake]`, which run teamrig's CLI, it
 reads files only: a stat every 3 seconds
 re-reads a file when its size or time moved, and a 60 second tick moves the due and age labels on. Its state
 (the size, a pin) lives in the plugin's own store, never in the register.

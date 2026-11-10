@@ -85,7 +85,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   active and retired sessions, its lead over the sessions each leader leads, the retired ones in a group of their own
   and the child teams under their parent; each session's row gives its name, how many sessions it leads
   (`(2)`), its roles, each in a colour of its own, and how many of its cards wait on the owner, with a `[Meet]` press
-  that has teamrig ask it to bring them now; the pane's own row starts with a green triangle pointing right; the switch's button counts the
+  that has teamrig ask it to bring them now, and a `[Wake]` press that wakes it by hand; the pane's own row starts with a green triangle pointing right; the switch's button counts the
   cards, `Teams (2)`. A press on a row closes or opens what lies under it; a session's card adds its hire or retire and
   how many of its tasks are done and verifying. `[Stats]` on a team's or session's row opens the Stats tab on it, and
   back returns to that row.
@@ -105,7 +105,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
 - **Files only.** A stat every 3 s re-reads a file only when its size or time moved, plus a tick every
   60 s. The exceptions run the CLI of the teamrig plugin installed in Claude Code: the Meetings view
   (`teamrig meeting list` every 60 s while it shows, `teamrig meeting start` on a press) and the Teams tab's `[Meet]`
-  (`teamrig meet` on a press). No model calls, so no tokens.
+  and `[Wake]` (`teamrig meet` and `teamrig owner wake` on a press). No model calls, so no tokens.
 - **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; a project
   with none shows how to set it up. See [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
 

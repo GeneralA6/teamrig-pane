@@ -8,7 +8,7 @@ an older one:
 Docks the session's tasks from teamrig's task register (its tasks folder: `events.jsonl`, with the
 `inbox-marks.jsonl` that `teamrig inbox read` writes, the `goals.jsonl` that ranks the plan and the `usage/tasks.week.json` that sizes
 its tasks; see Where the register is, below) on the right of
-Claude Code's fullscreen UI. It reads files only (the Meetings view and the Teams tab's `[Meet]` aside, which run teamrig's CLI): a stat poll
+Claude Code's fullscreen UI. It reads files only (the Meetings view and the Teams tab's `[Meet]` and `[Wake]` aside, which run teamrig's CLI): a stat poll
 every 3 s re-reads a file only when its size or mtime moved, and a 60 s tick moves the due/age
 labels on. No model calls, so no tokens. Every time is on the team's clock and zone-marked
 (`14:20 IDT`), as teamrig prints it: the team config's `timeZone`, else the machine's zone (the
@@ -453,7 +453,7 @@ row. Under it come its lead, each leader over the sessions it leads (the config'
 many sessions it leads, when it leads any, dim (`acme-web (2)`), and its roles, each in a colour of its own so the
 eye finds a role without reading it: lead, sub-lead (a leader that is not the lead), delivery owner, security reviewer.
 Then come how many of its cards wait on the owner now (`? 2 decisions`) with a `[Meet]` press, and when the next card the
-owner put off comes back (`later Mon 11-02`, dim). Its hire, review and retire days are on its card, keeping the row
+owner put off comes back (`later Mon 11-02`, dim), then a `[Wake]` press on an active session's row. Its hire, review and retire days are on its card, keeping the row
 short. The row of the session whose pane it is starts with a green triangle pointing right, so you find yourself at a
 glance. A retired session's row is a dim `○`.
 Teams under another top team are left out. Until there is a tree, the tab says why: no team, a team with no config
@@ -471,7 +471,7 @@ binds keys only to buttons.
 Each team's and session's row ends in `[Stats]`, which opens the Stats tab on that team (its child teams rolled in) or
 that session (the tasks it owns). `‹ back` (`b`) and the trail `Teams › Stats` then lead the tab, and back shows the
 Teams tab at that row. A Health count's list keeps its own back first, and a press on the switch drops the row's.
-Inline `[Stats]` is words only, as `[Meet]` is.
+Inline `[Stats]` is words only, as `[Meet]` and `[Wake]` are.
 
 `[Meet]` runs `teamrig meet <session>`: teamrig wakes a running session with an inbox line asking it to bring the owner
 its cards now, or opens it in a new tab to do so, and refuses a session with no card waiting on the owner. What teamrig
@@ -479,10 +479,18 @@ answered leads the tab: `Asking web for its cards…`, then `Asked web for its c
 woke or opened), or `web was not asked:` and why. The session's row answers too, in the press's place, so the answer
 shows where it was pressed: `Asking…`, then `Asked 19:41 IST`, when teamrig asked it, on the team's clock, with no
 press until the Teams tab opens again from the switch or the session starts, so it cannot be asked twice; a refused one
-keeps the press, then `not asked`. One meet runs at a time, given 60 s. Inline, a row with a `[Meet]`
+keeps the press, then `not asked`. One press runs at a time, a meet or a wake; a meet is given 60 s. Inline, a row with a `[Meet]`
 opens the card. It needs the teamrig plugin 0.209.0 or later installed in Claude Code (found as for Meetings, below) and `node` on the PATH. The switch's Teams button counts
 the cards waiting on the owner now across the team's sessions, `Teams (2)`; a card the owner put off counts again once it
 comes back.
+
+`[Wake]` runs `teamrig owner wake <team>/<id>`, your wake by hand of any session of the tree: an idle running session
+gets an inbox line that wakes it to work its task list, one not running opens in a new tab, and one in a turn, at a tool
+call or waiting on the person is refused with nothing posted. Its answer shows as a meet's does: `Waking web…`, then
+`Woke web:` with teamrig's line, or `web was not woken:` and why, leads the tab, and the row shows `Waking…`, then
+`Woke 19:41 IST` with no press, or the press again, then `not woken`. A wake is given 120 s, as opening a tab waits
+for it to come up. A retired session's row has none, nor the row of the session whose pane it is: that is the tab you
+type in. It needs the teamrig plugin 0.319.0 or later.
 
 A card has one labelled line per fact the team's files hold, each only when it has a value: Id (where it differs from the name), Role (its roles in their
 colours and how many sessions it leads, `leads 2 sessions`, or the area it owns), Led by (its leaders, nearest first),
@@ -509,7 +517,7 @@ open.
 
 It reads each team's config and, in the state folder that config names, its rename log, hire log and week file, and
 for the pane's own team its register and inbox read marks and each marked session's inbox, with teamrig's own readers.
-It reads files only (`[Meet]` aside), and only while it shows: on each 3 s poll a file is read again only when its size
+It reads files only (`[Meet]` and `[Wake]` aside), and only while it shows: on each 3 s poll a file is read again only when its size
 or time moved.
 No model calls,
 no tokens.
