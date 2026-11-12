@@ -485,7 +485,7 @@ woke or opened), or `web was not asked:` and why. The session's row answers too,
 shows where it was pressed: `Asking…`, then `Asked 19:41 IST`, when teamrig asked it, on the team's clock, with no
 press until the Teams tab opens again from the switch or the session starts, so it cannot be asked twice; a refused one
 keeps the press, then `not asked`. One press runs at a time, a meet or a wake; a meet is given 60 s. Inline, a row with a `[Meet]`
-opens the card. It needs the teamrig plugin 0.209.0 or later installed in Claude Code (found as for Meetings, below) and `node` on the PATH. The switch's Teams button counts
+opens the card. It needs the teamrig plugin 0.209.0 or later (found as for Meetings, below) and `node` on the PATH. The switch's Teams button counts
 the cards waiting on the owner now across the team's sessions, `Teams (2)`; a card the owner put off counts again once it
 comes back.
 
@@ -548,12 +548,13 @@ lacks says so), Brief (a press that opens the file) and, on a scheduled meeting,
 typing it would. What teamrig answered leads the list: `Starting M3…`, then `Started M3.` with teamrig's lines
 (`TOLD lead`), or `M3 did not start:` and why. One start runs at a time, and the list is read again once it ends.
 
-It runs the CLI of the teamrig plugin installed in Claude Code, found once a session from Claude Code's plugin list
-(`plugins/installed_plugins.json` under `$CLAUDE_CONFIG_DIR`, else `~/.claude`), with `node`: teamrig 0.208.0 or
-later and `node` on the PATH. It reads the list when the view opens and every 60 s while it shows, giving teamrig
-30 s to answer and a start 60 s; on another view, or minimized, it runs nothing. A list it cannot read says why: no
-teamrig plugin, one too old to print the list, or teamrig's own error. A meeting in a newer format than the pane
-reads is counted on a `WARN` line, the rest still shown. There is no Find field: a schedule is a few rows.
+It runs the CLI of the teamrig plugin, found once a session: in `$TEAMRIG_PLUGIN_DIR` when it holds
+`dist/cli/main.js` (teamrig names its folder there for a session that loads it with `--plugin-dir`), else from Claude
+Code's plugin list (`plugins/installed_plugins.json` under `$CLAUDE_CONFIG_DIR`, else `~/.claude`), with `node`:
+teamrig 0.208.0 or later and `node` on the PATH. It reads the list when the view opens and every 60 s while it shows,
+giving teamrig 30 s to answer and a start 60 s; on another view, or minimized, it runs nothing. A list it cannot read
+says why: no teamrig plugin, one too old to print the list, or teamrig's own error. A meeting in a newer format than
+the pane reads is counted on a `WARN` line, the rest still shown. There is no Find field: a schedule is a few rows.
 
 ### Stats
 

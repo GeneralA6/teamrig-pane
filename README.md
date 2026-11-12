@@ -103,9 +103,9 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
 - **The same reader.** teamrig's own read modules are copied into the plugin at a pinned commit, and
   a golden test holds the pane's rows to what `teamrig list` prints.
 - **Files only.** A stat every 3 s re-reads a file only when its size or time moved, plus a tick every
-  60 s. The exceptions run the CLI of the teamrig plugin installed in Claude Code: the Meetings view
-  (`teamrig meeting list` every 60 s while it shows, `teamrig meeting start` on a press) and the Teams tab's `[Meet]`
-  and `[Wake]` (`teamrig meet` and `teamrig owner wake` on a press). No model calls, so no tokens.
+  60 s. The exceptions run the CLI of the teamrig plugin, installed in Claude Code or in `$TEAMRIG_PLUGIN_DIR`:
+  the Meetings view (`teamrig meeting list` every 60 s while it shows, `teamrig meeting start` on a press) and the
+  Teams tab's `[Meet]` and `[Wake]` (`teamrig meet` and `teamrig owner wake` on a press). No model calls, so no tokens.
 - **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; a project
   with none shows how to set it up. See [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).
 

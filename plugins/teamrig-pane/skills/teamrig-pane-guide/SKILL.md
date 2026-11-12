@@ -28,7 +28,7 @@ module in Claude Code's own runtime), an early-access plugin surface that may ch
 | Claude Code | 2.1.295 or later | CI runs the plugin's tests on 2.1.295, the oldest release they pass on; earlier test kits cannot draw a pane. On an older one the pane draws a `WARN` line with the fix. |
 | Fullscreen layout | `"tui": "fullscreen"` in `~/.claude/settings.json` | Only the fullscreen layout docks the pane on the right. Without it the pane sits above the prompt. |
 | Terminal width | 110 columns to dock, 144 to open by itself | Narrower, the pane sits above the prompt; `/teamrig-pane` opens it at any width. |
-| teamrig | a team with a register; for the Meetings view, the teamrig plugin 0.208.0 or later installed in Claude Code, for the Teams tab's `[Meet]`, 0.209.0 or later, and for its `[Wake]`, 0.319.0 or later | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). The Meetings view, `[Meet]` and `[Wake]` run the CLI of the teamrig plugin it finds in Claude Code's plugin list. |
+| teamrig | a team with a register; for the Meetings view, the teamrig plugin 0.208.0 or later, installed in Claude Code or loaded with `--plugin-dir` and named in `$TEAMRIG_PLUGIN_DIR`, for the Teams tab's `[Meet]`, 0.209.0 or later, and for its `[Wake]`, 0.319.0 or later | The pane shows the register teamrig writes. Without one it shows a `WARN` line ([reference.md](reference.md#warn-lines-and-their-fixes)). The Meetings view, `[Meet]` and `[Wake]` run the CLI of the teamrig plugin in `$TEAMRIG_PLUGIN_DIR` when it is there, else the one it finds in Claude Code's plugin list. |
 | git | on the PATH | Only for the Changes tab, which runs `git status` per repo, `git diff` and `git grep` to count the changed lines, and `git diff` for each file's diff you open. Without it the pane draws a `WARN` line with the fix. |
 | Node.js | `node` on the PATH for the Meetings view, `[Meet]` and `[Wake]`, as teamrig needs; 22.18 or later to develop it | The pane runs inside Claude Code; the Meetings view, `[Meet]` and `[Wake]` run teamrig's CLI with `node`. The repository's tools and tests run on Node (`engines` in `package.json`). |
 | Operating system | Linux, Windows or macOS | CI runs the tests on ubuntu, windows and macos, each on Node 22 and 24, and the plugin tests in Claude Code on each. CI checks only once the repository is public: until then each change is tested before it is pushed on one machine, Node and Claude Code release, so the others go unchecked. |
@@ -719,9 +719,9 @@ on a scheduled meeting, `[Start meeting]`. That press runs `teamrig meeting star
 `Starting M3…`, then `Started M3.` with teamrig's lines (`TOLD lead`), or `M3 did not start:` and why. One start runs
 at a time.
 
-The view runs the CLI of the teamrig plugin installed in Claude Code, with `node`: `teamrig meeting list --json` when
-the view opens and every 60 seconds while it shows; on another view, or minimized, it runs nothing. With no teamrig
-plugin, one older than 0.208.0, or a list that fails, it says why
+The view runs the CLI of the teamrig plugin in `$TEAMRIG_PLUGIN_DIR`, else the one installed in Claude Code, with
+`node`: `teamrig meeting list --json` when the view opens and every 60 seconds while it shows; on another view, or
+minimized, it runs nothing. With no teamrig plugin, one older than 0.208.0, or a list that fails, it says why
 ([reference.md](reference.md#warn-lines-and-their-fixes)). It has no Find field: a schedule is a few rows.
 
 ## The Stats tab
