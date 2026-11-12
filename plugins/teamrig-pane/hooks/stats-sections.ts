@@ -1,5 +1,5 @@
-// The Stats tab's sections after Flow (T1859, the T1419 design's increment 4): New work, Speed, Delays, Waits, Bugs
-// and People, each a foldable section (stats-parts.ts sectionBlock) closed by default, its header alone answering the
+// The Stats tab's sections after Flow (T1859, the T1419 design's increment 4): Bottlenecks (stats-bottlenecks.ts,
+// T1866), New work, Speed, Delays, Waits, Bugs and People, each a foldable section (stats-parts.ts sectionBlock) closed by default, its header alone answering the
 // glance; a press opens its rows. New work: where the range's new tasks came from as a share bar, their type,
 // priority and goal. Speed: each team's lead and cycle time (median and p85) as a table, or a line a team where the
 // table does not fit, and the active tasks by age. Delays: the overdue tasks, each count a press that lists them (the
@@ -12,6 +12,7 @@ import type { StatsListKind, StatsView } from '../types'
 import { joined } from './card'
 import { priorityText, WAIT_KINDS, WORK_SOURCES, type Band, type PersonDone, type Spread, type StatsRange, type TeamStats, type WaitKind, type WorkSource } from './core/read/index'
 import { SEPARATOR, type Block, type Row, type Span } from './rows'
+import { BOTTLENECKS_KEY, bottlenecksHead, bottlenecksRows } from './stats-bottlenecks'
 import { bar } from './stats-chart'
 import { daysText, dim, INDENT, noteRow, padded, percent, plural, rangeLabel, sectionBlock, title, VIEW } from './stats-parts'
 import { cells } from './width'
@@ -339,6 +340,7 @@ function peopleRows(view: Folded, width: number): Row[] {
 
 /** The sections in the order the tab draws them after Flow. */
 const SECTIONS: readonly Section[] = [
+  { key: BOTTLENECKS_KEY, head: bottlenecksHead, rows: bottlenecksRows },
   { key: NEW_KEY, head: newWorkHead, rows: newWorkRows },
   { key: SPEED_KEY, head: speedHead, rows: speedRows },
   { key: DELAYS_KEY, head: delaysHead, rows: delaysRows },
