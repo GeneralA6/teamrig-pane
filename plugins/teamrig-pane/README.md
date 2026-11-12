@@ -228,10 +228,10 @@ every task again.
 
 ## The banner
 
-The band above the prompt leads with the session's name, then the task the session works on: its area's task
-in progress that took its status last (`acme-po · ◐ T595  Current-task banner outside the pane`), else its
-first open task in plan order after a
-dim `next`, else a dim `nothing in progress or open`. It follows the register as the list does, cut at one
+The band above the prompt leads with the session's name, then the task the session works on, after a dim label
+named as the list's sections are: its area's task in progress that took its status last
+(`acme-po · working on · ◐ T595  Current-task banner outside the pane`), else its first open task in plan order
+(`acme-po · up next · ○ T595  ...`), else a dim `nothing in progress or open`. It follows the register as the list does, cut at one
 line, whether the pane is open, minimized or never drawn; a session with no area gets no band from the pane. A
 click on it opens the task's description, status, note, proof, priority and due under its title; a second
 click closes it. The `open in pane` button at the band's right end opens the pane, minimized or never opened too, at the
@@ -241,12 +241,13 @@ terminal. A survey takes the band while it is up, its `[-]` (or `ctrl+x ctrl+a`)
 than the band scrolls in it. Neither press has a key of its own: a band's key would answer that key typed in an
 empty prompt.
 
-Over the banner, a row in a dim round frame of its own names the area's previous conversation, so after a `/clear`
-the band says what came before: a dim `previous ·`, then its title as the Conversations list draws it (the tasks its
-session worked, else how it opened), cut at one line. A click on its title opens it: each task its session worked
-on a row of its own with its whole title, then when it ran and its count of lines, then how it opened when its tasks
-title it; a second click closes it. Its `open in pane` button opens the pane at that conversation's page, and `all
-conversations` at the Conversations list. The previous conversation is the newest one of the session's area, in the
+Over the banner, a dim round frame of its own holds the area's previous conversation, so after a `/clear` the band
+says what came before. Its first row is a dim `previous conversation` label with two buttons: `open in pane` opens
+the pane at that conversation's page, and `all conversations` at the Conversations list. Under it, its title as the
+Conversations list draws it (the tasks its session worked, else how it opened), cut at one line at the frame's
+whole width. A click on its title opens it: each task its session worked on a row of its own with its whole title,
+then when it ran and its count of lines, then how it opened when its tasks title it; a second click closes it. The
+label has a row of its own because Claude Code lets a plugin draw no text on a frame's edge. The previous conversation is the newest one of the session's area, in the
 hours teamrig keeps its turn log, that is not the one running now; it is read again when the session's conversation
 changes (a `/clear`), from the turn-log files only. With none to name, no turn log or a session with no area, the
 band is the banner alone.
