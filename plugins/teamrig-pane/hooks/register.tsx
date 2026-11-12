@@ -629,10 +629,11 @@ export const register: Register = on => {
     await update($, sessionAnswer, () => NO_ANSWER)
     await update($, ownerAct, () => NO_ACT)
     const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
-    // The teamrig CLI the Meetings view runs: the installed plugin's (teamrig-cli.ts), found once.
+    // The teamrig CLI the Meetings view runs: the one in teamrig's plugin folder, else the installed plugin's
+    // (teamrig-cli.ts), found once.
     const cli = await findTeamrigCli(
       { exists: path => $.fs.exists(path), read: path => $.fs.read(path) },
-      { configDir: await $.env.get('CLAUDE_CONFIG_DIR'), home },
+      { configDir: await $.env.get('CLAUDE_CONFIG_DIR'), home, pluginDir: await $.env.get('TEAMRIG_PLUGIN_DIR') },
     )
     // A path that is not there stamps null; a locked or denied one, or any other failure, throws to
     // the poll (source.ts unlessMissing).

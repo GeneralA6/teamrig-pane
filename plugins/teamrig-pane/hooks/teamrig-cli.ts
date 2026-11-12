@@ -1,8 +1,9 @@
-// The teamrig CLI the pane runs (T1359): the installed teamrig plugin's `dist/cli/main.js`, found as teamrig's own
-// status line finds it. Claude Code lists its installed plugins in `plugins/installed_plugins.json` under its config
-// folder (CLAUDE_CONFIG_DIR, else ~/.claude): `{ plugins: { "teamrig@<marketplace>": [{ installPath, ... }] } }`. The
-// first `teamrig@*` install whose main.js is there is the one run, with `node`, and a run's answer read as lines.
-// Reads two files; runs nothing.
+// The teamrig CLI the pane runs (T1359): the teamrig plugin's `dist/cli/main.js`, found as teamrig's own status line
+// finds it. A session that loads teamrig with `--plugin-dir` has no install in Claude Code's plugin list; teamrig names
+// that folder in TEAMRIG_PLUGIN_DIR, so its main.js, when there, is the one run. Else Claude Code lists its installed
+// plugins in `plugins/installed_plugins.json` under its config folder (CLAUDE_CONFIG_DIR, else ~/.claude):
+// `{ plugins: { "teamrig@<marketplace>": [{ installPath, ... }] } }`, and the first `teamrig@*` install whose main.js
+// is there is the one run, with `node`, and a run's answer read as lines. Reads three files at most; runs nothing.
 import { messageOf } from './errors'
 import { slashed } from './source'
 
@@ -21,8 +22,11 @@ export type CliFiles = {
   read: (path: string) => Promise<string>
 }
 
-/** Where to look: Claude Code's config folder variable and the user's home, as the session's environment holds them. */
-export type CliEnv = { readonly configDir: string | undefined; readonly home: string | undefined }
+/**
+ * Where to look: teamrig's plugin folder variable (TEAMRIG_PLUGIN_DIR), Claude Code's config folder variable and the
+ * user's home, as the session's environment holds them.
+ */
+export type CliEnv = { readonly configDir: string | undefined; readonly home: string | undefined; readonly pluginDir: string | undefined }
 
 type JsonRecord = Readonly<Record<string, unknown>>
 
@@ -59,11 +63,22 @@ export function teamrigInstalls(text: string): string[] {
   return found
 }
 
-/** The first teamrig install whose CLI is there; else why none is. A failed read or check is a problem too, never a throw. */
+/** The CLI under the plugin folder TEAMRIG_PLUGIN_DIR names, slashes made forward; null when it is unset or blank. */
+export function pluginDirMain(env: CliEnv): string | null {
+  const pluginDir = env.pluginDir?.trim()
+  return pluginDir === undefined || pluginDir === '' ? null : `${slashed(pluginDir)}/${CLI_MAIN}`
+}
+
+/**
+ * The CLI under TEAMRIG_PLUGIN_DIR when it is there, else the first teamrig install whose CLI is; else why none is. A
+ * failed read or check is a problem too, never a throw.
+ */
 export async function findTeamrigCli(files: CliFiles, env: CliEnv): Promise<TeamrigCli> {
+  const bundled = pluginDirMain(env)
   const listPath = pluginListPath(env)
-  if (listPath === null) return { kind: 'missing', problem: 'no CLAUDE_CONFIG_DIR or home folder to find the teamrig plugin under' }
   try {
+    if (bundled !== null && (await files.exists(bundled))) return { kind: 'found', main: bundled }
+    if (listPath === null) return { kind: 'missing', problem: 'no CLAUDE_CONFIG_DIR or home folder to find the teamrig plugin under' }
     if (!(await files.exists(listPath))) return { kind: 'missing', problem: `no plugin list at ${listPath}: install the teamrig plugin` }
     for (const install of teamrigInstalls(await files.read(listPath))) {
       const main = `${install}/${CLI_MAIN}`
