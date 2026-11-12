@@ -59,7 +59,6 @@ import { HIRE_CAP_DROPPED, IDLE_RETIRE_DROPPED } from './migrate.ts';
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
 import {
   AD_HOC_RUNNERS,
-  ASK_WITH,
   PACKAGE_INSTALLS,
   BURST_POLICIES,
   CONFLICT_WINNERS,
@@ -67,7 +66,6 @@ import {
   GOALS_MODES,
   HIRING_POLICIES,
   isAdHocRunners,
-  isAskWith,
   isPackageInstalls,
   isBurstPolicy,
   isCommitGate,
@@ -103,7 +101,6 @@ import {
   SECRET_WRITES,
   SKIP_HOOKS,
   TERMINALS,
-  type AskWith,
   type AlertsConfig,
   type ContextFilesConfig,
   type ExecConfig,
@@ -206,6 +203,10 @@ const EXEC_DIRECTORY: Check<string> = (folder) => {
 /** An environment variable's name, such as `EXEC_WEBHOOK_URL`: what a config key names in place of a secret value. */
 const ENV_VARIABLE: Check<string> = (name) =>
   /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(name) ? undefined : 'expected a variable name: a letter or _, then at most 63 letters, digits or _';
+
+/** A key in a secrets file of many, such as `PAGE_WEBHOOK_URL`: a Kubernetes secret's keys may also hold . and -. */
+const SECRET_KEY: Check<string> = (name) =>
+  /^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(name) ? undefined : 'expected a key name: a letter or _, then at most 63 letters, digits, _, . or -';
 
 /** The key shape the skills lint recognises in frontmatter. */
 const isFrontmatterKey: Check<string> = (key) => (/^[A-Za-z0-9_-]+$/.test(key) ? undefined : 'expected a frontmatter key: letters, digits, _ or -');
@@ -428,6 +429,8 @@ export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse
   const pickerGuard = read.section(raw, 'pickerGuard', '');
   const budget = parseBudget(read, read.section(raw, 'budget', ''), sessions, above);
   const decisions = read.section(raw, 'decisions', '');
+  // T2256: the question picker stopped the lead's session in the meeting too; the meeting asks only in plain text.
+  read.dropped(decisions, 'askWith', 'decisions', 'the daily meeting asks the owner each decision in plain text, the picker guard refusing the question picker to the lead too');
   reportRenamedKey(read, raw, '', 'coordinator', 'delivery');
 
   const config: KitConfig = {
@@ -510,10 +513,10 @@ export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse
     decisions: {
       batchTimesUtc: read.stringList(decisions, 'batchTimesUtc', 'decisions', DEFAULT_DECISIONS.batchTimesUtc, isUtcTime, CONFIG_LIMITS.decisionBatchTimes.maxItems),
       batchAt: read.integer(decisions, 'batchAt', 'decisions', DEFAULT_DECISIONS.batchAt, CONFIG_LIMITS.decisionBatchAt),
-      askWith: parseAskWith(read, decisions),
+      dedicatedOwners: read.stringList(decisions, 'dedicatedOwners', 'decisions', DEFAULT_DECISIONS.dedicatedOwners, isSessionName, CONFIG_LIMITS.dedicatedOwners.maxItems),
     },
     tabStatus: { enabled: read.boolean(tabStatus, 'enabled', 'tabStatus', false) },
-    pickerGuard: { enabled: read.boolean(pickerGuard, 'enabled', 'pickerGuard', false) },
+    pickerGuard: { enabled: read.boolean(pickerGuard, 'enabled', 'pickerGuard', true) },
     turnLog: parseTurnLog(read, read.section(raw, 'turnLog', '')),
     readonlyShell: parseReadonlyShell(read, read.section(raw, 'readonlyShell', '')),
     permissions: parsePermissions(read, read.section(raw, 'permissions', '')),
@@ -1162,10 +1165,16 @@ function parseAlerts(read: ConfigReader, raw: JsonRecord): AlertsConfig {
   const path = 'alerts';
   const pageWebhookEnv = read.optionalString(raw, 'pageWebhookEnv', path, ENV_VARIABLE);
   const pageWebhookFile = read.optionalString(raw, 'pageWebhookFile', path, isAbsoluteFile);
+  const pageWebhookKey = read.optionalString(raw, 'pageWebhookKey', path, SECRET_KEY);
+  // A bad file is already reported; a key with no file at all is its own mistake.
+  if (pageWebhookKey !== undefined && raw['pageWebhookFile'] === undefined) {
+    read.report(`${path}.pageWebhookKey`, 'needs alerts.pageWebhookFile, the file it reads the key from');
+  }
   return {
     persistentFailureHours: read.integer(raw, 'persistentFailureHours', path, DEFAULT_ALERTS.persistentFailureHours, CONFIG_LIMITS.persistentFailureHours),
     ...(pageWebhookEnv === undefined ? {} : { pageWebhookEnv }),
     ...(pageWebhookFile === undefined ? {} : { pageWebhookFile }),
+    ...(pageWebhookKey === undefined || pageWebhookFile === undefined ? {} : { pageWebhookKey }),
   };
 }
 
@@ -1409,12 +1418,6 @@ function focusValues(read: ConfigReader, raw: JsonRecord, key: string, path: str
     return fallback;
   }
   return values.length === given.length ? values : fallback;
-}
-
-function parseAskWith(read: ConfigReader, raw: JsonRecord): AskWith {
-  const fallback = DEFAULT_DECISIONS.askWith;
-  const value = read.string(raw, 'askWith', 'decisions', fallback, oneOf(ASK_WITH));
-  return isAskWith(value) ? value : fallback;
 }
 
 function parsePushToProtected(read: ConfigReader, raw: JsonRecord): PushToProtected {

@@ -1,11 +1,13 @@
 // Copied from teamrig's src/register/stats.ts by scripts/sync-core.ts: change it there, then run the sync.
+import { quantile } from '../core/quantile.ts';
 import { MS_PER_DAY } from '../core/time.ts';
 import type { TimeZone } from '../core/zone.ts';
+import { AREA_THRESHOLDS, areaStats, type RegisterAreas } from './area-stats.ts';
 import type { MovedEvent, RegisterEvent } from './events.ts';
 import { foldEvents, type Task } from './fold.ts';
 import { goalStats, type GoalStats } from './goal-stats.ts';
 import type { Goal } from './goals.ts';
-import { GITHUB_SOURCE, type TaskStatus } from './model.ts';
+import { GITHUB_SOURCE, isTopPriority, type TaskStatus } from './model.ts';
 import { waitsOnOwner } from './owner-waits.ts';
 import { dueTime } from './views.ts';
 import type { WaitKind } from './waits.ts';
@@ -237,9 +239,9 @@ export interface RegisterStats {
   readonly splits: readonly Split[];
   readonly tasks: StatsTasks;
   readonly goals: GoalStats;
+  /** Each team and session against the others and its own usual, whatever the range: a usual is its own 30 days. */
+  readonly areas: RegisterAreas;
 }
-
-const TOP_PRIORITY = 1;
 
 const AGE_BANDS: readonly BandLimit[] = [
   { label: '<2 d', below: 2 },
@@ -311,6 +313,7 @@ export function registerStats(input: StatsInput): RegisterStats {
   const overdue = overdueOf(held, clock);
   const onOwner = ownerWaitsOf(activeHeld, ownerMarker);
   const recent = dayWindow(today - (RECENT_DAYS - 1) * MS_PER_DAY, today, zone);
+  const scoped = teams.filter((team) => session === undefined || team.team === session.team);
   return {
     range: input.range,
     days,
@@ -322,7 +325,7 @@ export function registerStats(input: StatsInput): RegisterStats {
     recent: { days: RECENT_DAYS, net: tasks.filter((task) => within(recent, task.createdAt)).length - tasks.filter((task) => closedIn(task, recent)).length },
     active: activeRecord((status) => active.filter((task) => task.status === status).length),
     all: teamPart(held, clock, overdue),
-    teams: teams.filter((team) => session === undefined || team.team === session.team).map((team) => ({ team: team.team, ...teamPart(team.held, clock) })),
+    teams: scoped.map((team) => ({ team: team.team, ...teamPart(team.held, clock) })),
     newWork: newWork(created, ownerMarker),
     activeByAge: banded(
       active.map((task) => (now - Date.parse(task.createdAt)) / MS_PER_DAY),
@@ -347,11 +350,18 @@ export function registerStats(input: StatsInput): RegisterStats {
       opened: created,
       closed: closedHeld,
       overdue,
-      overdueP1: overdue.filter((each) => each.task.priority === TOP_PRIORITY),
+      overdueP1: overdue.filter((each) => isTopPriority(each.task.priority)),
       ownerDecisions: onOwner,
     },
     goals: goalStats({ goals: input.goals ?? new Map<string, Goal>(), tasks: held, doneInRange: done, now: input.now, zone, scoped: session !== undefined }),
+    areas: areasOf(scoped, clock, today),
   };
+}
+
+/** The areas of the teams in scope, their usual read at each day-end before `today`. */
+function areasOf(teams: readonly FoldedTeam[], { now, zone }: Clock, today: number): RegisterAreas {
+  const dayEnds = daySpans(today - AREA_THRESHOLDS.usualDays * MS_PER_DAY, today - MS_PER_DAY, zone).map((span) => span.end);
+  return areaStats({ teams: teams.map(({ team, kept, held }) => ({ team, kept, active: held.filter((each) => isActive(each.task.status)) })), now, zone, dayEnds });
 }
 
 /** A team's tasks in scope, from its events without those of the tasks that moved away. */
@@ -497,7 +507,7 @@ function teamPart(held: readonly Held[], clock: Clock, overdue: readonly Held[] 
     active: tasks.filter((task) => isActive(task.status)).length,
     leadTime: spread(done.map((task) => daysBetween(task.createdAt, task.statusAt))),
     cycleTime: spread(done.flatMap((task) => (task.startedAt === null ? [] : [daysBetween(task.startedAt, task.statusAt)]))),
-    overdue: { count: overdue.length, p1: overdue.filter((each) => each.task.priority === TOP_PRIORITY).length },
+    overdue: { count: overdue.length, p1: overdue.filter((each) => isTopPriority(each.task.priority)).length },
     due: { total: withDue.length, onTime: withDue.filter(({ closedAt, due }) => closedAt <= due).length },
   };
 }
@@ -614,14 +624,6 @@ function daysBetween(from: string, to: string): number {
 function spread(values: readonly number[]): Spread {
   const sorted = [...values].sort((a, b) => a - b);
   return { count: sorted.length, median: quantile(sorted, 0.5), p85: quantile(sorted, 0.85) };
-}
-
-/** The `q` quantile of sorted values, linearly interpolated between the two nearest; null with none. */
-export function quantile(sorted: readonly number[], q: number): number | null {
-  const position = q * (sorted.length - 1);
-  const below = sorted[Math.floor(position)];
-  const above = sorted[Math.ceil(position)];
-  return below === undefined || above === undefined ? null : below + (above - below) * (position - Math.floor(position));
 }
 
 function banded(values: readonly number[], bands: readonly BandLimit[]): Band[] {

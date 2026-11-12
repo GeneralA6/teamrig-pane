@@ -775,9 +775,9 @@ export interface QueueConfig {
   /**
    * How the host lock's line is ordered: `pipeline` lets the most urgent step in first (a p0 step at once, then by class
    * turn, priority raised by agingMinutes waited, and arrival), with at most perSessionRunning steps of one session
-   * running and maxHeavyParallel heavy steps sharing the host at once; `serial` keeps the line in arrival order with no
-   * cap and one heavy step at a time, as before, and is the default while a team's own deploy tool may take the lock
-   * file without reading the shares.
+   * running and maxHeavyParallel heavy steps sharing the host at once, and is the default; `serial` keeps the line in
+   * arrival order with no cap and one heavy step at a time, for a team whose own deploy tool takes the lock file
+   * without first waiting for the shares to end.
    */
   readonly admission: AdmissionMode;
   /** In `pipeline` admission, a waiting step's priority rises one level per this many minutes waited, never to p0; 0 ages nothing. */
@@ -960,6 +960,12 @@ export interface AlertsConfig {
    * a log or a session's read. Wins over `pageWebhookEnv` when both are set.
    */
   readonly pageWebhookFile?: string;
+  /**
+   * With `pageWebhookFile`: the key whose value in that file is the URL, so a secrets file holding many keys (a
+   * Kubernetes secret's YAML, a `.env` file) is read in place and the URL keeps one home (src/core/secret-key.ts).
+   * Absent: the file's first non-empty line is the URL.
+   */
+  readonly pageWebhookKey?: string;
 }
 
 /** When the lead asks the owner the decisions waiting on them, together in a batch (src/decisions/batch.ts). */
@@ -971,19 +977,11 @@ export interface DecisionsConfig {
   readonly batchTimesUtc: readonly string[];
   /** A batch is due once this many waits on the owner are not yet asked; 0: never by count. */
   readonly batchAt: number;
-  /** How the lead asks the owner at the daily meeting: in plain text, or with Claude Code's question picker. */
-  readonly askWith: AskWith;
-}
-
-export const ASK_WITH = ['text', 'picker'] as const;
-/**
- * How the daily meeting asks the owner each decision: `text` reads the cards in plain text and the owner answers in
- * their own words; `picker` asks the choices with Claude Code's question picker (AskUserQuestion), at most 4 a call.
- */
-export type AskWith = (typeof ASK_WITH)[number];
-
-export function isAskWith(value: unknown): value is AskWith {
-  return ASK_WITH.some((way) => way === value);
+  /**
+   * Sessions that own a team's core-business areas: the owner decides their waits in a dedicated meeting with the
+   * session and its full brief, never from a daily card or a batch (T868).
+   */
+  readonly dedicatedOwners: readonly string[];
 }
 
 /**
@@ -1394,8 +1392,9 @@ export interface KitConfig {
   readonly tabStatus: { readonly enabled: boolean };
   /**
    * Refuses Claude Code's question picker (AskUserQuestion), which would stop the session until the person answers,
-   * to every session and helper, and to the lead outside the owner's daily meeting; the reason says to decide it if it
-   * is the session's own, else record it on its task and go on (hook-picker-guard.ts). Off by default.
+   * to every session and helper, the lead included, in the owner's daily meeting too; the reason says to decide it if it
+   * is the session's own, else record it on its task and go on (hook-picker-guard.ts). On by default (T2256): a team
+   * that never named the key had no guard, and one session's picker held its other tasks for hours.
    */
   readonly pickerGuard: { readonly enabled: boolean };
   readonly turnLog: TurnLogConfig;

@@ -1,11 +1,11 @@
 // Copied from teamrig's src/register/ranking.ts by scripts/sync-core.ts: change it there, then run the sync.
 import type { FocusConfig } from '../config/types.ts';
+import { quantile } from '../core/quantile.ts';
 import { MS_PER_DAY } from '../core/time.ts';
 import type { ItemType } from './events.ts';
 import { classOf, servedGoalOf, type RankedGoal } from './focus.ts';
 import type { Task } from './fold.ts';
 import type { SizeFacts } from './score.ts';
-import { quantile } from './stats.ts';
 import type { TreeRanking, TreeTask } from './tree.ts';
 
 /**
