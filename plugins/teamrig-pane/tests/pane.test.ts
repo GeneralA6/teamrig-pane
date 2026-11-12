@@ -1,7 +1,7 @@
 // The plugin through the engine: env, clock, store, session id and fs answered beneath it.
 import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiFocusInput, UiScrollInput } from 'claude-code'
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
-import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT, PREVIOUS_ALL_KEY, PREVIOUS_ALL_LABEL, PREVIOUS_FRAME_KEY, PREVIOUS_KEY, PREVIOUS_OPEN_KEY, PREVIOUS_PRESS_KEY } from '../hooks/banner'
+import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT, PREVIOUS_ALL_KEY, PREVIOUS_ALL_LABEL, PREVIOUS_FRAME_KEY, PREVIOUS_HEAD_KEY, PREVIOUS_KEY, PREVIOUS_LABEL, PREVIOUS_OPEN_KEY, PREVIOUS_PRESS_KEY } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
 import { barKeys, KEY_GROUPS } from '../hooks/keys-page'
 import { POLL_MS } from '../hooks/live'
@@ -927,7 +927,7 @@ test('/teamrig-pane <session> pins the session an id or a name names; a word nam
   expect(await pane.find({ text: /^api \(pinned\) · 1 active/ })).toBeDefined()
   expect(await pane.find({ text: /Ship the api/ })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: '[web] api (pinned)' })).toBeDefined()
-  expect(await bannerText(await mountBand($))).toMatch(/^web-api · next ○ T7 {2}Ship the api/)
+  expect(await bannerText(await mountBand($))).toMatch(/^web-api · up next · ○ T7 {2}Ship the api/)
 
   await run('lead')
   expect(store.get(`pin:${S1}`)).toBe('lead')
@@ -1371,14 +1371,14 @@ test('the band above the prompt names the task up next, follows a status change,
   const opens = keyedProps(await band.drawn(), BANNER_OPEN_KEY)
   expect(opens).toMatchObject({ label: BANNER_OPEN_LABEL, variant: 'secondary' })
   expect(opens !== null && 'hotkey' in opens).toBe(false)
-  expect(await banner()).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
+  expect(await banner()).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
 
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, title: 'Ship the task pane' }),
     statusLine('T1', 'po', NOW, 'in-progress', 'halfway'),
   ])
   await clock.advance(3_000)
-  expect(await banner()).toMatch(/^po · ◐ T1 {2}Ship the task pane/)
+  expect(await banner()).toMatch(/^po · working on · ◐ T1 {2}Ship the task pane/)
   expect(await banner()).not.toMatch(/Note/)
 
   await band.press({ key: BANNER_KEY })
@@ -1393,7 +1393,7 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   await start(on, { paneSize: 'minimized' })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const band = await mountBand($)
-  expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', 'stats'])
@@ -1404,7 +1404,7 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   expect(typeOf(title)).toBe('Text')
   expect(screenOf(title)).toEqual(['po'])
   expect(buttonKeys(await pane.drawn())).not.toContain(BANNER_KEY)
-  expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
 })
 
 test("the band's open button opens the pane, minimized or on another view, at the task's page; back shows the list at the task's row", async ($, on) => {
@@ -1463,27 +1463,28 @@ test("over the banner the band names the area's previous conversation; its butto
 
   await clock.advance(POLL_MS)
   const drawn = await band.drawn()
-  expect(buttonKeys(drawn)).toEqual([PREVIOUS_PRESS_KEY, PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY, BANNER_KEY])
-  expect(await band.find({ type: 'Text', text: /^previous · Ship the log view$/ })).toBeDefined()
-  // Its row sits in a dim round frame of its own, so it never reads as the banner.
-  const [previousRow] = childrenOf(drawn)
-  expect(elementKey(propsOf(previousRow))).toBe(PREVIOUS_FRAME_KEY)
-  expect(keyedProps(drawn, PREVIOUS_FRAME_KEY)).toMatchObject({ borderStyle: 'round', borderDimColor: true, paddingX: 1 })
-  // Its title takes the free columns, so its buttons end the row; no press has a hotkey.
-  expect(childrenOf(previousRow).map(child => elementKey(propsOf(child)))).toEqual([PREVIOUS_KEY, PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY])
-  expect(numberProp(keyedProps(drawn, PREVIOUS_KEY), 'flexGrow')).toBe(1)
+  expect(buttonKeys(drawn)).toEqual([PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY, PREVIOUS_PRESS_KEY, BANNER_KEY])
+  expect(await band.find({ type: 'Text', text: /^Ship the log view$/ })).toBeDefined()
+  // It sits in a dim round frame of its own, so it never reads as the banner.
+  const [frame] = childrenOf(drawn)
+  expect(elementKey(propsOf(frame))).toBe(PREVIOUS_FRAME_KEY)
+  expect(keyedProps(drawn, PREVIOUS_FRAME_KEY)).toMatchObject({ flexDirection: 'column', borderStyle: 'round', borderDimColor: true, paddingX: 1 })
+  // A head row names it, its buttons ending the row; its title under it at the frame's whole width. No press has a hotkey.
+  expect(childrenOf(frame).map(child => elementKey(propsOf(child)))).toEqual([PREVIOUS_HEAD_KEY, PREVIOUS_KEY])
+  const head = keyedNode(drawn, PREVIOUS_HEAD_KEY)
+  expect(buttonKeys(head)).toEqual([PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY])
+  expect(await band.find({ type: 'Text', text: PREVIOUS_LABEL })).toBeDefined()
   expect(keyedProps(drawn, PREVIOUS_OPEN_KEY)).toMatchObject({ label: BANNER_OPEN_LABEL, variant: 'secondary' })
   expect(keyedProps(drawn, PREVIOUS_ALL_KEY)).toMatchObject({ label: PREVIOUS_ALL_LABEL, variant: 'secondary' })
   for (const key of [PREVIOUS_PRESS_KEY, PREVIOUS_OPEN_KEY, PREVIOUS_ALL_KEY]) expect('hotkey' in (keyedProps(drawn, key) ?? {})).toBe(false)
 
-  // A press on its title opens it to when it ran and its count of lines, hung under the title and wrapped there in the
-  // columns its buttons leave, and a second closes it.
+  // A press on its title opens it to when it ran and its count of lines, under the title, and a second closes it.
   await band.press({ key: PREVIOUS_PRESS_KEY })
   const openRows = (await pressText(band, PREVIOUS_PRESS_KEY)) ?? ''
-  expect(openRows).toMatch(/^previous · Ship the log view\n {11}13:20 UTC/)
-  expect(openRows.replace(/\s+/g, ' ')).toBe('previous · Ship the log view 13:20 UTC–13:22 UTC · 3 lines')
+  expect(openRows).toMatch(/^Ship the log view\n13:20 UTC/)
+  expect(openRows.replace(/\s+/g, ' ')).toBe('Ship the log view 13:20 UTC–13:22 UTC · 3 lines')
   await band.press({ key: PREVIOUS_PRESS_KEY })
-  expect(await pressText(band, PREVIOUS_PRESS_KEY)).toBe('previous · Ship the log view')
+  expect(await pressText(band, PREVIOUS_PRESS_KEY)).toBe('Ship the log view')
 
   // Its open button opens the pane at the conversation's page; back shows the list.
   opened.length = 0
@@ -1508,7 +1509,7 @@ test("over the banner the band names the area's previous conversation; its butto
   await run('lead')
   await clock.advance(POLL_MS)
   expect(buttonKeys(await band.drawn())).toEqual([BANNER_KEY])
-  expect(await band.find({ type: 'Text', text: /^previous · / })).toBeUndefined()
+  expect(await band.find({ type: 'Text', text: PREVIOUS_LABEL })).toBeUndefined()
 })
 
 test('a survey takes the band: the plugin passes it to the engine, and draws the banner again once the survey is gone', async ($, on) => {
@@ -1521,7 +1522,7 @@ test('a survey takes the band: the plugin passes it to the engine, and draws the
   expect(passes).toEqual([true])
 
   await band.redraw(BAND_PROPS)
-  expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
   expect(await band.find({ text: ENGINE_BAND })).toBeUndefined()
   expect(passes).toEqual([true])
 })
@@ -1544,7 +1545,7 @@ test('the band draws nothing for a session with no area, then says its area has 
 
   disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' })])
   await clock.advance(3_000)
-  expect(await bannerText(band)).toMatch(/^po · next ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
 })
 
 test('the session registers /teamrig-pane alone: /teamrig stays free for the teamrig plugin', async ($, on) => {
