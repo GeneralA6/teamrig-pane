@@ -5,6 +5,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { readEvents, registerStats, TimeZone, type RegisterHealth } from '../hooks/core/read/index'
 import type { Block, Row, Span } from '../hooks/rows'
+import { slimAreas } from '../hooks/stats-areas'
 import { BOTH_DAYS_CELLS, GOALS_KEY, goalBlocks, MIN_TIMELINE_CELLS, OFF_GOAL_KEY, offGoalWords, timeline } from '../hooks/stats-goals'
 import { statsBlocks } from '../hooks/stats-rows'
 import { cells } from '../hooks/width'
@@ -19,7 +20,7 @@ const NARROW = 40
 const TODAY = '2026-10-13'
 const EVENTS = readEvents(`${createLine('T1', { at: NOW, by: 'lead', owner: 'api', title: 'Add the route' })}\n`).events
 /** teamrig's fold of a one-task register less its tasks and goals: the fields the section does not read. */
-const { tasks, goals, ...TALLIES } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
+const { tasks, goals, areas, ...TALLIES } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
 const HEALTH: RegisterHealth = {
   closeOpen: { level: 'good', ratio: 1 },
   backlog: { level: 'good', net: 0, active: 1 },
@@ -58,7 +59,7 @@ const DONE = goal({ tag: 'O1', start: '2026-09-20', target: '2026-10-05', done: 
 const GOALS = [LATE, ON_TRACK, AT_RISK, DONE]
 
 function viewOf(over: Partial<StatsGoals> = {}): Folded {
-  const stats = { ...TALLIES, goals: { today: TODAY, offGoal: 750, doneInRange: 774, goals: GOALS, ...over } }
+  const stats = { ...TALLIES, goals: { today: TODAY, offGoal: 750, doneInRange: 774, goals: GOALS, ...over }, areas: slimAreas(areas, () => []).areas }
   return { kind: 'stats', scope: { kind: 'tree' }, range: '7d', teams: ['acme'], stats, health: HEALTH, list: null, week: null, failures: [] }
 }
 

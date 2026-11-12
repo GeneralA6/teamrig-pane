@@ -14,8 +14,19 @@
 // sections (stats-sections.ts, T1859), then the Goals section (stats-goals.ts, T1420), each closed by default. A team
 // folder the last read could not read is a WARN line. Pure.
 import type { ThemeKey } from 'claude-code'
-import type { StatsChoice, StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
-import { priorityText, STATS_RANGES, type ActiveStatus, type HealthLevel, type RegisterHealth, type StatsDay, type StatsRange } from './core/read/index'
+import type { StatsAreaPick, StatsChoice, StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
+import {
+  AREA_MEASURE_LABELS,
+  AREA_THRESHOLDS,
+  priorityText,
+  STATS_RANGES,
+  type ActiveStatus,
+  type AreaMeasure,
+  type HealthLevel,
+  type RegisterHealth,
+  type StatsDay,
+  type StatsRange,
+} from './core/read/index'
 import { storedDueWords } from './meta'
 import { indentOf, META_LINES, SEPARATOR, single, TITLE_LINES, titleRow, type Block, type Row, type Span, type StatsPress } from './rows'
 import { activeChart, bar, BURN_GLYPH, burnUpChart, FLOW_GLYPH, flowChart, type BurnSeries, type Chart, type LineSeries } from './stats-chart'
@@ -334,9 +345,31 @@ function flowBlock(view: Folded, open: boolean, width: number): Block {
   return sectionBlock(FLOW_KEY, parts, open ? flowRows(view, width) : null)
 }
 
-/** `Overdue (35)`: the list's title, as the tab's head names it, and how many tasks it holds. */
+/** An area's name: the session's, else the team's. */
+function areaName(area: StatsAreaPick): string {
+  return area.session ?? area.team
+}
+
+/** `Overdue (35)` or `po bugs (17)`: the list's title, as the tab's head names it, and how many tasks it holds. */
 export function listTitle(list: StatsList): string {
-  return `${LIST_TITLES[list.kind]} (${list.rows.length})`
+  const title = list.kind === 'area' ? `${areaName(list.area)} ${AREA_MEASURE_LABELS[list.area.measure]}` : LIST_TITLES[list.kind]
+  return `${title} (${list.rows.length})`
+}
+
+/** What each area cell's list holds, around the area's words, as LIST_WORDS. */
+const AREA_WORDS: Readonly<Record<AreaMeasure, { readonly lead: string; readonly tail: string }>> = {
+  bugs: { lead: 'The active bugs', tail: '' },
+  p1: { lead: 'The active p1 tasks', tail: '' },
+  p1Late: { lead: 'The active p1 tasks', tail: ' past their due date' },
+  low: { lead: 'The active p3-and-lower tasks', tail: '' },
+  waits: { lead: 'The tasks', tail: ` waiting over ${AREA_THRESHOLDS.waitDays} days` },
+}
+
+/** The line over an area cell's list: what it holds in that area, and its order. */
+function areaWhat(area: StatsAreaPick): string {
+  const { lead, tail } = AREA_WORDS[area.measure]
+  const where = area.session === null ? `in ${area.team}` : `of ${area.session} in ${area.team}`
+  return `${lead} ${where}${tail}, p1 first, then by due date.`
 }
 
 function scopeWords(scope: StatsChoice): string {
@@ -376,7 +409,8 @@ function listBlock(row: StatsListRow, own: StatsOwn): Block {
 /** A Health count's tasks in place of the tab's numbers: the WARN lines, the line saying what it holds, then its tasks. */
 function listBlocks(view: Folded, list: StatsList, own: StatsOwn): Block[] {
   const tasks = list.rows.length === 0 ? [note('No tasks.')] : list.rows.map(row => listBlock(row, own))
-  return [...view.failures.map(failure => failureBlock(VIEW, failure)), single(`${VIEW}:list`, [{ text: listWhat(view, list.kind), dim: true }]), ...tasks]
+  const what = list.kind === 'area' ? areaWhat(list.area) : listWhat(view, list.kind)
+  return [...view.failures.map(failure => failureBlock(VIEW, failure)), single(`${VIEW}:list`, [{ text: what, dim: true }]), ...tasks]
 }
 
 /**

@@ -1178,7 +1178,9 @@ describe('layout', () => {
       statsPressKey({ kind: 'scope', scope: { kind: 'session', team: 'acme', session: 'dev' } }),
       statsPressKey({ kind: 'range', range: 'all' }),
       statsPressKey({ kind: 'list', list: 'overdueP1' }),
-    ]).toEqual(['tree', 'team:acme', 'session:acme/dev', 'range:all', 'list:overdueP1'])
+      statsPressKey({ kind: 'list', list: { team: 'acme', session: 'dev', measure: 'p1Late' } }),
+      statsPressKey({ kind: 'list', list: { team: 'acme', session: null, measure: 'bugs' } }),
+    ]).toEqual(['tree', 'team:acme', 'session:acme/dev', 'range:all', 'list:overdueP1', 'list:area:acme/dev:p1Late', 'list:area:acme/:bugs'])
   })
 
   test('a task id is never split or merged: it moves to a fresh line whole, two side by side stay two, words beside one stay apart', async () => {

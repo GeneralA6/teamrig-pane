@@ -60,7 +60,7 @@ import type {
   SetupView,
   Snapshot,
   StatsChoice,
-  StatsListKind,
+  StatsListPick,
   StatsView,
   TaskDetail,
   TaskRow,
@@ -336,7 +336,7 @@ const statsScope = atom({ plugin: 'teamrig-pane', key: 'statsScope' } as const, 
 const FIRST_RANGE: StatsRange = '7d'
 /** The days the Stats tab folds: the last 7 until a press on its range row picks others. */
 const statsRange = atom({ plugin: 'teamrig-pane', key: 'statsRange' } as const, FIRST_RANGE)
-const NO_STATS_LIST: StatsListKind | null = null
+const NO_STATS_LIST: StatsListPick | null = null
 /** The Health count whose tasks the Stats tab lists in place of its numbers: none until a tile's press picks one, back clears it. */
 const statsList = atom({ plugin: 'teamrig-pane', key: 'statsList' } as const, NO_STATS_LIST)
 const NO_STATS_FROM: string | null = null

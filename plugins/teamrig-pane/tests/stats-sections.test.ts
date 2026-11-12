@@ -6,6 +6,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { readEvents, registerStats, TimeZone, type RegisterHealth, type TeamPart, type TeamStats } from '../hooks/core/read/index'
 import type { Block, Row, Span } from '../hooks/rows'
 import { bar } from '../hooks/stats-chart'
+import { slimAreas } from '../hooks/stats-areas'
 import { goalsOf } from '../hooks/stats-source'
 import { BUGS_KEY, DELAYS_KEY, NEW_KEY, PEOPLE_KEY, PEOPLE_ROWS, SECTION_KEYS, SPEED_KEY, WAITS_KEY, sectionBlocks, shareCells } from '../hooks/stats-sections'
 import { cells } from '../hooks/width'
@@ -19,8 +20,8 @@ type Folded = Extract<StatsView, { kind: 'stats' }>
 
 const EVENTS = readEvents(`${createLine('T1', { at: NOW, by: 'lead', owner: 'api', title: 'Add the route' })}\n`).events
 /** teamrig's fold of a one-task register less its tasks: the fields a test does not set. */
-const { tasks, goals, ...TALLIES } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
-const BASE: StatsNumbers = { ...TALLIES, goals: goalsOf(goals, TimeZone.UTC, TimeZone.UTC.day(new Date(NOW))) }
+const { tasks, goals, areas, ...TALLIES } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
+const BASE: StatsNumbers = { ...TALLIES, goals: goalsOf(goals, TimeZone.UTC, TimeZone.UTC.day(new Date(NOW))), areas: slimAreas(areas, () => []).areas }
 /** The Health tiles' levels, which no section reads. */
 const HEALTH: RegisterHealth = {
   closeOpen: { level: 'good', ratio: 1 },

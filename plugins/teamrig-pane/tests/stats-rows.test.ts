@@ -8,12 +8,13 @@ import type { Block, Row, Span } from '../hooks/rows'
 import { activeChart, bar } from '../hooks/stats-chart'
 import { GOALS_KEY } from '../hooks/stats-goals'
 import { rangeLabel } from '../hooks/stats-parts'
+import { slimAreas } from '../hooks/stats-areas'
 import { goalsOf } from '../hooks/stats-source'
 import { DAY_ROWS, FLOW_KEY, HEALTH_DOT, dayLabel, isSectionOpen, listTitle, statsBlocks, type StatsOwn } from '../hooks/stats-rows'
 import { SECTION_KEYS, SPEED_KEY } from '../hooks/stats-sections'
 import type { TeamWeek } from '../hooks/team'
 import { cells } from '../hooks/width'
-import type { StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
+import type { StatsAreaPick, StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
 import { clockAt, createLine, NOW, statusLine } from './fixtures'
 
 const DAY = 24 * 3_600_000
@@ -23,8 +24,8 @@ const NARROW = 40
 const LINES = [createLine('T1', { at: NOW - 3 * DAY, by: 'lead', owner: 'api', title: 'Add the route' }), statusLine('T1', 'api', NOW - 2 * DAY, 'in-progress')]
 const EVENTS = readEvents(LINES.map(line => `${line}\n`).join('')).events
 /** teamrig's fold of one small register less its tasks, as the view holds it: the fields a test does not set. */
-const { tasks, goals, ...TALLIES } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
-const BASE: StatsNumbers = { ...TALLIES, goals: goalsOf(goals, TimeZone.UTC, TimeZone.UTC.day(new Date(NOW))) }
+const { tasks, goals, areas, ...TALLIES } = registerStats({ teams: [{ team: 'acme', lead: 'lead', events: EVENTS }], range: '7d', now: new Date(NOW), zone: TimeZone.UTC, ownerMarker: 'owner' })
+const BASE: StatsNumbers = { ...TALLIES, goals: goalsOf(goals, TimeZone.UTC, TimeZone.UTC.day(new Date(NOW))), areas: slimAreas(areas, () => []).areas }
 /** The design's Health of 10-31: four red, one amber. */
 const HEALTH: RegisterHealth = {
   closeOpen: { level: 'bad', ratio: 0.79 },
@@ -298,6 +299,34 @@ describe("statsBlocks: a Health count's tasks", () => {
 
   test('listTitle names the count and how many tasks it holds', () => {
     expect([listTitle(closed), listTitle({ kind: 'overdueP1', rows: [] }), listTitle({ kind: 'ownerDecisions', rows })]).toEqual(['Closed (3)', 'Overdue p1 (0)', 'Owner decisions (3)'])
+  })
+})
+
+describe("statsBlocks: an area cell's tasks", () => {
+  /** The line over an area cell's list, empty. */
+  const whatOf = (area: StatsAreaPick): string[] =>
+    blockOf(statsBlocks(viewOf({ list: { kind: 'area', area, rows: [] } }), [], WIDE, OWN), 'stats:list').rows.map(lineOf)
+
+  test('say what each measure holds in the session or team, p1 first, then by due date, whatever the scope', () => {
+    expect(whatOf({ team: 'acme', session: 'api', measure: 'bugs' })).toEqual(['The active bugs of api in acme, p1 first, then by due date.'])
+    expect(whatOf({ team: 'acme', session: 'api', measure: 'p1' })).toEqual(['The active p1 tasks of api in acme, p1 first, then by due date.'])
+    expect(whatOf({ team: 'acme', session: null, measure: 'p1Late' })).toEqual(['The active p1 tasks in acme past their due date, p1 first, then by due date.'])
+    expect(whatOf({ team: 'tools', session: null, measure: 'low' })).toEqual(['The active p3-and-lower tasks in tools, p1 first, then by due date.'])
+    expect(whatOf({ team: 'acme', session: 'dev', measure: 'waits' })).toEqual(['The tasks of dev in acme waiting over 3 days, p1 first, then by due date.'])
+  })
+
+  test("draw the cell's tasks as a count's are, and say so when it holds none", () => {
+    const blocks = statsBlocks(viewOf({ list: { kind: 'area', area: { team: 'acme', session: 'api', measure: 'bugs' }, rows: [listRow('T1')] } }), [], WIDE, OWN)
+    expect(blocks.map(block => block.key)).toEqual(['stats:list', 'stats:list:acme/T1'])
+    const none = statsBlocks(viewOf({ list: { kind: 'area', area: { team: 'acme', session: 'api', measure: 'bugs' }, rows: [] } }), [], WIDE, OWN)
+    expect(none.map(block => block.rows.map(lineOf))).toEqual([['The active bugs of api in acme, p1 first, then by due date.'], ['No tasks.']])
+  })
+
+  test("listTitle names the area, the session's else the team's, its measure and how many tasks it holds", () => {
+    expect([
+      listTitle({ kind: 'area', area: { team: 'acme', session: 'api', measure: 'bugs' }, rows: [listRow('T1'), listRow('T2')] }),
+      listTitle({ kind: 'area', area: { team: 'tools', session: null, measure: 'p1Late' }, rows: [] }),
+    ]).toEqual(['api bugs (2)', 'tools p1 late (0)'])
   })
 })
 
