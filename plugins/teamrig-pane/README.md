@@ -580,9 +580,10 @@ row and each day's bar a blank column from the next. (A `$` is to mark a day the
 quiet day there is not read as slack; the pane has no source for those days yet, so none shows.) A team's charts say
 where a split moved tasks out of it, as only the tree's are whole before one.
 
-Seven more sections follow Flow, closed by default, each header answering the glance on its own; a press on one opens
+Eight more sections follow Flow, closed by default, each header answering the glance on its own; a press on one opens
 it:
 
+    ▸ Bottlenecks · 2 areas stand out
     ▸ New work · 556 in 7 d · 548 with no goal
     ▸ Speed · lead time median 0.7-1.3 d · 126 never started
     ▸ Delays · 104 overdue · p1 26
@@ -590,6 +591,14 @@ it:
     ▸ Bugs · 108 active · opened 138, fixed 79 in 7 d
     ▸ People · done in 7 d · 19 sessions
     ▸ Goals · 1 at risk · 1 late
+
+Bottlenecks holds the areas whose work piles up now, whatever the range: the teams against each other (when the scope
+holds two or more), then the sessions against each other, each a table of its active tasks, bugs, p1, late p1, the
+low-priority share and the long waits. A cell high against both the other areas and its own usual carries a red `▲`,
+high against one an amber `△`, as `teamrig stats` marks them; its header counts the areas that stand out. A cell with
+tasks is a press that lists them (`Stats › api bugs (5)`), and an area's name a press that scopes the tab to it. Each
+group draws its 6 most marked areas, a dim median row and a line counting the rest; a pane too narrow for the table
+draws a line an area.
 
 New work draws where the range's new tasks came from (another session, self-made, the owner, the lead, GitHub) as a
 share bar over its legend, then their type, priority and how many have no goal. Speed draws each team's lead and cycle

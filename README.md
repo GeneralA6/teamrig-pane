@@ -94,7 +94,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   with their status, its brief), and a scheduled one's `[Start meeting]` runs `teamrig meeting start` for you.
 - **Stats:** the tree's registers folded as `teamrig stats` folds them, for the whole tree, a team or a session over 7,
   30, 90 or 180 days, a year or all: Health tiles in green, amber and red, then the flow of work (opened, closed, net, the active
-  tasks by day, a burn-up and the cumulative flow), then New work, Speed, Delays, Waits, Bugs and People, each a
+  tasks by day, a burn-up and the cumulative flow), then Bottlenecks, New work, Speed, Delays, Waits, Bugs and People, each a
   section a press folds or opens, its header the numbers at a glance.
   Press the switch, or `t`, `d`, `g`, `u`, `e`, `j` and `r` while the pane holds the keyboard.
 
