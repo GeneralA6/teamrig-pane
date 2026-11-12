@@ -354,7 +354,7 @@ describe('statsBlocks: Flow', () => {
     expect([isSectionOpen(FLOW_KEY, []), isSectionOpen(FLOW_KEY, [FLOW_KEY]), isSectionOpen('stats:speed', []), isSectionOpen('stats:speed', ['stats:speed'])]).toEqual([true, false, false, true])
   })
 
-  test('the six sections after Flow draw folded by default, a toggled key opening its own alone', () => {
+  test('the sections after Flow draw folded by default, a toggled key opening its own alone', () => {
     const opened = (toggled: readonly string[]): string[] =>
       statsBlocks(viewOf({ stats }), toggled, WIDE, OWN)
         .filter(block => SECTION_KEYS.includes(block.key) && block.card !== undefined)

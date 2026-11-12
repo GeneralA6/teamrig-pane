@@ -8,6 +8,7 @@ import type { Block, Row, Span } from '../hooks/rows'
 import { bar } from '../hooks/stats-chart'
 import { slimAreas } from '../hooks/stats-areas'
 import { goalsOf } from '../hooks/stats-source'
+import { BOTTLENECKS_KEY } from '../hooks/stats-bottlenecks'
 import { BUGS_KEY, DELAYS_KEY, NEW_KEY, PEOPLE_KEY, PEOPLE_ROWS, SECTION_KEYS, SPEED_KEY, WAITS_KEY, sectionBlocks, shareCells } from '../hooks/stats-sections'
 import { cells } from '../hooks/width'
 import type { StatsNumbers, StatsView } from '../types'
@@ -84,6 +85,8 @@ const STATS: StatsNumbers = {
   people: PEOPLE,
 }
 
+/** No area with an active task. */
+const NO_AREAS = { median: { active: 0, bugs: 0, p1: 0, p1Late: 0, low: 0, waits: 0 }, areas: [] }
 const NONE_DONE: TeamStats = { ...TOOLS, leadTime: { count: 0, median: null, p85: null } }
 /** The same tree with its active tasks but nothing created, done, overdue or waiting in the range. */
 const EMPTY: StatsNumbers = {
@@ -99,6 +102,7 @@ const EMPTY: StatsNumbers = {
   waits: { waiting: 0, byKind: { decision: 0, approval: 0, task: 0, time: 0 }, ownerDecisions: { count: 0, oldestDays: null } },
   bugs: { active: 0, opened: 0, fixed: 0 },
   people: [],
+  areas: { teams: NO_AREAS, sessions: NO_AREAS },
 }
 
 /** The numbers of the tree of acme and tools over the 7 days, unless `over` sets them. */
@@ -135,11 +139,12 @@ function spanOf(row: Row, text: string): Span {
 }
 
 describe('sectionBlocks: the headers', () => {
-  test('draw the six sections closed in order, each header a press that opens it, alone answering the glance', () => {
+  test('draw the seven sections closed in order, each header a press that opens it, alone answering the glance', () => {
     const blocks = sectionsOf(viewOf(), WIDE, [])
-    expect(blocks.map(block => block.key)).toEqual([NEW_KEY, SPEED_KEY, DELAYS_KEY, WAITS_KEY, BUGS_KEY, PEOPLE_KEY])
-    expect(SECTION_KEYS).toEqual(['stats:new', 'stats:speed', 'stats:delays', 'stats:waits', 'stats:bugs', 'stats:people'])
+    expect(blocks.map(block => block.key)).toEqual([BOTTLENECKS_KEY, NEW_KEY, SPEED_KEY, DELAYS_KEY, WAITS_KEY, BUGS_KEY, PEOPLE_KEY])
+    expect(SECTION_KEYS).toEqual(['stats:bottlenecks', 'stats:new', 'stats:speed', 'stats:delays', 'stats:waits', 'stats:bugs', 'stats:people'])
     expect(headsOf(viewOf())).toEqual([
+      ['▸ Bottlenecks · 1 area stands out'],
       ['▸ New work · 20 in 7 d · 18 with no goal'],
       ['▸ Speed · lead time median 0.9-1.2 d · 4 never started'],
       ['▸ Delays · 6 overdue · p1 2'],
@@ -148,7 +153,7 @@ describe('sectionBlocks: the headers', () => {
       ['▸ People · done in 7 d · 10 sessions'],
     ])
     expect(blocks.map(block => [block.folds, block.opensSection, block.card])).toEqual(SECTION_KEYS.map(key => [key, true, undefined]))
-    const head = blocks[0]?.rows[0]
+    const head = blocks[1]?.rows[0]
     if (head === undefined) throw new Error('no New work header')
     expect(spanOf(head, 'New work').bold).toBe(true)
   })
@@ -162,6 +167,7 @@ describe('sectionBlocks: the headers', () => {
   test('name the range as all days, and one median and one session alone', () => {
     const one = viewOf({ range: 'all', stats: { ...STATS, teams: [ACME], people: PEOPLE.slice(0, 1) } })
     expect(headsOf(one)).toEqual([
+      ['▸ Bottlenecks · 1 area stands out'],
       ['▸ New work · 20 in all days · 18 with no goal'],
       ['▸ Speed · lead time median 0.9 d · 4 never started'],
       ['▸ Delays · 6 overdue · p1 2'],
@@ -173,6 +179,7 @@ describe('sectionBlocks: the headers', () => {
 
   test('with nothing to count, say so in each header', () => {
     expect(headsOf(viewOf({ stats: EMPTY }))).toEqual([
+      ['▸ Bottlenecks · no active tasks'],
       ['▸ New work · 0 in 7 d'],
       ['▸ Speed · none done in 7 d'],
       ['▸ Delays · 0 overdue'],

@@ -10,8 +10,8 @@
 // its headline so it still answers folded (`folds`): the active tasks at each day's end, the newest days with bars of
 // what opened and closed and a `$` on a day the week sat at its usage limit, the burn-up and the cumulative flow, each
 // part after a blank row, a chart under a legend whose title is bold; a team's charts say where a split moved tasks
-// out of them, as only the tree's are whole before it. After Flow the New work, Speed, Delays, Waits, Bugs and People
-// sections (stats-sections.ts, T1859), then the Goals section (stats-goals.ts, T1420), each closed by default. A team
+// out of them, as only the tree's are whole before it. After Flow the Bottlenecks, New work, Speed, Delays, Waits, Bugs
+// and People sections (stats-sections.ts, T1859, T1866), then the Goals section (stats-goals.ts, T1420), each closed by default. A team
 // folder the last read could not read is a WARN line. Pure.
 import type { ThemeKey } from 'claude-code'
 import type { StatsAreaPick, StatsChoice, StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
