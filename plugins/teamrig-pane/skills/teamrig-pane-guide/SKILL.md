@@ -137,17 +137,17 @@ A plugin cannot bind a key that works from anywhere. For one, add `"ctrl+x t": "
 `~/.claude/keybindings.json` (the context it belongs under is unverified).
 
 The banner, in the band above the prompt, leads with the session's name, then the task the session works on
-(`acme-po · ◐ T595  Current-task banner`): its area's task in progress that took its status last, else its
-first open task in plan order after a dim `next`. It follows the register
+after a dim label: `acme-po · working on · ◐ T595  Current-task banner` for its area's task in progress that took its
+status last, else `acme-po · up next · ○ ...` for its first open task in plan order. It follows the register
 as the list does, whether the pane is open, minimized or never drawn. A click opens that task's description,
 status, note, proof, priority and due under it; a second click closes it. Its `open in pane` button, at the band's
 right end beside the `[-]`, opens the
 pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
 band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
-Over the banner, a row in a dim round frame names the area's previous conversation, so after a `/clear` the band
-says what came before: a dim `previous ·`, then its title as the Conversations list draws it, cut at one line, with
-`open in pane` (its page) and `all conversations` (the list). A click on its title opens each task it worked with
+Over the banner, a dim round frame holds the area's previous conversation, so after a `/clear` the band says what
+came before: a head row with a dim `previous conversation` label, `open in pane` (its page) and `all conversations`
+(the list), then its title as the Conversations list draws it, cut at one line. A click on its title opens each task it worked with
 its whole title, when it ran with its count of lines, and how it opened; a second click closes them. It is the area's newest conversation in the kept hours of the turn log
 other than the one running now, read again only when the session's conversation changes. With none to name, no
 turn log or a session with no area, the band is the banner alone.
