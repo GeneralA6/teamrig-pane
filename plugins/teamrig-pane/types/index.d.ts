@@ -428,10 +428,38 @@ export type StatsChoice =
 
 /**
  * teamrig's stats fold less the tasks behind its counts (core register/stats.ts RegisterStats.tasks) and behind each
- * goal (GoalProgress.tasks): the view keeps only the list a Health tile's press opened and each goal's tasks, as slim
- * rows (StatsListRow), never the register's tasks, which are heavy.
+ * goal (GoalProgress.tasks) and each area's cell (AreaCell.tasks): the view keeps only the list a press opened and
+ * each goal's tasks, as slim rows (StatsListRow), never the register's tasks, which are heavy.
  */
-export type StatsNumbers = Omit<import('../hooks/core/read/index').RegisterStats, 'tasks' | 'goals'> & { readonly goals: StatsGoals }
+export type StatsNumbers = Omit<import('../hooks/core/read/index').RegisterStats, 'tasks' | 'goals' | 'areas'> & {
+  readonly goals: StatsGoals
+  readonly areas: StatsAreas
+}
+
+/** An area's cell (core register/area-stats.ts AreaCell) less its tasks: `listed` counts them, for its press. */
+export type StatsAreaCell = Omit<import('../hooks/core/read/index').AreaCell, 'tasks'> & { readonly listed: number }
+
+/** A team's or session's numbers (core AreaStats), each cell slim, and whether teamrig says it stands out (core standingOut). */
+export type StatsArea = Omit<import('../hooks/core/read/index').AreaStats, 'cells'> & {
+  readonly cells: Readonly<Record<import('../hooks/core/read/index').AreaMeasure, StatsAreaCell>>
+  readonly standsOut: boolean
+}
+
+/** The areas of one kind held against each other (core AreaGroup), in teamrig's order: most red cells first. */
+export type StatsAreaGroup = Omit<import('../hooks/core/read/index').AreaGroup, 'areas'> & { readonly areas: readonly StatsArea[] }
+
+/** The Bottlenecks section's numbers (hooks/stats-areas.ts): teams against teams, sessions against sessions. */
+export type StatsAreas = { readonly teams: StatsAreaGroup; readonly sessions: StatsAreaGroup }
+
+/** One area cell a Bottlenecks press lists: its team, its session (null for the whole team) and its measure. */
+export type StatsAreaPick = {
+  readonly team: string
+  readonly session: string | null
+  readonly measure: import('../hooks/core/read/index').AreaMeasure
+}
+
+/** What a Stats list holds: a Health count's tasks, or one area cell's. */
+export type StatsListPick = StatsListKind | StatsAreaPick
 
 /**
  * The goals' progress (core register/goal-stats.ts GoalStats), each goal's tasks as slim rows, and the team's day the
@@ -463,8 +491,13 @@ export type StatsListRow = {
   readonly due: string | null
 }
 
-/** The tasks behind one Health count (hooks/stats-source.ts listsOf): p1 first, then by due date, but the owner's waits the oldest first. */
-export type StatsList = { readonly kind: StatsListKind; readonly rows: readonly StatsListRow[] }
+/**
+ * The tasks behind one Health count (hooks/stats-source.ts listsOf) or one area cell (hooks/stats-areas.ts): p1 first,
+ * then by due date, but the owner's waits the oldest first.
+ */
+export type StatsList =
+  | { readonly kind: StatsListKind; readonly rows: readonly StatsListRow[] }
+  | { readonly kind: 'area'; readonly area: StatsAreaPick; readonly rows: readonly StatsListRow[] }
 
 /**
  * The Stats tab's numbers (hooks/stats-source.ts): the scope they fold, a team no longer in the tree folded as the
@@ -769,8 +802,8 @@ declare module 'claude-code' {
       statsScope: StatsChoice
       /** The days the Stats tab folds (its range row's presses pick them). */
       statsRange: import('../hooks/core/read/index').StatsRange
-      /** The Health count whose tasks the Stats tab lists in place of its numbers (a tile's press picks it, back clears it); null for the numbers. */
-      statsList: StatsListKind | null
+      /** The Health count or area cell whose tasks the Stats tab lists in place of its numbers (a press picks it, back clears it); null for the numbers. */
+      statsList: StatsListPick | null
       /** The Teams tab row whose [Stats] opened the Stats tab, back's landing; null when the tab shows from its switch. */
       statsFrom: string | null
       /** The Stats tab's sections the person opened or closed against their default (hooks/stats-rows.ts isSectionOpen), by key. */

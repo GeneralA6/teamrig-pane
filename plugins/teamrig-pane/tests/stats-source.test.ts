@@ -27,7 +27,8 @@ import {
 import { POLL_MS, TICK_MS } from '../hooks/live'
 import type { TeamFiles } from '../hooks/places'
 import type { FileStamp, Files } from '../hooks/source'
-import { goalsOf, LiveStats, listsOf, placerOf, type StatsPick, type StatsSettings } from '../hooks/stats-source'
+import { areaListKey, slimAreas } from '../hooks/stats-areas'
+import { goalsOf, LiveStats, listsOf, placerOf, plannedRows, type StatsPick, type StatsSettings } from '../hooks/stats-source'
 import { weekOf } from '../hooks/team'
 import { HOUR, MemoryFiles, NOW, createLine, iso, statusLine, waitingLine } from './fixtures'
 import { weekFile } from './team-fixtures'
@@ -94,9 +95,18 @@ type FoldedAt = { readonly at?: number; readonly session?: StatsScope; readonly 
 
 /** The view teamrig's fold gives `teams` in the tree of acme and tools, its picked list as rows, with no week and no failure. */
 function folded(teams: readonly StatsTeam[], pick: StatsPick, { at = NOW, session, goals = new Map() }: FoldedAt = {}): StatsView {
-  const { tasks, goals: progress, ...stats } = registerStats({ teams, range: pick.range, now: new Date(at), zone: TimeZone.UTC, ownerMarker: 'owner', goals, ...(session === undefined ? {} : { session }) })
-  const list = pick.list === null ? null : { kind: pick.list, rows: listsOf(tasks, TimeZone.UTC)[pick.list] }
-  return { kind: 'stats', scope: pick.scope, range: pick.range, teams: ['acme', 'tools'], stats: { ...stats, goals: goalsOf(progress, TimeZone.UTC, TimeZone.UTC.day(new Date(at))) }, health: registerHealth(stats), list, week: null, failures: [] }
+  const { tasks, goals: progress, areas, ...stats } = registerStats({ teams, range: pick.range, now: new Date(at), zone: TimeZone.UTC, ownerMarker: 'owner', goals, ...(session === undefined ? {} : { session }) })
+  const placedOf = placerOf(TimeZone.UTC)
+  const slim = slimAreas(areas, rows => plannedRows(rows, placedOf))
+  const picked = pick.list
+  const list =
+    picked === null
+      ? null
+      : typeof picked === 'string'
+        ? { kind: picked, rows: listsOf(tasks, TimeZone.UTC)[picked] }
+        : { kind: 'area' as const, area: picked, rows: slim.lists.get(areaListKey(picked)) ?? [] }
+  const numbers = { ...stats, goals: goalsOf(progress, TimeZone.UTC, TimeZone.UTC.day(new Date(at))), areas: slim.areas }
+  return { kind: 'stats', scope: pick.scope, range: pick.range, teams: ['acme', 'tools'], stats: numbers, health: registerHealth(stats), list, week: null, failures: [] }
 }
 
 /** Each goal of the view as its tag and title, in the view's order. */
@@ -275,6 +285,30 @@ describe('LiveStats', () => {
     expect(lists[1]).toEqual({ kind: 'closed', rows: [{ team: 'tools', id: 'T3', title: 'Fix the build', owner: 'dev', status: 'done', priority: 3, due: null }] })
     // The same row object: the minute's fold was kept, not folded again for another list.
     expect(lists[2]?.rows[0]).toBe(decisions?.rows[0])
+  })
+
+  test("an area cell's pick publishes its tasks as slim rows from the same fold; the areas carry counts, never tasks", async () => {
+    const disk = teamsDisk()
+    const { live, pick, views } = fakeStats(disk)
+    pick.value = { ...TREE, list: { team: 'acme', session: 'lead', measure: 'low' } }
+    await live.refresh()
+    const first = views.at(-1)
+    expect(first).toEqual(folded([ACME, TOOLS], pick.value))
+    expect(first?.kind === 'stats' ? first.list : undefined).toEqual({
+      kind: 'area',
+      area: { team: 'acme', session: 'lead', measure: 'low' },
+      rows: [{ team: 'acme', id: 'T2', title: 'Pick the database', owner: 'lead', status: 'waiting', priority: 3, due: null }],
+    })
+    const lead = first?.kind === 'stats' ? first.stats.areas.sessions.areas.find(area => area.session === 'lead') : undefined
+    expect(lead?.cells.low.listed).toBe(1)
+    expect(JSON.stringify(first?.kind === 'stats' ? first.stats.areas : null)).not.toContain('"tasks"')
+
+    disk.reads.length = 0
+    pick.value = { ...TREE, list: { team: 'acme', session: 'gone', measure: 'bugs' } }
+    await live.refresh()
+    expect(disk.reads).toEqual([])
+    const gone = views.at(-1)
+    expect(gone?.kind === 'stats' ? gone.list : undefined).toEqual({ kind: 'area', area: { team: 'acme', session: 'gone', measure: 'bugs' }, rows: [] })
   })
 
   test("the scope's week sums its teams' week files, a session's its team's", async () => {

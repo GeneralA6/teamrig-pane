@@ -6,7 +6,7 @@
 // opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
-import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, SessionPress, Snapshot, StatsChoice, StatsListKind, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, SessionPress, Snapshot, StatsChoice, StatsListPick, TaskRow, TaskStatus, ViewMode } from '../types'
 import { actRows, type CardActs } from './act-rows'
 import { cardRows, GUIDE } from './card'
 import { COMMAND } from './command'
@@ -53,15 +53,20 @@ export type Span = {
 }
 
 /**
- * A press on the Stats tab (stats-rows.ts): the scope it folds or the range, on the pick rows; or the Health count whose
- * tasks it lists, on a tile. Or one that opens the tab, on a Teams tab row (team-rows.ts): the scope it opens on, and the
+ * A press on the Stats tab (stats-rows.ts): the scope it folds or the range, on the pick rows; or the Health count or
+ * area cell whose tasks it lists, on a tile or a Bottlenecks cell. Or one that opens the tab, on a Teams tab row (team-rows.ts): the scope it opens on, and the
  * tree node's key of the `row` back lands on.
  */
 export type StatsPress =
   | { readonly kind: 'scope'; readonly scope: StatsChoice }
   | { readonly kind: 'range'; readonly range: StatsRange }
-  | { readonly kind: 'list'; readonly list: StatsListKind }
+  | { readonly kind: 'list'; readonly list: StatsListPick }
   | { readonly kind: 'open'; readonly scope: StatsChoice; readonly row: string }
+
+/** A list pick as one word: the Health count's name, or `area:` and the cell's `<team>/<session>:<measure>`. */
+function listKey(list: StatsListPick): string {
+  return typeof list === 'string' ? list : `area:${list.team}/${list.session ?? ''}:${list.measure}`
+}
 
 /** A scope as one word: `tree`, `team:<team>` or `session:<team>/<session>`. */
 function scopeKey(scope: StatsChoice): string {
@@ -85,7 +90,7 @@ export function statsPressKey(press: StatsPress): string {
     case 'range':
       return `range:${press.range}`
     case 'list':
-      return `list:${press.list}`
+      return `list:${listKey(press.list)}`
     case 'scope':
       return scopeKey(press.scope)
     case 'open':

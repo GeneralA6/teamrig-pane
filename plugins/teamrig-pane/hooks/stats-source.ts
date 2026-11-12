@@ -8,11 +8,22 @@
 // the tab shows; a press reads at once (refresh), and one made during a read runs another after it. A team folder or a
 // peer's register whose read fails draws as it last read, or is left out before one, named with why; the own team's
 // folder or register, never read yet, fails the view. The view holds the fold's numbers and, while a Health tile's
-// press picked one (T1864), the tasks behind that count as slim rows; the register's tasks never leave the fold.
+// press picked one (T1864), the tasks behind that count as slim rows, and each area (stats-areas.ts, T1866) with its
+// cells' counts, a Bottlenecks press listing a cell's tasks the same way; the register's tasks never leave the fold.
 // Each goal's progress (T1420) folds over the goals the scoped teams' tasks can serve, as `teamrig stats` reads them
 // (core cli/tree-goals.ts): each scoped team's goals file and those of the teams above it, a tag two teams hold read
 // as the nearer team's; each file re-read only when its stamp moves, one whose read fails kept as last read and named.
-import type { StatsChoice, StatsGoals, StatsListKind, StatsListRow, StatsNumbers, StatsView, TeamFolderFailure } from '../types'
+import type {
+  StatsChoice,
+  StatsGoals,
+  StatsList,
+  StatsListKind,
+  StatsListPick,
+  StatsListRow,
+  StatsNumbers,
+  StatsView,
+  TeamFolderFailure,
+} from '../types'
 import {
   ACTIVE_STATUSES,
   dueTime,
@@ -35,14 +46,15 @@ import {
   type TimeZone,
 } from './core/read/index'
 import { POLL_MS, TICK_MS, type Timer } from './live'
+import { areaListKey, slimAreas, type AreaLists } from './stats-areas'
 import { teamIds, teamStateDir, type TeamFiles } from './places'
 import { RegisterHistory } from './register-history'
 import { WatchedFile, type Files } from './source'
 import { weekOf, type TeamRead } from './team'
 import { TeamFolder } from './team-source'
 
-/** What the tab picked: the scope, the range, and the Health count whose tasks it lists (null for none). */
-export type StatsPick = { readonly scope: StatsChoice; readonly range: StatsRange; readonly list: StatsListKind | null }
+/** What the tab picked: the scope, the range, and the Health count or area cell whose tasks it lists (null for none). */
+export type StatsPick = { readonly scope: StatsChoice; readonly range: StatsRange; readonly list: StatsListPick | null }
 
 /** Each Health count's tasks as slim rows. */
 export type StatsLists = Readonly<Record<StatsListKind, readonly StatsListRow[]>>
@@ -68,7 +80,7 @@ export function placerOf(zone: TimeZone): PlacedOf {
 }
 
 /** `list` as rows, p1 first, then by due date, undated last. */
-function plannedRows(list: readonly StatsTask[], placedOf: PlacedOf): StatsListRow[] {
+export function plannedRows(list: readonly StatsTask[], placedOf: PlacedOf): StatsListRow[] {
   return list
     .map(placedOf)
     .sort((a, b) => a.row.priority - b.row.priority || planOrder(a.place, b.place))
@@ -164,7 +176,20 @@ class TeamGoals {
 type ReadGoals = { readonly goals: ReadonlyMap<string, Goal>; readonly versions: readonly (string | number)[][] }
 
 /** The last fold and what it folded, its counts' tasks as rows: a read whose key has not moved takes it as is. */
-type Fold = { readonly key: string; readonly stats: StatsNumbers; readonly health: RegisterHealth; readonly lists: StatsLists }
+type Fold = {
+  readonly key: string
+  readonly stats: StatsNumbers
+  readonly health: RegisterHealth
+  readonly lists: StatsLists
+  readonly areaLists: AreaLists
+}
+
+/** The list a press picked, its rows from the fold: a Health count's, or an area cell's (none when the cell is gone). */
+function listOf(pick: StatsListPick | null, fold: Fold): StatsList | null {
+  if (pick === null) return null
+  if (typeof pick === 'string') return { kind: pick, rows: fold.lists[pick] }
+  return { kind: 'area', area: pick, rows: fold.areaLists.get(areaListKey(pick)) ?? [] }
+}
 
 /** The view of a read that found the own team and its register. */
 type Folded = Extract<StatsView, { kind: 'stats' }>
@@ -323,7 +348,7 @@ export class LiveStats {
     const fold = this.fold?.key === key ? this.fold : this.foldOf(key, scope, pick.range, statsTeams, goals.goals, minute * TICK_MS)
     this.fold = fold
     const week = weekOf(scopedReads.flatMap(read => read.week ?? []), now)
-    const list = pick.list === null ? null : { kind: pick.list, rows: fold.lists[pick.list] }
+    const list = listOf(pick.list, fold)
     return { kind: 'stats', scope, range: pick.range, teams, stats: fold.stats, health: fold.health, list, week, failures }
   }
 
@@ -334,9 +359,16 @@ export class LiveStats {
   private foldOf(key: string, scope: StatsChoice, range: StatsRange, teams: readonly StatsTeam[], goals: ReadonlyMap<string, Goal>, at: number): Fold {
     const { zone, ownerMarker } = this.settings
     const session = scope.kind === 'session' ? { session: { team: scope.team, session: scope.session } } : {}
-    const { tasks, goals: progress, ...stats } = registerStats({ teams, range, now: new Date(at), zone, ownerMarker, goals, ...session })
+    const { tasks, goals: progress, areas, ...stats } = registerStats({ teams, range, now: new Date(at), zone, ownerMarker, goals, ...session })
     const placedOf = placerOf(zone)
-    return { key, stats: { ...stats, goals: goalsOf(progress, zone, zone.day(new Date(at)), placedOf) }, health: registerHealth(stats), lists: listsOf(tasks, zone, placedOf) }
+    const slim = slimAreas(areas, list => plannedRows(list, placedOf))
+    return {
+      key,
+      stats: { ...stats, goals: goalsOf(progress, zone, zone.day(new Date(at)), placedOf), areas: slim.areas },
+      health: registerHealth(stats),
+      lists: listsOf(tasks, zone, placedOf),
+      areaLists: slim.lists,
+    }
   }
 
   /**
