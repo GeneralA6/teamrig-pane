@@ -84,15 +84,15 @@ describe('bannerBlock', () => {
   const snap = snapOf(LINES)
   const tree = treeAt(snap.tasks, NOW)
 
-  test('closed, one row cut at one line led by the name: the task in progress, or the next one after a dim next', () => {
+  test('closed, one row cut at one line led by the name, then a dim label naming it: working on, or up next', () => {
     const now = bannerBlock(currentTask(snap, tree), false, tree, 'po')
     expect(now.key).toBe(BANNER_KEY)
-    expect(now.rows.map(textOf)).toEqual(['po · ◐ T4  Started last'])
-    expect(now.rows[0]?.spans.slice(0, 2)).toEqual([{ text: 'po', bold: true }, SEPARATOR])
+    expect(now.rows.map(textOf)).toEqual(['po · working on · ◐ T4  Started last'])
+    expect(now.rows[0]?.spans.slice(0, 4)).toEqual([{ text: 'po', bold: true }, SEPARATOR, { text: 'working on', dim: true }, SEPARATOR])
     expect(now.rows[0]?.maxLines).toBe(1)
     const next = bannerBlock({ kind: 'next', task: taskOf(snap.tasks, 'T2') }, false, tree, 'po')
-    expect(next.rows.map(textOf)).toEqual(['po · next ○ T2  Open first'])
-    expect(next.rows[0]?.spans[2]).toEqual({ text: 'next ', dim: true })
+    expect(next.rows.map(textOf)).toEqual(['po · up next · ○ T2  Open first'])
+    expect(next.rows[0]?.spans[2]).toEqual({ text: 'up next', dim: true })
   })
 
   test('open, the title whole and the facts the person reads first, each on its labelled row at the edge', () => {
@@ -108,12 +108,12 @@ describe('bannerBlock', () => {
     expect(working.rows.map(row => row.key.split(':').at(-1))).toEqual([BANNER_KEY, 'status', 'note', 'priority'])
   })
 
-  test('a wrapped title lines up under the title, past the name and any next', () => {
+  test('a wrapped title lines up under the title, past the name and its label', () => {
     const indent = '○ T2  '.length
     const next = bannerBlock({ kind: 'next', task: taskOf(snap.tasks, 'T2') }, false, tree, 'acme-po')
-    expect(next.rows[0]?.hang?.text.length).toBe('acme-po · next '.length + indent)
+    expect(next.rows[0]?.hang?.text.length).toBe('acme-po · up next · '.length + indent)
     const now = bannerBlock(currentTask(snap, tree), false, tree, 'acme-po')
-    expect(now.rows[0]?.hang?.text.length).toBe('acme-po · '.length + indent)
+    expect(now.rows[0]?.hang?.text.length).toBe('acme-po · working on · '.length + indent)
   })
 
   test('the name, then a dim line, when the area has no current task', () => {
@@ -136,13 +136,11 @@ describe('previousBlock', () => {
   }
 
   const clock = clockOf(snapOf(LINES))
-  /** The cells under its title, past `previous · `. */
-  const under = ' '.repeat('previous · '.length)
 
-  test('one row cut at one line: a dim previous, then how the conversation opened', () => {
+  test('one row cut at one line, how the conversation opened, led by nothing: the frame head names it', () => {
     expect(previousBlock(before, snapOf(LINES), false, clock)).toEqual({
       key: PREVIOUS_KEY,
-      rows: [{ key: PREVIOUS_KEY, spans: [{ text: 'previous', dim: true }, SEPARATOR, { text: 'Plan the week' }], maxLines: 1 }],
+      rows: [{ key: PREVIOUS_KEY, spans: [{ text: 'Plan the week' }], maxLines: 1 }],
     })
   })
 
@@ -152,16 +150,16 @@ describe('previousBlock', () => {
       { session: 'po', task: 'T2', at: NOW - 10 * 60_000 },
     ]
     const block = previousBlock(before, { ...snapOf(LINES), work }, false, clock)
-    expect(block.rows.map(textOf)).toEqual(['previous · T4 Started last'])
-    expect(block.rows[0]?.spans[2]).toEqual({ text: 'T4', bold: true })
+    expect(block.rows.map(textOf)).toEqual(['T4 Started last'])
+    expect(block.rows[0]?.spans[0]).toEqual({ text: 'T4', bold: true })
   })
 
   test('open, it is cut at no line: how it opened, then when it ran and its count of lines, under the title', () => {
     const block = previousBlock(before, snapOf(LINES), true, clock)
-    expect(block.rows.map(textOf)).toEqual(['previous · Plan the week', `${under}${conversationWhen(before, clock)}`])
+    expect(block.rows.map(textOf)).toEqual(['Plan the week', conversationWhen(before, clock)])
     expect(conversationWhen(before, clock)).toMatch(/–.* · 4 lines$/)
     expect(block.rows.map(row => row.maxLines)).toEqual([undefined, undefined])
-    expect(block.rows.map(row => row.hang?.text)).toEqual([under, under])
+    expect(block.rows.map(row => row.hang)).toEqual([undefined, undefined])
     expect(block.rows[1]?.spans.at(-1)?.dim).toBe(true)
   })
 
@@ -177,11 +175,11 @@ describe('previousBlock', () => {
     expect(textOf(previousBlock(before, worked, false, clock).rows[0] ?? { key: '', spans: [] })).not.toContain(long)
     const block = previousBlock(before, worked, true, clock)
     expect(block.rows.map(textOf)).toEqual([
-      'previous · T4 Started last',
-      `${under}T7 ${long}`,
-      `${under}T9`,
-      `${under}${conversationWhen(before, clock)}`,
-      `${under}opened · Plan the week`,
+      'T4 Started last',
+      `T7 ${long}`,
+      'T9',
+      conversationWhen(before, clock),
+      'opened · Plan the week',
     ])
     expect(block.rows.map(row => row.key)).toEqual([
       PREVIOUS_KEY,
@@ -190,12 +188,12 @@ describe('previousBlock', () => {
       `${PREVIOUS_KEY}:when`,
       `${PREVIOUS_KEY}:opened`,
     ])
-    expect(block.rows[1]?.spans[1]).toEqual({ text: 'T7', bold: true })
+    expect(block.rows[1]?.spans[0]).toEqual({ text: 'T7', bold: true })
   })
 
   test('open, a conversation of harness notices alone has its dim title and its times, and no opened row', () => {
     const block = previousBlock({ ...before, opening: null }, snapOf(LINES), true, clock)
-    expect(block.rows.map(textOf)).toEqual([`previous · ${UNTITLED.text}`, `${under}${conversationWhen(before, clock)}`])
+    expect(block.rows.map(textOf)).toEqual([UNTITLED.text, conversationWhen(before, clock)])
   })
 
   test("a Claude opening is dim in the open block's opened row as in its title", () => {
