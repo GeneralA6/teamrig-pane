@@ -698,8 +698,9 @@ minimized, it reads nothing.
 
 ## The Meetings view
 
-`j`, or Meetings on the switch, lists the meetings booked for the session's team, the scheduled and started ones, by
-time. A ruled header counts them and the missed ones (`3 meetings · 1 missed`). A meeting's row gives its mark, its id,
+`j`, or Meetings on the switch, lists the meetings booked for the session's team, the scheduled and started ones and
+those done or dropped today on the team's clock (the whole day's schedule; an earlier day's are left out), by time. A
+ruled header counts them and the missed ones (`3 meetings · 1 missed`). A meeting's row gives its mark, its id,
 when it starts on the team's clock, its length, and the session met with those joining; under it, dim, what it is about
 and the tasks it settles:
 
@@ -712,6 +713,8 @@ and the tasks it settles:
 | `○` | one more scheduled meeting |
 | `!`, a red `missed` | a scheduled meeting whose slot ended with no start |
 | `◐`, `started` | a started meeting |
+| a dim `●`, `done` | a meeting held today; no start press |
+| a dim `×`, `dropped` | a meeting dropped today; no start press |
 
 A press on a row (a click, Enter or Space) opens its card in place of the dim line, and again closes it: About, With,
 Tasks (each with its title and status; an id the register holds opens its page), Brief (a press opens the file) and,
@@ -721,7 +724,7 @@ on a scheduled meeting, `[Start meeting]`. That press runs `teamrig meeting star
 at a time.
 
 The view runs the CLI of the teamrig plugin installed in Claude Code (else the one beside the `teamrig` command on the
-PATH), with `node`: `teamrig meeting list --json` when
+PATH), with `node`: `teamrig meeting list --all --json` when
 the view opens and every 60 seconds while it shows; on another view, or minimized, it runs nothing. With no teamrig
 plugin, one older than 0.208.0, or a list that fails, it says why
 ([reference.md](reference.md#warn-lines-and-their-fixes)). It has no Find field: a schedule is a few rows.
