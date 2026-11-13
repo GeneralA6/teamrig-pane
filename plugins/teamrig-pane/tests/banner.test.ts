@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { LogConversation, Snapshot, TaskRow, ViewMode } from '../types'
-import { BANNER_KEY, NOTHING_CURRENT, PREVIOUS_KEY, bannerBlock, currentRowKey, currentTask, previousBlock, type Current } from '../hooks/banner'
+import { BANNER_KEY, NOTHING_CURRENT, PREVIOUS_KEY, bannerBlock, currentRowKey, currentTask, lookShowing, previousBlock, type Current, type ListLook } from '../hooks/banner'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { conversationWhen } from '../hooks/log-rows'
@@ -77,6 +77,38 @@ describe('currentRowKey', () => {
     expect(currentRowKey(currentOf(next), 'all')).toBe('po:T2')
     // Each is a block the list draws, so a step back to it scrolls to the task.
     for (const snap of [working, next]) for (const mode of ['mine', 'all'] as const) expect(keysOf(snap, mode)).toContain(currentRowKey(currentOf(snap), mode))
+  })
+})
+
+describe('lookShowing', () => {
+  const working = snapOf(LINES)
+  const current = currentTask(working, treeOf(working))
+  if (current === null) throw new Error('no current task')
+  const drawnWith = (mode: ViewMode, look: ListLook) => paneBlocks(working, mode, undefined, look.filter, look.folded).map(block => block.key)
+  const row = (mode: ViewMode) => currentRowKey(current, mode)
+
+  test("a filter to another status, or a fold over the row, hides it; the look it gives draws it again (T1291)", () => {
+    const hiding: ListLook[] = [
+      { filter: 'waiting', folded: [] },
+      { filter: null, folded: ['working'] },
+      { filter: 'verifying', folded: ['working', 'waiting'] },
+    ]
+    for (const look of hiding) {
+      expect(drawnWith('mine', look)).not.toContain(row('mine'))
+      expect(drawnWith('mine', lookShowing(current, 'mine', look))).toContain(row('mine'))
+    }
+    // Every owner's list folds by owner, and a filter there hides nothing, so it is kept for the area's list.
+    const allFolded: ListLook = { filter: 'waiting', folded: ['owner:po', 'owner:etl'] }
+    expect(drawnWith('all', allFolded)).not.toContain(row('all'))
+    expect(lookShowing(current, 'all', allFolded)).toEqual({ filter: 'waiting', folded: ['owner:etl'] })
+    expect(drawnWith('all', lookShowing(current, 'all', allFolded))).toContain(row('all'))
+  })
+
+  test("only what hides the row changes: other folds stay, and a filter to the row's own status stays with its folds", () => {
+    expect(lookShowing(current, 'mine', { filter: 'waiting', folded: ['working', 'done'] })).toEqual({ filter: null, folded: ['done'] })
+    const ownStatus: ListLook = { filter: 'working', folded: ['working'] }
+    expect(lookShowing(current, 'mine', ownStatus)).toBe(ownStatus)
+    expect(drawnWith('mine', ownStatus)).toContain(row('mine'))
   })
 })
 

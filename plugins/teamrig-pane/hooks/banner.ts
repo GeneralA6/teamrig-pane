@@ -12,13 +12,13 @@
 // that opens its page in the pane and one the pane's list of conversations, and under it its title at the frame's
 // whole width; a press on the title opens it to its tasks' whole titles, its times and how it opened (T2302). Pure: the blocks of rows
 // that layout.ts wraps and register.tsx draws, and the row the button's page goes back to.
-import type { LogConversation, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
+import type { BarStatus, LogConversation, Snapshot, TaskDetail, TaskRow, ViewMode } from '../types'
 import { cardRows, type CardField } from './card'
 import type { TaskTree } from './core/read/index'
 import { conversationWhen } from './log-rows'
 import { openingSpan, titleSpans, workedTitles, type Worked } from './log-title'
 import type { PaneTree } from './meta'
-import { SEPARATOR, indentOf, listRowKey, titleRow, type Block, type Row, type Span } from './rows'
+import { SEPARATOR, indentOf, listHeadingKey, listRowKey, titleRow, type Block, type Row, type Span } from './rows'
 import { newestFirst } from './view'
 import { cells } from './width'
 import type { Clock } from './zone'
@@ -86,7 +86,27 @@ export function currentTask(snap: Snapshot, tree: TaskTree<TaskRow>): Current | 
  * progress, Up next while next, on every owner's under the area's own.
  */
 export function currentRowKey(current: Current, mode: ViewMode): string {
-  return listRowKey(current.task, mode, current.kind === 'now' ? 'working' : 'not-started')
+  return listRowKey(current.task, mode, currentStatus(current))
+}
+
+/** The status bar's status `current` is listed under: working while in progress, not started while next. */
+function currentStatus(current: Current): BarStatus {
+  return current.kind === 'now' ? 'working' : 'not-started'
+}
+
+/** How the list looks beside its places: the status the bar filters the mine view to (null for all), the folded headings. */
+export type ListLook = { readonly filter: BarStatus | null; readonly folded: readonly string[] }
+
+/**
+ * `look` changed only as far as the list of `mode` needs to draw `current`'s row (currentRowKey), so back from the
+ * page the button opens lands on it (T1291): on the area's list a filter to another status cleared, and the heading
+ * over the row unfolded. A filter to the row's own status lists it under no heading, so the folds stay as they were.
+ */
+export function lookShowing(current: Current, mode: ViewMode, look: ListLook): ListLook {
+  const status = currentStatus(current)
+  if (mode === 'mine' && look.filter === status) return look
+  const heading = listHeadingKey(current.task, mode, status)
+  return { filter: mode === 'mine' ? null : look.filter, folded: look.folded.filter(key => key !== heading) }
 }
 
 /**
