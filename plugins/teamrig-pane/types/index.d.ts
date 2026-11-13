@@ -527,7 +527,7 @@ export type StatsView =
 export type MeetingStatus = 'scheduled' | 'started' | 'done' | 'dropped'
 
 /**
- * A meeting the Meetings view lists (hooks/meetings.ts), as `teamrig meeting list --json` prints it: its id (`M<n>`),
+ * A meeting the Meetings view lists (hooks/meetings.ts), as `teamrig meeting list --all --json` prints it: its id (`M<n>`),
  * when it starts (epoch ms) and that time on the team's clock, its length in minutes, the session met (whose tab a
  * start brings to the front, or opens), the others joining, the tasks it settles, what it is about, its brief's path
  * (null for none), its status, and whether it is missed: scheduled, its slot over with no start.
@@ -547,7 +547,8 @@ export type Meeting = {
 }
 
 /**
- * The Meetings view's list (hooks/meetings.ts): the team's scheduled and started meetings by time, and how many of the
+ * The Meetings view's list (hooks/meetings.ts): the team's scheduled and started meetings and those done or dropped in
+ * the last week, by time (the view shows the day's: hooks/meetings-rows.ts), and how many of the
  * meetings teamrig printed the pane could not read (a newer teamrig's); or that it is not read yet, that the pane found
  * no team, or why the list could not be read (no teamrig CLI, a refusal).
  */
