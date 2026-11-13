@@ -720,7 +720,8 @@ on a scheduled meeting, `[Start meeting]`. That press runs `teamrig meeting star
 `Starting M3…`, then `Started M3.` with teamrig's lines (`TOLD lead`), or `M3 did not start:` and why. One start runs
 at a time.
 
-The view runs the CLI of the teamrig plugin installed in Claude Code, with `node`: `teamrig meeting list --json` when
+The view runs the CLI of the teamrig plugin installed in Claude Code (else the one beside the `teamrig` command on the
+PATH), with `node`: `teamrig meeting list --json` when
 the view opens and every 60 seconds while it shows; on another view, or minimized, it runs nothing. With no teamrig
 plugin, one older than 0.208.0, or a list that fails, it says why
 ([reference.md](reference.md#warn-lines-and-their-fixes)). It has no Find field: a schedule is a few rows.
