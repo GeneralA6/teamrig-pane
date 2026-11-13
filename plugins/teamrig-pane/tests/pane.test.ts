@@ -3142,7 +3142,7 @@ test("the Keys page names every key a button of the pane answers, and each key i
 /** Where the fake Claude Code keeps its config, and the teamrig install its plugin list names. */
 const CLAUDE_DIR = '/Homes/tester/.claude'
 const TEAMRIG_INSTALL = `${CLAUDE_DIR}/plugins/cache/teamrig/teamrig/0.227.0`
-/** A scheduled meeting as `teamrig meeting list --json` prints it: an hour from now, with web, on T1. */
+/** A scheduled meeting as `teamrig meeting list --all --json` prints it: an hour from now, with web, on T1. */
 const MEETING = {
   id: 'M3',
   at: iso(NOW + HOUR),
@@ -3174,7 +3174,7 @@ test("the switch's Meetings button lists the team's meetings through the teamrig
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   const cliRuns = () => runs.filter(run => run.startsWith('teamrig '))
-  const LIST = 'teamrig meeting list --json --session po'
+  const LIST = 'teamrig meeting list --all --json --session po'
 
   // Nothing runs while another view shows.
   expect(keyedProps(await pane.drawn(), 'meetings')).toMatchObject({ label: 'Meetings', hotkey: 'j', variant: 'secondary' })
