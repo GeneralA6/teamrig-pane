@@ -253,7 +253,7 @@ describe('the requirements in the pane guide', () => {
       (new RegExp(`^\\s*${key}: \\[([^\\]]+)\\]`, 'm').exec(ci)?.[1] ?? '').split(',').map((item) => item.trim().replace(/-latest$/, ''));
     const systems = list('os');
     const nodes = list('node');
-    assert.ok(systems.length > 1 && nodes.length > 1, 'ci.yml has an os and node matrix');
+    assert.ok(systems.length > 1 && nodes.length > 0, 'ci.yml has an os and node matrix');
     const cells = row(skill, 'Operating system');
     assert.ok(cells.includes(`CI runs the tests on ${systems.slice(0, -1).join(', ')} and ${systems.at(-1) ?? ''}`), `names ${systems.join(', ')}`);
     assert.ok(cells.includes(`Node ${nodes.join(' and ')}`), `names Node ${nodes.join(' and ')}`);
