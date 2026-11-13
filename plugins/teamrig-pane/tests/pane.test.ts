@@ -1441,6 +1441,25 @@ test("the band's open button opens the pane, minimized or on another view, at th
   expect(keyedProps(drawn, 'tasks')).toMatchObject({ variant: 'primary' })
 })
 
+test("the band's open button clears a status filter that hides the task, so back lands on its row (T1291)", async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, [
+    createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' }),
+    createLine('T2', { owner: 'po', by: 'po', at: NOW - HOUR, title: 'Check the roll' }),
+    statusLine('T2', 'po', NOW, 'verifying', 'health check passes'),
+  ])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+  await pane.press({ key: 'count:verifying' })
+  expect(keyedNode(await pane.drawn(), 'next:T1')).toBe(null)
+
+  const band = await mountBand($)
+  await band.press({ key: BANNER_OPEN_KEY })
+  await pane.press({ key: 'back' })
+  expect(keyedNode(await pane.drawn(), 'next:T1')).not.toBe(null)
+  expect(await pane.find({ text: /^showing/ })).toBeUndefined()
+})
+
 test("over the banner the band names the area's previous conversation; its buttons open the pane at its page or at the list of conversations", async ($, on) => {
   const { clock, disk, opened } = await startWithLogs(on)
   disk.write('/Homes/tester/.teamrig/teams/web/config.json', [JSON.stringify({ sessions: ['lead', 'api'], turnLog: { keepHours: 2 } })])
