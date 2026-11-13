@@ -1182,7 +1182,7 @@ export const register: Register = on => {
                       own: snap.team === null || snap.area === null ? null : sessionKey(snap.team, snap.area),
                     })
                   : current === 'meetings'
-                  ? meetingsBlocks(await read($, meetings), await read($, meetingsOpen), await read($, meetingStart), snap.tasks, snap.now)
+                  ? meetingsBlocks(await read($, meetings), await read($, meetingsOpen), await read($, meetingStart), snap.tasks, clockOf(snap))
                   : statsShown !== null
                   ? statsBlocks(statsShown, await read($, statsToggled), columns, {
                       team: snap.team,

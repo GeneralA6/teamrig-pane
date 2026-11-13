@@ -531,7 +531,8 @@ no tokens.
 ### Meetings
 
 Meetings lists the meetings booked for the session's team (`teamrig meeting schedule`), the scheduled and started
-ones, by time, as `teamrig meeting list --json` prints them. A ruled header counts them and the missed ones
+ones and those done or dropped today on the team's clock (the whole day's schedule; an earlier day's are left out), by
+time, as `teamrig meeting list --all --json` prints them. A ruled header counts them and the missed ones
 (`3 meetings · 1 missed`). A meeting's row is its mark, its id in bold, when it starts on the team's clock, its length
 and the session met with those joining; under it, dim, what it is about and the tasks it settles:
 
@@ -539,8 +540,8 @@ and the session met with those joining; under it, dim, what it is about and the 
           the pricing tiers · T1
 
 The first scheduled meeting not missed is `›` and `next` (`now` once its time came), one more scheduled meeting a dim
-`○`, a missed one (scheduled, its slot ended with no start) a red `!` and `missed`, a started one `◐` and `started`.
-Marks are one cell of plain text, never an emoji.
+`○`, a missed one (scheduled, its slot ended with no start) a red `!` and `missed`, a started one `◐` and `started`,
+one done today a dim `●` and `done`, one dropped today a dim `×` and `dropped`. Marks are one cell of plain text, never an emoji.
 
 A press on a row (a click, or Enter or Space on it) opens its card in place of the dim line, and a second closes it:
 About whole, With, Tasks (each with its title and status, an id the register holds a press that opens its page; one it

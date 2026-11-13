@@ -1,4 +1,4 @@
-// The Meetings view's source (hooks/meetings.ts): `teamrig meeting list --json` read with type guards, the rows it
+// The Meetings view's source (hooks/meetings.ts): `teamrig meeting list --all --json` read with type guards, the rows it
 // cannot read counted; written only when it changed and read only while the view shows; a start press runs `meeting
 // start`, one at a time, tells what it answered and reads the list again; each run passes the caller's --session.
 import { describe, expect, test } from 'claude-code/testing'
@@ -102,8 +102,8 @@ describe('LiveMeetings', () => {
     await live.refresh()
     await live.refresh()
     expect(ports.runs).toEqual([
-      { args: cliArgv(CLI.main, ['meeting', 'list', '--json', '--session', 'lead']), timeoutMs: LIST_TIMEOUT_MS },
-      { args: cliArgv(CLI.main, ['meeting', 'list', '--json', '--session', 'lead']), timeoutMs: LIST_TIMEOUT_MS },
+      { args: cliArgv(CLI.main, ['meeting', 'list', '--all', '--json', '--session', 'lead']), timeoutMs: LIST_TIMEOUT_MS },
+      { args: cliArgv(CLI.main, ['meeting', 'list', '--all', '--json', '--session', 'lead']), timeoutMs: LIST_TIMEOUT_MS },
     ])
     expect(ports.views).toEqual([{ kind: 'list', meetings: [MEETING], unreadable: 0 }])
   })
@@ -111,7 +111,7 @@ describe('LiveMeetings', () => {
   test('with no caller known, no --session: the CLI asks its own variable', async () => {
     const ports = { ...portsOf([LISTED]), caller: async () => null }
     await new LiveMeetings(CLI, ports).refresh()
-    expect(ports.runs[0]?.args).toEqual(cliArgv(CLI.main, ['meeting', 'list', '--json']))
+    expect(ports.runs[0]?.args).toEqual(cliArgv(CLI.main, ['meeting', 'list', '--all', '--json']))
   })
 
   test('no CLI, or a run that does not finish, shows why', async () => {
@@ -144,7 +144,7 @@ describe('LiveMeetings', () => {
     await new LiveMeetings(CLI, ports).start('M3')
     expect(ports.runs).toEqual([
       { args: cliArgv(CLI.main, ['meeting', 'start', 'M3', '--session', 'lead']), timeoutMs: START_TIMEOUT_MS },
-      { args: cliArgv(CLI.main, ['meeting', 'list', '--json', '--session', 'lead']), timeoutMs: LIST_TIMEOUT_MS },
+      { args: cliArgv(CLI.main, ['meeting', 'list', '--all', '--json', '--session', 'lead']), timeoutMs: LIST_TIMEOUT_MS },
     ])
     expect(ports.told).toEqual([
       { id: 'M3', outcome: 'starting', lines: [] },
