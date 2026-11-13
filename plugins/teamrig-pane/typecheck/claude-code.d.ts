@@ -273,7 +273,8 @@ declare module 'claude-code' {
     'ui.close': { filter: { readonly id: string }; e: { readonly id: string; readonly origin: PaneCloseOrigin }; result: { readonly deny?: string } }
     'ui.render': { filter: { readonly component: RenderComponent; readonly requestId?: string }; e: RenderRequest; result: JSX.Element }
     'ui.scroll': { filter: { readonly requestId: string }; e: UiScrollInput; result: UiScrollResult }
-    'ui.focus': { filter: { readonly requestId: string }; e: UiFocusInput; result: UiFocusResult }
+    // A test's answer names the plugin whose ring moved: the test kit counts the test as a plugin of its own (2.1.323).
+    'ui.focus': { filter: { readonly requestId: string } | { readonly plugin: string }; e: UiFocusInput; result: UiFocusResult }
     'fs.stat': { filter: never; e: { readonly path: string }; result: Answer<FsStat> }
     'fs.exists': { filter: never; e: { readonly path: string }; result: Answer<boolean> }
     'fs.read': { filter: never; e: { readonly path: string }; result: Answer<string> }
