@@ -11,8 +11,8 @@ npm run setup   # the same hook setup, for a clone installed with --ignore-scrip
 The git hooks run the scrub and DCO checks below before each commit, and the [local gate](#the-local-gate) before
 each push. `npm run check` first checks that git runs them, and fails until `npm run setup` ran. Where teamrig is on
 PATH, each hook first runs its secret scan (`teamrig secrets staged`, `message` and `pushed`), which refuses a commit
-or push that adds a secret, named by place and shape; teamrig is private, so a clone without it skips the scan with
-a line saying so.
+or push that adds a secret, named by place and shape; a machine without teamrig on PATH skips the scan with a line
+saying so.
 
 ## How we work
 Every contributor, and every Claude Code session opened in this repo, works the same way. [CLAUDE.md](CLAUDE.md) holds
@@ -76,8 +76,8 @@ tests on Linux, Windows and macOS under node 22 and 24, with a pinned Claude Cod
 `hooks/core/` is a copy of teamrig's read modules at the commit `scripts/teamrig-pin.json` names, made
 by `scripts/sync-core.ts`; never edit it by hand. The `hooks/core matches the teamrig pin` check (a CI job
 and a step of the local gate) runs `sync-core.ts --check` against teamrig and fails on any difference;
-teamrig is private, so in CI that job alone reads the `TEAMRIG_READ_TOKEN` secret, and the local gate
-reads a teamrig checkout on your machine. The `hooks/core reads teamrig main's formats` check (a step of
+in CI it checks out the public teamrig repository, and the local gate reads a teamrig checkout on your
+machine. The `hooks/core reads teamrig main's formats` check (a step of
 that job and of the local gate) runs `sync-core.ts --formats`: it fails while a format number in
 `hooks/core/` (an `export const <NAME>_VERSION` or `_FORMAT`, as teamrig declares the format of each file
 it keeps) is lower than teamrig main's, or missing, so a format teamrig raised fails the next pane push
@@ -125,8 +125,7 @@ Node version or the pinned Claude Code release shows goes unseen until the repos
 ## Pull requests
 - **From a fork**: fork the repository, branch off its `main`, and open the pull request against this repository's
   `main`. CI runs it with no secrets and a read-only token, and an outside contributor's run waits for the
-  maintainer to approve it. While teamrig is private, the `hooks/core matches the teamrig pin` job cannot read it
-  in a fork's run, which has no `TEAMRIG_READ_TOKEN`.
+  maintainer to approve it.
 - **Your commit e-mail**: the `Signed-off-by:` line carries your commit e-mail, and the scrub refuses an e-mail
   address in a commit message unless it is one of GitHub's no-reply addresses. Before your first commit, set the
   no-reply address GitHub shows under Settings, Emails: `git config user.email <id>+<user>@users.noreply.github.com`.

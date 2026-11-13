@@ -91,9 +91,8 @@ jobs:
     name: hooks/core matches the teamrig pin
     # Fails when plugins/teamrig-pane/hooks/core differs from teamrig's read modules at the commit
     # scripts/teamrig-pin.json names, or when a format number there trails teamrig main's (see
-    # CONTRIBUTING.md). teamrig is private, so this is the only job that holds TEAMRIG_READ_TOKEN; it
-    # installs nothing and runs only the repo's own sync script. A pull request from a fork gets no
-    # secrets, so this job cannot read teamrig there while teamrig is private.
+    # CONTRIBUTING.md). teamrig is public, so it is checked out with no token and a fork's pull request
+    # runs this job too; it installs nothing and runs only the repo's own sync script.
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     steps:
@@ -103,7 +102,6 @@ jobs:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
         with:
           repository: ${{ github.repository_owner }}/teamrig
-          token: ${{ secrets.TEAMRIG_READ_TOKEN }} # fine-grained, contents:read on teamrig only; drop once teamrig is public
           path: teamrig-src
           fetch-depth: 0 # the pin may not be the tip; also brings origin/main, which --formats reads
           persist-credentials: false
