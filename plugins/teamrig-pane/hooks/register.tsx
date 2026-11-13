@@ -103,6 +103,7 @@ import {
   bannerBlock,
   currentRowKey,
   currentTask,
+  lookShowing,
   previousBlock,
   type Current,
 } from './banner'
@@ -2095,14 +2096,19 @@ export const register: Register = on => {
       </Button>
     )
     // Opens the pane as /teamrig-pane does, minimized or never opened too, at the task's page (read as its card's is)
-    // over the list at the task's row (nav.ts fromList): back shows the list scrolled to it.
+    // over the list at the task's row (nav.ts fromList): back shows the list scrolled to it. A status-bar filter or a
+    // fold that hides the row gives way first (banner.ts lookShowing), else back would have no row to land on.
     const openInPane = async (shown: Current) => {
       await sizer?.set('open')
       await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
       const detail = await detailOf(shown.task)
       await update($, pages, kept => ({ ...kept, [shown.task.id]: detail }))
       await update($, view, () => 'tasks')
-      const row = currentRowKey(shown, await read($, mode))
+      const listMode = await read($, mode)
+      const look = lookShowing(shown, listMode, { filter: await read($, barFilter), folded: await read($, tasksFolded) })
+      await update($, barFilter, () => look.filter)
+      await update($, tasksFolded, () => look.folded)
+      const row = currentRowKey(shown, listMode)
       await go($, () => fromList(row, { kind: 'task', id: shown.task.id }))
     }
     // The banner's Box takes the columns the banner leaves free, so the button ends the row, beside the engine's [-].

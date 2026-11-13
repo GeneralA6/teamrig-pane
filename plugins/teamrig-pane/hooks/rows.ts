@@ -296,6 +296,14 @@ export function listRowKey(task: TaskRow, mode: ViewMode, status: BarStatus): st
 }
 
 /**
+ * The key of the heading over `task`'s block on the list `mode` shows (listRowKey): its section's on the area's, its
+ * owner's (`owner:<id>`) on every owner's. A press on it folds the block away.
+ */
+export function listHeadingKey(task: TaskRow, mode: ViewMode, status: BarStatus): string {
+  return mode === 'mine' ? SECTION_KEY[status] : `owner:${task.owner}`
+}
+
+/**
  * A section of the tasks at `status`: its heading, keyed `key`, with how many it holds (`total`, view.ts areaView), its
  * blocks, and a dim line naming how many the cap left out (moreText); in `folded`, its heading alone. An empty section
  * draws nothing.
