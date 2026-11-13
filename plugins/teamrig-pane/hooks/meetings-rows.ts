@@ -1,8 +1,9 @@
-// The Meetings view as blocks of rows (rows.ts, T1359): the team's scheduled and started meetings (meetings.ts) by
-// time, under a header that counts them. A meeting's row is its mark, its id, when it starts on the team's clock, its
+// The Meetings view as blocks of rows (rows.ts, T1359): the team's scheduled and started meetings (meetings.ts) and
+// those done or dropped on the team's day (T2455: the whole day's schedule, not only what is still to come), by time,
+// under a header that counts them; one done or dropped on an earlier day is left out. A meeting's row is its mark, its id, when it starts on the team's clock, its
 // length and the session met with those joining, and under it, dim, what it is about and the tasks it settles. The
 // first scheduled one not missed is marked next (now, once its time came), a missed one (scheduled, its slot over
-// with no start) in red, a started one says so. A press on a row opens or closes its card (`folds`): what it is about
+// with no start) in red, a started one says so, a done or dropped one dim. A press on a row opens or closes its card (`folds`): what it is about
 // whole, who joins, each task it settles with its title and status (an id the register holds a press that opens its
 // page), its brief (a press that opens the file) and, on a scheduled meeting, a [Start meeting] press (`starts`). What
 // the last start press answered leads the list. Plain-text marks, never an emoji. Pure.
@@ -12,12 +13,13 @@ import { fileLabel } from './details'
 import { STATUS_WORDS } from './meta'
 import { META_LINES, SEPARATOR, single, TITLE_GAP, type Block, type Row, type Span } from './rows'
 import { cells } from './width'
+import { dayOf, type Clock } from './zone'
 
 const VIEW = 'meetings'
 /** Starts each card line: the guide that ties the card to its meeting's row. */
 const GUIDE: Span = { text: '    │ ', dim: true }
 /** What a meeting's row leads with, by where it stands: each one cell of plain text. */
-export const MEETING_MARK = { scheduled: '○', next: '›', missed: '!', started: '◐' } as const
+export const MEETING_MARK = { scheduled: '○', next: '›', missed: '!', started: '◐', done: '●', dropped: '×' } as const
 /** The text of the press that starts a scheduled meeting. */
 export const START_TEXT = '[Start meeting]'
 /** What an empty schedule shows. */
@@ -35,9 +37,9 @@ function note(text: string): Block {
   return single(`${VIEW}:note`, [{ text, dim: true }])
 }
 
-/** `meeting`'s standing: started, missed, the next one (`next`'s id), or one more scheduled. */
+/** `meeting`'s standing: done, dropped, started, missed, the next one (`next`'s id), or one more scheduled. */
 function standingOf(meeting: Meeting, next: string | null): Standing {
-  if (meeting.status === 'started') return 'started'
+  if (meeting.status !== 'scheduled') return meeting.status
   if (meeting.missed) return 'missed'
   return meeting.id === next ? 'next' : 'scheduled'
 }
@@ -51,6 +53,9 @@ function standingSpan(standing: Standing, meeting: Meeting, now: number): Span |
       return { text: 'missed', color: 'error' }
     case 'next':
       return { text: meeting.at <= now ? 'now' : 'next', color: 'claude' }
+    case 'done':
+    case 'dropped':
+      return { text: standing, dim: true }
     case 'scheduled':
       return null
   }
@@ -65,8 +70,10 @@ function markSpan(standing: Standing): Span {
       return { text: MEETING_MARK.missed, color: 'error' }
     case 'next':
       return { text: MEETING_MARK.next, color: 'claude' }
+    case 'done':
+    case 'dropped':
     case 'scheduled':
-      return { text: MEETING_MARK.scheduled, dim: true }
+      return { text: MEETING_MARK[standing], dim: true }
   }
 }
 
@@ -154,12 +161,18 @@ function headerBlocks(meetings: readonly Meeting[], unreadable: number): Block[]
   return [header, single(`${VIEW}:unreadable`, [{ text: `WARN ${what} in a newer format: update the pane.`, color: 'warning' }], { text: '  ' })]
 }
 
+/** Whether the view shows `meeting`: one still to hold or holding always, one done or dropped only on the clock's day. */
+function isShown(meeting: Meeting, { now, zone }: Clock): boolean {
+  if (meeting.status === 'scheduled' || meeting.status === 'started') return true
+  return dayOf(meeting.at, zone) === dayOf(now, zone)
+}
+
 /**
- * The Meetings view: the header, what the last start press answered, and the meetings, those whose key (meetingKey)
- * `open` holds with their cards open; or why none show. `tasks` are the register's, for a card's task titles; `now` marks
- * the next meeting `now` once its time came.
+ * The Meetings view: the header, what the last start press answered, and the meetings the clock's day shows (isShown),
+ * those whose key (meetingKey) `open` holds with their cards open; or why none show. `tasks` are the register's, for a
+ * card's task titles; the clock's `now` marks the next meeting `now` once its time came.
  */
-export function meetingsBlocks(view: MeetingsView, open: readonly string[], start: MeetingStart | null, tasks: readonly TaskRow[], now: number): Block[] {
+export function meetingsBlocks(view: MeetingsView, open: readonly string[], start: MeetingStart | null, tasks: readonly TaskRow[], clock: Clock): Block[] {
   const told = start === null ? [] : [startBlock(start)]
   switch (view.kind) {
     case 'reading':
@@ -169,12 +182,13 @@ export function meetingsBlocks(view: MeetingsView, open: readonly string[], star
     case 'failed':
       return [...told, single(`${VIEW}:note`, [{ text: `The meetings could not be read: ${view.reason.replace(/\.$/, '')}.`, color: 'warning' }])]
     case 'list': {
-      const header = headerBlocks(view.meetings, view.unreadable)
-      if (view.meetings.length === 0) return [...header, ...told, note(NO_MEETINGS)]
-      const next = view.meetings.find(meeting => meeting.status === 'scheduled' && !meeting.missed)?.id ?? null
+      const shown = view.meetings.filter(meeting => isShown(meeting, clock))
+      const header = headerBlocks(shown, view.unreadable)
+      if (shown.length === 0) return [...header, ...told, note(NO_MEETINGS)]
+      const next = shown.find(meeting => meeting.status === 'scheduled' && !meeting.missed)?.id ?? null
       const opened = new Set(open)
       const byId = new Map(tasks.map(task => [task.id, task]))
-      return [...header, ...told, ...view.meetings.map(meeting => meetingBlock(meeting, standingOf(meeting, next), opened, byId, now))]
+      return [...header, ...told, ...shown.map(meeting => meetingBlock(meeting, standingOf(meeting, next), opened, byId, clock.now))]
     }
   }
 }

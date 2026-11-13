@@ -1,6 +1,6 @@
 // The Meetings view's source (T1359): the team's meeting schedule, read through the teamrig CLI (teamrig-cli.ts) and
-// never from its file, whose format is teamrig's own. `teamrig meeting list --json` prints the scheduled and started
-// meetings by time; this reads each with type guards, counting the ones it cannot read (a newer teamrig's), and writes
+// never from its file, whose format is teamrig's own. `teamrig meeting list --all --json` prints the scheduled and
+// started meetings and those done or dropped in the last week, by time (the view shows the day's: meetings-rows.ts); this reads each with type guards, counting the ones it cannot read (a newer teamrig's), and writes
 // the list only when it changed. It reads every TICK_MS (live.ts) and only while the view shows (a missed mark moves
 // with the clock, and a meeting is added or moved from elsewhere), at once when the person switches to the view, and
 // right after a start. A [Start meeting] press runs `teamrig meeting start <id>`, one at a time, telling what it
@@ -56,7 +56,7 @@ export function parseMeeting(value: unknown): Meeting | null {
   return { id, at: time, atText, minutes, session, with: joining, tasks, about, brief, status, missed }
 }
 
-/** The meetings `meeting list --json` printed and how many of them it could not read; null for output that is no list. */
+/** The meetings `meeting list --all --json` printed and how many of them it could not read; null for output that is no list. */
 export function readMeetingList(stdout: string): { meetings: Meeting[]; unreadable: number } | null {
   let printed: unknown
   try {
@@ -172,7 +172,7 @@ export class LiveMeetings {
     const cli = this.cli
     if (cli.kind === 'missing') return { kind: 'failed', reason: cli.problem }
     try {
-      return listView(await this.ports.run(cliArgv(cli.main, await this.args(['meeting', 'list', '--json'])), LIST_TIMEOUT_MS))
+      return listView(await this.ports.run(cliArgv(cli.main, await this.args(['meeting', 'list', '--all', '--json'])), LIST_TIMEOUT_MS))
     } catch (error) {
       return { kind: 'failed', reason: `teamrig meeting list did not finish: ${messageOf(error)}` }
     }
