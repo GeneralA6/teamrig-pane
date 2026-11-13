@@ -121,7 +121,7 @@ groups (the views, the list's own, a page's steps, the status bar's) and how the
 | A click on a card's `[Note]` or `[Next]`, or Enter on it | In the dock: the owner's Note to the task's session, or its Next after a confirm (see [Note and Next](#note-and-next)) |
 | A click on a file in a card's `Reference` row | Opens that file's page, at the line its ref names (see [A reference file's page](#a-reference-files-page)) |
 | A click on the banner above the prompt | Opens the current task's card under its title; again closes it |
-| A click on the banner's `open in pane` | Opens the pane, minimized or never opened too, at the current task's page; back shows the list at its row |
+| A click on the banner's `open in pane` | Opens the pane, minimized or never opened too, at the current task's page; back shows the list at its row, a status filter or fold hiding it cleared |
 | A click on the previous conversation's title, over the banner | Opens its tasks' whole titles, when it ran and how it opened under it; again closes them |
 | A click on the previous conversation's `open in pane`, over the banner | Opens the pane at that conversation's page in the Conversations view |
 | A click on `all conversations`, over the banner | Opens the pane at the Conversations list |
@@ -142,7 +142,8 @@ status last, else `acme-po · up next · ○ ...` for its first open task in pla
 as the list does, whether the pane is open, minimized or never drawn. A click opens that task's description,
 status, note, proof, priority and due under it; a second click closes it. Its `open in pane` button, at the band's
 right end beside the `[-]`, opens the
-pane, minimized or never opened too, at that task's page, with back to the list at its row. A survey takes the
+pane, minimized or never opened too, at that task's page, with back to the list at its row (a status filter or a
+folded heading that would hide it gives way). A survey takes the
 band while it is up, and its `[-]` (or `ctrl+x ctrl+a`) folds it.
 
 Over the banner, a dim round frame holds the area's previous conversation, so after a `/clear` the band says what
