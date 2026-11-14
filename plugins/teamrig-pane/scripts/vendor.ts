@@ -77,6 +77,7 @@ export const CORE_FILES: readonly string[] = [
   'register/week.ts',
   'rules/keys.ts',
   'sessions/log.ts',
+  'tabs/need-kind.ts',
   'turn-log/entry.ts',
 ]
 

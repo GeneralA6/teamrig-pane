@@ -50,9 +50,15 @@ export const CONFIG_LIMITS = {
   secretPaths: { maxItems: 32, maxLength: 200 },
   secretEnvNames: { maxItems: 16, maxLength: 120 },
   secretCommands: { maxItems: 16, maxLength: 200 },
+  dbWriteEntrypoints: { maxItems: 32 },
+  dbWritePrograms: { maxItems: 16 },
+  dbWriteNodeClients: { maxItems: 16 },
+  dbWriteClientReceivers: { maxItems: 8, maxLength: 40 },
   packageCooldownDays: { min: 0, max: 365 },
   searchNudgeAt: { min: 0, max: 50 },
   turnLogKeepHours: { min: 1, max: 168 },
+  meetingBeforeMinutes: { min: 0, max: 120 },
+  meetingMissedMinutes: { min: 0, max: 120 },
   wakePriority: { min: 1, max: 99 },
   wakeBatchSeconds: { min: 0, max: 3600 },
   wakeMinGapMinutes: { min: 0, max: 1440 },
@@ -60,6 +66,7 @@ export const CONFIG_LIMITS = {
   githubRepos: { maxItems: 20, maxLength: 140 },
   closedDays: { min: 1, max: 365 },
   githubEveryMinutes: { min: 0, max: 1440 },
+  similarThreshold: { min: 0, max: 1 },
   budgetTargetPct: { min: 1, max: 100 },
   budgetReservePct: { min: 0, max: 50 },
   /** 0 turns the floor off; past 50 one team's floor would leave a second less than its own (T2215). */
@@ -76,6 +83,8 @@ export const CONFIG_LIMITS = {
   liftMaxStopPct: { min: 1, max: 100 },
   liftReserveStopPct: { min: 1, max: 100 },
   maxBytesPerHook: { min: 100_000, max: 100_000_000 },
+  budgetResets: { maxItems: 20 },
+  budgetResetCount: { min: 1, max: 20 },
   hiringReviewDays: { min: 1, max: 90 },
   hiringResumeMaxTokens: { min: 10_000, max: 1_000_000 },
   hiringResumeMaxIdleDays: { min: 1, max: 90 },
@@ -112,6 +121,13 @@ export const CONFIG_LIMITS = {
   stablePeriodMinMinutes: { min: 1, max: 1440 },
   resetBlackoutHours: { min: 1, max: 48 },
   execPath: { maxItems: 16, maxLength: 260 },
+  /** Under 0.1 the dimming goes unseen; past 0.9 the rest of the screen can no longer be read behind it (T2517). */
+  spotlightDim: { min: 0.1, max: 0.9 },
+  /**
+   * Under 10 s the dimming is back before the owner has read the break-through (the overlay checks every 2 s); past an
+   * hour the meeting has lost its spotlight for good (T2524).
+   */
+  spotlightBreakthroughSeconds: { min: 10, max: 3600 },
 } as const;
 
 /**
@@ -123,6 +139,40 @@ export const RULE_CONFLICT_LIMITS = {
   textMaxLength: 300,
   reasonMaxLength: 200,
 } as const;
+
+/** The longest `meeting.statusLine.heldText`: it is appended to every other tab's status line, which must stay one row. */
+export const MEETING_HELD_TEXT_MAX_LENGTH = 40;
+
+/** `meeting.statusLine.colour`: a 24-bit `#rrggbb` colour, the form the status line's ANSI foreground code takes. */
+export const MEETING_COLOUR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+
+/** Bounds on one data script the db-write guard knows (`dbWriteGuard.entrypoints`). */
+export const DB_WRITE_ENTRYPOINT_LIMITS = {
+  pathMaxLength: 260,
+  applyFlagsMaxItems: 4,
+  applyFlagMaxLength: 40,
+} as const;
+
+/**
+ * Bounds on the names in the db-write guard's object lists (`dbWriteGuard.programs[].name`,
+ * `dbWriteGuard.nodeClients[].module`); a `maxLength` in CONFIG_LIMITS bounds a list's string items instead.
+ */
+export const DB_WRITE_NAME_LIMITS = {
+  programNameMaxLength: 60,
+  nodeModuleMaxLength: 120,
+} as const;
+
+/** An entrypoint's apply flag as a line spells it: `--apply`, `-y`. */
+export const APPLY_FLAG_PATTERN = /^--?[A-Za-z][\w-]*$/;
+
+/** A database program's name as a line runs it (`dbWriteGuard.programs[].name`): `psql`, `my-cli`, `tool.exe`. */
+export const DB_PROGRAM_NAME_PATTERN = /^[A-Za-z0-9][\w.+-]*$/;
+
+/** A Node client module as code loads it (`dbWriteGuard.nodeClients[].module`): `store`, `@scope/store`. */
+export const NODE_MODULE_PATTERN = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/;
+
+/** A word inside a receiver's name that marks a key-value client (`dbWriteGuard.clientReceivers`): `cache`. */
+export const CLIENT_RECEIVER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 
 /** The longest `budget.account` name, on one line. */
 export const BUDGET_ACCOUNT_MAX_LENGTH = 100;

@@ -9,6 +9,7 @@ import type {
   CommitGuardConfig,
   CommitsConfig,
   ContextFilesConfig,
+  DbWriteGuardConfig,
   DecisionsConfig,
   FocusConfig,
   GithubConfig,
@@ -34,8 +35,11 @@ import type {
   StatusLineConfig,
   TestsConfig,
   TurnLogConfig,
+  NeedsYouConfig,
+  MeetingNoticesConfig,
   WakeConfig,
   StablePeriodsConfig,
+  MeetingConfig,
 } from './types.ts';
 
 /** Defaults for every key except the roster (`sessions`, `roles.lead`), which each team supplies. */
@@ -145,6 +149,13 @@ export const DEFAULT_PROMPTS: PromptsConfig = { hookAsks: 'ask', routeAllow: 'on
 /** Refused by default: a secret printed into a session lands in its transcript and every later prompt (T660, 10-19). */
 export const DEFAULT_SECRET_GUARD: SecretGuardConfig = { secretReads: 'deny', writes: 'deny', paths: [], envNames: [], commands: [], redact: true };
 
+/**
+ * Asked by default: a hand-run write is sometimes the right step, once the owner has seen its counts or preview, so
+ * the human answers it rather than the guard refusing it (T661). The SQL clients are built in; no other program, Node
+ * client or script is the guard's until a team names it.
+ */
+export const DEFAULT_DB_WRITE_GUARD: DbWriteGuardConfig = { writes: 'ask', entrypoints: [], programs: [], nodeClients: [], clientReceivers: [] };
+
 /** Off, and trusting no prefix, until a team opts in. */
 export const DEFAULT_READONLY_SHELL: ReadonlyShellConfig = { enabled: false, allowPrefixes: [] };
 
@@ -199,11 +210,13 @@ export const DEFAULT_COMMITS: CommitsConfig = {
  * Neutral on purpose: off, no allowance cap, every session an equal share, and past the line only
  * the warning lines, so a team that turns it on is measured and shown before anything acts.
  * The optional keys (main lead, weekly limit, extra usage's W per dollar, reset, quiet hours, snapshot folder) stay
- * unset. Each team with planned work gets at least 10% of a weekly split, enough for one slice (owner order T2215).
+ * unset, and the account holds no resets beside its weekly one. Each team with planned work gets at least 10% of a weekly
+ * split, enough for one slice (owner order T2215).
  */
 export const DEFAULT_BUDGET: BudgetConfig = {
   enabled: false,
   subagentWeight: 1,
+  resets: [],
   targetPct: 99.5,
   reservePct: 0.5,
   shareFloorPct: 10,
@@ -239,6 +252,18 @@ export const DEFAULT_LOOPS: LoopsConfig = { chainNudgeAt: 3 };
 export const DEFAULT_LEAD_BOUNDARY: LeadBoundaryConfig = { enabled: true, ownPaths: [], searchNudgeAt: 3 };
 /** On, for a day: what a tab showed stays readable through a night of refreshes. */
 export const DEFAULT_TURN_LOG: TurnLogConfig = { enabled: true, keepHours: 24 };
+/** On for every ask but an API error, which needs no answer; no OS notification (the owner's order, T2511). */
+export const DEFAULT_NEEDS_YOU: NeedsYouConfig = { enabled: true, kinds: ['permission', 'question', 'elicitation', 'decision'], osToast: false };
+/** The owner's order (T2405): 10 minutes ahead and at the slot, and a missed alert 5 minutes in, on every channel. */
+export const DEFAULT_MEETING_NOTICES: MeetingNoticesConfig = {
+  enabled: true,
+  beforeMinutes: 10,
+  atStart: true,
+  missedAfterMinutes: 5,
+  osToast: true,
+  tabToast: true,
+  leadInbox: true,
+};
 
 /**
  * On, for p0 and p1 only. In one team of 12 sessions, others handed a session 3 to 6 p1 tasks a day once its register
@@ -249,6 +274,21 @@ export const DEFAULT_TURN_LOG: TurnLogConfig = { enabled: true, keepHours: 24 };
  */
 export const DEFAULT_WAKE: WakeConfig = { enabled: true, priority: 1, batchSeconds: 120, minGapMinutes: 15 };
 
+/**
+ * The agenda panel is on: it shows only in the lead's tab while a meeting is open, so it costs no other tab anything.
+ * The spotlight is on too, by the owner's call (T2523): it keeps the owner's eye on the meeting, lets every click
+ * through and lifts when the meeting ends; a team sets it false to stop it. At 0.6 the rest of the screen stays
+ * readable behind it. A break-through lifts it for two minutes: long enough to read the message and answer it, short
+ * enough that the meeting gets its focus back on its own (T2524). The status line marks are on: they only colour the
+ * lead's line and add a few words to the others' while a meeting is open (T2513); the magenta reads on dark and light
+ * terminal themes alike.
+ */
+export const DEFAULT_MEETING: MeetingConfig = {
+  panel: { enabled: true },
+  spotlight: { enabled: true, dim: 0.6, breakthroughSeconds: 120 },
+  statusLine: { enabled: true, colour: '#d75fd7', heldText: 'meeting on: held' },
+};
+
 /** About a screenful: two or three failing tests with their errors and first stack frames. */
 export const DEFAULT_TESTS: TestsConfig = { maxFailureChars: 4000 };
 
@@ -258,13 +298,15 @@ export const DEFAULT_TESTS: TestsConfig = { maxFailureChars: 4000 };
  * per further hundred open, or recently changed closed, issues). An outsider's issue waits for the `teamrig` label,
  * named after the tool so it does not clash with a repository's own triage labels.
  */
-export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {}, closedDays: 14, everyMinutes: 15, acceptLabel: 'teamrig' };
+export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {}, closedDays: 14, everyMinutes: 15, acceptLabel: 'teamrig', similarThreshold: 0.35 };
 
 /**
  * Claude Code compacts a 200k window at about 167k, so 120k refreshes before that; every 3 tasks catches a
  * session that grows slowly, from 80k up. Measured over 8 days of 12 sessions: about 9 refreshes a day in all.
- * The user types /clear for the fresh start (`autoRestart` off): an automatic /clear wiped the screen while the
- * user was still reading the last reply, still had its question to answer, or was away. While a handover is
+ * The user types /clear for the fresh start of a member (`autoRestart` 'lead'): an automatic /clear wiped the screen
+ * while the user was still reading the last reply, still had its question to answer, or was away. The lead restarts
+ * on its own: with it off, a lead grew unasked through the night, and the mod's activity hold and countdown keep the
+ * /clear from landing under the user. While a handover is
  * pending, the compaction at 167k waits up to 185k: 18k of room to finish the step and write it, and 15k under the
  * window for a large tool result. A handover over 20 KB is refused: on 10-24 most were 4 to 8 KB, and one appended
  * to section by section (29 of them) reached 88 KB, which its every fresh start read whole.
@@ -275,7 +317,7 @@ export const DEFAULT_REFRESH: RefreshConfig = {
   everyTasks: 3,
   everyTasksMinTokens: 80_000,
   tabTitle: true,
-  autoRestart: false,
+  autoRestart: 'lead',
   restartDelaySeconds: 15,
   holdAfterActivityMinutes: 30,
   countdownSeconds: 20,

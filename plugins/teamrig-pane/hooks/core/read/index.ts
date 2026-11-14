@@ -96,6 +96,7 @@ export {
 export {
   asksOwner,
   deferredUntil,
+  isProofAsk,
   isUngated,
   ownerCardsBySession,
   ownerLater,

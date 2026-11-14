@@ -4,12 +4,13 @@ import { deployTargetsOf } from '../delivery/targets.ts';
 import { ADDRESS_PATTERN, splitAddress } from '../core/address.ts';
 import { isRecord, type JsonRecord } from '../core/guards.ts';
 import { isReservedName, NAME_PATTERN, NAME_RULE, RESERVED_NAMES } from '../core/ids.ts';
-import { isMinuteInSpan, utcMinuteOf } from '../core/time.ts';
+import { isMinuteInSpan, parseUtcDeadline, utcMinuteOf } from '../core/time.ts';
 import { TimeZone } from '../core/zone.ts';
 import { FOLLOWUP_STATUSES, isTaskStatus, LEGACY_WAITING_HINT, LEGACY_WAITING_STATUS, REVIEW_STATUSES, SESSION_NAME, TASK_STATUSES, WORK_CLASS_NAME, type TaskStatus } from '../register/model.ts';
 import { KEEP_RULE_PATTERN } from '../permissions/allow-rules.ts';
 import { PREFIX_PATTERN } from '../readonly-shell/rules.ts';
 import { CORE_RULE_KEYS, isCoreRuleKey } from '../rules/keys.ts';
+import { isNeedKind, NEED_KINDS, type NeedKind } from '../tabs/need-kind.ts';
 import {
   DEFAULT_ALERTS,
   DEFAULT_BUDGET,
@@ -27,6 +28,8 @@ import {
   DEFAULT_LOCK,
   DEFAULT_LEAD_BOUNDARY,
   DEFAULT_TURN_LOG,
+  DEFAULT_NEEDS_YOU,
+  DEFAULT_MEETING_NOTICES,
   DEFAULT_LOOPS,
   DEFAULT_MERGE_REMOTE,
   DEFAULT_MESSAGES,
@@ -35,6 +38,7 @@ import {
   DEFAULT_OPEN,
   DEFAULT_OWNER_GATES,
   DEFAULT_COMMIT_GUARD,
+  DEFAULT_DB_WRITE_GUARD,
   DEFAULT_SECRET_GUARD,
   DEFAULT_PACKAGE_GUARD,
   DEFAULT_PERMISSIONS,
@@ -51,19 +55,42 @@ import {
   DEFAULT_TESTS,
   DEFAULT_WAKE,
   DEFAULT_STABLE_PERIODS,
+  DEFAULT_MEETING,
   QUEUE_TTL_MARGIN_MINUTES,
 } from './defaults.ts';
 import { isEffort, isModel } from './launch.ts';
-import { BUDGET_ACCOUNT_MAX_LENGTH, CONFIG_LIMITS, GITHUB_LABEL_MAX_LENGTH, REVIEW_PATH_LIMITS, RULE_CONFLICT_LIMITS } from './limits.ts';
+import {
+  APPLY_FLAG_PATTERN,
+  BUDGET_ACCOUNT_MAX_LENGTH,
+  CLIENT_RECEIVER_PATTERN,
+  CONFIG_LIMITS,
+  DB_PROGRAM_NAME_PATTERN,
+  DB_WRITE_ENTRYPOINT_LIMITS,
+  DB_WRITE_NAME_LIMITS,
+  GITHUB_LABEL_MAX_LENGTH,
+  MEETING_COLOUR_PATTERN,
+  MEETING_HELD_TEXT_MAX_LENGTH,
+  NODE_MODULE_PATTERN,
+  REVIEW_PATH_LIMITS,
+  RULE_CONFLICT_LIMITS,
+} from './limits.ts';
 import { HIRE_CAP_DROPPED, IDLE_RETIRE_DROPPED } from './migrate.ts';
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
 import {
+  AUTO_RESTART_LEAD,
+  type AutoRestart,
   AD_HOC_RUNNERS,
   PACKAGE_INSTALLS,
   BURST_POLICIES,
   CONFLICT_WINNERS,
+  DB_CLIENT_VOCABULARIES,
+  DB_PROGRAM_SHAPES,
+  DB_WRITES,
   ESCALATIONS,
   GOALS_MODES,
+  isDbClientVocabulary,
+  isDbProgramShape,
+  isDbWrites,
   HIRING_POLICIES,
   isAdHocRunners,
   isPackageInstalls,
@@ -86,9 +113,12 @@ import {
   isSecretWrites,
   isSkipHooks,
   isTerminalChoice,
+  isResetKind,
   isReviewMode,
   isVerifyGate,
   isWeekday,
+  RESET_KINDS,
+  type ResetStock,
   HOOK_ASKS,
   IDLE_MODES,
   OTHER_AREA_LISTINGS,
@@ -137,6 +167,10 @@ import {
   type PromptsConfig,
   type QuietHours,
   type SecretGuardConfig,
+  type DbWriteEntrypoint,
+  type DbWriteGuardConfig,
+  type DbWriteNodeClient,
+  type DbWriteProgram,
   type SkipHooks,
   type ReadonlyShellConfig,
   type ScaleOutConfig,
@@ -149,9 +183,12 @@ import {
   type FocusScoreConfig,
   isWipMode,
   WIP_MODES,
+  type MeetingConfig,
   type PriorityConfig,
   type TeamLink,
   type TurnLogConfig,
+  type NeedsYouConfig,
+  type MeetingNoticesConfig,
   type WakeConfig,
   type StablePeriodsConfig,
 } from './types.ts';
@@ -497,6 +534,7 @@ export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse
     commitGuard: { skipHooks: parseSkipHooks(read, read.section(raw, 'commitGuard', '')) },
     prompts: parsePrompts(read, read.section(raw, 'prompts', '')),
     secretGuard: parseSecretGuard(read, read.section(raw, 'secretGuard', '')),
+    dbWriteGuard: parseDbWriteGuard(read, read.section(raw, 'dbWriteGuard', '')),
     commits: parseCommits(read, read.section(raw, 'commits', '')),
     delivery: parseDelivery(read, read.section(raw, 'delivery', '')),
     budget,
@@ -516,8 +554,11 @@ export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse
       dedicatedOwners: read.stringList(decisions, 'dedicatedOwners', 'decisions', DEFAULT_DECISIONS.dedicatedOwners, isSessionName, CONFIG_LIMITS.dedicatedOwners.maxItems),
     },
     tabStatus: { enabled: read.boolean(tabStatus, 'enabled', 'tabStatus', false) },
+    needsYou: parseNeedsYou(read, read.section(raw, 'needsYou', '')),
     pickerGuard: { enabled: read.boolean(pickerGuard, 'enabled', 'pickerGuard', true) },
+    meeting: parseMeeting(read, read.section(raw, 'meeting', '')),
     turnLog: parseTurnLog(read, read.section(raw, 'turnLog', '')),
+    meetingNotices: parseMeetingNotices(read, read.section(raw, 'meetingNotices', '')),
     readonlyShell: parseReadonlyShell(read, read.section(raw, 'readonlyShell', '')),
     permissions: parsePermissions(read, read.section(raw, 'permissions', '')),
     refresh: parseRefresh(read, read.section(raw, 'refresh', '')),
@@ -532,11 +573,68 @@ export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse
   return { config, issues: read.issues };
 }
 
+/**
+ * `meeting`: the agenda panel's switch, the spotlight's with its dim, bounded so the screen stays readable, and how
+ * long a break-through lifts it, and the status line's marks, with a colour the ANSI code can take and a held text
+ * that keeps the line one row.
+ */
+function parseMeeting(read: ConfigReader, raw: JsonRecord): MeetingConfig {
+  const spotlight = read.section(raw, 'spotlight', 'meeting');
+  const statusLine = read.section(raw, 'statusLine', 'meeting');
+  const defaults = DEFAULT_MEETING.statusLine;
+  return {
+    statusLine: {
+      enabled: read.boolean(statusLine, 'enabled', 'meeting.statusLine', defaults.enabled),
+      colour: read.string(statusLine, 'colour', 'meeting.statusLine', defaults.colour, (value) => (MEETING_COLOUR_PATTERN.test(value) ? undefined : 'expected a #rrggbb colour')),
+      heldText: read.string(statusLine, 'heldText', 'meeting.statusLine', defaults.heldText, shortLine(MEETING_HELD_TEXT_MAX_LENGTH)),
+    },
+    panel: { enabled: read.boolean(read.section(raw, 'panel', 'meeting'), 'enabled', 'meeting.panel', DEFAULT_MEETING.panel.enabled) },
+    spotlight: {
+      enabled: read.boolean(spotlight, 'enabled', 'meeting.spotlight', DEFAULT_MEETING.spotlight.enabled),
+      dim: read.number(spotlight, 'dim', 'meeting.spotlight', DEFAULT_MEETING.spotlight.dim, CONFIG_LIMITS.spotlightDim),
+      breakthroughSeconds: read.integer(
+        spotlight,
+        'breakthroughSeconds',
+        'meeting.spotlight',
+        DEFAULT_MEETING.spotlight.breakthroughSeconds,
+        CONFIG_LIMITS.spotlightBreakthroughSeconds,
+      ),
+    },
+  };
+}
+
 /** `turnLog`: kept from an hour to a week. */
 function parseTurnLog(read: ConfigReader, raw: JsonRecord): TurnLogConfig {
   return {
     enabled: read.boolean(raw, 'enabled', 'turnLog', DEFAULT_TURN_LOG.enabled),
     keepHours: read.integer(raw, 'keepHours', 'turnLog', DEFAULT_TURN_LOG.keepHours, CONFIG_LIMITS.turnLogKeepHours),
+  };
+}
+
+/** `needsYou`: each kind one of `NEED_KINDS`; an unknown one is an issue and left out. */
+function parseNeedsYou(read: ConfigReader, raw: JsonRecord): NeedsYouConfig {
+  const kind = (value: unknown, itemPath: string): NeedKind | undefined => {
+    const text = read.stringItem(value, itemPath, oneOf(NEED_KINDS));
+    return text !== undefined && isNeedKind(text) ? text : undefined;
+  };
+  return {
+    enabled: read.boolean(raw, 'enabled', 'needsYou', DEFAULT_NEEDS_YOU.enabled),
+    kinds: read.list(raw, 'kinds', 'needsYou', DEFAULT_NEEDS_YOU.kinds, kind, NEED_KINDS.length),
+    osToast: read.boolean(raw, 'osToast', 'needsYou', DEFAULT_NEEDS_YOU.osToast),
+  };
+}
+
+/** `meetingNotices`: each lead time up to two hours, 0 turning its notice off. */
+function parseMeetingNotices(read: ConfigReader, raw: JsonRecord): MeetingNoticesConfig {
+  const d = DEFAULT_MEETING_NOTICES;
+  return {
+    enabled: read.boolean(raw, 'enabled', 'meetingNotices', d.enabled),
+    beforeMinutes: read.integer(raw, 'beforeMinutes', 'meetingNotices', d.beforeMinutes, CONFIG_LIMITS.meetingBeforeMinutes),
+    atStart: read.boolean(raw, 'atStart', 'meetingNotices', d.atStart),
+    missedAfterMinutes: read.integer(raw, 'missedAfterMinutes', 'meetingNotices', d.missedAfterMinutes, CONFIG_LIMITS.meetingMissedMinutes),
+    osToast: read.boolean(raw, 'osToast', 'meetingNotices', d.osToast),
+    tabToast: read.boolean(raw, 'tabToast', 'meetingNotices', d.tabToast),
+    leadInbox: read.boolean(raw, 'leadInbox', 'meetingNotices', d.leadInbox),
   };
 }
 
@@ -602,6 +700,7 @@ function parseGithub(read: ConfigReader, raw: JsonRecord, sessions: readonly str
     closedDays: read.integer(raw, 'closedDays', 'github', DEFAULT_GITHUB.closedDays, CONFIG_LIMITS.closedDays),
     everyMinutes: read.integer(raw, 'everyMinutes', 'github', DEFAULT_GITHUB.everyMinutes, CONFIG_LIMITS.githubEveryMinutes),
     acceptLabel: read.string(raw, 'acceptLabel', 'github', DEFAULT_GITHUB.acceptLabel, shortLine(GITHUB_LABEL_MAX_LENGTH)),
+    similarThreshold: read.number(raw, 'similarThreshold', 'github', DEFAULT_GITHUB.similarThreshold, CONFIG_LIMITS.similarThreshold),
   };
 }
 
@@ -901,6 +1000,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
   const weeklyLimitW = read.optionalInteger(raw, 'weeklyLimitW', path, CONFIG_LIMITS.weeklyLimitW) ?? inherited?.weeklyLimitW;
   const extraWPerUsd = read.optionalInteger(raw, 'extraWPerUsd', path, CONFIG_LIMITS.extraWPerUsd) ?? inherited?.extraWPerUsd;
   const reset = parseBudgetReset(read, raw) ?? inherited?.reset;
+  const resets = raw['resets'] === undefined ? (inherited?.resets ?? defaults.resets) : parseResetStocks(read, raw, defaults.resets);
   const why = "the team's daily budget is the pace, recomputed at every reading from what is left of the week";
   read.dropped(raw, 'dailyPct', path, why);
   read.dropped(raw, 'maxDailyPct', path, why);
@@ -916,6 +1016,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
     subagentWeight: read.number(raw, 'subagentWeight', path, inherited?.subagentWeight ?? defaults.subagentWeight, CONFIG_LIMITS.subagentWeight),
     ...(extraWPerUsd === undefined ? {} : { extraWPerUsd }),
     ...(reset === undefined ? {} : { reset }),
+    resets,
     targetPct,
     reservePct,
     shareFloorPct: read.integer(raw, 'shareFloorPct', path, defaults.shareFloorPct, CONFIG_LIMITS.shareFloorPct),
@@ -954,6 +1055,41 @@ function parseBudgetReset(read: ConfigReader, raw: JsonRecord): BudgetReset | un
   const weekday = read.requiredString(section, 'weekday', path, oneOf(WEEKDAYS));
   const timeUtc = read.requiredString(section, 'timeUtc', path, isUtcTime);
   return isWeekday(weekday) && timeUtc !== '' ? { weekday, timeUtc } : undefined;
+}
+
+/** A reset grant's note: one short line, such as where it came from. */
+const RESET_NOTE_MAX_LENGTH = 100;
+
+/** A UTC minute as YYYY-MM-DD HH:MM, a real day and time. */
+const isUtcMinute: Check<string> = (text) =>
+  /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(text) && parseUtcDeadline(text) !== undefined ? undefined : 'expected a UTC time as YYYY-MM-DD HH:MM';
+
+/** `budget.resets`: each grant read whole, or dropped with its issues; more uses than the grant holds is an issue. */
+function parseResetStocks(read: ConfigReader, raw: JsonRecord, fallback: readonly ResetStock[]): readonly ResetStock[] {
+  return read.list(raw, 'resets', 'budget', fallback, (value, itemPath) => parseResetStock(read, value, itemPath), CONFIG_LIMITS.budgetResets.maxItems);
+}
+
+function parseResetStock(read: ConfigReader, value: unknown, path: string): ResetStock | undefined {
+  const section = read.objectItem(value, path);
+  if (section === undefined) {
+    return undefined;
+  }
+  const issues = read.issues.length;
+  const kind = read.requiredString(section, 'kind', path, oneOf(RESET_KINDS));
+  const count = read.optionalInteger(section, 'count', path, CONFIG_LIMITS.budgetResetCount);
+  if (section['count'] === undefined) {
+    read.report(`${path}.count`, 'is required');
+  }
+  const expiresUtc = read.requiredString(section, 'expiresUtc', path, isUtcMinute);
+  const usedUtc = read.stringList(section, 'usedUtc', path, [], isUtcMinute, CONFIG_LIMITS.budgetResetCount.max);
+  const note = read.optionalString(section, 'note', path, shortLine(RESET_NOTE_MAX_LENGTH));
+  if (count !== undefined && usedUtc.length > count) {
+    read.report(`${path}.usedUtc`, `lists ${usedUtc.length} uses of a grant of ${count}`);
+  }
+  if (read.issues.length > issues || !isResetKind(kind) || count === undefined) {
+    return undefined;
+  }
+  return { kind, count, expiresUtc, usedUtc, ...(note === undefined ? {} : { note }) };
 }
 
 /** `budget.quietHours`: a start, an end and the action, or nothing. */
@@ -1501,6 +1637,75 @@ function keepablePattern(keeps: string): Check<string> {
   };
 }
 
+function parseDbWriteGuard(read: ConfigReader, raw: JsonRecord): DbWriteGuardConfig {
+  const path = 'dbWriteGuard';
+  const defaults = DEFAULT_DB_WRITE_GUARD;
+  const writes = read.string(raw, 'writes', path, defaults.writes, oneOf(DB_WRITES));
+  const { dbWriteEntrypoints, dbWritePrograms, dbWriteNodeClients, dbWriteClientReceivers } = CONFIG_LIMITS;
+  return {
+    writes: isDbWrites(writes) ? writes : defaults.writes,
+    entrypoints: read.list(raw, 'entrypoints', path, defaults.entrypoints, (value, itemPath) => parseDbWriteEntrypoint(read, value, itemPath), dbWriteEntrypoints.maxItems),
+    programs: read.list(raw, 'programs', path, defaults.programs, (value, itemPath) => parseDbWriteProgram(read, value, itemPath), dbWritePrograms.maxItems),
+    nodeClients: read.list(raw, 'nodeClients', path, defaults.nodeClients, (value, itemPath) => parseDbWriteNodeClient(read, value, itemPath), dbWriteNodeClients.maxItems),
+    clientReceivers: read.stringList(
+      raw,
+      'clientReceivers',
+      path,
+      defaults.clientReceivers,
+      shortLine(dbWriteClientReceivers.maxLength, matching(CLIENT_RECEIVER_PATTERN, 'expected a word of letters, digits, _ or $, such as cache')),
+      dbWriteClientReceivers.maxItems,
+    ),
+  };
+}
+
+/** A check that `pattern` matches the whole value, else `expected`. */
+function matching(pattern: RegExp, expected: string): Check<string> {
+  return (value) => (pattern.test(value) ? undefined : expected);
+}
+
+function parseDbWriteEntrypoint(read: ConfigReader, value: unknown, path: string): DbWriteEntrypoint | undefined {
+  const entrypoint = read.objectItem(value, path);
+  if (entrypoint === undefined) {
+    return undefined;
+  }
+  const before = read.issues.length;
+  const { pathMaxLength, applyFlagsMaxItems, applyFlagMaxLength } = DB_WRITE_ENTRYPOINT_LIMITS;
+  const scriptPath = read.requiredString(entrypoint, 'path', path, shortLine(pathMaxLength));
+  if (entrypoint['applyFlags'] === undefined) {
+    read.report(`${path}.applyFlags`, 'is required');
+  }
+  const isApplyFlag = matching(APPLY_FLAG_PATTERN, 'expected a flag such as --apply');
+  const applyFlags = read.stringList(entrypoint, 'applyFlags', path, [], shortLine(applyFlagMaxLength, isApplyFlag), applyFlagsMaxItems);
+  if (Array.isArray(entrypoint['applyFlags']) && entrypoint['applyFlags'].length === 0) {
+    read.report(`${path}.applyFlags`, 'expected at least one flag, such as --apply');
+  }
+  return read.issues.length === before ? { path: scriptPath, applyFlags } : undefined;
+}
+
+function parseDbWriteProgram(read: ConfigReader, value: unknown, path: string): DbWriteProgram | undefined {
+  const program = read.objectItem(value, path);
+  if (program === undefined) {
+    return undefined;
+  }
+  const before = read.issues.length;
+  const isName = matching(DB_PROGRAM_NAME_PATTERN, 'expected a program name such as my-cli, no path');
+  const name = read.requiredString(program, 'name', path, shortLine(DB_WRITE_NAME_LIMITS.programNameMaxLength, isName));
+  const reads = read.requiredString(program, 'reads', path, oneOf(DB_PROGRAM_SHAPES));
+  return read.issues.length === before && isDbProgramShape(reads) ? { name, reads } : undefined;
+}
+
+function parseDbWriteNodeClient(read: ConfigReader, value: unknown, path: string): DbWriteNodeClient | undefined {
+  const client = read.objectItem(value, path);
+  if (client === undefined) {
+    return undefined;
+  }
+  const before = read.issues.length;
+  const isModule = matching(NODE_MODULE_PATTERN, 'expected a package name such as store or @scope/store');
+  const module = read.requiredString(client, 'module', path, shortLine(DB_WRITE_NAME_LIMITS.nodeModuleMaxLength, isModule));
+  const vocabulary = read.requiredString(client, 'vocabulary', path, oneOf(DB_CLIENT_VOCABULARIES));
+  return read.issues.length === before && isDbClientVocabulary(vocabulary) ? { module, vocabulary } : undefined;
+}
+
 function parseReadonlyShell(read: ConfigReader, raw: JsonRecord): ReadonlyShellConfig {
   const { maxItems, maxLength } = CONFIG_LIMITS.readonlyShellPrefixes;
   return {
@@ -1562,6 +1767,16 @@ const HANDOVER_MAX_BYTES = { min: 0, max: 1_000_000 } as const;
 /** A program and its arguments. */
 const END_COMMAND_MAX_ITEMS = 16;
 
+/** `refresh.autoRestart`: true, false or `lead`; anything else is an issue and takes the default. */
+function autoRestartIn(read: ConfigReader, raw: JsonRecord, path: string, fallback: AutoRestart): AutoRestart {
+  const value = raw['autoRestart'];
+  if (value === undefined || value === AUTO_RESTART_LEAD || typeof value === 'boolean') {
+    return value ?? fallback;
+  }
+  read.report(`${path}.autoRestart`, `expected true, false or "${AUTO_RESTART_LEAD}", got ${describe(value)}`);
+  return fallback;
+}
+
 function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
   const path = 'refresh';
   const defaults = DEFAULT_REFRESH;
@@ -1572,7 +1787,7 @@ function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
     everyTasks: read.integer(raw, 'everyTasks', path, defaults.everyTasks, REFRESH_TASKS),
     everyTasksMinTokens: read.integer(raw, 'everyTasksMinTokens', path, defaults.everyTasksMinTokens, REFRESH_TOKENS),
     tabTitle: read.boolean(raw, 'tabTitle', path, defaults.tabTitle),
-    autoRestart: read.boolean(raw, 'autoRestart', path, defaults.autoRestart),
+    autoRestart: autoRestartIn(read, raw, path, defaults.autoRestart),
     restartDelaySeconds: read.integer(raw, 'restartDelaySeconds', path, defaults.restartDelaySeconds, RESTART_DELAY_SECONDS),
     holdAfterActivityMinutes: read.integer(raw, 'holdAfterActivityMinutes', path, defaults.holdAfterActivityMinutes, HOLD_AFTER_ACTIVITY_MINUTES),
     countdownSeconds: read.integer(raw, 'countdownSeconds', path, defaults.countdownSeconds, COUNTDOWN_SECONDS),

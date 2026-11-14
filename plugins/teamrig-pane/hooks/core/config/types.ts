@@ -2,6 +2,7 @@
 import type { TaskStatus } from '../register/model.ts';
 import type { CoreRuleKey } from '../rules/keys.ts';
 import type { AdmissionMode } from '../delivery/admission.ts';
+import type { NeedKind } from '../tabs/need-kind.ts';
 
 /** The config format this code reads and writes. Older files are migrated in memory on load. */
 export const CONFIG_VERSION = 8;
@@ -376,8 +377,9 @@ export interface SecretGuardConfig {
 /**
  * A call that would print a secret: a secret file's content (`cat .env`, `Get-Content ~/.npmrc`, the Read tool), the
  * whole environment (`env`, `printenv`, `Get-ChildItem Env:`), a secret variable (`echo $GITHUB_TOKEN`), a
- * Kubernetes secret's data or a dump command's output (`kubectl config view --raw`): `deny` refuses it, `ask` asks the
- * human, `allow` lets it run.
+ * Kubernetes secret's data or a dump command's output (`kubectl config view --raw`), and a shell line that reads a saved
+ * credential out of the host's store, printed or not (`gh auth token`, `git credential fill`, `CredRead`):
+ * `deny` refuses it, `ask` asks the human, `allow` lets it run.
  */
 export type SecretReads = 'deny' | 'ask' | 'allow';
 
@@ -387,6 +389,67 @@ export type SecretReads = 'deny' | 'ask' | 'allow';
  * `deny` refuses it, `ask` asks the human, `allow` lets it run.
  */
 export type SecretWrites = 'deny' | 'ask' | 'allow';
+
+/**
+ * The hook that asks before a Bash or PowerShell call writes to a database by hand (hook-db-write-guard). The SQL
+ * clients are built in; a team adds the programs and Node client modules its own stores take, since a store named by
+ * its product is the team's to add. A team's list only adds: a missing or broken key never switches a built-in off.
+ */
+export interface DbWriteGuardConfig {
+  /** What a Bash or PowerShell call that writes to a database by hand does. */
+  readonly writes: DbWrites;
+  /** The team's data scripts that write only when one of their apply flags is on the line. */
+  readonly entrypoints: readonly DbWriteEntrypoint[];
+  /** The team's database programs, each by the arguments it reads, read before the built-in SQL clients. */
+  readonly programs: readonly DbWriteProgram[];
+  /** The Node client modules whose calls write, read in `node -e` code, a script file or stdin that loads one. */
+  readonly nodeClients: readonly DbWriteNodeClient[];
+  /**
+   * Words that mark a key-value client in Node code, matched in any case inside a receiver's name, added to the
+   * built-in `client`: a call named like a shared method (`set`, `rename`, `copy`) writes only on such a receiver.
+   */
+  readonly clientReceivers: readonly string[];
+}
+
+/**
+ * A hand-run database write: a SQL client or a team's database program whose code writes, a Node script or `node -e`
+ * whose team-named client writes, a container or remote host running one, or an entrypoint run with an apply flag:
+ * `deny` refuses it, `ask` asks the human, `allow` lets it run.
+ */
+export type DbWrites = 'deny' | 'ask' | 'allow';
+
+/** A script a team runs on purpose, which writes only when one of its apply flags is on the line. */
+export interface DbWriteEntrypoint {
+  /** The script's path, matched against the end of the path a line runs: `scripts/backfill.ts`. */
+  readonly path: string;
+  /** The flags that make it write, `--apply` or `--apply=yes`; without one it is a dry run whatever its code holds. */
+  readonly applyFlags: readonly string[];
+}
+
+/**
+ * How a database program takes the code it runs: `document-shell` (`--eval` code, `-f` files, a positional script
+ * file; document methods), `key-value-cli` (a command word, `EVAL` scripts, `--eval` files, stdin lines),
+ * `sql-command` (`-c`, `-f`, stdin), `sql-execute` (`-e`, stdin) or `sql-database-file` (a database file, then SQL;
+ * `-cmd`, stdin).
+ */
+export const DB_PROGRAM_SHAPES = ['document-shell', 'key-value-cli', 'sql-command', 'sql-execute', 'sql-database-file'] as const;
+export type DbProgramShape = (typeof DB_PROGRAM_SHAPES)[number];
+
+/** A database program the guard reads, by its name as a line runs it and the arguments it takes. */
+export interface DbWriteProgram {
+  readonly name: string;
+  readonly reads: DbProgramShape;
+}
+
+/** The write vocabulary of a Node client: a document store's methods, or a key-value store's commands. */
+export const DB_CLIENT_VOCABULARIES = ['document', 'key-value'] as const;
+export type DbClientVocabulary = (typeof DB_CLIENT_VOCABULARIES)[number];
+
+/** A Node client module (`module`, or a `module/sub` path under it) and the write vocabulary of its calls. */
+export interface DbWriteNodeClient {
+  readonly module: string;
+  readonly vocabulary: DbClientVocabulary;
+}
 
 /**
  * The opt-in hook that lets a Bash or PowerShell line run without a permission prompt when every command in it
@@ -458,6 +521,20 @@ export function isSecretWrites(value: unknown): value is SecretWrites {
   return SECRET_WRITES.some((choice) => choice === value);
 }
 
+export const DB_WRITES: readonly DbWrites[] = ['deny', 'ask', 'allow'];
+
+export function isDbWrites(value: unknown): value is DbWrites {
+  return DB_WRITES.some((choice) => choice === value);
+}
+
+export function isDbProgramShape(value: unknown): value is DbProgramShape {
+  return DB_PROGRAM_SHAPES.some((shape) => shape === value);
+}
+
+export function isDbClientVocabulary(value: unknown): value is DbClientVocabulary {
+  return DB_CLIENT_VOCABULARIES.some((vocabulary) => vocabulary === value);
+}
+
 export const COMMIT_GATES = ['off', 'warn', 'refuse'] as const;
 /** What a push to a protected branch does about commits over the size rule: nothing, list them, or refuse the push. */
 export type CommitGate = (typeof COMMIT_GATES)[number];
@@ -486,6 +563,41 @@ export interface TurnLogConfig {
   readonly enabled: boolean;
   /** How long each entry is kept, in hours; whole hours past it are removed at a session start. */
   readonly keepHours: number;
+}
+
+/**
+ * The needs-you band (T2511): every tab of the team shows which other tab asks the user something (a permission
+ * prompt, a question, a decision line), read from the tab files (src/tabs/need.ts), with a button that focuses it.
+ */
+export interface NeedsYouConfig {
+  /** Off: no tab shows another's asks (the tab files are still written, for smart focus). */
+  readonly enabled: boolean;
+  /** The kinds of ask that raise the band and its toast. */
+  readonly kinds: readonly NeedKind[];
+  /** Also one OS notification per ask across the team, besides the toast in each tab. */
+  readonly osToast: boolean;
+}
+
+/**
+ * What a booked meeting (`meeting schedule`) tells the person, and when (src/meeting/notify.ts, T2405): a notice
+ * some minutes before its slot, one at the slot, and an alert once it is some minutes past its slot with no start.
+ * Each notice goes out once, by whichever tab of the team looks first, on each channel left on.
+ */
+export interface MeetingNoticesConfig {
+  /** Off: no meeting notice of any kind. */
+  readonly enabled: boolean;
+  /** The early notice, in minutes before the slot; 0: none. */
+  readonly beforeMinutes: number;
+  /** The notice at the slot's time. */
+  readonly atStart: boolean;
+  /** The missed alert, in minutes past the slot's time with no `meeting start`; 0: none. */
+  readonly missedAfterMinutes: number;
+  /** The operating system's notification (a toast on Windows, a banner on macOS, notify-send on Linux). */
+  readonly osToast: boolean;
+  /** A toast in the open tab of the team that sends the notice; a missed alert's stays a minute, the longest Claude Code shows one. */
+  readonly tabToast: boolean;
+  /** One inbox line to the team's lead for a missed meeting. */
+  readonly leadInbox: boolean;
 }
 
 /** How teamrig keeps the lead leading (T320): its own edits, tests and code searches are nudged and shown, never blocked. */
@@ -521,8 +633,8 @@ export interface WakeConfig {
   /**
    * The least urgent priority that wakes a session: 1 wakes for p0 and p1 only. A session its budget holds (past
    * its daily budget while the team has no room today, the wake's own turn counted for both) or a short day pauses
-   * (`budget.pauseByPriority`) wakes for p0 only, and one in the budget's quiet hours for p0 and p1 only, whatever
-   * this says.
+   * (`budget.pauseByPriority`) wakes for p0 only, and one in the budget's quiet hours for p0 and p1 only (p0 alone
+   * when their action is block), whatever this says.
    */
   readonly priority: number;
   /** How long a wake waits after the first new task it is for, so tasks handed together wake the session once. */
@@ -532,7 +644,8 @@ export interface WakeConfig {
   /**
    * The day's start (`HH:MM` UTC, outside the budget's quiet hours): from then each session with work it can start,
    * of any priority, that has had no turn since gets one wake that day, and a burst wakes its sessions the same way
-   * once it starts. Unset: no day-start wake, and a burst wakes no one.
+   * once it starts. Unset: no day-start wake, and a burst wakes no one. The root lead's `teamrig schedule set` overrides
+   * it for a day, per team or session.
    */
   readonly dayStartUtc?: string;
 }
@@ -543,7 +656,7 @@ export interface TestsConfig {
   readonly maxFailureChars: number;
 }
 
-/** Which GitHub issues `teamrig gh sync` reads into the register. It only reads GitHub, never writes to it. */
+/** The team's GitHub repositories: `teamrig gh sync` reads their issues into the register, never writing to GitHub; `gh migrate` and `issue comment`/`issue close`, run by hand, write only to them. */
 export interface GithubConfig {
   /** The repositories it reads, as `owner/name` in lowercase; empty turns the import off. */
   readonly repos: readonly string[];
@@ -561,6 +674,11 @@ export interface GithubConfig {
    * were not edited after that. Matched without case.
    */
   readonly acceptLabel: string;
+  /**
+   * The score, from 0 to 1, at which a mirrored issue counts as a duplicate candidate of a new one: the cosine of
+   * their TF-IDF word vectors (src/issues/similar.ts). Higher lists fewer, closer candidates.
+   */
+  readonly similarThreshold: number;
 }
 
 /** The small-commits rule: one logical change per commit, and a reason line on any commit over the bounds. */
@@ -615,6 +733,33 @@ export interface BudgetReset {
   readonly timeUtc: string;
 }
 
+/**
+ * The resets the account holds beside its weekly one: `fable` refills the Fable bar and gives back what Fable used of the
+ * weekly limit, `full` clears all of the week's usage.
+ */
+export const RESET_KINDS = ['fable', 'full'] as const;
+
+export type ResetKind = (typeof RESET_KINDS)[number];
+
+export function isResetKind(value: unknown): value is ResetKind {
+  return RESET_KINDS.some((kind) => kind === value);
+}
+
+/**
+ * One grant of resets the account holds, with the uses taken from it: what is left is `count` minus `usedUtc`, and
+ * none of it can be used past `expiresUtc`. Claude Code does not tell a session about these, so the team writes them
+ * down as they are granted and used.
+ */
+export interface ResetStock {
+  readonly kind: ResetKind;
+  readonly count: number;
+  /** YYYY-MM-DD HH:MM, UTC. */
+  readonly expiresUtc: string;
+  /** When each use was taken, YYYY-MM-DD HH:MM UTC; at most `count`. */
+  readonly usedUtc: readonly string[];
+  readonly note?: string;
+}
+
 /** UTC hours in which the live warning applies `action` on its own, while the team sleeps. */
 export interface QuietHours {
   readonly startUtc: string;
@@ -649,7 +794,7 @@ export interface BudgetLiftConfig {
  * leaves one unset takes the team above's, unless it names another account (src/cli/kit.ts openKit), so the teams of
  * a tree read one week alike without a copy that drifts.
  */
-export const ACCOUNT_BUDGET_KEYS = ['enabled', 'account', 'accountLead', 'weeklyLimitW', 'subagentWeight', 'extraWPerUsd', 'reset'] as const satisfies readonly (keyof BudgetConfig)[];
+export const ACCOUNT_BUDGET_KEYS = ['enabled', 'account', 'accountLead', 'weeklyLimitW', 'subagentWeight', 'extraWPerUsd', 'reset', 'resets'] as const satisfies readonly (keyof BudgetConfig)[];
 
 /** The keys of ACCOUNT_BUDGET_KEYS as a team reads them, its own or the team above's. */
 export type AccountBudget = Pick<BudgetConfig, (typeof ACCOUNT_BUDGET_KEYS)[number]>;
@@ -689,6 +834,8 @@ export interface BudgetConfig {
   readonly extraWPerUsd?: number;
   /** Unset: the team above's (`AccountBudget`), else the reset time the status line reports. */
   readonly reset?: BudgetReset;
+  /** The account's resets in stock beside the weekly one. Unset: the team above's (`AccountBudget`), else none. */
+  readonly resets: readonly ResetStock[];
   /** Use the week up to this share of the weekly limit. */
   readonly targetPct: number;
   /** Kept back for incidents until shortly before the reset. */
@@ -984,6 +1131,10 @@ export interface DecisionsConfig {
   readonly dedicatedOwners: readonly string[];
 }
 
+/** `refresh.autoRestart`: on or off for every session, or on for the team's lead only. */
+export const AUTO_RESTART_LEAD = 'lead';
+export type AutoRestart = boolean | typeof AUTO_RESTART_LEAD;
+
 /**
  * Context refresh: at any turn end with the session's context at or over `contextTokens`, at a task end
  * (`set <id> --status done`) with `everyTasks` tasks finished since its context was last fresh, or after the lead
@@ -1008,9 +1159,11 @@ export interface RefreshConfig {
    * the plugin's mod runs /clear in its tab; where no mod claims the ask, end its Claude Code process and start
    * it again, in the same tab when `teamrig open` started it, else in a new tab. A session with no work it can start
    * then waits for the wake that brings it some, which starts it fresh instead of waking it (T1383). A prompt typed
-   * before then keeps the context. Off (the default): the user types /clear once done with the screen, which a /clear wipes.
+   * before then keeps the context. Off: the user types /clear once done with the screen, which a /clear wipes.
+   * `lead` (the default): on for the team's lead (`roles.lead`), whose context otherwise grows unasked overnight,
+   * off for every other session; it needs a way to restart the tab, as with `true`.
    */
-  readonly autoRestart: boolean;
+  readonly autoRestart: AutoRestart;
   /** How long after the turn's end the automatic restart waits, so the user can still type to keep the context. */
   readonly restartDelaySeconds: number;
   /**
@@ -1036,7 +1189,7 @@ export interface RefreshConfig {
    */
   readonly compactCeilingTokens: number;
   /**
-   * `teamrig refresh --ready` refuses a handover larger than this many bytes: the fresh start reads all of it, so a
+   * The turn end (and `teamrig refresh --ready`) takes no handover larger than this many bytes: the fresh start reads all of it, so a
    * handover that grows section by section fills the next session's context before its work begins. 0: no cap.
    */
   readonly handoverMaxBytes: number;
@@ -1333,6 +1486,27 @@ export interface TeamLink {
   readonly project?: string;
 }
 
+/** The owner's daily meeting in the lead's tab (T2512). */
+export interface MeetingConfig {
+  /**
+   * The agenda panel beside the lead's chat while a meeting is open: the owner's cards in the agenda's order, the
+   * ones decided since the start checked off with the decision, the one on the table marked (src/meeting/panel.ts).
+   */
+  readonly panel: { readonly enabled: boolean };
+  /**
+   * The spotlight while a meeting is open, Windows Terminal on Windows only: every screen dimmed by `dim` (the overlay's
+   * opacity) but the window holding the lead's tab, click-through and never taking the focus (src/meeting/spotlight.ts).
+   * A CRITICAL message the meeting hold lets through to the lead lifts the dimming for `breakthroughSeconds`, so the
+   * owner sees the break-through at once; it comes back by itself after that (T2524).
+   */
+  readonly spotlight: { readonly enabled: boolean; readonly dim: number; readonly breakthroughSeconds: number };
+  /**
+   * The status line while a meeting is open (T2513): the lead's tab prints its whole line in `colour` (`#rrggbb`), and
+   * every other tab appends `heldText`, so a glance at any tab says the team is held for the meeting.
+   */
+  readonly statusLine: { readonly enabled: boolean; readonly colour: string; readonly heldText: string };
+}
+
 export interface KitConfig {
   readonly configVersion: number;
   /** Unset in a config written before team trees: the team is then the root of its own tree. */
@@ -1375,6 +1549,8 @@ export interface KitConfig {
   readonly prompts: PromptsConfig;
   /** Refuses a call that would print a secret file, the environment or a secret variable, or whose line holds a secret as text (hook-secret-guard). */
   readonly secretGuard: SecretGuardConfig;
+  /** Asks before a call that writes to a database by hand (hook-db-write-guard). */
+  readonly dbWriteGuard: DbWriteGuardConfig;
   readonly commits: CommitsConfig;
   readonly delivery: DeliveryConfig;
   readonly budget: BudgetConfig;
@@ -1390,6 +1566,7 @@ export interface KitConfig {
    * needs Claude Code's own title off (`CLAUDE_CODE_DISABLE_TERMINAL_TITLE=1`), else Claude Code writes over it.
    */
   readonly tabStatus: { readonly enabled: boolean };
+  readonly needsYou: NeedsYouConfig;
   /**
    * Refuses Claude Code's question picker (AskUserQuestion), which would stop the session until the person answers,
    * to every session and helper, the lead included, in the owner's daily meeting too; the reason says to decide it if it
@@ -1397,7 +1574,9 @@ export interface KitConfig {
    * that never named the key had no guard, and one session's picker held its other tasks for hours.
    */
   readonly pickerGuard: { readonly enabled: boolean };
+  readonly meeting: MeetingConfig;
   readonly turnLog: TurnLogConfig;
+  readonly meetingNotices: MeetingNoticesConfig;
   /** Lets a shell line that only reads run without a permission prompt; off by default. */
   readonly readonlyShell: ReadonlyShellConfig;
   /** Which local allow rules stay when `permissions trim` removes the rest. */
