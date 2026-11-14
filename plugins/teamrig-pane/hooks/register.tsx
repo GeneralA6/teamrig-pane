@@ -34,7 +34,7 @@
 // files and runs git (status, diff, grep) and the teamrig CLI (meeting list and start, meet; no model calls);
 // /teamrig-pane steers it.
 import { atom, read, update } from 'claude-code'
-import type { Components, Context, Register, ToolResult } from 'claude-code'
+import type { Components, Context, ProcessResult, Register, ToolResult } from 'claude-code'
 import type {
   BarStatus,
   BodyScroll,
@@ -69,6 +69,7 @@ import type {
   ViewMode,
 } from '../types'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
+import { bounded } from './bounded-run'
 import { LiveRegister, pinKey } from './live'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
@@ -629,7 +630,10 @@ export const register: Register = on => {
     await update($, meetingStart, () => NO_START)
     await update($, sessionAnswer, () => NO_ANSWER)
     await update($, ownerAct, () => NO_ACT)
-    const home = (await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
+    // Each run also ends by the pane's own clock (bounded-run.ts): one the engine never settles must not hold a reader's latch.
+    const run = (argv: readonly string[], init: { readonly cwd?: string; readonly timeoutMs: number }): Promise<ProcessResult> =>
+      bounded($.process.run(argv, init), init.timeoutMs, (ms, fn) => $.clock.every(ms, fn))
+    const home =(await $.env.get('USERPROFILE')) ?? (await $.env.get('HOME'))
     // The teamrig CLI the Meetings view runs: the installed plugin's, else the teamrig command's on the PATH
     // (teamrig-cli.ts), found once. Windows may name the PATH `Path`.
     const cli = await findTeamrigCli(
@@ -786,7 +790,7 @@ export const register: Register = on => {
         team === null
           ? null
           : new LiveMeetings(cli, {
-              run: (argv, timeoutMs) => $.process.run(argv, { cwd: e.cwd, timeoutMs }),
+              run: (argv, timeoutMs) => run(argv, { cwd: e.cwd, timeoutMs }),
               caller: async () => (await $.env.get('TEAMRIG_SESSION')) ?? (await read($, snapshot)).area,
               isShown: async () => (await read($, view)) === 'meetings' && (await read($, size)) !== 'minimized',
               publish: async shown => {
@@ -823,7 +827,7 @@ export const register: Register = on => {
         team === null
           ? null
           : new SessionActs(cli, {
-              run: (argv, timeoutMs) => $.process.run(argv, { cwd: e.cwd, timeoutMs }),
+              run: (argv, timeoutMs) => run(argv, { cwd: e.cwd, timeoutMs }),
               tell: async answer => {
                 await update($, sessionAnswer, () => answer)
               },
@@ -834,7 +838,7 @@ export const register: Register = on => {
         team === null
           ? null
           : new OwnerActs(cli, {
-              run: (argv, timeoutMs) => $.process.run(argv, { cwd: e.cwd, timeoutMs }),
+              run: (argv, timeoutMs) => run(argv, { cwd: e.cwd, timeoutMs }),
               tell: async act => {
                 await update($, ownerAct, () => act)
               },
@@ -860,7 +864,7 @@ export const register: Register = on => {
     const seed = await read($, changes)
     const kept = await read($, known)
     title = paneTitle(seed)
-    const git = (args: readonly string[], cwd: string) => $.process.run(['git', ...args], { cwd, timeoutMs: GIT_TIMEOUT_MS })
+    const git = (args: readonly string[], cwd: string) => run(['git', ...args], { cwd, timeoutMs: GIT_TIMEOUT_MS })
     const knownAtStart = knownSeed(seed, kept)
     // The copies ask the changes whether a file is outside git only from a write's hook, which waits for `copying`.
     const copiesLive = new LiveCopies(
@@ -954,7 +958,7 @@ export const register: Register = on => {
     // failed write only leaves the lines out.
     void requirementProblems({
       version: () => $.session.version(),
-      gitVersion: () => $.process.run(['git', '--version'], { timeoutMs: GIT_TIMEOUT_MS }),
+      gitVersion: () => run(['git', '--version'], { timeoutMs: GIT_TIMEOUT_MS }),
     })
       .then(found => update($, requirements, () => found))
       .catch(() => undefined)

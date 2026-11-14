@@ -3,6 +3,7 @@
 // start`, one at a time, tells what it answered and reads the list again; each run passes the caller's --session.
 import { describe, expect, test } from 'claude-code/testing'
 import type { MeetingStart, MeetingsView } from '../types'
+import { RUN_GRACE_MS, bounded } from '../hooks/bounded-run'
 import { TICK_MS } from '../hooks/live'
 import { LIST_TIMEOUT_MS, LiveMeetings, START_TIMEOUT_MS, listView, parseMeeting, readMeetingList, startOutcome, type MeetingsPorts } from '../hooks/meetings'
 import { cliArgv, type CliRun, type TeamrigCli } from '../hooks/teamrig-cli'
@@ -177,5 +178,39 @@ describe('LiveMeetings', () => {
     const stuck = portsOf([new Error('timed out')])
     await new LiveMeetings(CLI, stuck).start('M4')
     expect(stuck.told[1]).toEqual({ id: 'M4', outcome: 'refused', lines: ['teamrig meeting start M4 did not finish: timed out'] })
+  })
+
+  test('a run the engine never settles fails once the bound passes and frees the read for the next one (T2807)', async () => {
+    // The bound's timer, fired by hand once the read reached its run (the caller is asked first); the first run never
+    // settles, the ones after answer at once.
+    let fire = (): void => undefined
+    let arm = (): void => undefined
+    const isArmed = new Promise<void>(resolve => {
+      arm = resolve
+    })
+    const every = (_ms: number, fn: () => void): { cancel: () => void } => {
+      fire = fn
+      arm()
+      return { cancel: () => undefined }
+    }
+    const ports = portsOf([LISTED])
+    let isFirst = true
+    const hung: MeetingsPorts = {
+      ...ports,
+      run: (args, timeoutMs) => {
+        const answer = isFirst ? new Promise<CliRun>(() => undefined) : ports.run(args, timeoutMs)
+        isFirst = false
+        return bounded(answer, timeoutMs, every)
+      },
+    }
+    const live = new LiveMeetings(CLI, hung)
+    const first = live.refresh()
+    await isArmed
+    fire()
+    await first
+    const limitS = (LIST_TIMEOUT_MS + RUN_GRACE_MS) / 1000
+    expect(ports.views).toEqual([{ kind: 'failed', reason: `teamrig meeting list did not finish: no answer in ${limitS} s` }])
+    await live.refresh()
+    expect(ports.views[1]).toEqual({ kind: 'list', meetings: [MEETING], unreadable: 0 })
   })
 })
