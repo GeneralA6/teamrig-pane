@@ -3,7 +3,7 @@ import type { Snapshot } from '../types'
 import type { TeamFiles } from '../hooks/places'
 import { TaskRegisterSource, type RegisterPaths } from '../hooks/source'
 import { TreeGoals } from '../hooks/tree-goals'
-import { HOUR, MemoryFiles, NOW, S1, TEAM_SETTINGS, createLine, goalLine, goalRankLine, goalTitleLine, waitingLine, type CardFields } from './fixtures'
+import { HOUR, MemoryFiles, NOW, S1, TEAM_SETTINGS, createLine, goalLine, goalRankLine, goalSliceLine, goalTitleLine, waitingLine, type CardFields } from './fixtures'
 
 const PATHS: RegisterPaths = { events: 'R/tasks/events.jsonl', marks: 'R/tasks/inbox-marks.jsonl', goals: 'R/tasks/goals.jsonl', inboxDir: 'R/inbox', tasksWeek: 'R/tasks/usage/tasks.week.json' }
 const WEB: TeamFiles = { team: 'web', dir: 'K/teams/web', teamsDir: 'K/teams', config: 'K/teams/web/config.json', renames: 'R/tasks/renames.jsonl', turnLog: null }
@@ -46,7 +46,17 @@ describe('TreeGoals', () => {
     files.write(PATHS.goals, [goalLine('A1'), goalRankLine('A1', 1), goalLine('A2', 'A1')].join('\n'))
     const goals = new TreeGoals(files, PATHS.goals, WEB)
     expect(await goals.refresh()).toBe(true)
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 1 }, A2: { parent: 'A1', rank: null } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 1, slice: null }, A2: { parent: 'A1', rank: null, slice: null } })
+  })
+
+  // A prep marker stands near only by the goal's open slice (core focus.ts prepRead), so the slice must reach the ranking.
+  test("reads a goal's open slice, the last one the lead opened", async () => {
+    const files = new MemoryFiles()
+    files.write(WEB.config, configOf('web'))
+    files.write(PATHS.goals, [goalLine('A1'), goalRankLine('A1', 1), goalSliceLine('A1', 1), goalSliceLine('A1', 2)].join('\n'))
+    const goals = new TreeGoals(files, PATHS.goals, WEB)
+    await goals.refresh()
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 1, slice: 2 } })
   })
 
   test('reads the goals of every team above, up to the root, and of no team beside it', async () => {
@@ -61,7 +71,7 @@ describe('TreeGoals', () => {
     files.write('K/teams/side/state/goals.jsonl', goalsText({ A4: 4 }))
     const goals = new TreeGoals(files, PATHS.goals, WEB)
     await goals.refresh()
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 1 }, A2: { parent: null, rank: 2 }, A3: { parent: null, rank: 3 } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 1, slice: null }, A2: { parent: null, rank: 2, slice: null }, A3: { parent: null, rank: 3, slice: null } })
   })
 
   test("a tag two teams hold reads as the nearest team's", async () => {
@@ -74,7 +84,7 @@ describe('TreeGoals', () => {
     files.write(ACME_GOALS, goalsText({ A1: 3, A2: 3 }))
     const goals = new TreeGoals(files, PATHS.goals, WEB)
     await goals.refresh()
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 1 }, A2: { parent: null, rank: 2 } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 1, slice: null }, A2: { parent: null, rank: 2, slice: null } })
   })
 
   test('parents that go round a loop read as no tree above: only the own goals count', async () => {
@@ -82,7 +92,7 @@ describe('TreeGoals', () => {
     files.write(configPath('acme'), configOf('acme', 'web'))
     const goals = new TreeGoals(files, PATHS.goals, WEB)
     await goals.refresh()
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 1 } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 1, slice: null } })
   })
 
   test("a team above whose config moves its state folder is read there, also when the config moves it later", async () => {
@@ -90,10 +100,10 @@ describe('TreeGoals', () => {
     files.write('K/teams/acme/kept/goals.jsonl', goalsText({ A1: 2 }))
     const goals = new TreeGoals(files, PATHS.goals, WEB)
     await goals.refresh()
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 1 } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 1, slice: null } })
     files.write(configPath('acme'), configOf('acme', null, 'kept'))
     expect(await goals.refresh()).toBe(true)
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 2 } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 2, slice: null } })
   })
 
   test('a new title moves nothing a ranking reads; a new rank, a rank taken off and a removed file do', async () => {
@@ -106,10 +116,10 @@ describe('TreeGoals', () => {
     expect(await goals.refresh()).toBe(false)
     files.write(PATHS.goals, [...retitled, goalRankLine('A1', 2)].join('\n'))
     expect(await goals.refresh()).toBe(true)
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 2 } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 2, slice: null } })
     files.write(PATHS.goals, [...retitled, goalRankLine('A1', null)].join('\n'))
     expect(await goals.refresh()).toBe(true)
-    expect(goals.current).toEqual({ A1: { parent: null, rank: null } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: null, slice: null } })
     files.remove(PATHS.goals)
     expect(await goals.refresh()).toBe(true)
     expect(goals.current).toEqual({})
@@ -121,18 +131,18 @@ describe('TreeGoals', () => {
     files.write(PATHS.goals, goalsText({ A1: 1 }))
     const goals = new TreeGoals(files, PATHS.goals, WEB)
     await goals.refresh()
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 1 } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 1, slice: null } })
     files.write(configPath('acme'), configOf('acme'))
     files.write(ACME_GOALS, goalsText({ A2: 2 }))
     expect(await goals.refresh()).toBe(true)
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 1 }, A2: { parent: null, rank: 2 } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 1, slice: null }, A2: { parent: null, rank: 2, slice: null } })
   })
 
   test('a register named with no team reads its own goals file alone', async () => {
     const files = webUnderAcme(goalsText({ A1: 1 }), goalsText({ A2: 2 }))
     const goals = new TreeGoals(files, PATHS.goals, null)
     await goals.refresh()
-    expect(goals.current).toEqual({ A1: { parent: null, rank: 1 } })
+    expect(goals.current).toEqual({ A1: { parent: null, rank: 1, slice: null } })
     expect(files.reads).toEqual([PATHS.goals])
   })
 
@@ -167,7 +177,7 @@ describe('TaskRegisterSource over the tree goals', () => {
     expect(await source.poll(POLL)).toBe(null)
     files.write(PATHS.goals, goalsText({ A1: 2, A2: 1 }))
     const moved = await source.poll(POLL)
-    expect(moved?.goals).toEqual({ A1: { parent: null, rank: 2 }, A2: { parent: null, rank: 1 } })
+    expect(moved?.goals).toEqual({ A1: { parent: null, rank: 2, slice: null }, A2: { parent: null, rank: 1, slice: null } })
     expect(dueIds(moved)).toEqual(['T2', 'T1'])
   })
 
@@ -181,7 +191,7 @@ describe('TaskRegisterSource over the tree goals', () => {
     expect(await source.poll(POLL)).toBe(null)
     files.write(PATHS.goals, goalsText({ A1: 2 }))
     const moved = await source.poll(POLL)
-    expect(moved?.goals).toEqual({ A1: { parent: null, rank: 2 } })
+    expect(moved?.goals).toEqual({ A1: { parent: null, rank: 2, slice: null } })
     expect(dueIds(moved) ?? []).toEqual([])
   })
 })

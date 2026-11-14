@@ -214,10 +214,11 @@ export type Snapshot = {
 }
 
 /**
- * Each goal's parent and rank by its tag, what a ranking reads of a goal (core register/ranking.ts `goals`). Plain data,
- * not a Map, as a snapshot crosses `$.state`.
+ * Each goal's parent, rank and open slice by its tag, what a ranking reads of a goal (core register/ranking.ts `goals`,
+ * focus.ts SlicedGoal): the slice says whether a task's prep marker stands near. Plain data, not a Map, as a snapshot
+ * crosses `$.state`.
  */
-export type GoalRanks = Readonly<Record<string, { readonly parent: string | null; readonly rank: number | null }>>
+export type GoalRanks = Readonly<Record<string, { readonly parent: string | null; readonly rank: number | null; readonly slice: number | null }>>
 
 /** The median spend of the tasks of one class and type done lately, in percent of the week: what an unsized one of them is sized by. */
 export type LikeMedianRow = { readonly workClass: string; readonly type: TaskRow['type']; readonly pct: number }

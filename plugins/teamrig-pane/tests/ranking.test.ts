@@ -1,7 +1,23 @@
 import { describe, expect, test } from 'claude-code/testing'
-import { TASKS_WEEK_FORMAT } from '../hooks/core/read/index'
-import { NO_SPEND, spendFor, spendIn } from '../hooks/ranking'
+import { DEFAULT_FOCUS, DEFAULT_REGISTER, TASKS_WEEK_FORMAT } from '../hooks/core/read/index'
+import type { TreeTask } from '../hooks/core/register/tree'
+import { NO_SPEND, rankingOf, spendFor, spendIn } from '../hooks/ranking'
 import { LIKE_MEDIANS, NOW, tasksWeekText } from './fixtures'
+
+describe('rankingOf', () => {
+  /** An open task preparing slice `slice` of goal A1. */
+  const prepTask = (slice: number): TreeTask => ({ id: 'T1', status: 'open', owner: 'po', priority: 2, due: null, after: [], waits: [], prepares: { goal: 'A1', slice } })
+  const standing = (slice: number, open: number | null) =>
+    rankingOf(DEFAULT_FOCUS, DEFAULT_REGISTER.ownerSource, { A1: { parent: null, rank: 1, slice: open } }, NO_SPEND).prepOf(prepTask(slice))?.standing
+
+  // The goal's open slice reaches the core ranking: a marker on it or the next stands near, ranked right after expedite.
+  test("a prep marker stands near by its goal's open slice, and lapses once the goal opens none or moves past it", async () => {
+    expect(standing(2, 2)).toBe('near')
+    expect(standing(3, 2)).toBe('near')
+    expect(standing(1, 2)).toBe('lapsed')
+    expect(standing(2, null)).toBe('lapsed')
+  })
+})
 
 describe('spendIn', () => {
   test("reads each task's spend and the like tasks' medians from the file teamrig's budget hooks write", async () => {

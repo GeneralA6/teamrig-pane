@@ -394,7 +394,7 @@ describe('view', () => {
     expect(sameView(base, { ...base, now: NOW + 2 * HOUR })).toBe(false)
     expect(sameView(base, { ...base, unreadInbox: 1 })).toBe(false)
     expect(sameView(base, { ...base, focus: { ...base.focus, expedite: { ...base.focus.expedite, ownerP1: false } } })).toBe(false)
-    expect(sameView(base, { ...base, goals: { A1: { parent: null, rank: 1 } } })).toBe(false)
+    expect(sameView(base, { ...base, goals: { A1: { parent: null, rank: 1, slice: null } } })).toBe(false)
     expect(sameView(base, { ...base, spend: { spentPct: { T1: 0.2 }, likeMedians: [] } })).toBe(false)
     // The Inbox view: a line read 23 hours before leaves its window an hour on, with no poll; one read an hour before
     // prints with its weekday from the zone's midnight.

@@ -64,6 +64,11 @@ export function goalTitleLine(tag: string, title: string): string {
   return JSON.stringify({ v: GOAL_RECORD_VERSION, type: 'goal-set', at: iso(NOW), by: 'lead', tag, target: null, title, note: 'renamed' })
 }
 
+/** A goal's newly open slice, as `teamrig goal set --slice` writes it: target and title stay. */
+export function goalSliceLine(tag: string, slice: number): string {
+  return JSON.stringify({ v: GOAL_RECORD_VERSION, type: 'goal-set', at: iso(NOW), by: 'lead', tag, target: null, title: null, slice, note: 'slice opened' })
+}
+
 /** A goal's rank, as `teamrig goal rank` writes it; null takes it off the ranking. */
 export function goalRankLine(tag: string, rank: number | null): string {
   return JSON.stringify({ v: GOAL_RECORD_VERSION, type: 'goal-rank', at: iso(NOW), by: 'lead', tag, rank })

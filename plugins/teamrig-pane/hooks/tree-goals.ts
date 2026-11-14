@@ -9,9 +9,9 @@ import { WatchedFile, type Files, type GoalSource } from './source'
 /** No goals: what a snapshot holds before the first read, and a team with no goals file. */
 export const NO_GOAL_RANKS: GoalRanks = {}
 
-/** What a ranking reads of a goals file: each goal's parent and rank, so a new title or target moves nothing. */
+/** What a ranking reads of a goals file: each goal's parent, rank and open slice, so a new title or target moves nothing. */
 function ranksIn(text: string): GoalRanks {
-  return Object.fromEntries([...readGoals(text).goals].map(([tag, { parent, rank }]) => [tag, { parent, rank }]))
+  return Object.fromEntries([...readGoals(text).goals].map(([tag, { parent, rank, slice }]) => [tag, { parent, rank, slice }]))
 }
 
 /** A team's folder as the walk up the tree reads it: its config, then the goals file in the state folder that config names. */

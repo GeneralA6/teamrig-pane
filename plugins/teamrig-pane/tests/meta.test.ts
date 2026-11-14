@@ -360,7 +360,7 @@ describe('meta rank words', () => {
 
   test('a Roadmap task scores by the rank of its goal, a child goal with no rank by its ranked parent; the row prints the number alone, as a list row does', async () => {
     const onGoal = (goal: string) => taskOf(own({ goals: [goal], workClass: 'Roadmap' }))
-    const goals = { A1: { parent: null, rank: 1 }, A2: { parent: 'A1', rank: null } }
+    const goals = { A1: { parent: null, rank: 1, slice: null }, A2: { parent: 'A1', rank: null, slice: null } }
     const scoreOf = (task: TaskRow, ranks: typeof goals | Record<string, never>) => Number(rankWords(task, treeAt([task], NOW, undefined, undefined, null, ranks))?.score)
     expect(scoreOf(onGoal('A1'), goals)).toBeGreaterThan(scoreOf(onGoal('A1'), {}))
     expect(scoreOf(onGoal('A2'), goals)).toBe(scoreOf(onGoal('A1'), goals))
