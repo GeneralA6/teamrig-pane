@@ -545,10 +545,20 @@ one done today a dim `●` and `done`, one dropped today a dim `×` and `dropped
 
 A press on a row (a click, or Enter or Space on it) opens its card in place of the dim line, and a second closes it:
 About whole, With, Tasks (each with its title and status, an id the register holds a press that opens its page; one it
-lacks says so), Brief (a press that opens the file) and, on a scheduled meeting, `[Start meeting]`. That press runs
-`teamrig meeting start <id> --session <caller>`, the caller being `$TEAMRIG_SESSION`, else the area the pane shows, as
-typing it would. What teamrig answered leads the list: `Starting M3…`, then `Started M3.` with teamrig's lines
-(`TOLD lead`), or `M3 did not start:` and why. One start runs at a time, and the list is read again once it ends.
+lacks says so), Brief (a press that opens the file) and its presses. A scheduled meeting has `[Start meeting]`, which
+runs `teamrig meeting start <id>` at once, `[Move]` and `[Drop]`; a started one `[End]` and `[Postpone]`. Those four
+first ask a second line on the card, so one stray press never moves, drops or ends a meeting, each with `[Back]`:
+
+    Move M3 to:  [In 1 h]  [Tomorrow 15:00 IST]  [Back]      → teamrig meeting move <id> --at <time>
+    Drop M3?  [Not needed]  [Covered elsewhere]  [Back]      → teamrig meeting drop <id> --note <reason>
+    End M3 now?  [Yes, end]  [Back]                          → teamrig meeting end <id>
+    Postpone M1 to:  [In 1 h]  [Tomorrow 13:00 IST]  [Back]  → teamrig meeting postpone <id> --at <time>
+
+In 1 h is an hour from the press, up to the whole minute after; Tomorrow is the team's next day at the meeting's time
+on its clock, kept across a clock change. Each runs with `--session <caller>`, the caller being `$TEAMRIG_SESSION`,
+else the area the pane shows, as typing it would. What teamrig answered leads the list: `Moving M3…`, then `Moved M3.`
+with teamrig's lines (`TOLD lead`), or `M3 was not moved:` and why (a teamrig too old for a verb refuses it there). One
+press runs at a time, and the list is read again once it ends.
 
 It runs the CLI of the teamrig plugin installed in Claude Code, found once a session from Claude Code's plugin list
 (`plugins/installed_plugins.json` under `$CLAUDE_CONFIG_DIR`, else `~/.claude`), else as the `dist/cli/main.js` beside

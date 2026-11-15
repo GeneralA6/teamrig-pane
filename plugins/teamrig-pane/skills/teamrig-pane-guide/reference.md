@@ -76,7 +76,7 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | In Meetings, `The meetings could not be read: teamrig printed no meeting list the pane can read: update teamrig.` | The teamrig plugin is older than 0.208.0: update it, then restart or resume the session. |
 | In Meetings, `The meetings could not be read: <teamrig's error>.` | teamrig refused the list, or did not finish in 30 seconds (`node` not on the PATH says `spawn node ENOENT`); fix what it says. The view tries again every 60 seconds while it shows. |
 | In Meetings, `WARN 2 meetings teamrig printed are in a newer format: update the pane.` | teamrig is newer than the pane: update teamrig-pane. The meetings it can read still show. |
-| In Meetings, `M3 did not start:` and teamrig's reason | `teamrig meeting start` refused the start (the meeting was started, ended or dropped since the list was read), or did not finish in 60 seconds. |
+| In Meetings, `M3 was not started:` (or `moved`, `dropped`, `ended`, `postponed`) and teamrig's reason | teamrig refused the press (the meeting was started, ended or dropped since the list was read; `postpone` on a teamrig older than 0.401.0), or it did not finish in 60 seconds. |
 
 ## Limits
 
@@ -85,7 +85,7 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | One file read | 4 MiB, about 13,500 register events |
 | Polls | a file stat every 3 seconds; a 60 second tick for due and age labels, for Changes and for the Meetings view |
 | Stats | the team folders, the scoped registers' history and the goals of those teams and the teams above them every 3 seconds while the tab shows, folded again only when a history, the scope, the range or the minute moved |
-| Meetings | `teamrig meeting list --all --json` every 60 seconds while the view shows, given 30 seconds to answer; a start is given 60 seconds |
+| Meetings | `teamrig meeting list --all --json` every 60 seconds while the view shows, given 30 seconds to answer; a press's run is given 60 seconds |
 | `Waiting`, asked of others | the first 8 asked of other sessions, after the area's own waiting tasks; the heading and the status bar count them all, a dim line the rest |
 | `Done today` | done or dropped on the team's day, the newest 6; the heading and the status bar count them all, a dim line the rest |
 | `not picked up` | untouched by its owner 24 hours after it was assigned |
@@ -103,7 +103,7 @@ the setup step alone, and a problem a later look finds is a `WARN` line over it.
 | A Claude dialog (a permission prompt, a question) | while it is open, Claude Code sends the pane no keys, clicks or wheel scroll, and tells it nothing: answer the dialog first |
 | Done page | 4 rows a group before `▸ n more`; the tasks finished in the last 8 days, teamrig's own retention |
 
-The pane never writes the register, the inboxes or any repo itself: the Meetings view's `[Start meeting]` runs
-`teamrig meeting start`, the Teams tab's `[Meet]` runs `teamrig meet` and its `[Wake]` `teamrig owner wake`, and a card's `[Note]` and `[Next]` run
+The pane never writes the register, the inboxes or any repo itself: the Meetings view's presses run `teamrig meeting
+start`, `move`, `drop`, `end` and `postpone`, the Teams tab's `[Meet]` runs `teamrig meet` and its `[Wake]` `teamrig owner wake`, and a card's `[Note]` and `[Next]` run
 `teamrig owner note` and `teamrig owner next`, and teamrig writes what they change. It keeps only its size and the
 pins in the plugin's own store.

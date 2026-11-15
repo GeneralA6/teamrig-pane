@@ -91,7 +91,9 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   back returns to that row.
 - **Meetings:** the meetings booked for the session's team, by time: each one's time, length, who meets and what it
   settles, the next one marked and a missed one red. A press opens its card (what it is about, who joins, its tasks
-  with their status, its brief), and a scheduled one's `[Start meeting]` runs `teamrig meeting start` for you.
+  with their status, its brief) and its presses: a scheduled one's `[Start meeting]`, `[Move]` and `[Drop]`, a started
+  one's `[End]` and `[Postpone]`, which run `teamrig meeting` for you, a second line asking first where a stray press
+  would cost.
 - **Stats:** the tree's registers folded as `teamrig stats` folds them, for the whole tree, a team or a session over 7,
   30, 90 or 180 days, a year or all: Health tiles in green, amber and red, then the flow of work (opened, closed, net, the active
   tasks by day, a burn-up and the cumulative flow), then Bottlenecks, New work, Speed, Delays, Waits, Bugs and People, each a
@@ -104,7 +106,7 @@ Docked, its title and controls stay put while the list scrolls under them, a scr
   a golden test holds the pane's rows to what `teamrig list` prints.
 - **Files only.** A stat every 3 s re-reads a file only when its size or time moved, plus a tick every
   60 s. The exceptions run the CLI of the teamrig plugin installed in Claude Code: the Meetings view
-  (`teamrig meeting list` every 60 s while it shows, `teamrig meeting start` on a press) and the Teams tab's `[Meet]`
+  (`teamrig meeting list` every 60 s while it shows, `teamrig meeting start`, `move`, `drop`, `end` or `postpone` on a press) and the Teams tab's `[Meet]`
   and `[Wake]` (`teamrig meet` and `teamrig owner wake` on a press). No model calls, so no tokens.
 - **Your team's register.** The team comes from `$TEAMRIG_TEAM` or the nearest `.teamrig.json`; a project
   with none shows how to set it up. See [Where the register is](plugins/teamrig-pane/README.md#where-the-register-is).

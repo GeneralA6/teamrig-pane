@@ -713,15 +713,26 @@ and the tasks it settles:
 | `○` | one more scheduled meeting |
 | `!`, a red `missed` | a scheduled meeting whose slot ended with no start |
 | `◐`, `started` | a started meeting |
-| a dim `●`, `done` | a meeting held today; no start press |
-| a dim `×`, `dropped` | a meeting dropped today; no start press |
+| a dim `●`, `done` | a meeting held today; no presses |
+| a dim `×`, `dropped` | a meeting dropped today; no presses |
 
 A press on a row (a click, Enter or Space) opens its card in place of the dim line, and again closes it: About, With,
-Tasks (each with its title and status; an id the register holds opens its page), Brief (a press opens the file) and,
-on a scheduled meeting, `[Start meeting]`. That press runs `teamrig meeting start <id>` as the session
-(`$TEAMRIG_SESSION`, else the area the pane shows), as typing it would. What teamrig answered leads the list:
-`Starting M3…`, then `Started M3.` with teamrig's lines (`TOLD lead`), or `M3 did not start:` and why. One start runs
-at a time.
+Tasks (each with its title and status; an id the register holds opens its page), Brief (a press opens the file) and
+its presses:
+
+| Press | On | What it runs |
+| --- | --- | --- |
+| `[Start meeting]` | a scheduled meeting | `teamrig meeting start <id>` at once |
+| `[Move]` | a scheduled meeting | asks `Move M3 to: [In 1 h] [Tomorrow 15:00 IST] [Back]`, then `teamrig meeting move <id> --at <time>` |
+| `[Drop]` | a scheduled meeting | asks `Drop M3? [Not needed] [Covered elsewhere] [Back]`, then `teamrig meeting drop <id> --note <reason>` |
+| `[End]` | a started meeting | asks `End M3 now? [Yes, end] [Back]`, then `teamrig meeting end <id>` |
+| `[Postpone]` | a started meeting | asks as Move does, then `teamrig meeting postpone <id> --at <time>` |
+
+In 1 h is an hour from the press, to the whole minute after; Tomorrow is the team's next day at the meeting's time on
+its clock. The second line asks first so one stray press never moves, drops or ends a meeting; `[Back]` closes it.
+Each runs as the session (`$TEAMRIG_SESSION`, else the area the pane shows), as typing it would. What teamrig answered
+leads the list: `Moving M3…`, then `Moved M3.` with teamrig's lines (`TOLD lead`), or `M3 was not moved:` and why (a
+teamrig too old for a verb refuses it there). One press runs at a time.
 
 The view runs the CLI of the teamrig plugin installed in Claude Code (else the one beside the `teamrig` command on the
 PATH), with `node`: `teamrig meeting list --all --json` when
@@ -767,7 +778,8 @@ numbers kept from the last read. It has no Find field.
 
 ## How it relates to the teamrig CLI
 
-The pane never writes, but for the Meetings view's `[Start meeting]`, which runs `teamrig meeting start`, the Teams
+The pane never writes, but for the Meetings view's presses, which run `teamrig meeting start`, `move`, `drop`, `end`
+and `postpone`, the Teams
 tab's `[Meet]` and `[Wake]`, which run `teamrig meet` and `teamrig owner wake`, and a card's `[Note]` and `[Next]`, which run `teamrig owner note` and
 `teamrig owner next` (see [Note and Next](#note-and-next)). To change
 what it shows, run teamrig (see the
