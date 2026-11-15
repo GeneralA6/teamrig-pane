@@ -6,7 +6,7 @@
 // opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
 import type { ThemeKey } from 'claude-code'
-import type { BarStatus, ExpandedTasks, LogRead, OwnerActPress, RefFile, SessionPress, Snapshot, StatsChoice, StatsListPick, TaskRow, TaskStatus, ViewMode } from '../types'
+import type { BarStatus, ExpandedTasks, LogRead, MeetingPress, OwnerActPress, RefFile, SessionPress, Snapshot, StatsChoice, StatsListPick, TaskRow, TaskStatus, ViewMode } from '../types'
 import { actRows, type CardActs } from './act-rows'
 import { cardRows, GUIDE } from './card'
 import { COMMAND } from './command'
@@ -26,7 +26,7 @@ import { cells } from './width'
  * on opens: the session's own in the Inbox view, another area's as a file's page at its first unread line; never split. With `toggles` the text is a press that opens or closes that Teams tab key
  * (team-rows.ts): a leader's fold mark its node, its id its card; never split. With `pins` the text is a session's id
  * a press on ties the tab to, as `/teamrig-pane <session>` does (a tab tied to no session, noSessionBlock); never split.
- * With `starts` the text is a press that starts that meeting (a scheduled meeting's card, meetings-rows.ts); never
+ * With `meets` the text is a press on that meeting (a meeting card's Start, Move, Drop, End, Postpone or a choice of its second line, meetings-rows.ts); never
  * split. With `sessionAct` the text is a press that runs that act on that session (session-acts.ts): a Teams tab row's
  * [Meet], team-rows.ts, which brings the owner its cards, or its [Wake], which wakes the session; never split. With `acts` the text is a press of the owner's Note or Next on
  * a task's card (owner-acts.ts); never split. With `stats` the text is a press on the Stats tab's scope or range row
@@ -46,7 +46,7 @@ export type Span = {
   inbox?: InboxPress
   toggles?: string
   pins?: string
-  starts?: string
+  meets?: MeetingPress
   sessionAct?: SessionPress
   acts?: ActPress
   stats?: StatsPress
@@ -95,6 +95,28 @@ export function statsPressKey(press: StatsPress): string {
       return scopeKey(press.scope)
     case 'open':
       return `open:${scopeKey(press.scope)}`
+  }
+}
+/** A meeting press's key: its meeting, then what it asks or runs (a Move's or Postpone's when, a Drop's why). */
+export function meetingPressKey(press: MeetingPress): string {
+  switch (press.kind) {
+    case 'ask':
+      return `${press.id}:ask:${press.ask}`
+    case 'back':
+      return `${press.id}:back`
+    case 'run': {
+      const { run } = press
+      switch (run.verb) {
+        case 'start':
+        case 'end':
+          return `${press.id}:${run.verb}`
+        case 'drop':
+          return `${press.id}:drop:${run.why}`
+        case 'move':
+        case 'postpone':
+          return `${press.id}:${run.verb}:${run.to.kind}`
+      }
+    }
   }
 }
 /** What an unread count's press opens: the area whose inbox it is, and how many of its newest lines are unread. */

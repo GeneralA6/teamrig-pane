@@ -4,11 +4,11 @@
 import type { OwnerActPress } from '../types'
 import type { Place, Placed, View } from './frame'
 import type { CardPart, Drawn, Piece } from './layout'
-import { statsPressKey } from './rows'
+import { meetingPressKey, statsPressKey } from './rows'
 
 /**
  * A piece of a card's line that is a press: a task id, a reference file, an inbox count, a Teams tab key, a session to
- * tie the tab to, a meeting to start, a session act on a session's row, an owner act on a task, a Stats tab scope or
+ * tie the tab to, a press on a meeting, a session act on a session's row, an owner act on a task, a Stats tab scope or
  * range.
  */
 export type PressPiece = Exclude<Piece, { kind: 'words' }>
@@ -46,7 +46,7 @@ export function diffKey(from: string, partKey: string): string {
 
 /**
  * A press in a card's line: a task id `goto:<id>:`, a reference file `goto:file:`, an inbox count `goto:inbox:`, a
- * Teams tab key `team:<key>:`, a session to tie the tab to `pin:<id>:`, a meeting to start `start:<id>:`, a session
+ * Teams tab key `team:<key>:`, a session to tie the tab to `pin:<id>:`, a press on a meeting `meeting:<id>:<what it does>:`, a session
  * act `<act>:<team>/<id>:` (`meet:`), a Stats tab press `stats:<what it picks>:` (rows.ts statsPressKey), then
  * where it is drawn, the line, and the piece's place in it; an owner act on a task its actKey alone, wherever it is drawn.
  */
@@ -63,8 +63,8 @@ export function pieceKey(piece: PressPiece, from: string, partKey: string, i: nu
       return `team:${piece.toggles}:${at}`
     case 'pin':
       return `pin:${piece.pins}:${at}`
-    case 'start':
-      return `start:${piece.starts}:${at}`
+    case 'meeting':
+      return `meeting:${meetingPressKey(piece.meets)}:${at}`
     case 'session-act': {
       const { act, team, session } = piece.sessionAct
       return `${act}:${team}/${session}:${at}`

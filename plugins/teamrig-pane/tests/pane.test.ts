@@ -3157,12 +3157,21 @@ const MEETING = {
   missed: false,
 }
 
-test("the switch's Meetings button lists the team's meetings through the teamrig CLI, with no Find field; a press on one opens its card, whose start press starts it", async ($, on) => {
-  let isStarted = false
+test("the switch's Meetings button lists the team's meetings through the teamrig CLI, with no Find field; a press on one opens its card, whose presses move, start and end it", async ($, on) => {
+  let status = 'scheduled'
   const teamrig = (args: readonly string[]): string => {
-    if (args[1] !== 'start') return JSON.stringify({ meetings: [isStarted ? { ...MEETING, status: 'started' } : MEETING] })
-    isStarted = true
-    return ['STARTED M3 started, Tue 10-13 15:00 UTC, 30 min, web with lead, tasks T1 | the pricing tiers', 'TOLD web', 'TOLD lead', ''].join('\n')
+    switch (args[1]) {
+      case 'start':
+        status = 'started'
+        return ['STARTED M3 started, Tue 10-13 15:00 UTC, 30 min, web with lead, tasks T1 | the pricing tiers', 'TOLD web', 'TOLD lead', ''].join('\n')
+      case 'move':
+        return ['MOVED M3 scheduled, Tue 10-13 15:00 UTC', 'TOLD lead', ''].join('\n')
+      case 'end':
+        status = 'done'
+        return ['ENDED M3', 'TOLD web', ''].join('\n')
+      default:
+        return JSON.stringify({ meetings: [{ ...MEETING, status }] })
+    }
   }
   // A session of team web, its pointer file in /work, its register holding T1.
   const { disk, runs } = await start(on, {}, { roots: {}, statuses: {}, teamrig }, { USERPROFILE: HOME, CLAUDE_CONFIG_DIR: CLAUDE_DIR, TEAMRIG_SESSION: 'po' })
@@ -3188,14 +3197,41 @@ test("the switch's Meetings button lists the team's meetings through the teamrig
 
   await pane.press({ key: 'meeting:M3' })
   expect(await drawsLine(pane, /^│ Tasks +T1 Ship the pricing page · not started$/)).toBe(true)
-  const startKey = buttonKeys(await pane.drawn()).find(key => key.startsWith('start:M3:'))
-  if (startKey === undefined) throw new Error('no start press on the open card')
-  await pane.press({ key: startKey })
-  expect(cliRuns()).toEqual([LIST, 'teamrig meeting start M3 --session po', LIST])
+  const pressOn = async (prefix: string): Promise<void> => {
+    const key = buttonKeys(await pane.drawn()).find(found => found.startsWith(prefix))
+    if (key === undefined) throw new Error(`no ${prefix} press on the open card`)
+    await pane.press({ key })
+  }
+  expect(await drawsLine(pane, /^│ \[Start meeting\]  \[Move\]  \[Drop\]$/)).toBe(true)
+
+  // Move asks when to first, and Back closes the ask running nothing; a second Move moves it an hour on.
+  await pressOn('meeting:M3:ask:move:')
+  expect(await drawsLine(pane, /^│ Move M3 to:  \[In 1 h\]  \[Tomorrow 15:00 UTC\]  \[Back\]$/)).toBe(true)
+  await pressOn('meeting:M3:back:')
+  expect(await drawsLine(pane, /^│ Move M3 to:/)).toBe(false)
+  expect(cliRuns()).toEqual([LIST])
+  await pressOn('meeting:M3:ask:move:')
+  await pressOn('meeting:M3:move:in-1h:')
+  expect(cliRuns()).toEqual([LIST, `teamrig meeting move M3 --at ${iso(NOW + HOUR)} --session po`, LIST])
+  expect(await drawsLine(pane, /^Moved M3\.$/)).toBe(true)
+  expect(await drawsLine(pane, /^│ Move M3 to:/)).toBe(false)
+
+  // Start runs at once.
+  await pressOn('meeting:M3:start:')
+  expect(cliRuns().slice(3)).toEqual(['teamrig meeting start M3 --session po', LIST])
   expect(await drawsLine(pane, /^Started M3\.$/)).toBe(true)
   expect(await drawsLine(pane, /^TOLD lead$/)).toBe(true)
   expect(await drawsLine(pane, /^◐ M3  Tue 10-13 15:00 UTC · 30 min · web with lead · started$/)).toBe(true)
-  expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('start:'))).toEqual([])
+  expect(await drawsLine(pane, /^│ \[End\]  \[Postpone\]$/)).toBe(true)
+  expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('meeting:M3:start:'))).toEqual([])
+
+  // End asks to confirm, then ends it; a done meeting's card has no presses.
+  await pressOn('meeting:M3:ask:end:')
+  expect(await drawsLine(pane, /^│ End M3 now\?  \[Yes, end\]  \[Back\]$/)).toBe(true)
+  await pressOn('meeting:M3:end:')
+  expect(cliRuns().slice(5)).toEqual(['teamrig meeting end M3 --session po', LIST])
+  expect(await drawsLine(pane, /^Ended M3\.$/)).toBe(true)
+  expect(buttonKeys(await pane.drawn()).filter(key => key.startsWith('meeting:M3:') && !key.startsWith('meeting:M3:card'))).toEqual([])
 })
 
 test("the switch's Stats button, key r, folds the tree's registers with no Find field; a press on a range or a team picks it and folds again", async ($, on) => {

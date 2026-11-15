@@ -3,6 +3,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import { placesOf, viewOf } from '../hooks/frame'
 import type { CardPart, Drawn } from '../hooks/layout'
 import { actKey, diffKey, headPresses, noteKey, openKey, pieceKey, placeOf, pressesFrom, pressesOf, standInsOf } from '../hooks/press-keys'
+import { meetingPressKey } from '../hooks/rows'
 
 /** A body element of one line, its head no press unless `extra` makes it one. */
 function drawn(key: string, extra: Partial<Drawn> = {}): Drawn {
@@ -51,8 +52,9 @@ describe('press-keys', () => {
     expect(pieceKey({ kind: 'inbox', span: { text: '2' }, inbox: { area: 'api', unread: 2 } }, 'header', 'p0', 0)).toBe('goto:inbox:header:p0:0')
     expect(pieceKey({ kind: 'toggle', span: { text: 'web' }, toggles: 'card:web' }, 'team:web', 'card:0', 2)).toBe('team:card:web:team:web:card:0:2')
     expect(pieceKey({ kind: 'pin', span: { text: 'api' }, pins: 'api' }, 'no-area', 'card:1', 2)).toBe('pin:api:no-area:card:1:2')
-    expect(pieceKey({ kind: 'start', span: { text: '[Start meeting]' }, starts: 'M3' }, 'meeting:M3', 'meeting:M3:card:start', 1)).toBe(
-      'start:M3:meeting:M3:meeting:M3:card:start:1',
+    const startsM3 = { kind: 'run', id: 'M3', run: { verb: 'start' } } as const
+    expect(pieceKey({ kind: 'meeting', span: { text: '[Start meeting]' }, meets: startsM3 }, 'meeting:M3', 'meeting:M3:card:presses', 1)).toBe(
+      'meeting:M3:start:meeting:M3:meeting:M3:card:presses:1',
     )
     const meetsApi = { act: 'meet', team: 'acme', session: 'api' } as const
     expect(pieceKey({ kind: 'session-act', span: { text: '[Meet]' }, sessionAct: meetsApi }, 'session:acme/api', 'row', 9)).toBe('meet:acme/api:session:acme/api:row:9')
@@ -70,6 +72,23 @@ describe('press-keys', () => {
     )
     expect(diffKey('C1-open', 'f1')).toBe('diff:C1-open:f1')
     expect(pieceKey({ kind: 'act', span: { text: '[Next]' }, acts: { task: 'T5', press: 'next' } }, 'T5-open', 'card:3', 2)).toBe(actKey('next', 'T5'))
+  })
+
+  test('a meeting press is keyed by its meeting and what it does, each choice of a second line apart', () => {
+    const keys = [
+      meetingPressKey({ kind: 'ask', id: 'M3', ask: 'move' }),
+      meetingPressKey({ kind: 'ask', id: 'M3', ask: 'drop' }),
+      meetingPressKey({ kind: 'back', id: 'M3' }),
+      meetingPressKey({ kind: 'run', id: 'M3', run: { verb: 'start' } }),
+      meetingPressKey({ kind: 'run', id: 'M1', run: { verb: 'end' } }),
+      meetingPressKey({ kind: 'run', id: 'M3', run: { verb: 'drop', why: 'Not needed' } }),
+      meetingPressKey({ kind: 'run', id: 'M3', run: { verb: 'drop', why: 'Covered elsewhere' } }),
+      meetingPressKey({ kind: 'run', id: 'M3', run: { verb: 'move', to: { kind: 'in-1h' } } }),
+      meetingPressKey({ kind: 'run', id: 'M3', run: { verb: 'move', to: { kind: 'tomorrow', from: 0 } } }),
+      meetingPressKey({ kind: 'run', id: 'M1', run: { verb: 'postpone', to: { kind: 'in-1h' } } }),
+    ]
+    expect(keys.slice(0, 5)).toEqual(['M3:ask:move', 'M3:ask:drop', 'M3:back', 'M3:start', 'M1:end'])
+    expect(new Set(keys).size).toBe(keys.length)
   })
 
   test("a task card's Note field and act presses are ring stops keyed by their task alone, each on its row", () => {

@@ -27,7 +27,7 @@
 // switch (`Teams (2)`), its [Meet] press running `teamrig meet` on it and its [Wake] press running `teamrig owner wake`
 // on it (session-acts.ts), and the Meetings view: the
 // team's scheduled and started meetings by time (meetings.ts, meetings-rows.ts), a press on one opening its card,
-// whose [Start meeting] press starts it. The band above the prompt shows the session's
+// whose presses start, move, drop, end or postpone it. The band above the prompt shows the session's
 // name and the task it works on now
 // (banner.ts), a press opening its card and a button beside it the pane at the task's page, whether the pane is
 // open, minimized or never drawn. Reads
@@ -45,7 +45,8 @@ import type {
   LogList,
   LogPage,
   LogRead,
-  MeetingStart,
+  MeetingAnswer,
+  MeetingAsked,
   MeetingsView,
   Nav,
   OwnerAct,
@@ -324,9 +325,12 @@ const NO_TEAM_MEETINGS: MeetingsView = { kind: 'no-team' }
 const meetings = atom({ plugin: 'teamrig-pane', key: 'meetings' } as const, MEETINGS_READING, { shape: MEETINGS_SHAPE })
 /** The Meetings view's meetings whose cards are open (meetings-rows.ts meetingKey), by key: a press on a row flips one. */
 const meetingsOpen = atom({ plugin: 'teamrig-pane', key: 'meetingsOpen' } as const, NOTHING_TOGGLED)
-const NO_START: MeetingStart | null = null
-/** What the last [Start meeting] press answered (meetings.ts): cleared at each session start and each switch to the view. */
-const meetingStart = atom({ plugin: 'teamrig-pane', key: 'meetingStart' } as const, NO_START)
+const NO_MEETING_ANSWER: MeetingAnswer | null = null
+const NO_MEETING_ASKED: MeetingAsked | null = null
+/** What the last run press on a meeting answered (meetings.ts): cleared at each session start and each switch to the view. */
+const meetingAnswer = atom({ plugin: 'teamrig-pane', key: 'meetingAnswer' } as const, NO_MEETING_ANSWER)
+/** The second line a meeting's card shows (Move, Postpone, Drop or End asked, meetings-rows.ts): cleared with the answer. */
+const meetingAsked = atom({ plugin: 'teamrig-pane', key: 'meetingAsked' } as const, NO_MEETING_ASKED)
 /** The Stats tab's numbers (stats-source.ts) are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when StatsView or the core's RegisterStats or RegisterHealth changes shape. */
 const STATS_SHAPE = 'stats-v2'
 const STATS_READING: StatsView = { kind: 'reading' }
@@ -551,7 +555,8 @@ async function switchView($: Context, target: PaneView, lives: ViewLives): Promi
     await lives.teaming?.refresh()
   }
   if (target === 'meetings') {
-    await update($, meetingStart, () => NO_START)
+    await update($, meetingAnswer, () => NO_MEETING_ANSWER)
+    await update($, meetingAsked, () => NO_MEETING_ASKED)
     await lives.scheduling?.refresh()
   }
   if (target === 'stats') await lives.tallying?.refresh()
@@ -627,7 +632,8 @@ export const register: Register = on => {
     // A filter is a look for the moment, never kept: a new session, or a hot reload, lists every task again.
     await update($, barFilter, () => null)
     // A start's answer is to its press: a new session, or a hot reload, shows none.
-    await update($, meetingStart, () => NO_START)
+    await update($, meetingAnswer, () => NO_MEETING_ANSWER)
+    await update($, meetingAsked, () => NO_MEETING_ASKED)
     await update($, sessionAnswer, () => NO_ANSWER)
     await update($, ownerAct, () => NO_ACT)
     // Each run also ends by the pane's own clock (bounded-run.ts): one the engine never settles must not hold a reader's latch.
@@ -796,8 +802,12 @@ export const register: Register = on => {
               publish: async shown => {
                 await update($, meetings, () => shown)
               },
-              tell: async start => {
-                await update($, meetingStart, () => start)
+              clock: async () => clockOf({ now: await $.clock.now(), timeZone: (await read($, snapshot)).timeZone }),
+              tell: async answer => {
+                await update($, meetingAnswer, () => answer)
+              },
+              ask: async asked => {
+                await update($, meetingAsked, () => asked)
               },
             })
       scheduling = meetingsLive
@@ -1186,7 +1196,12 @@ export const register: Register = on => {
                       own: snap.team === null || snap.area === null ? null : sessionKey(snap.team, snap.area),
                     })
                   : current === 'meetings'
-                  ? meetingsBlocks(await read($, meetings), await read($, meetingsOpen), await read($, meetingStart), snap.tasks, clockOf(snap))
+                  ? meetingsBlocks(
+                      await read($, meetings),
+                      { open: await read($, meetingsOpen), answer: await read($, meetingAnswer), asked: await read($, meetingAsked) },
+                      snap.tasks,
+                      clockOf(snap),
+                    )
                   : statsShown !== null
                   ? statsBlocks(statsShown, await read($, statsToggled), columns, {
                       team: snap.team,
@@ -1374,7 +1389,7 @@ export const register: Register = on => {
      * its page, keyed `goto:<id>:`, each reference file one that opens the file's, keyed `goto:file:`, an inbox count
      * one that opens the inbox's, keyed `goto:inbox:`, each Teams tab key one that opens or closes it in its span's
      * style, keyed `team:`, each session of a tab tied to none one that ties the tab to it as `/teamrig-pane
-     * <session>` does, keyed `pin:`, a scheduled meeting's [Start meeting] one that starts it, keyed `start:`, a Team
+     * <session>` does, keyed `pin:`, a meeting card's press one that asks, closes or runs its act, keyed `meeting:`, a Team
      * tab session row's [Meet] or [Wake] one that runs `teamrig meet` or `teamrig owner wake` on its session, keyed
      * `<act>:<team>/<session>:`, then
      * where it is drawn (`from`, the card's element); a Changes file's row one press that opens or closes its diff, keyed `diff:`, then where it is
@@ -1443,11 +1458,11 @@ export const register: Register = on => {
                   </Button>
                 )
               }
-              case 'start': {
-                const id = piece.starts
+              case 'meeting': {
+                const press = piece.meets
                 return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void scheduling?.start(id)}>
-                    {drawPress(piece.span, 'start')}
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void scheduling?.press(press)}>
+                    {drawPress(piece.span, 'meeting')}
                   </Button>
                 )
               }

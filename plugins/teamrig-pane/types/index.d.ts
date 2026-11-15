@@ -560,11 +560,47 @@ export type MeetingsView =
   | { readonly kind: 'failed'; readonly reason: string }
 
 /**
- * What the last [Start meeting] press answered (hooks/meetings.ts): the meeting, whether teamrig is still starting it,
- * started it or refused, and the lines it printed after its STARTED line (who it told, the tab it fronted or opened),
- * or why it refused.
+ * A press on a meeting's card that asks a second line before anything runs (T2778): Move a scheduled meeting or
+ * Postpone a started one to a time, Drop one with why, End a started one.
  */
-export type MeetingStart = { readonly id: string; readonly outcome: 'starting' | 'started' | 'refused'; readonly lines: readonly string[] }
+export type MeetingAsk = 'move' | 'postpone' | 'drop' | 'end'
+
+/** The second line one meeting's card shows, asked by a press (hooks/meetings-rows.ts). */
+export type MeetingAsked = { readonly id: string; readonly ask: MeetingAsk }
+
+/** Why a Drop press drops a meeting: the note `meeting drop` sends those it would meet. */
+export type DropWhy = 'Not needed' | 'Covered elsewhere'
+
+/**
+ * Where a Move or Postpone press moves a meeting: an hour from the press, or tomorrow at the wall time of `from`, the
+ * meeting's time now (hooks/meetings.ts movedAt).
+ */
+export type MeetingTo = { readonly kind: 'in-1h' } | { readonly kind: 'tomorrow'; readonly from: number }
+
+/** What a press runs on a meeting through the teamrig CLI (hooks/meetings.ts meetingWords). */
+export type MeetingRun =
+  | { readonly verb: 'start' }
+  | { readonly verb: 'end' }
+  | { readonly verb: 'drop'; readonly why: DropWhy }
+  | { readonly verb: 'move' | 'postpone'; readonly to: MeetingTo }
+
+/** A press on a Meetings view card (hooks/meetings-rows.ts): one that asks a second line, one that closes it, or one that runs. */
+export type MeetingPress =
+  | { readonly kind: 'ask'; readonly id: string; readonly ask: MeetingAsk }
+  | { readonly kind: 'back'; readonly id: string }
+  | { readonly kind: 'run'; readonly id: string; readonly run: MeetingRun }
+
+/**
+ * What the last run press answered (hooks/meetings.ts): the meeting and what ran on it, whether teamrig is still running
+ * it, did it or refused, and the lines it printed after its first (who it told, the tab it fronted or opened), or why
+ * it refused.
+ */
+export type MeetingAnswer = {
+  readonly id: string
+  readonly verb: MeetingRun['verb']
+  readonly outcome: 'running' | 'done' | 'refused'
+  readonly lines: readonly string[]
+}
 
 /**
  * A press on a session's row of the Teams tab that runs the teamrig CLI on that session (hooks/session-acts.ts):
@@ -792,8 +828,10 @@ declare module 'claude-code' {
       meetings: Shaped<MeetingsView>
       /** The Meetings view's meetings whose cards are open (hooks/meetings-rows.ts meetingKey), by key. */
       meetingsOpen: readonly string[]
-      /** What the last [Start meeting] press answered; null before one, and after a session start or a switch to the view. */
-      meetingStart: MeetingStart | null
+      /** What the last run press on a meeting answered; null before one, and after a session start or a switch to the view. */
+      meetingAnswer: MeetingAnswer | null
+      /** The second line a meeting's card shows (Move, Postpone, Drop or End asked); null when none. */
+      meetingAsked: MeetingAsked | null
       /** What the last session act pressed on the Teams tab answered; null before one, and after a session start or a switch to the tab. */
       sessionAnswer: SessionAnswer | null
       /** Where the owner's Note or Next on a task card stands (hooks/owner-acts.ts); null before one, after a cancel and after a session start. */
