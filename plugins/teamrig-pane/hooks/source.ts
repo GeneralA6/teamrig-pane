@@ -356,9 +356,12 @@ export class TaskRegisterSource {
         .map(task => rowOf(task))
         .filter(task => isActive(task) || isHeldFinished(task, now))
         .sort((a, b) => taskNumber(a.id) - taskNumber(b.id))
-      // The working set keeps each live and recently finished task's whole history, so its events cover the window;
-      // a task a compaction retired that is touched again marks nothing, its create no longer read.
-      this.work = this.keepHours === null ? [] : workMarks(this.register.current.read.events, now - this.keepHours * HOUR_MS)
+      // The working set keeps each live and recently finished task's events from its window's start (layout 5: its
+      // tasks as they stood then seed the owners), or its whole history before it; a task a compaction retired that
+      // is touched again marks nothing, its owner no longer read.
+      const { events } = this.register.current.read
+      const atWindowStart = this.register.current.window?.tasks
+      this.work = this.keepHours === null ? [] : workMarks(events, now - this.keepHours * HOUR_MS, atWindowStart)
       this.taskCounts = taskCountsOf(this.register.current.state.tasks.values(), this.register.current.retired !== null)
     }
     // Before the cards: a moved rank or spend reorders them with no register event.

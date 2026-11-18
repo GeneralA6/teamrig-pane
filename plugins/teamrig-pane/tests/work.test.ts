@@ -65,4 +65,16 @@ describe('workMarks', () => {
   test('an event on a task whose create was never read marks nothing', () => {
     expect(marksOf([statusLine('T9', 'api', NOW, 'in-progress')])).toEqual([])
   })
+
+  test("a task created before a layout 5 window marks for its owner at the window's start, then follows a handoff (T4081)", () => {
+    // The window's events hold no create for T9: its folded task line, as it stood at the window's start, names the owner.
+    const events = readEvents(
+      [statusLine('T9', 'api', NOW + HOUR, 'in-progress'), updateLine('T9', 'api', NOW + 2 * HOUR, { owner: 'ui' }), statusLine('T9', 'ui', NOW + 3 * HOUR, 'waiting')].join('\n'),
+    ).events
+    expect(workMarks(events, 0, new Map([['T9', { owner: 'api' }]]))).toEqual([
+      { session: 'api', task: 'T9', at: NOW + HOUR },
+      { session: 'api', task: 'T9', at: NOW + 2 * HOUR },
+      { session: 'ui', task: 'T9', at: NOW + 3 * HOUR },
+    ])
+  })
 })
