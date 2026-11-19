@@ -14,8 +14,10 @@ project skills in `.claude/skills/` hold the steps of each repeated job.
   mechanical change alone), committed as each step passes. A commit past 400 changed non-test lines or 15 non-test
   files carries a `Large-commit: <reason>` line.
 - **Signed off**: every commit is `git commit -s` (DCO).
-- **Version**: a change under `plugins/teamrig-pane/` raises the version in
-  `plugins/teamrig-pane/.claude-plugin/plugin.json`, in its own commit.
+- **Version**: never raise the version in `plugins/teamrig-pane/.claude-plugin/plugin.json`: the release pull
+  request does, from the commit subjects.
+- **Conventional subjects**: `<type>(<area>): <what>`, the area optional; the types are `feat`, `fix`, `perf`,
+  `refactor`, `docs`, `test`, `build`, `ci`, `chore` and `revert`, with `!` before the colon for a breaking change.
 - **`hooks/core/` is teamrig's**: never edit `plugins/teamrig-pane/hooks/core/` by hand; `dev-sync-core` moves it.
 - **Docs in the same pull request**: `dev-update-docs` says which page each kind of change touches.
 - **No private data**: no home paths, e-mail addresses, host names or secrets in code, tests, docs or commit
@@ -30,4 +32,4 @@ project skills in `.claude/skills/` hold the steps of each repeated job.
 | `dev-write-pane-test` | a plugin test in the engine, or a node test where the runner cannot go |
 | `dev-update-docs` | the docs a change must update, and the tests that hold them to the code |
 | `dev-sync-core` | moving `hooks/core/` to a new teamrig commit, and the golden capture after it |
-| `dev-ship-change` | from the last commit to the merge: version raise, checks, push, pull request |
+| `dev-ship-change` | from the last commit to the merge: checks, push, pull request |

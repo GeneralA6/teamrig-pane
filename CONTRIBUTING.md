@@ -23,7 +23,7 @@ the rules that apply on every turn, and the project skills in `.claude/skills/` 
 | [`dev-write-pane-test`](.claude/skills/dev-write-pane-test/SKILL.md) | a plugin test in the engine, or a node test where the runner cannot go |
 | [`dev-update-docs`](.claude/skills/dev-update-docs/SKILL.md) | the docs a change must update, and the tests that hold them to the code |
 | [`dev-sync-core`](.claude/skills/dev-sync-core/SKILL.md) | moving `hooks/core/` to a new teamrig commit, and the golden capture after it |
-| [`dev-ship-change`](.claude/skills/dev-ship-change/SKILL.md) | from the last commit to the merge: version raise, checks, push, pull request |
+| [`dev-ship-change`](.claude/skills/dev-ship-change/SKILL.md) | from the last commit to the merge: typed subjects, checks, push, pull request |
 
 - **One branch per change**, cut from the newest `origin/main` (see [Branches and releases](#branches-and-releases)).
 - **One logical change per commit**: a fix with its tests, a refactor apart from what it enables, a mechanical change
@@ -113,6 +113,12 @@ Node version or the pinned Claude Code release shows goes unseen until the repos
 - Each commit is one logical change. The `size rule` (`tools/ci/size-rule-cli.ts`, run by the local gate, CI
   and `npm run check`) fails a commit over 400 changed non-test lines or 15 non-test files whose message has
   no `Large-commit: <reason>` line: teamrig's push guard rule at its defaults, so a pull request meets it too.
+- Each commit subject is a Conventional Commit, `<type>(<area>): <what>` with the area optional, such as
+  `fix(work): ...` or `docs: ...`; the types are `feat`, `fix`, `perf`, `refactor`, `docs`, `test`,
+  `build`, `ci`, `chore` and `revert`, and a `!` before the colon marks a change that breaks how people use
+  the pane. The release workflow raises the version from these subjects, and a pull request is rebase-merged with its
+  commits as they are, so the `commit subjects` check (`tools/ci/commit-subjects-cli.ts`, run by the local gate, CI
+  and `npm run check`) fails a commit whose subject is not one, and says how to reword it.
 - Nothing is pushed to `main` directly, and release tags are set only by the release workflow.
 - The `release` workflow (`.github/workflows/release.yml`, run on each push to `main`) keeps one release pull request
   open through release-please (`release-please-config.json`): it raises the version in
@@ -132,8 +138,6 @@ Node version or the pinned Claude Code release shows goes unseen until the repos
 - **Your commit e-mail**: the `Signed-off-by:` line carries your commit e-mail, and the scrub refuses an e-mail
   address in a commit message unless it is one of GitHub's no-reply addresses. Before your first commit, set the
   no-reply address GitHub shows under Settings, Emails: `git config user.email <id>+<user>@users.noreply.github.com`.
-- **A version clash**: when `main` moves on with a version raise of its own, rebase onto it. `plugin.json` clashes:
-  take `main`'s side and raise the version above it again, in its own commit as before.
 - **Review**: a code owner (`.github/CODEOWNERS`: the maintainer) reviews the code and approves the last push, and a
   new push dismisses an approval given before it. A change to the git hooks, their setup, CI or the scrub
   (`.githooks/`, `.github/`, `tools/setup/`, `tools/scrub/`, `tools/ci/`) also gets a security review.

@@ -19,8 +19,8 @@ description: Move the pane's copy of teamrig's read modules to a new teamrig com
    `plugins/teamrig-pane/tests/golden-register.ts`, which `plugins/teamrig-pane/tests/golden.test.ts` holds the pane to.
 4. A new module the read entry reaches goes into the list in `plugins/teamrig-pane/scripts/vendor.ts`, so the import
    check accepts it.
-5. Commit the copy, the pin and the capture together, `core: sync hooks/core to teamrig <sha>, <why>`, with a
-   `Large-commit: <reason>` line when the copy passes the size limits. Raise the plugin version in its own commit.
+5. Commit the copy, the pin and the capture together, `build(core): sync hooks/core to teamrig <sha>, <why>`, with a
+   `Large-commit: <reason>` line when the copy passes the size limits. The release pull request raises the version.
 
 ## Traps
 
