@@ -41,7 +41,6 @@ export function localChecks(base: string, teamrig: string): readonly LocalCheck[
     { name: 'commit subjects', argv: ['node', 'tools/ci/commit-subjects-cli.ts', '--base', base] },
     { name: 'plugin tests: none skipped', argv: ['node', 'tools/ci/plugin-tests-cli.ts'] },
     { name: 'doc pictures', argv: ['node', 'tools/docs/images-cli.ts', '--check'] },
-    { name: 'plugin version gate', argv: ['node', 'tools/ci/plugin-version-cli.ts', '--base', base] },
     {
       name: 'hooks/core matches the teamrig pin',
       argv: ['node', '--disable-warning=ExperimentalWarning', 'scripts/sync-core.ts', '--teamrig', teamrig, '--check'],

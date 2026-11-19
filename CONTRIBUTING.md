@@ -113,14 +113,17 @@ Node version or the pinned Claude Code release shows goes unseen until the repos
 - Each commit is one logical change. The `size rule` (`tools/ci/size-rule-cli.ts`, run by the local gate, CI
   and `npm run check`) fails a commit over 400 changed non-test lines or 15 non-test files whose message has
   no `Large-commit: <reason>` line: teamrig's push guard rule at its defaults, so a pull request meets it too.
-- Nothing is pushed to `main` directly, and release tags are set only by the maintainer.
+- Nothing is pushed to `main` directly, and release tags are set only by the release workflow.
+- The `release` workflow (`.github/workflows/release.yml`, run on each push to `main`) keeps one release pull request
+  open through release-please (`release-please-config.json`): it raises the version in
+  `plugins/teamrig-pane/.claude-plugin/plugin.json` and writes the notes, and a person reviews and merges it.
 - Installs take the version in `plugins/teamrig-pane/.claude-plugin/plugin.json`, not the newest commit:
-  `claude plugin update` moves an install only when that version rises. So a change to anything under
-  `plugins/teamrig-pane/` raises it, as MAJOR.MINOR.PATCH: while it is 0.x, the minor for a new feature
-  or a change that breaks how people use it, the patch for a fix. The `plugin version gate`
-  (`tools/ci/plugin-version-cli.ts`, run by the local gate and `npm run check`) fails a pull request that does not, and
-  one that gives the marketplace entry a version of its own, which Claude Code ignores. How users update:
-  [Update](README.md#update).
+  `claude plugin update` moves an install only when that version rises. A pull request never raises it: the release
+  pull request does, from the commit subjects since the last release. While it is 0.x, a `feat` or a breaking change
+  raises the minor, a `fix` or `perf` the patch. A spec (`tools/ci/release-workflow.test.ts`) holds `plugin.json` and
+  `.release-please-manifest.json` to one version, so a raise by hand fails, and another
+  (`tools/lib/marketplace.test.ts`) fails a marketplace entry that gives a version of its own, which Claude Code
+  ignores. How users update: [Update](README.md#update).
 
 ## Pull requests
 - **From a fork**: fork the repository, branch off its `main`, and open the pull request against this repository's
