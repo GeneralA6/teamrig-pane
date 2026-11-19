@@ -84,10 +84,10 @@ describe('unpassedJobs', () => {
       job('test (macos-latest, node 24)', 'success'),
       job('coverage', 'skipped'),
       job('size-rule', 'failure'),
-      job('plugin-version', null, 'queued'),
+      job('commit-subjects', null, 'queued'),
       job(SELF, null, 'in_progress'),
     ];
-    assert.deepEqual(unpassedJobs(jobs, SELF).map((one) => one.name), ['test (macos-latest, node 22)', 'coverage', 'size-rule', 'plugin-version']);
+    assert.deepEqual(unpassedJobs(jobs, SELF).map((one) => one.name), ['test (macos-latest, node 22)', 'coverage', 'size-rule', 'commit-subjects']);
   });
 });
 
