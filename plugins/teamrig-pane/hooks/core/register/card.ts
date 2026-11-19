@@ -1,6 +1,7 @@
 // Copied from teamrig's src/register/card.ts by scripts/sync-core.ts: change it there, then run the sync.
 import { isRecord } from '../core/guards.ts';
 import { auditOf, handStepShapeOf, runFileDrift, runLineOf, shortSha256, type HandStepAudit, type RunFiles } from './hand-step.ts';
+import { verdictIsCurrent, type SecurityVerdict } from './security-verdict.ts';
 
 /**
  * A decision card (T514): what a task waiting on a decision or an approval asks, written so whoever decides needs
@@ -38,6 +39,12 @@ export interface DecisionCard {
    * writes; one that does none of those is approved with the work it tests, and goes ahead.
    */
   readonly affects?: string;
+  /**
+   * On any card (T2761, core rule 9): the question is security-related whatever its gate, a guard line, a secret or
+   * a grant say, so it reaches the owner only with the security reviewer's verdict on it, as a card on a gate in
+   * `securityGates` does. Kept as long as the card is, as the reviewer reads the card before the owner does.
+   */
+  readonly security?: true;
 }
 
 /** The CLI flags that write a card's parts, for the refusals that name them. */
@@ -55,6 +62,9 @@ export const RUN_FLAG = '--run';
 /** The CLI flag that writes a card's `affects`. */
 export const AFFECTS_FLAG = '--affects';
 
+/** The CLI switch that writes a card's `security`. */
+export const SECURITY_FLAG = '--security';
+
 /** How `--affects` is typed. */
 export const AFFECTS_USAGE = `${AFFECTS_FLAG} "<the approved number it changes, the money it spends or the data it writes>"`;
 
@@ -69,6 +79,22 @@ const PROOF_WORD =
 /** The first word that makes `question` about a test, a measure or a proof (PROOF_WORD), as written; undefined when none does. */
 export function proofWordOf(question: string): string | undefined {
   return PROOF_WORD.exec(question)?.[0];
+}
+
+/**
+ * The words that make a card security-related (T2761): a guard, a permission, a deny, settings, a secret, a token,
+ * a grant, `teamrig exec`, auto mode, a privileged step. The bare words key and allow are left out, and so are
+ * tokens and setting: a key result, an allowance, a token budget and setting a date are not security matters.
+ */
+const SECURITY_WORD =
+  /\bguards?\b|\bpermissions?\b|\bden(?:y|ies|ied)\b|\bsettings\b|\bsecrets?\b|\btoken\b|\bgrant(?:s|ed|ing)?\b|\bexec\b|\bauto-?mode\b|\bprivileged\b/iu;
+
+/**
+ * The first word in what `card` asks the owner to approve (its question, options and recommendation, the parts a
+ * security verdict reads) that makes it security-related (SECURITY_WORD), as written; undefined when none does.
+ */
+export function securityWordOf(card: DecisionCard): string | undefined {
+  return SECURITY_WORD.exec([card.question, ...card.options, card.recommend].join(' | '))?.[0];
 }
 
 /** The gate that names a business decision, the owner's besides the owner gates (T1194). */
@@ -178,6 +204,7 @@ export function keptCard(card: DecisionCard, keep: KeptOwnerParts): DecisionCard
     ...(keep.gate && card.gate !== undefined ? { gate: card.gate } : {}),
     ...(keep.run && card.run !== undefined ? { run: card.run } : {}),
     ...(keep.affects && card.affects !== undefined ? { affects: card.affects } : {}),
+    ...(card.security === true ? { security: true } : {}),
   };
 }
 
@@ -264,6 +291,7 @@ export function sameCard(a: DecisionCard | null, b: DecisionCard | null): boolea
     a.gate === b.gate &&
     a.run === b.run &&
     a.affects === b.affects &&
+    a.security === b.security &&
     a.options.length === b.options.length &&
     a.options.every((option, index) => option === b.options[index])
   );
@@ -280,7 +308,7 @@ export function parseCard(value: unknown): DecisionCard | undefined | string {
   if (!isRecord(value)) {
     return 'card is not an object';
   }
-  const { question, options, recommend, byDefault, whyAsk, gate, run, affects } = value;
+  const { question, options, recommend, byDefault, whyAsk, gate, run, affects, security } = value;
   if (typeof question !== 'string' || typeof recommend !== 'string' || typeof byDefault !== 'string') {
     return 'card needs question, recommend and byDefault as text';
   }
@@ -299,6 +327,9 @@ export function parseCard(value: unknown): DecisionCard | undefined | string {
   if (affects !== undefined && typeof affects !== 'string') {
     return 'card affects is not text';
   }
+  if (security !== undefined && security !== true) {
+    return 'card security is not true';
+  }
   return {
     question,
     options,
@@ -308,6 +339,7 @@ export function parseCard(value: unknown): DecisionCard | undefined | string {
     ...(gate === undefined ? {} : { gate }),
     ...(run === undefined ? {} : { run }),
     ...(affects === undefined ? {} : { affects }),
+    ...(security === true ? { security } : {}),
   };
 }
 
@@ -315,12 +347,14 @@ export function parseCard(value: unknown): DecisionCard | undefined | string {
  * A card as printed under its task: the question, the owner gate or business reason that makes it the owner's, why
  * the owner is asked and what a test it asks about changes (when the card says), each option numbered, the recommendation and the default, then the
  * hand step to run (when the card hands one), each line led by `indent`. `audits` are the task's (fold.ts), and
- * `runFiles` what its hand step file hashes to now.
+ * `runFiles` what its hand step file hashes to now. `verdict` is the task's security verdict (T2761), printed after
+ * the gate, or marked STALE once the card asks something other than what it was given on.
  */
-export function cardLines(card: DecisionCard, indent: string, audits: readonly HandStepAudit[], runFiles: RunFiles): string[] {
+export function cardLines(card: DecisionCard, indent: string, audits: readonly HandStepAudit[], runFiles: RunFiles, verdict: SecurityVerdict | null): string[] {
   return [
     `${indent}decide: ${card.question}`,
     ...(card.gate === undefined ? [] : [`${indent}gate: ${card.gate}`]),
+    ...(verdict === null ? (card.security === true ? [`${indent}security: no verdict yet; it reaches the owner only with the security reviewer's`] : []) : [`${indent}security: ${verdictText(verdict, card)}`]),
     ...(card.whyAsk === undefined ? [] : [`${indent}why asked: ${card.whyAsk}`]),
     ...(card.affects === undefined ? [] : [`${indent}affects: ${card.affects}`]),
     ...card.options.map((option, index) => `${indent}  ${index + 1}. ${option}`),
@@ -328,6 +362,16 @@ export function cardLines(card: DecisionCard, indent: string, audits: readonly H
     `${indent}with no answer: ${card.byDefault}`,
     ...(card.run === undefined ? [] : [`${indent}run: ${runText(card.run, audits, runFiles)}`]),
   ];
+}
+
+/**
+ * The security verdict as the owner reads it: the reviewer's text and who gave it, or, once the card asks another
+ * question, options or recommendation than the verdict read, that it is stale and not to be decided on (core rule 9).
+ */
+function verdictText(verdict: SecurityVerdict, card: DecisionCard): string {
+  return verdictIsCurrent(verdict, card)
+    ? `${verdict.text} (verdict by ${verdict.by})`
+    : `STALE: ${verdict.by}'s verdict read another question, options or recommendation; do not decide until it is read again`;
 }
 
 /**

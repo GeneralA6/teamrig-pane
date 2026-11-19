@@ -1,6 +1,7 @@
 // Copied from teamrig's src/register/tree.ts by scripts/sync-core.ts: change it there, then run the sync.
 import { parseDeadline } from '../core/time.ts';
 import type { TimeZone } from '../core/zone.ts';
+import { answerTo } from './approval.ts';
 import { canMove } from './can-move.ts';
 import type { PrepRead } from './focus.ts';
 import { taskNumber, type Task } from './fold.ts';
@@ -287,6 +288,16 @@ export interface WaitingOnYou<T extends TreeTask = Task> {
   readonly asks: readonly PersonWait[];
 }
 
+/** One session a task waits on ({@link TaskTree.waitsOn}): the session, and what of it the task waits on. */
+export interface WaitOn<T extends TreeTask = Task> extends WaitingOnYou<T> {
+  readonly session: string;
+}
+
+/** The task's decision and approval waits no answer met yet (T1422: an answered one lets its owner go on). */
+function unansweredAsks(task: TreeTask): PersonWait[] {
+  return task.waits.filter((reason): reason is PersonWait => (reason.kind === 'decision' || reason.kind === 'approval') && answerTo({ answer: task.answer ?? null }, reason) === undefined);
+}
+
 /** What a task is worth by its class, goal and severity, as `ranking` reads them. */
 function valueFacts(task: TreeTask, ranking: TreeRanking): ValueFacts {
   return { workClass: ranking.classOf(task), rank: ranking.goalOf(task)?.rank ?? null, type: task.type ?? null, critical: task.critical ?? false };
@@ -498,7 +509,8 @@ export class TaskTree<T extends TreeTask = Task> {
   /**
    * What waits on `session`: every active task of another owner that directly needs an unfinished task of the
    * session, or waits on its decision or approval, in plan order. A parked task is left out: `list` hides it, so a row
-   * here would name work its owner cannot see.
+   * here would name work its owner cannot see. An approval the session already answered, either way, is left out too
+   * (T1422): its owner goes on (`waitsLetGoOn`), so the row would ask the session for an answer it gave.
    */
   waitingOn(session: string): WaitingOnYou<T>[] {
     const waiting = [...this.tasks.values()].flatMap((task) => {
@@ -506,10 +518,26 @@ export class TaskTree<T extends TreeTask = Task> {
         return [];
       }
       const needs = this.inPlanOrder(this.unfinishedNeeds(task).filter((need) => need.owner === session));
-      const asks = task.waits.filter((reason): reason is PersonWait => (reason.kind === 'decision' || reason.kind === 'approval') && reason.who === session);
+      const asks = unansweredAsks(task).filter((reason) => reason.who === session);
       return needs.length === 0 && asks.length === 0 ? [] : [{ task, needs, asks }];
     });
     return waiting.sort((a, b) => this.byPlanOrder(a.task, b.task));
+  }
+
+  /**
+   * Who `task` waits on, the other side of {@link waitingOn}: each session other than its owner that owns an
+   * unfinished task it directly needs or is asked for one of its unanswered decisions and approvals, with what it
+   * waits on there. None for a finished or parked task, as `waitingOn` leaves those out.
+   */
+  waitsOn(task: T): WaitOn<T>[] {
+    if (!isActive(task) || this.isParked(task)) {
+      return [];
+    }
+    const needs = this.inPlanOrder(this.unfinishedNeeds(task));
+    const asks = unansweredAsks(task);
+    const sessions = new Set([...needs.map((need) => need.owner), ...asks.map((ask) => ask.who)]);
+    sessions.delete(task.owner);
+    return [...sessions].map((session) => ({ task, session, needs: needs.filter((need) => need.owner === session), asks: asks.filter((ask) => ask.who === session) }));
   }
 
   /**

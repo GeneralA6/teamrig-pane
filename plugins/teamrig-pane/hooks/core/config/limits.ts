@@ -16,6 +16,7 @@ export const CONFIG_LIMITS = {
   skillListingChars: { min: 500, max: 500_000 },
   sessionListsChars: { min: 500, max: 500_000 },
   ownerGates: { maxItems: 8, maxLength: 60 },
+  securityGates: { maxItems: 8, maxLength: 60 },
   ruleConflicts: { maxItems: 40 },
   protectedBranches: { maxItems: 8, maxLength: 64 },
   reviewPaths: { maxItems: 128 },
@@ -55,6 +56,7 @@ export const CONFIG_LIMITS = {
   dbWriteNodeClients: { maxItems: 16 },
   dbWriteClientReceivers: { maxItems: 8, maxLength: 40 },
   packageCooldownDays: { min: 0, max: 365 },
+  serviceRoleDailyCap: { min: 0, max: 200 },
   searchNudgeAt: { min: 0, max: 50 },
   turnLogKeepHours: { min: 1, max: 168 },
   meetingBeforeMinutes: { min: 0, max: 120 },
@@ -64,15 +66,19 @@ export const CONFIG_LIMITS = {
   wakeMinGapMinutes: { min: 0, max: 1440 },
   maxFailureChars: { min: 500, max: 50_000 },
   githubRepos: { maxItems: 20, maxLength: 140 },
+  issueTypeNames: { maxItems: 5, maxLength: 100 },
   closedDays: { min: 1, max: 365 },
-  githubEveryMinutes: { min: 0, max: 1440 },
+  githubProbeSeconds: { min: 0, max: 3600 },
   similarThreshold: { min: 0, max: 1 },
+  githubFollowMax: { min: 0, max: 100 },
   budgetTargetPct: { min: 1, max: 100 },
   budgetReservePct: { min: 0, max: 50 },
   /** 0 turns the floor off; past 50 one team's floor would leave a second less than its own (T2215). */
   shareFloorPct: { min: 0, max: 50 },
   weeklyLimitW: { min: 1_000_000, max: 1_000_000_000_000 },
   subagentWeight: { min: 0.1, max: 10 },
+  budgetModelWeights: { maxItems: 10 },
+  modelWeight: { min: 0.1, max: 20 },
   extraWPerUsd: { min: 1_000, max: 1_000_000_000 },
   paceEndHoursBeforeReset: { min: 0, max: 48 },
   sessionShare: { min: 0, max: 100 },
@@ -96,6 +102,7 @@ export const CONFIG_LIMITS = {
   burstMinSparePct: { min: 0.1, max: 100 },
   burstMaxHelpers: { min: 0, max: 20 },
   burstMaxHires: { min: 0, max: 20 },
+  rushPokeAfterMinutes: { min: 1, max: 120 },
   queueLockTtlMinutes: { min: 11, max: 1440 },
   queueMaxRunMinutes: { min: 1, max: 1430 },
   queueSmallMaxRunMinutes: { min: 1, max: 1430 },
@@ -105,17 +112,23 @@ export const CONFIG_LIMITS = {
   queueSmallReserveMb: { min: 0, max: 1_048_576 },
   queueHeavyReserveMb: { min: 0, max: 1_048_576 },
   queueAgingMinutes: { min: 0, max: 1440 },
+  queueMemoryPassMinutes: { min: 0, max: 1440 },
   queuePerSessionRunning: { min: 0, max: 64 },
   queueMaxHeavyParallel: { min: 1, max: 64 },
+  queueMaxSmallParallel: { min: 1, max: 64 },
+  queueHeavyIdleCpuPct: { min: 0, max: 100 },
   headroomSessionMb: { min: 100, max: 65_536 },
   headroomCommitMaxPct: { min: 50, max: 100 },
   headroomCloseIdleMinutes: { min: 15, max: 10_080 },
   headroomFloorMb: { min: 0, max: 1_048_576 },
   headroomLoadMinutes: { min: 1, max: 60 },
+  idleReopenUnreadLines: { min: 0, max: 1_000 },
   deliveryPollSeconds: { min: 1, max: 600 },
   deliveryWaitMaxMinutes: { min: 0, max: 1440 },
   checkTimeoutSeconds: { min: 1, max: 600 },
+  passEnv: { maxItems: 32 },
   freezeMaxMinutes: { min: 1, max: 1440 },
+  branchSlugMax: { min: 8, max: 100 },
   settleMinutes: { min: 0, max: 1440 },
   assumedDeployMinutes: { min: 0, max: 1440 },
   stablePeriodMinMinutes: { min: 1, max: 1440 },
@@ -179,6 +192,18 @@ export const BUDGET_ACCOUNT_MAX_LENGTH = 100;
 
 /** The longest `github.acceptLabel`: GitHub caps a label name at 50 characters. */
 export const GITHUB_LABEL_MAX_LENGTH = 50;
+
+/** The longest name in `github.fields`: past any field name GitHub shows. */
+export const ISSUE_FIELD_NAME_MAX_LENGTH = 100;
+
+/**
+ * Bounds on `serviceRoles` (T2984): how many roles a team declares, and the shape of a role's name, which a log line
+ * and the classifier's briefing line name it by.
+ */
+export const SERVICE_ROLE_LIMITS = {
+  maxRoles: 16,
+  namePattern: /^[a-z][a-z0-9-]{0,31}$/,
+} as const;
 
 /** Bounds on the fields of one review gate entry (`pushGuard.reviewPaths`). */
 export const REVIEW_PATH_LIMITS = {

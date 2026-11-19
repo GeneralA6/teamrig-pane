@@ -1,8 +1,10 @@
 // Copied from teamrig's src/config/types.ts by scripts/sync-core.ts: change it there, then run the sync.
 import type { TaskStatus } from '../register/model.ts';
+import type { ItemType } from '../register/events.ts';
 import type { CoreRuleKey } from '../rules/keys.ts';
 import type { AdmissionMode } from '../delivery/admission.ts';
 import type { NeedKind } from '../tabs/need-kind.ts';
+import type { ServiceCommand } from '../permissions/service-commands.ts';
 
 /** The config format this code reads and writes. Older files are migrated in memory on load. */
 export const CONFIG_VERSION = 8;
@@ -98,10 +100,16 @@ export interface RegisterConfig {
    */
   readonly requireFollowupsOn: readonly TaskStatus[];
   /**
-   * Whether a write archives the task list's log by itself once it is long (register/rotate.ts), as it does
-   * after the first `teamrig compact`. Off, only `teamrig compact` archives it.
+   * Whether a write archives the task list's log by itself once it is long (register/rotate.ts), the first
+   * time too. Off, only `teamrig compact` archives it.
    */
   readonly autoArchive: boolean;
+  /**
+   * Whether a leader (the lead, or a sub-lead in `leads`) is shown, at each prompt, the register changes in its tree
+   * since its last one (hooks/leader-digest.ts), and a member's note that told no leader says it waits for that digest.
+   * Off (the default), neither: a note reaches a leader only by a line posted to it.
+   */
+  readonly leaderDigest: boolean;
   /**
    * Whether `set --status waiting` on the owner's decision or approval needs a decision card (`--question`,
    * `--options`, `--recommend`, `--default`; register/card.ts), so the owner decides from it alone.
@@ -221,7 +229,8 @@ export interface ExecConfig {
   readonly path: readonly string[];
   /**
    * The name of the environment variable that holds the webhook URL every approval, refusal and run is posted to
-   * (spec §10), never the URL itself, which is a secret. Absent: nothing is posted.
+   * (spec §10), never the URL itself, which is a secret. Only an https URL is posted to; any other warns. Absent:
+   * nothing is posted.
    */
   readonly webhookEnv?: string;
 }
@@ -236,12 +245,12 @@ export interface PushGuardConfig {
 }
 
 /**
- * A normal push to a protected branch: `ask` the human, `allow` it with a note, or `lead`: the lead's own goes through
- * with a note, another session's only once the lead approved one of its waiting tasks (`teamrig approve`, T684), else
- * it is refused with how to ask, never asked of the human. `gated` (T800 §2.1, T858) clears a hand push as `lead` does,
+ * A normal push to a protected branch: `ask` refuses it with the route to take, as no teamrig hook asks a person
+ * (T3356), `allow` lets it through with a note, or `lead`: the lead's own goes through with a note, another session's
+ * only once the lead approved one of its waiting tasks (`teamrig approve`, T684), else it is refused with how to ask. `gated` (T800 §2.1, T858) clears a hand push as `lead` does,
  * and `teamrig merge` merges a change that holds the self-merge gates with no approval, logging it, and holds one
  * that misses a gate for its session's leader. None changes a refusal, a `--force-with-lease` push, or a command the
- * guard cannot read, which still asks.
+ * guard cannot read, which is still refused with its route.
  */
 export type PushToProtected = 'ask' | 'allow' | 'lead' | 'gated';
 
@@ -291,14 +300,14 @@ export interface PackageGuardConfig {
 /**
  * An install the guard cannot vet (`npm install`, `pnpm add`, `yarn add`, `bun add` and their updates): a range or a
  * bare update rather than an exact version or tag, a git or URL source, or a version published fewer than
- * `cooldownDays` ago or with a known advisory: `deny` refuses it, `ask` asks the human, `allow` lets it run.
+ * `cooldownDays` ago or with a known advisory: `deny` refuses it, `ask` refuses it too, its reason naming the route to take (no teamrig hook asks a person), `allow` lets it run.
  */
 export type PackageInstalls = 'deny' | 'ask' | 'allow';
 
 /**
  * An ad-hoc package run, one that fetches a package outside the project's lockfile and runs it at once (`npx` of a
  * tool not in `node_modules/.bin`, `npm exec`, `npm create`/`init <x>`, `pnpm dlx`, `yarn dlx`, `bunx`): `deny`
- * refuses it, `ask` asks the human, `allow` lets it run.
+ * refuses it, `ask` refuses it too, its reason naming the route to take (no teamrig hook asks a person), `allow` lets it run.
  */
 export type AdHocRunners = 'deny' | 'ask' | 'allow';
 
@@ -310,16 +319,24 @@ export interface CommitGuardConfig {
 /**
  * A git command run without the repository's hooks: `--no-verify` (or `-n` for `git commit` and `git am`), `HUSKY`
  * set for it, or a `core.hooksPath` that `-c`, a `GIT_CONFIG*` variable or `git config` sets or unsets: `deny`
- * refuses it, `ask` asks the human, `allow` lets it run.
+ * refuses it, `ask` refuses it too, its reason naming the route to take (no teamrig hook asks a person), `allow` lets it run.
  */
 export type SkipHooks = 'deny' | 'ask' | 'allow';
 
-/** The permission prompts teamrig's own hooks raise. */
+/** The permission prompts a team's sessions meet; teamrig's own hooks raise none (T3356). */
 export interface PromptsConfig {
-  /** What a hook does with a call it would ask the human about. */
+  /** What happens to a permission prompt Claude Code raises on its own while the team is loaded. */
   readonly hookAsks: HookAsks;
-  /** Whether a sanctioned route's line runs with no permission check at all while asks are refused. */
+  /**
+   * Whether a sanctioned route's line runs with no permission check at all while asks are refused, and a service role's
+   * call for its holder's tab whatever asks say.
+   */
   readonly routeAllow: RouteAllow;
+  /**
+   * How many calls one service role lets run with no permission check in 24 hours (T2984, security condition C6), so a
+   * holder steered by outside text closes or comments only so much; past it, the role's next call is refused.
+   */
+  readonly serviceRoleDailyCap: number;
 }
 
 /**
@@ -331,12 +348,12 @@ export interface PromptsConfig {
 export type RouteAllow = 'on' | 'off';
 
 /**
- * A call a teamrig hook would ask the human about (a push to a protected branch or one it cannot read, an ad-hoc
- * package run, an install it cannot vet, a git command without hooks, a call that would print a secret, a helper over
- * the budget, as their own keys set): `ask` raises the permission prompt; `refuse` refuses it instead, its reason telling the session to record the step as waiting for
- * the owner's approval and take its next task, so no prompt holds a session while nobody is there to answer it.
- * `refuse` also answers the prompts Claude Code raises on its own, per case (hooks/prompt-refuse.ts): a line that
- * provably only reads runs, a line teamrig's rules give a rerun form is refused quoting it, anything else is refused.
+ * What happens to a permission prompt Claude Code raises on its own while the team is loaded. teamrig's own hooks never
+ * ask a person, whatever this says (owner order T3356): what one would ask about is refused with the route to take and
+ * how to ask for a rule change (hooks/permission.ts). `refuse`, the default since T3356, answers Claude Code's own
+ * prompts per case (hooks/prompt-refuse.ts): a line that provably only reads runs, a line teamrig's rules give a rerun
+ * form is refused quoting it, anything else is refused, so no prompt holds a session while nobody is there to answer
+ * it. `ask` lets those prompts open; it suits only a team with a person watching every tab.
  */
 export type HookAsks = 'ask' | 'refuse';
 
@@ -379,14 +396,14 @@ export interface SecretGuardConfig {
  * whole environment (`env`, `printenv`, `Get-ChildItem Env:`), a secret variable (`echo $GITHUB_TOKEN`), a
  * Kubernetes secret's data or a dump command's output (`kubectl config view --raw`), and a shell line that reads a saved
  * credential out of the host's store, printed or not (`gh auth token`, `git credential fill`, `CredRead`):
- * `deny` refuses it, `ask` asks the human, `allow` lets it run.
+ * `deny` refuses it, `ask` refuses it too, its reason naming the route to take (no teamrig hook asks a person), `allow` lets it run.
  */
 export type SecretReads = 'deny' | 'ask' | 'allow';
 
 /**
  * A call that holds a secret as text: a Bash or PowerShell line with a token, credentials in a URL or an
  * `Authorization` header in it, or a Write, Edit, MultiEdit or NotebookEdit whose text holds one outside a secret file:
- * `deny` refuses it, `ask` asks the human, `allow` lets it run.
+ * `deny` refuses it, `ask` refuses it too, its reason naming the route to take (no teamrig hook asks a person), `allow` lets it run.
  */
 export type SecretWrites = 'deny' | 'ask' | 'allow';
 
@@ -414,7 +431,7 @@ export interface DbWriteGuardConfig {
 /**
  * A hand-run database write: a SQL client or a team's database program whose code writes, a Node script or `node -e`
  * whose team-named client writes, a container or remote host running one, or an entrypoint run with an apply flag:
- * `deny` refuses it, `ask` asks the human, `allow` lets it run.
+ * `deny` refuses it, `ask` refuses it too, its reason naming the route to take (no teamrig hook asks a person), `allow` lets it run.
  */
 export type DbWrites = 'deny' | 'ask' | 'allow';
 
@@ -656,18 +673,64 @@ export interface TestsConfig {
   readonly maxFailureChars: number;
 }
 
-/** The team's GitHub repositories: `teamrig gh sync` reads their issues into the register, never writing to GitHub; `gh migrate` and `issue comment`/`issue close`, run by hand, write only to them. */
+/** The kinds of issue a task's issue is typed as (T3406): a design issue, a goal (a task planned after its parts), a bug, else a task. */
+export const ISSUE_KINDS = ['task', 'bug', 'goal', 'design'] as const;
+export type IssueKind = (typeof ISSUE_KINDS)[number];
+
+/**
+ * What the status push writes to the issue fields and the type of each open issue a task holds (T3406), one way from
+ * the register, on a tracker that has fields: the priority, the day the task first went in progress, its due day and
+ * its score, each only when it differs from what the issue holds. Labels stay as they are.
+ */
+export interface IssueFieldsConfig {
+  /** Off: the push writes no field and no type. */
+  readonly push: boolean;
+  /** The single-select field the priority goes to, as the option priorityOptions names for it; empty writes none. */
+  readonly priority: string;
+  /**
+   * The options each priority level is written as, by `p<n>`: the first one the field has wins (case aside, or one
+   * that starts with it, such as `P1 - high`). A level not listed is written as its `P<n>` option.
+   */
+  readonly priorityOptions: Readonly<Record<string, readonly string[]>>;
+  /** The date field the day the task first went in progress goes to, on the team's clock; empty writes none. */
+  readonly startDate: string;
+  /** The date field the task's due day goes to; empty writes none. */
+  readonly targetDate: string;
+  /** The number field the task's score goes to, rounded to a whole number, so it is written only when that changed; empty writes none. */
+  readonly score: string;
+  /** The issue types each kind is set as: the first one the repository has wins; an empty list sets no type for that kind. */
+  readonly types: Readonly<Record<IssueKind, readonly string[]>>;
+}
+
+/** The team's GitHub repositories: `teamrig issue sync` reads their issues into the register, never writing to GitHub; `issue migrate` and `issue comment`/`issue close`, run by hand, write only to them. */
 export interface GithubConfig {
   /** The repositories it reads, as `owner/name` in lowercase; empty turns the import off. */
   readonly repos: readonly string[];
   /** The session each GitHub login (lowercase) owns imported issues as; an issue with no listed assignee goes to its repository's session. */
   readonly owners: Readonly<Record<string, string>>;
-  /** The session each repository's (lowercase) issues go to when none of their assignees is in `owners`; else the lead. */
+  /**
+   * The session that owns an issue carrying each label (lowercase), such as `area:cli` for the session of that area:
+   * read after the assignees and before `sessions`, the first label in this list the issue carries winning.
+   */
+  readonly areaOwners: Readonly<Record<string, string>>;
+  /** The session each repository's (lowercase) issues go to when none of their assignees is in `owners` and none of their labels in `areaOwners`; else the lead. */
   readonly sessions: Readonly<Record<string, string>>;
   /** How many days back closed issues are read, to finish the tasks they were imported as. */
   readonly closedDays: number;
-  /** How often the hooks start a sync on their own, in minutes, once for the whole team; 0 leaves it to `gh sync --yes`. */
-  readonly everyMinutes: number;
+  /**
+   * How often `issue watch` asks GitHub whether a listed repository changed, in seconds (a conditional read, free
+   * when nothing changed), syncing only when one did; 0 runs no watch and leaves the sync to `issue sync --yes`.
+   */
+  readonly probeSeconds: number;
+  /**
+   * Whether the automatic sync also sends the status push (`issue sync --push --yes`), so each issue a task holds
+   * shows the task's status without a session running it. It sends labels and assignees only: a close waits
+   * for a session's `issue sync --push --yes` (security verdict F1 on T2876).
+   * Off by default: read the push's dry run first.
+   */
+  readonly statusPush: boolean;
+  /** The issue fields and types the status push sets (T3406). */
+  readonly fields: IssueFieldsConfig;
   /**
    * The label that lets an issue by an author outside the repository (not its owner, an organization member or a
    * collaborator) become a task: it counts when someone other than the author added it last and the title and body
@@ -679,6 +742,47 @@ export interface GithubConfig {
    * their TF-IDF word vectors (src/issues/similar.ts). Higher lists fewer, closer candidates.
    */
   readonly similarThreshold: number;
+  /**
+   * Whether the automatic sync tells a task's owner each new comment, review, CI result, label, close and merge on the
+   * issue or pull request the task holds, and each session the same on the items it follows (`teamrig follow`): what
+   * asks it to act (changes requested, a failed check, a question, a mention) wakes it, the rest are quiet inbox lines.
+   * Off, a session hears only mentions and the pull request news of its own branches.
+   */
+  readonly activity: boolean;
+  /** The most issues and pull requests one session follows at once (`teamrig follow`); 0 turns following off. */
+  readonly followMax: number;
+  /**
+   * The session that hears the pull request news no task owner takes: a pull request from a fork or by an author
+   * outside the repository, or from a branch that names no task. Unset, the first holder of a service role holding
+   * `issue comment` (github/watcher.ts), else the lead.
+   */
+  readonly watcher?: string;
+  /**
+   * The repository of `repos` a new task's issue opens in: while set, `teamrig add` opens the task's issue there with
+   * the public wording given (`--issue`, `--issue-body`), or records why the task stays local (`--local`), and adds no
+   * task with neither, so every task has its issue from the start. Unset, the default: an add opens an issue only when
+   * asked.
+   */
+  readonly issueAtAdd?: string;
+  /**
+   * Whether each text teamrig posts (a comment, an issue, a replaced body) ends with the made-with-teamrig footer
+   * (core/stamp.ts, #1102). On by default; false posts the text as given.
+   */
+  readonly stamp: boolean;
+}
+
+/**
+ * One service role (T2984): the teamrig commands it lets run past every permission check for the sessions that hold
+ * it. Written by `teamrig roles grant` and `revoke`, which the owner runs.
+ */
+export interface ServiceRoleConfig {
+  /**
+   * The sessions of this team that hold it, by id, or `team` for every session of the team, which only a role whose
+   * every command checks its own caller may name (TEAM_HELD_COMMANDS).
+   */
+  readonly holders: readonly string[] | 'team';
+  /** The commands it holds, by name from teamrig's fixed table (permissions/service-commands.ts); never free text. */
+  readonly commands: readonly ServiceCommand[];
 }
 
 /** The small-commits rule: one logical change per commit, and a reason line on any commit over the bounds. */
@@ -710,7 +814,8 @@ export function isWeekday(value: unknown): value is Weekday {
 export const OVER_ACTIONS = ['warn', 'ask-lead', 'ask', 'block'] as const;
 /**
  * What the live warning does past a session's daily budget: lines only; also an inbox line to the
- * lead; also asking the person before a helper launch; or refusing helper launches.
+ * lead; also refusing a helper launch with its route, as no teamrig hook asks a person (T3356); or refusing helper
+ * launches.
  */
 export type OverAction = (typeof OVER_ACTIONS)[number];
 
@@ -760,6 +865,17 @@ export interface ResetStock {
   readonly note?: string;
 }
 
+/**
+ * What one W of a model's calls moves the weekly meter, against 1 for any model unlisted: the account's limit
+ * counts each model at its own rate (a Fable W about 4.4 times an Opus W, T2531), so the meter weighs it before the
+ * W per % is learned, and the week's use reads alike whatever mix of models a team runs.
+ */
+export interface ModelWeight {
+  /** A prefix of the model id a transcript line names, such as `claude-fable`; the longest listed match wins. */
+  readonly model: string;
+  readonly weight: number;
+}
+
 /** UTC hours in which the live warning applies `action` on its own, while the team sleeps. */
 export interface QuietHours {
   readonly startUtc: string;
@@ -794,7 +910,7 @@ export interface BudgetLiftConfig {
  * leaves one unset takes the team above's, unless it names another account (src/cli/kit.ts openKit), so the teams of
  * a tree read one week alike without a copy that drifts.
  */
-export const ACCOUNT_BUDGET_KEYS = ['enabled', 'account', 'accountLead', 'weeklyLimitW', 'subagentWeight', 'extraWPerUsd', 'reset', 'resets'] as const satisfies readonly (keyof BudgetConfig)[];
+export const ACCOUNT_BUDGET_KEYS = ['enabled', 'account', 'accountLead', 'weeklyLimitW', 'subagentWeight', 'modelWeights', 'extraWPerUsd', 'reset', 'resets'] as const satisfies readonly (keyof BudgetConfig)[];
 
 /** The keys of ACCOUNT_BUDGET_KEYS as a team reads them, its own or the team above's. */
 export type AccountBudget = Pick<BudgetConfig, (typeof ACCOUNT_BUDGET_KEYS)[number]>;
@@ -826,6 +942,11 @@ export interface BudgetConfig {
    * multiplies each subagent call's W by it, so every W (and `weeklyLimitW`) is in main-session W. 1: alike.
    */
   readonly subagentWeight: number;
+  /**
+   * Each model's weight on the meter, multiplied with subagentWeight on each call's W. Unset: the team above's
+   * (`AccountBudget`), else none, every model alike.
+   */
+  readonly modelWeights: readonly ModelWeight[];
   /**
    * W per US dollar of extra usage, standing in until two spent readings past 100% of the week teach the rate
    * (src/budget/extra.ts). Unset: the team above's (`AccountBudget`), else the extra-usage pool shows in dollars only
@@ -893,7 +1014,10 @@ export interface QueueConfig {
   readonly lockPath?: string;
   /** A taken host lock lasts this many minutes; past it, another step takes it over. */
   readonly lockTtlMinutes: number;
-  /** A queued step still running after this many minutes is killed with every process it started. */
+  /**
+   * A queued step still running after this many minutes is killed with every process it started; the time its share is
+   * set aside (`teamrig step-away` until `teamrig step-back` takes it back) does not count (T4218).
+   */
   readonly maxRunMinutes: number;
   /**
    * A small step (`queue --small`) still running after this many minutes is killed the same way; at most
@@ -920,16 +1044,28 @@ export interface QueueConfig {
    */
   readonly heavyReserveMb: number;
   /**
-   * How the host lock's line is ordered: `pipeline` lets the most urgent step in first (a p0 step at once, then by class
-   * turn, priority raised by agingMinutes waited, and arrival), with at most perSessionRunning steps of one session
-   * running and maxHeavyParallel heavy steps sharing the host at once, and is the default; `serial` keeps the line in
-   * arrival order with no cap and one heavy step at a time, for a team whose own deploy tool takes the lock file
-   * without first waiting for the shares to end.
+   * How the host lock's line is ordered: `pipeline` lets the most urgent step in first (a step of the task the lead put
+   * at the front with `teamrig pipeline front`, then a p0 step at once, then by class turn, priority raised by
+   * agingMinutes waited, and arrival), with at most perSessionRunning steps of one session running and maxHeavyParallel
+   * heavy steps sharing the host at once, small steps in a line of their own with at most maxSmallParallel of them at
+   * once, and is the default; `serial` keeps one line in arrival order with no cap and one heavy step at a time, for a
+   * team whose own deploy tool takes the lock file without first waiting for the shares to end. A step in line reads
+   * this key and the five after it again at each look, so an edit reaches the steps already waiting.
    */
   readonly admission: AdmissionMode;
   /** In `pipeline` admission, a waiting step's priority rises one level per this many minutes waited, never to p0; 0 ages nothing. */
   readonly agingMinutes: number;
-  /** In `pipeline` admission, a session with this many steps running (the host lock or a share of the host) waits for one to end, and later steps pass it; 0 caps nothing. */
+  /**
+   * In `pipeline` admission, a later step may pass one waiting on the host's memory or commit charge, as a step that
+   * fits need not wait behind one that does not: always while no queued step runs (only memory outside the queue
+   * holds it then), and for this many minutes of its memory wait while queued steps run; past them it holds the line
+   * so that the room they free goes to it; 0 passes no one.
+   */
+  readonly memoryPassMinutes: number;
+  /**
+   * In `pipeline` admission, a session with this many heavy steps running (the host lock or a heavy share of the host)
+   * waits for one to end, and later steps pass it; its small steps are not counted or held; 0 caps nothing.
+   */
   readonly perSessionRunning: number;
   /**
    * In `pipeline` admission, at most this many heavy queued steps share the host at once, each let in only while the
@@ -937,6 +1073,18 @@ export interface QueueConfig {
    * waiting for every share to end.
    */
   readonly maxHeavyParallel: number;
+  /**
+   * In `pipeline` admission, small queued steps (`teamrig queue --small`) wait in a line of their own, never behind a
+   * heavy step, and at most this many share the host at once, each let in only while the memory gate has room for its
+   * need (smallReserveMb when none is learned or declared); a merge or a deploy holding the whole host still keeps them out.
+   */
+  readonly maxSmallParallel: number;
+  /**
+   * In `pipeline` admission, a heavy queued step joins another heavy one already sharing the host only while at least
+   * this % of the host's CPU time is idle (read over 2 seconds), as two test runs fanned out over every core slow each
+   * other until their time limits fire; a heavy step alone on the host never waits on CPU; 0 reads no CPU.
+   */
+  readonly heavyIdleCpuPct: number;
 }
 
 /** How a delivery step waits. */
@@ -1001,6 +1149,14 @@ export interface DeliveryRepoConfig {
    * as `-`. A relative path is in the main checkout; unset: `.claude/worktrees` there.
    */
   readonly worktreeFolder?: string;
+  /**
+   * The ship tool a service role may run through `teamrig queue` with no permission check (T2984), a run without
+   * --merge as `--kind test` and a merge as `--kind ship|merge` (T3414):
+   * its script, in a checkout of this repository kept clean at main's current code, checked at every allow, as a queued
+   * step that runs it is queued and again when it starts (T3223). A relative path is in the main checkout; unset: no
+   * role runs a ship.
+   */
+  readonly shipTool?: string;
   /**
    * What `teamrig worktree add` runs in a new worktree, such as a link to the main checkout's node_modules: a program
    * and its arguments, run without a shell, with the main checkout's folder in `TEAMRIG_MAIN_CHECKOUT`. Anything but
@@ -1088,10 +1244,35 @@ export interface DeliveryConfig {
   readonly wait: DeliveryWaitConfig;
   /** A deploy's check still running after this many seconds is stopped, and the deploy waits. */
   readonly checkTimeoutSeconds: number;
+  /**
+   * Credential variables (core/child-env.ts CREDENTIAL_VARIABLES) the programs teamrig starts still get: queued and
+   * tested commands, merge, deploy and worktree hooks, `refresh.endCommand` and the team's sessions. The rest of that
+   * list is left out of each one's environment.
+   */
+  readonly passEnv: readonly string[];
   readonly freezes: FreezesConfig;
   readonly stablePeriods: StablePeriodsConfig;
+  readonly branches: BranchesConfig;
   /** By name, such as `api`. */
   readonly repos: Readonly<Record<string, DeliveryRepoConfig>>;
+}
+
+/**
+ * How `teamrig worktree add --task` names a new branch, and so its worktree folder (src/worktree/branch-name.ts,
+ * T2690): a pattern of `{type}`, `{id}`, `{issue}`, `{slug}` and `{session}`, `{id}` starting a part so the branch
+ * tells whose it is. Branches made before, or named by hand, keep their names.
+ */
+export interface BranchesConfig {
+  /** The pattern for every branch type without its own, such as `{type}/{id}-{slug}` (`feat/t12-parser`). */
+  readonly pattern: string;
+  /** Per branch type, such as `release`, its own pattern in place of `pattern`. */
+  readonly typePatterns: Readonly<Record<string, string>>;
+  /** Per item type (`task`, `bug`), the branch type its branch takes. */
+  readonly itemTypes: { readonly [T in ItemType]: string };
+  /** Per work class, the branch type its tasks' branches take, in place of their item type's. */
+  readonly classes: Readonly<Record<string, string>>;
+  /** The slug, made from the task's title, is cut at a word to at most this many characters. */
+  readonly slugMax: number;
 }
 
 export interface AlertsConfig {
@@ -1145,6 +1326,15 @@ export interface RefreshConfig {
   readonly enabled: boolean;
   /** The context size, in tokens, that asks for a refresh. Absolute, since a hook cannot see the window size. */
   readonly contextTokens: number;
+  /**
+   * The threshold for a session on a context window larger than 200k, when larger than `contextTokens`: its `launch`
+   * model ends in `[1m]`, or its refresh state shows the window, since a model can run a 1M window without the suffix
+   * (the lead's plain `opus`) and no hook is told it: the window the plugin's mod reports, a context past 200k, or a
+   * fresh start measured over `contextTokens` (src/refresh/decide.ts `windowOf`). A fresh session on it starts at over
+   * 120k (its system prompt, rules and handover), and the window has room far past it. 0: `contextTokens` for every
+   * window.
+   */
+  readonly largeWindowContextTokens: number;
   /**
    * Also refresh once this many tasks were finished since the context was last fresh (a /clear, a new
    * process or a compaction), when the context is at least `everyTasksMinTokens`; 0 turns it off.
@@ -1236,7 +1426,7 @@ export interface HiringConfig {
   readonly policy: HiringPolicy;
   /** Days from a hire to its review date, unless the hire names one. */
   readonly reviewDays: number;
-  /** The most context tokens a rehired session's last Claude Code session may hold for `open --resume` to resume it. */
+  /** The most context tokens a session's last Claude Code session may hold for `open --resume` to resume it. */
   readonly resumeMaxTokens: number;
   /** The most days that session may have been idle (its transcript unwritten) for `open --resume` to resume it. */
   readonly resumeMaxIdleDays: number;
@@ -1267,6 +1457,16 @@ export interface BurstConfig {
   readonly maxHelpers: number;
   /** The most sessions one burst may hire (`hire --burst`). */
   readonly maxHires: number;
+}
+
+/** A rush (`teamrig burst start rush`): how it keeps the team's tabs on its work. */
+export interface RushConfig {
+  /**
+   * The poke: while a rush is on, a tab idle this many minutes since its last turn, with a task of its own it can go
+   * on with and no queued step of its own running, is woken once to start or continue its top task
+   * (src/wake/rush-poke.ts).
+   */
+  readonly pokeAfterMinutes: number;
 }
 
 /**
@@ -1311,11 +1511,34 @@ export function isIdleMode(value: unknown): value is IdleMode {
   return IDLE_MODES.some((mode) => mode === value);
 }
 
+/**
+ * Which leads the idle pass never closes for being quiet: `root`, the lead of the tree's root team alone (a child
+ * team's lead and a sub-lead close like any session once nothing waits on them and no session they lead is open), or
+ * `all`, every team's lead (T3387).
+ */
+export const IDLE_LEADER_KEEPS = ['root', 'all'] as const;
+export type IdleLeaderKeep = (typeof IDLE_LEADER_KEEPS)[number];
+
+export function isIdleLeaderKeep(value: unknown): value is IdleLeaderKeep {
+  return IDLE_LEADER_KEEPS.some((keep) => keep === value);
+}
+
 /** The idle pass: it closes a session the wake check would not wake once it is quiet, and reopens it when work arrives. */
 export interface IdleConfig {
   readonly mode: IdleMode;
-  /** Sessions never closed for being quiet (by the pass or `teamrig close`), on top of the lead and the delivery owner. */
+  /** Sessions never closed for being quiet (by the pass or `teamrig close`), on top of the root lead and the delivery owner. */
   readonly keepOpen: readonly string[];
+  readonly leaders: IdleLeaderKeep;
+  /**
+   * How many inbox lines a closed session has not seen (neither read nor shown at a prompt) reopen it, though none is
+   * urgent; 0 never does (T3387).
+   */
+  readonly reopenUnreadLines: number;
+  /**
+   * A task due today (or overdue) handed to a session the pass closed starts its reopen at once, with a wake ask, when
+   * the adder may wake that session as `inbox add --wake now` gates it; off (the default), it waits for a pass (#1581).
+   */
+  readonly reopenForDueToday: boolean;
 }
 
 export interface OpenConfig {
@@ -1489,8 +1712,9 @@ export interface TeamLink {
 /** The owner's daily meeting in the lead's tab (T2512). */
 export interface MeetingConfig {
   /**
-   * The agenda panel beside the lead's chat while a meeting is open: the owner's cards in the agenda's order, the
-   * ones decided since the start checked off with the decision, the one on the table marked (src/meeting/panel.ts).
+   * The agenda panel beside the chat of the session the owner meets while a meeting is open (the lead's daily one, or a
+   * started M<n>): the owner's cards in the agenda's order, the ones decided since the start checked off with the
+   * decision, the one on the table marked (src/meeting/panel.ts).
    */
   readonly panel: { readonly enabled: boolean };
   /**
@@ -1501,8 +1725,9 @@ export interface MeetingConfig {
    */
   readonly spotlight: { readonly enabled: boolean; readonly dim: number; readonly breakthroughSeconds: number };
   /**
-   * The status line while a meeting is open (T2513): the lead's tab prints its whole line in `colour` (`#rrggbb`), and
-   * every other tab appends `heldText`, so a glance at any tab says the team is held for the meeting.
+   * The status line while a meeting is open (T2513): the meeting tab leads its line with `Meeting: <title>` and every
+   * other tab appends `heldText`, each mark alone in `colour` (`#rrggbb`, T2985), so a glance at any tab says the team
+   * is held for the meeting.
    */
   readonly statusLine: { readonly enabled: boolean; readonly colour: string; readonly heldText: string };
 }
@@ -1535,6 +1760,11 @@ export interface KitConfig {
   readonly leads: Readonly<Record<string, readonly string[]>>;
   /** Decision areas only the human owner can approve; silence never counts as consent for them. */
   readonly ownerGates: readonly string[];
+  /**
+   * The owner gates whose cards reach the owner only with the security reviewer's verdict on the card (T2761), each
+   * spelt as ownerGates spells it.
+   */
+  readonly securityGates: readonly string[];
   /** The local rules kept although they conflict with a core rule, each with the side that wins (`rules keep`). */
   readonly ruleConflicts: readonly RuleConflict[];
   readonly messages: MessagesConfig;
@@ -1559,6 +1789,8 @@ export interface KitConfig {
   readonly wake: WakeConfig;
   readonly tests: TestsConfig;
   readonly github: GithubConfig;
+  /** Each service role by name: the teamrig commands it holds and the sessions that hold it (T2984). */
+  readonly serviceRoles: Readonly<Record<string, ServiceRoleConfig>>;
   readonly alerts: AlertsConfig;
   readonly decisions: DecisionsConfig;
   /**
@@ -1570,8 +1802,10 @@ export interface KitConfig {
   /**
    * Refuses Claude Code's question picker (AskUserQuestion), which would stop the session until the person answers,
    * to every session and helper, the lead included, in the owner's daily meeting too; the reason says to decide it if it
-   * is the session's own, else record it on its task and go on (hook-picker-guard.ts). On by default (T2256): a team
-   * that never named the key had no guard, and one session's picker held its other tasks for hours.
+   * is the session's own, else record it on its task and go on (hook-picker-guard.ts). It also refuses a session's
+   * Bash `cd` compound that Claude Code would hold on a permission prompt, quoting its rerun form (T2730). On by
+   * default (T2256): a team that never named the key had no guard, and one session's picker held its other tasks for
+   * hours.
    */
   readonly pickerGuard: { readonly enabled: boolean };
   readonly meeting: MeetingConfig;
@@ -1584,6 +1818,7 @@ export interface KitConfig {
   readonly refresh: RefreshConfig;
   readonly hiring: HiringConfig;
   readonly burst: BurstConfig;
+  readonly rush: RushConfig;
   /** How `teamrig open` starts a session in a new terminal tab. */
   readonly open: OpenConfig;
   /** What `teamrig statusline` shows. */

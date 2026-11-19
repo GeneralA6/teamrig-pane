@@ -42,7 +42,7 @@ export function isTaskStatus(value: unknown): value is TaskStatus {
 export const SESSION_NAME = ID_PATTERN;
 
 /**
- * The source of a task imported from a GitHub issue: only `teamrig gh sync` writes one (github/sync.ts),
+ * The source of a task imported from a GitHub issue: only `teamrig issue sync` writes one (github/sync.ts),
  * and a session cannot give it to a task (policy.ts). Kept here, with the register's other names, so the
  * read side (views.ts, and the pane's copy of it) needs no write policy.
  */
@@ -50,6 +50,17 @@ export const GITHUB_SOURCE = 'github';
 
 /** What every issue ref starts with; here, beside GITHUB_SOURCE, so the write policy can tell an issue ref apart. */
 export const ISSUE_REF_PREFIX = 'gh:';
+
+/**
+ * The ref of a task kept off GitHub: this, then the reason (`add --local`), so the reason is on the task and never
+ * posted. Here, beside ISSUE_REF_PREFIX, so the check can tell a task with its reason from one with neither.
+ */
+export const LOCAL_REF_PREFIX = 'local: ';
+
+/** Whether a task's ref points at its issue or says why it has none: the two refs `github.issueAtAdd` accepts. */
+export function hasIssueOrReason(ref: string | null): boolean {
+  return ref !== null && (ref.startsWith(ISSUE_REF_PREFIX) || ref.startsWith(LOCAL_REF_PREFIX));
+}
 
 /** A priority as the CLI prints and takes it: `p1`, the most urgent, `p2` and so on. */
 export function priorityText(priority: number): string {

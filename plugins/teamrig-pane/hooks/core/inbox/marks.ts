@@ -89,6 +89,20 @@ export function lastClaudeSessionOf(marks: readonly InboxMark[], area: string): 
   return mark?.claudeSession ?? undefined;
 }
 
+/**
+ * The session a read as `area` must not move the tab off (T3081): the area the tab `claudeSession` is
+ * bound to, when that is another area still on the roster (`onRoster`). The guards take a tab's session from its
+ * newest mark, so a tool call's read binds the tab only once. Undefined when
+ * the read binds nothing new: no Claude Code session, a tab bound to no area or to `area`, or to one that left.
+ */
+export function boundElsewhereOf(marks: readonly InboxMark[], claudeSession: string | null, area: string, onRoster: (id: string) => boolean): string | undefined {
+  if (claudeSession === null) {
+    return undefined;
+  }
+  const bound = indexMarks(marks).areaBySession.get(claudeSession);
+  return bound !== undefined && bound !== area && onRoster(bound) ? bound : undefined;
+}
+
 /** The newest mark wins, both for an area's read position and for a session's area. */
 export function indexMarks(marks: readonly InboxMark[]): MarkIndex {
   const byArea = new Map<string, InboxMark>();
@@ -119,4 +133,15 @@ export function tabsOf(marks: readonly InboxMark[], area: string, limit: number)
     }
   }
   return tabs;
+}
+
+/**
+ * The one area a Claude Code session ever marked (T2984, security condition C1): a service role binds to the tab that
+ * holds it, so a tab that has read or bound as two areas holds no role, and neither does one with no mark. Every mark
+ * counts, not the newest: a tab of `alpha` that once ran `inbox read --session bravo` must not run bravo's role.
+ */
+export function soleAreaOf(marks: readonly InboxMark[], claudeSession: string): string | undefined {
+  const areas = new Set(marks.filter((mark) => mark.claudeSession === claudeSession).map((mark) => mark.area));
+  const [area] = areas;
+  return areas.size === 1 ? area : undefined;
 }

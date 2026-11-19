@@ -6,6 +6,7 @@ import type {
   QueueConfig,
   BudgetConfig,
   BurstConfig,
+  RushConfig,
   CommitGuardConfig,
   CommitsConfig,
   ContextFilesConfig,
@@ -13,6 +14,7 @@ import type {
   DecisionsConfig,
   FocusConfig,
   GithubConfig,
+  IssueFieldsConfig,
   HeadroomConfig,
   IdleConfig,
   ExecConfig,
@@ -39,6 +41,7 @@ import type {
   MeetingNoticesConfig,
   WakeConfig,
   StablePeriodsConfig,
+  BranchesConfig,
   MeetingConfig,
 } from './types.ts';
 
@@ -50,6 +53,12 @@ export const DEFAULT_OWNER_GATES: readonly string[] = [
   'budget',
   'resource changes',
 ];
+
+/**
+ * The owner gates whose cards reach the owner only with the security reviewer's verdict on them (T2761): a
+ * permission is a grant, a guard or a settings line, so the owner decides it from the reviewer's view.
+ */
+export const DEFAULT_SECURITY_GATES: readonly string[] = ['permissions'];
 
 export const DEFAULT_MESSAGES = { maxLines: 10, coldAfterMinutes: 60 } as const;
 
@@ -78,6 +87,7 @@ export const DEFAULT_REGISTER: RegisterConfig = {
   requireNoteOn: ['waiting', 'verifying', 'done', 'dropped'],
   requireFollowupsOn: ['verifying', 'done'],
   autoArchive: true,
+  leaderDigest: false,
   requireProofOnVerifying: true,
   requireDecisionCard: true,
   verifyGate: 'refuse',
@@ -144,14 +154,15 @@ export const DEFAULT_PACKAGE_GUARD: PackageGuardConfig = { adHocRunners: 'deny',
 /** Refused by default: the hooks are the repository's own checks, and a session that skips them ships what they would catch. */
 export const DEFAULT_COMMIT_GUARD: CommitGuardConfig = { skipHooks: 'deny' };
 
-export const DEFAULT_PROMPTS: PromptsConfig = { hookAsks: 'ask', routeAllow: 'on' };
+/** Refused by default: a prompt holds a session while nobody answers it (owner order T3356, 11-16). */
+export const DEFAULT_PROMPTS: PromptsConfig = { hookAsks: 'refuse', routeAllow: 'on', serviceRoleDailyCap: 10 };
 
 /** Refused by default: a secret printed into a session lands in its transcript and every later prompt (T660, 10-19). */
 export const DEFAULT_SECRET_GUARD: SecretGuardConfig = { secretReads: 'deny', writes: 'deny', paths: [], envNames: [], commands: [], redact: true };
 
 /**
- * Asked by default: a hand-run write is sometimes the right step, once the owner has seen its counts or preview, so
- * the human answers it rather than the guard refusing it (T661). The SQL clients are built in; no other program, Node
+ * `ask` by default: a hand-run write is sometimes the right step, once the owner has seen its counts or preview, so
+ * its refusal names the count or dry run to show the owner first (T661); no teamrig hook asks a person (T3356). The SQL clients are built in; no other program, Node
  * client or script is the guard's until a team names it.
  */
 export const DEFAULT_DB_WRITE_GUARD: DbWriteGuardConfig = { writes: 'ask', entrypoints: [], programs: [], nodeClients: [], clientReceivers: [] };
@@ -216,6 +227,7 @@ export const DEFAULT_COMMITS: CommitsConfig = {
 export const DEFAULT_BUDGET: BudgetConfig = {
   enabled: false,
   subagentWeight: 1,
+  modelWeights: [],
   resets: [],
   targetPct: 99.5,
   reservePct: 0.5,
@@ -279,18 +291,33 @@ export const DEFAULT_WAKE: WakeConfig = { enabled: true, priority: 1, batchSecon
  * The spotlight is on too, by the owner's call (T2523): it keeps the owner's eye on the meeting, lets every click
  * through and lifts when the meeting ends; a team sets it false to stop it. At 0.6 the rest of the screen stays
  * readable behind it. A break-through lifts it for two minutes: long enough to read the message and answer it, short
- * enough that the meeting gets its focus back on its own (T2524). The status line marks are on: they only colour the
- * lead's line and add a few words to the others' while a meeting is open (T2513); the magenta reads on dark and light
- * terminal themes alike.
+ * enough that the meeting gets its focus back on its own (T2524). The status line marks are on: they only lead the
+ * meeting tab's line with its title and add a few words to the others' while a meeting is open (T2513); the purple is
+ * teamrig's theme colour, by the owner's call (T2985), and reads on dark and light terminal themes alike.
  */
 export const DEFAULT_MEETING: MeetingConfig = {
   panel: { enabled: true },
   spotlight: { enabled: true, dim: 0.6, breakthroughSeconds: 120 },
-  statusLine: { enabled: true, colour: '#d75fd7', heldText: 'meeting on: held' },
+  statusLine: { enabled: true, colour: '#8b57e3', heldText: 'meeting on: held' },
 };
 
 /** About a screenful: two or three failing tests with their errors and first stack frames. */
 export const DEFAULT_TESTS: TestsConfig = { maxFailureChars: 4000 };
+
+/**
+ * GitHub's own field names and default issue types. A goal is a Feature, as an issue opened for one is typed
+ * (T3349), else a Goal where the organization made that type.
+ */
+export const DEFAULT_ISSUE_FIELDS: IssueFieldsConfig = {
+  push: true,
+  priority: 'Priority',
+  // P<n> first, for a field whose options are named so; else GitHub's own Priority options, p0 and p1 both Urgent as done-groups groups them.
+  priorityOptions: { p0: ['P0', 'Urgent'], p1: ['P1', 'Urgent'], p2: ['P2', 'High'], p3: ['P3', 'Medium'], p4: ['P4', 'Low'], p5: ['P5', 'Low'] },
+  startDate: 'Start date',
+  targetDate: 'Target date',
+  score: 'Score',
+  types: { task: ['Task'], bug: ['Bug'], goal: ['Feature', 'Goal'], design: ['Design'] },
+};
 
 /**
  * Off until a team lists a repository; two weeks of closed issues covers a sync missed over a holiday. Every 15
@@ -298,7 +325,7 @@ export const DEFAULT_TESTS: TestsConfig = { maxFailureChars: 4000 };
  * per further hundred open, or recently changed closed, issues). An outsider's issue waits for the `teamrig` label,
  * named after the tool so it does not clash with a repository's own triage labels.
  */
-export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {}, closedDays: 14, everyMinutes: 15, acceptLabel: 'teamrig', similarThreshold: 0.35 };
+export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, areaOwners: {}, sessions: {}, closedDays: 14, probeSeconds: 60, statusPush: false, acceptLabel: 'teamrig', similarThreshold: 0.35, activity: true, followMax: 20, stamp: true, fields: DEFAULT_ISSUE_FIELDS };
 
 /**
  * Claude Code compacts a 200k window at about 167k, so 120k refreshes before that; every 3 tasks catches a
@@ -306,14 +333,17 @@ export const DEFAULT_GITHUB: GithubConfig = { repos: [], owners: {}, sessions: {
  * The user types /clear for the fresh start of a member (`autoRestart` 'lead'): an automatic /clear wiped the screen
  * while the user was still reading the last reply, still had its question to answer, or was away. The lead restarts
  * on its own: with it off, a lead grew unasked through the night, and the mod's activity hold and countdown keep the
- * /clear from landing under the user. While a handover is
- * pending, the compaction at 167k waits up to 185k: 18k of room to finish the step and write it, and 15k under the
- * window for a large tool result. A handover over 20 KB is refused: on 10-24 most were 4 to 8 KB, and one appended
+ * /clear from landing under the user. A session on a 1M window refreshes at 250k (a `[1m]` launch, or one whose
+ * state shows the window, as a plain `opus` lead's fresh start past 120k does): a fresh one starts at about 122k,
+ * and the window has room far past it. While a handover is pending, the compaction at 167k waits up to 185k: 18k of
+ * room to finish the step and write it, and 15k under the window for a large tool result. A handover over 20 KB is
+ * refused: on 10-24 most were 4 to 8 KB, and one appended
  * to section by section (29 of them) reached 88 KB, which its every fresh start read whole.
  */
 export const DEFAULT_REFRESH: RefreshConfig = {
   enabled: true,
   contextTokens: 120_000,
+  largeWindowContextTokens: 250_000,
   everyTasks: 3,
   everyTasksMinTokens: 80_000,
   tabTitle: true,
@@ -339,7 +369,7 @@ export const DEFAULT_HEADROOM: HeadroomConfig = { sessionMb: 1200, commitMaxPct:
  * The idle pass closes and reopens sessions unless the team sets it to dry-run or off, so an idle tab spends no tokens
  * on any team (owner order, T1409); it keeps open only the sessions its roles name.
  */
-export const DEFAULT_IDLE: IdleConfig = { mode: 'on', keepOpen: [] };
+export const DEFAULT_IDLE: IdleConfig = { mode: 'on', keepOpen: [], leaders: 'root', reopenUnreadLines: 10, reopenForDueToday: false };
 
 export const DEFAULT_OPEN: OpenConfig = { terminal: 'auto', teamWindow: false, headroom: DEFAULT_HEADROOM, idle: DEFAULT_IDLE };
 
@@ -396,7 +426,7 @@ export const QUEUE_TTL_MARGIN_MINUTES = 10;
  * A host lock lasts 150 minutes and a queued step at most 45 of them, a small step at most 10; a step waits up to an hour
  * for the lock, and its memory is sampled every 15 seconds while it runs. The line is in `pipeline` order: a waiting
  * step's priority rises a level each 15 minutes, at most 2 steps of one session run, and 2 heavy steps share the host
- * with the lock file free. A team whose own deploy tool takes the lock file without first waiting for the shares in
+ * with the lock file free, the second let in only while 25% of the CPU is idle. A team whose own deploy tool takes the lock file without first waiting for the shares in
  * `<lock>.shared` to end sets `serial`, else that tool could start a roll beside 2 heavy builds.
  */
 export const DEFAULT_QUEUE: QueueConfig = {
@@ -410,8 +440,11 @@ export const DEFAULT_QUEUE: QueueConfig = {
   heavyReserveMb: 2048,
   admission: 'pipeline',
   agingMinutes: 15,
+  memoryPassMinutes: 15,
   perSessionRunning: 2,
   maxHeavyParallel: 2,
+  maxSmallParallel: 4,
+  heavyIdleCpuPct: 25,
 };
 
 /** A waiting delivery step looks again every 30 seconds; a deploy step waits up to an hour for freezes and the host lock. */
@@ -420,11 +453,17 @@ export const DEFAULT_DELIVERY_WAIT: DeliveryWaitConfig = { pollSeconds: 30, maxM
 /** A deploy's check answers within 20 seconds, else the deploy waits. */
 export const DEFAULT_CHECK_TIMEOUT_SECONDS = 20;
 
+/** No credential variable reaches a program teamrig starts until the owner names it. */
+export const DEFAULT_PASS_ENV: readonly string[] = [];
+
 /** A deploy freeze lasts at most two hours. */
 export const DEFAULT_FREEZES: FreezesConfig = { maxMinutes: 120 };
 
 /** A target measures cleanly 30 minutes after a deploy; a deploy the ledger knows only by its ledger.md line ran for 20 minutes; a stable period under 15 minutes is left out. */
 export const DEFAULT_STABLE_PERIODS: StablePeriodsConfig = { settleMinutes: 30, targetSettleMinutes: {}, assumedDeployMinutes: 20, minMinutes: 15 };
+
+/** Conventional Branch names (`feat/t12-parser`, `fix/t13-login-loop`): a task's branch is a feat, a bug's a fix, its slug at most 40 characters. */
+export const DEFAULT_BRANCHES: BranchesConfig = { pattern: '{type}/{id}-{slug}', typePatterns: {}, itemTypes: { task: 'feat', bug: 'fix' }, classes: {}, slugMax: 40 };
 
 /**
  * A burst spends more of the week, so the owner approves each one. A surplus burst may start from 48 hours before
@@ -432,6 +471,9 @@ export const DEFAULT_STABLE_PERIODS: StablePeriodsConfig = { settleMinutes: 30, 
  * and one burst hires at most 2 sessions.
  */
 export const DEFAULT_BURST: BurstConfig = { policy: 'owner', surplusHours: 48, minSparePct: 5, maxHelpers: 3, maxHires: 2 };
+
+/** The owner's bar for a rush: a tab with work left that sits idle 5 minutes is poked. */
+export const DEFAULT_RUSH: RushConfig = { pokeAfterMinutes: 5 };
 
 /**
  * An area's pace is the tasks it finished over the last week, counted once it finished at least 3; the dated
