@@ -1,0 +1,50 @@
+name: release
+
+on:
+  # Each merge to main updates the release pull request; merging that one tags main and publishes the release.
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One release at a time, and never one cancelled half-way between its tag and its notes.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+# Each job stops after 20 minutes (timeout-minutes), as in ci.yml.
+jobs:
+  release-please:
+    name: release pull request
+    # release-please keeps one pull request open that raises the version in plugin.json
+    # (release-please-config.json) and writes the notes from the commits since the last release; a person reviews
+    # and merges it, as any pull request. Once it merged, the next run tags main's commit teamrig-pane-v<version>
+    # and publishes the notes as a GitHub release.
+    if: ${{ !github.event.repository.private && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # A job's permissions replace the workflow's: contents to tag and commit the raise, pull-requests to open the
+    # release pull request, actions to run ci.yml on it (below).
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      # A pull request the workflow's own token opens or updates starts no workflow, so the required check would
+      # never report on it. A run by hand is the one event that token may start: ci.yml runs on the release branch's
+      # head, where the pull request reads its checks. The pull request goes in as a plain value and the script reads
+      # its branch: GitHub reads a step's env even when its `if` skips it, and fromJSON of a run's empty pr output
+      # fails the whole job.
+      - name: run ci on the release pull request
+        if: ${{ steps.release.outputs.pr != '' }}
+        run: gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$(node -p 'JSON.parse(process.env.PR).headBranchName')"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.release.outputs.pr }}
