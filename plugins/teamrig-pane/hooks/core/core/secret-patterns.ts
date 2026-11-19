@@ -78,7 +78,15 @@ export const SECRET_TEXT_PATTERNS: readonly SecretPattern[] = [
     pattern: /\bauthorization["']?\s*[:=]\s*["']?(?:bearer|basic|token|digest)\s+((?![$<{%])[^\s"']{8,})/i,
     secretGroup: 1,
   },
-  { id: 'secret-assignment', description: 'password or key assignment', pattern: /(?:password|passwd|secret|api[_-]?key)(?<!\/[\w.-]*)["']?\s*[=:]\s*\S/i },
+  // After a colon, one of a few prose words followed by more words is a sentence going on ("api_key: to the vault"),
+  // not a value, so a register text in plain words is not refused (GeneralA6/teamrig#852); `=` is never prose. Any
+  // other word is a value, so a passphrase of plain words is caught. The words must go on in the same line: a word and
+  // then a line break is a YAML or env value with the next key below it.
+  {
+    id: 'secret-assignment',
+    description: 'password or key assignment',
+    pattern: /(?:password|passwd|secret|api[_-]?key)(?<!\/[\w.-]*)["']?\s*(?:=\s*\S|:\s*(?!(?:to|see|none|in|from|at|the|is|are|was|not|still|now|moved|removed|rotated|missing|tbd)[ \t,.;]+[a-z])\S)/i,
+  },
 ];
 
 /** True for GitHub's fixed password `x-oauth-basic`, which follows a token given as a URL's login: a word, not a secret. */
@@ -114,6 +122,14 @@ function isCoordinationId(value: string, match: RegExpMatchArray): boolean {
   return match.groups?.['coordination'] !== undefined && COORDINATION_ID.test(value);
 }
 
+/** A relative path to a script or module, as a package.json `exports` map gives one (`"./cli/x-token": "./dist/cli/x-token.js"`). */
+const SCRIPT_PATH = /^\.{1,2}\/[\w@.-]+(?:\/[\w@.-]+)*\.(?:[cm]?js|ts|json)$/;
+
+/** True when `value` is a relative path to a script: it names a file, and the key above it only shares a word with a secret. */
+function isScriptPath(value: string): boolean {
+  return SCRIPT_PATH.test(value);
+}
+
 /**
  * A quoted literal of 12 or more characters given to a secret-like name: the scrub's rule in the repository and part of
  * the write-time set. Stricter than `secret-assignment`, so documentation and prose pass. The key word may end a longer
@@ -127,7 +143,7 @@ export const ASSIGNED_SECRET = {
   description: 'literal value assigned to a secret-like name',
   pattern: /(?:(?<coordination>(?<![\w$])(?:claim|lock|lease|fencing)[_-]?token)|password|passwd|secret|token|api[_-]?key|access[_-]?key)\b["']?\s*[:=]\s*["']([^"'\s]{12,})["']/i,
   secretGroup: 2,
-  isAllowedValue: (value, match) => isIdentifierName(value) || isCoordinationId(value, match),
+  isAllowedValue: (value, match) => isIdentifierName(value) || isCoordinationId(value, match) || isScriptPath(value),
 } satisfies SecretPattern;
 
 /**

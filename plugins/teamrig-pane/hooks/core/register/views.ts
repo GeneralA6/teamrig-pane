@@ -434,6 +434,21 @@ export interface DetailExtras {
   readonly sizeCost?: SizeCost;
   readonly files?: string;
   readonly runFiles: RunFiles;
+  /** `show --history`: every event; otherwise the last {@link SHOWN_HISTORY_EVENTS} (T2535). */
+  readonly allHistory?: boolean;
+}
+
+/**
+ * The history events `show` prints without `--history` (T2535, owner-approved fix C4 of T2217): the last 3 hold the
+ * status and wait a proof check reads, so one call still serves it, and the older ones cost every read its text.
+ */
+export const SHOWN_HISTORY_EVENTS = 3;
+
+/** `history:` and each event, or the last few under a header that counts the rest and names `--history`. */
+function historyLines(events: readonly RegisterEvent[], zone: TimeZone, all: boolean): string[] {
+  const shown = all ? events : events.slice(-SHOWN_HISTORY_EVENTS);
+  const header = shown.length === events.length ? 'history:' : `history (last ${shown.length} of ${events.length}; --history prints all):`;
+  return [header, ...shown.map((event) => `  ${formatEvent(event, zone)}`)];
 }
 
 /**
@@ -463,7 +478,7 @@ export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], t
   // Each pin before the card, so the owner of the task sees what its reviewer pinned before a card hands it (T2312).
   lines.push(...task.audits.map((audit) => auditText(audit, tree.zone)));
   if (task.card !== null) {
-    lines.push('card:', ...cardLines(task.card, '  ', task.audits, extras.runFiles));
+    lines.push('card:', ...cardLines(task.card, '  ', task.audits, extras.runFiles, task.securityVerdict));
   }
   if (task.answer !== null) {
     lines.push(`answer: ${task.answer.by} ${task.answer.verdict} at ${tree.zone.minute(new Date(task.answer.at))}${task.answer.note === null ? '' : `: ${task.answer.note}`}`);
@@ -493,7 +508,7 @@ export function formatTaskDetail(task: Task, events: readonly RegisterEvent[], t
   if (extras.files !== undefined) {
     lines.push(extras.files);
   }
-  lines.push('history:', ...events.filter((event) => event.id === task.id).map((event) => `  ${formatEvent(event, tree.zone)}`));
+  lines.push(...historyLines(events.filter((event) => event.id === task.id), tree.zone, extras.allHistory === true));
   return lines.join('\n');
 }
 
@@ -569,6 +584,12 @@ export function formatNextMove(task: Task, tree: TaskTree, team: string | undefi
   const what = move.kind === 'work' ? '' : move.kind === 'time' ? `, from ${weekdayText(move.at, tree.zone)}` : `, ${move.kind}`;
   const behind = move.behind === undefined ? '' : `, behind ${taskLabel(move.behind, team)} (${priorityText(move.behind.priority)})`;
   return `Next move: ${who} (${taskLabel(move.task, team)})${what}${behind}`;
+}
+
+/** `T12 (p0, owner bravo) waits on your approval, your T7`: what one task of another owner waits on, said to the session. */
+export function waitingOnYouText({ task, needs, asks }: WaitingOnYou): string {
+  const what = [...asks.map((ask) => `your ${ask.kind}`), ...needs.map((need) => `your ${need.id}`)];
+  return `${task.id} (${priorityText(task.priority)}, owner ${task.owner}) waits on ${what.join(', ')}`;
 }
 
 /**

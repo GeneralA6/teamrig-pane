@@ -8,6 +8,7 @@ import { parseCard, type DecisionCard } from './card.ts';
 import { GOAL_TAG, isSlice } from './goals.ts';
 import { parseAuditPin, type AuditPin } from './hand-step.ts';
 import { parseReview, type ProblemReview } from './review.ts';
+import { parseSecurityVerdictPin, type SecurityVerdictPin } from './security-verdict.ts';
 import { parseWaits, type WaitReason } from './waits.ts';
 
 /**
@@ -23,7 +24,8 @@ import { parseWaits, type WaitReason } from './waits.ts';
  * `review` (T916), a task's `type` and `critical` mark (T1252), which replaced `kind`, and a `done` status's `watch`
  * (T1306), an update's `waits` (T1295), a task's `noGoal` mark (T1730), an update's `decided` mark (T1366) and its
  * `sizeBase` (T649), a task's `workClass` (T2076), a start's `oneCommit` mark (T2110), an update's hand step `audit`
- * (T2312), a card's `affects` (T2623) and a task's `prepares` marker (T2453), which an older reader ignores:
+ * (T2312), a card's `affects` (T2623), a task's `prepares` marker (T2453) and an update's `securityVerdict` (T2761),
+ * which an older reader ignores:
  * each reads there as none (an answered update as a note alone). An older teamrig re-serialized the events of the snapshot a rotation or
  * `compact` rewrites, so it dropped such a field there (the archive keeps the lines as written); this one copies
  * each kept line as written (compaction.ts).
@@ -199,6 +201,8 @@ export interface UpdateEvent extends EventBase {
   readonly sizeBase?: SizeBase;
   /** A hand step file a session other than the task's owner audited for it, pinned at its sha256 (T2312); only `audit` writes it. */
   readonly audit?: AuditPin;
+  /** The security reviewer's verdict on the task's card, with the card parts it read (T2761); only `audit --verdict` writes it. */
+  readonly securityVerdict?: SecurityVerdictPin;
 }
 
 /**
@@ -376,6 +380,10 @@ export function parseEvent(line: JsonlRecord): EventParse {
       if (typeof audit === 'string') {
         return unreadable(audit);
       }
+      const securityVerdict = record['securityVerdict'] === undefined ? undefined : parseSecurityVerdictPin(record['securityVerdict']);
+      if (typeof securityVerdict === 'string') {
+        return unreadable(securityVerdict);
+      }
       const event: UpdateEvent = {
         ...base,
         type: 'update',
@@ -386,6 +394,7 @@ export function parseEvent(line: JsonlRecord): EventParse {
         ...(decided === undefined ? {} : { decided }),
         ...(sizeBase === undefined ? {} : { sizeBase }),
         ...(audit === undefined ? {} : { audit }),
+        ...(securityVerdict === undefined ? {} : { securityVerdict }),
       };
       return { kind: 'event', event };
     }

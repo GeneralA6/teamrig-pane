@@ -1,10 +1,12 @@
 // Copied from teamrig's src/register/fold.ts by scripts/sync-core.ts: change it there, then run the sync.
 import type { DecisionCard } from './card.ts';
 import { withAudit, type HandStepAudit } from './hand-step.ts';
+import { namesApprovedHead, namesUnapprovedCommit } from './head-sha.ts';
 import type { ProblemReview } from './review.ts';
+import type { SecurityVerdict } from './security-verdict.ts';
 import type { ApprovalVerdict, RegisterEvent, SizeBase, TaskFields, UpdateEvent } from './events.ts';
 import { WAIT_STATUSES, type TaskStatus } from './model.ts';
-import { namesNewWait, type WaitReason } from './waits.ts';
+import { namesNewWait, sameWait, type WaitReason } from './waits.ts';
 
 /** The lead's answer to a task's approval wait (T684), as `approve` wrote it. */
 export interface ApprovalAnswer {
@@ -15,7 +17,7 @@ export interface ApprovalAnswer {
   readonly note: string | null;
 }
 
-/** The owner's decision on a task's card (T1366), as a leader recorded it with `decide`. */
+/** The owner's decision on a task's card (T1366), as a leader recorded it with `update --decided`. */
 export interface OwnerDecision {
   /** The leader who recorded it. */
   readonly by: string;
@@ -41,7 +43,8 @@ export interface Task extends TaskFields {
   readonly card: DecisionCard | null;
   /**
    * The lead's latest answer to the approval the task waits on, since its latest status change; null otherwise. A new
-   * status clears it with the waits, so an approval covers the push or merge asked for and nothing after it.
+   * status clears it with the waits, so an approval covers the push or merge asked for and nothing after it; a wait
+   * on the same approval set again keeps it while its note names no other head (`keptAnswer`, T2117, T3044).
    */
   readonly answer: ApprovalAnswer | null;
   /**
@@ -80,6 +83,12 @@ export interface Task extends TaskFields {
    * audited, a later audit of a path replacing the one before; a status change keeps them. Empty when none.
    */
   readonly audits: readonly HandStepAudit[];
+  /**
+   * The security reviewer's latest verdict on the task's card (T2761), with the card parts it read, who gave it and
+   * when; a later verdict replaces it and a status change keeps it, so a card edited since prints it as stale. Null
+   * when none was given.
+   */
+  readonly securityVerdict: SecurityVerdict | null;
   /** When the task first went in progress (or verifying): only a started task can wait on another task. */
   readonly startedAt: string | null;
   readonly createdAt: string;
@@ -207,6 +216,7 @@ function created(id: string, fields: TaskFields, at: string, by: string): Task {
     review: {},
     sizeBase: null,
     audits: [],
+    securityVerdict: null,
     startedAt: null,
     createdAt: at,
     createdBy: by,
@@ -220,19 +230,59 @@ function created(id: string, fields: TaskFields, at: string, by: string): Task {
   };
 }
 
+/**
+ * The answer a status keeps: an approval, when the task stays waiting and names the approved wait again. A new hold
+ * behind another task or a time (T2117) keeps it while its note names no commit the approval's note does not, and
+ * `check` flags the task READY once the hold clears, the owner's wake to merge. The same waits set again keep it only
+ * when the note names the approved head (T3044, T3094): say a merge a classifier
+ * refused, logged with the head. A restated wait with no head in its note reads as "new head ready, please
+ * re-approve", the way to ask anew, so it clears the answer and the lead is asked; a note naming another head is a new
+ * ask too, as `ship.ts merge` takes only the head the answer's note names. Any other status, a new decision or
+ * approval wait, or a declined answer clears it.
+ */
+function keptAnswer(task: Task, status: TaskStatus, waits: readonly WaitReason[], note: string | null): ApprovalAnswer | null {
+  const { answer } = task;
+  if (answer === null || answer.verdict !== 'approved' || status !== 'waiting' || task.status !== 'waiting') {
+    return null;
+  }
+  const approved: WaitReason = { kind: 'approval', who: answer.by };
+  const holds = [task.waits, waits].every((each) => each.some((reason) => sameWait(reason, approved)));
+  const added = waits.filter((reason) => !task.waits.some((held) => sameWait(held, reason)));
+  const sameHead = added.length === 0 ? namesApprovedHead(note, answer.note) : !namesUnapprovedCommit(note, answer.note);
+  return holds && sameHead && added.every((reason) => reason.kind === 'task' || reason.kind === 'time') ? answer : null;
+}
+
+/** The statuses that end the step an approval was for: the change merged and waits on its proof, landed, or was given up. */
+const STEP_ENDS: readonly TaskStatus[] = ['verifying', 'done', 'dropped'];
+
+/**
+ * The approval a status change would clear before its step ends (T3207): a set that only records progress, such as
+ * in-progress with a note once the approved merge is queued, clears the approval as any new status does, and the merge
+ * is then refused. Null when the task holds no approval, the status ends its step, or it keeps the answer (`keptAnswer`,
+ * which reads the set's note for a head the approval does not name).
+ */
+export function droppedApproval(task: Task, status: TaskStatus, waits: readonly WaitReason[], note: string | null): ApprovalAnswer | null {
+  const { answer } = task;
+  if (answer === null || answer.verdict !== 'approved' || STEP_ENDS.includes(status)) {
+    return null;
+  }
+  return keptAnswer(task, status, waits, note) === null ? answer : null;
+}
+
 function withStatus(task: Task, event: Extract<RegisterEvent, { type: 'status' }>): Task {
   const waits = WAIT_STATUSES.includes(event.status) ? (event.waits ?? []) : [];
+  const answer = keptAnswer(task, event.status, waits, event.note);
   return {
     ...task,
     status: event.status,
     statusAt: event.status === task.status ? task.statusAt : event.at,
-    waitsAt: namesNewWait(task.answer === null ? task.waits : [], waits) ? event.at : task.waitsAt,
+    waitsAt: namesNewWait(task.answer === null || answer !== null ? task.waits : [], waits) ? event.at : task.waitsAt,
     note: event.note,
     evidence: event.evidence ?? task.evidence,
     skill: event.skill,
     waits,
     card: WAIT_STATUSES.includes(event.status) ? (event.card ?? null) : null,
-    answer: null,
+    answer,
     decided: null,
     proof: event.status === 'verifying' ? (event.proof ?? null) : null,
     watch: event.status === 'done' ? (event.watch ?? null) : null,
@@ -269,7 +319,7 @@ function reparksAfter(task: Task, event: Extract<RegisterEvent, { type: 'status'
  * gives its size base too (T649). An update with an `audit` pins a hand step file for the task, by the session that
  * wrote it (T2312).
  */
-function withChanges(task: Task, { changes, note, at, by, verdict, waits, decided, sizeBase, audit }: UpdateEvent): Task {
+function withChanges(task: Task, { changes, note, at, by, verdict, waits, decided, sizeBase, audit, securityVerdict }: UpdateEvent): Task {
   const priorityAt = changes.priority === undefined || changes.priority === task.priority ? task.priorityAt : at;
   const shown = note !== null && by === task.owner ? note : task.note;
   const answer = verdict === undefined ? task.answer : { verdict, by, at, note };
@@ -287,6 +337,7 @@ function withChanges(task: Task, { changes, note, at, by, verdict, waits, decide
     waitsAt: namesNewWait(task.waits, kept) ? at : task.waitsAt,
     sizeBase: base,
     audits: audit === undefined ? task.audits : withAudit(task.audits, { ...audit, by, at }),
+    securityVerdict: securityVerdict === undefined ? task.securityVerdict : { ...securityVerdict, by, at },
     updatedAt: at,
     updatedBy: by,
     priorityAt,

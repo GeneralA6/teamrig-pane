@@ -7,7 +7,10 @@ import { isReservedName, NAME_PATTERN, NAME_RULE, RESERVED_NAMES } from '../core
 import { isMinuteInSpan, parseUtcDeadline, utcMinuteOf } from '../core/time.ts';
 import { TimeZone } from '../core/zone.ts';
 import { FOLLOWUP_STATUSES, isTaskStatus, LEGACY_WAITING_HINT, LEGACY_WAITING_STATUS, REVIEW_STATUSES, SESSION_NAME, TASK_STATUSES, WORK_CLASS_NAME, type TaskStatus } from '../register/model.ts';
+import { isItemType, ITEM_TYPES, type ItemType } from '../register/events.ts';
+import { branchPatternProblem, isBranchType } from '../worktree/branch-name.ts';
 import { KEEP_RULE_PATTERN } from '../permissions/allow-rules.ts';
+import { isServiceCommand, SERVICE_COMMANDS, TEAM_HELD_COMMANDS, type ServiceCommand } from '../permissions/service-commands.ts';
 import { PREFIX_PATTERN } from '../readonly-shell/rules.ts';
 import { CORE_RULE_KEYS, isCoreRuleKey } from '../rules/keys.ts';
 import { isNeedKind, NEED_KINDS, type NeedKind } from '../tabs/need-kind.ts';
@@ -15,13 +18,16 @@ import {
   DEFAULT_ALERTS,
   DEFAULT_BUDGET,
   DEFAULT_BURST,
+  DEFAULT_RUSH,
   DEFAULT_COMMITS,
   DEFAULT_CONTEXT_FILES,
   DEFAULT_FREEZES,
   DEFAULT_DECISIONS,
   DEFAULT_DELIVERY_WAIT,
   DEFAULT_CHECK_TIMEOUT_SECONDS,
+  DEFAULT_PASS_ENV,
   DEFAULT_GITHUB,
+  DEFAULT_ISSUE_FIELDS,
   DEFAULT_QUEUE,
   DEFAULT_HIRING,
   DEFAULT_EXEC,
@@ -37,6 +43,7 @@ import {
   DEFAULT_IDLE,
   DEFAULT_OPEN,
   DEFAULT_OWNER_GATES,
+  DEFAULT_SECURITY_GATES,
   DEFAULT_COMMIT_GUARD,
   DEFAULT_DB_WRITE_GUARD,
   DEFAULT_SECRET_GUARD,
@@ -55,6 +62,7 @@ import {
   DEFAULT_TESTS,
   DEFAULT_WAKE,
   DEFAULT_STABLE_PERIODS,
+  DEFAULT_BRANCHES,
   DEFAULT_MEETING,
   QUEUE_TTL_MARGIN_MINUTES,
 } from './defaults.ts';
@@ -68,11 +76,13 @@ import {
   DB_WRITE_ENTRYPOINT_LIMITS,
   DB_WRITE_NAME_LIMITS,
   GITHUB_LABEL_MAX_LENGTH,
+  ISSUE_FIELD_NAME_MAX_LENGTH,
   MEETING_COLOUR_PATTERN,
   MEETING_HELD_TEXT_MAX_LENGTH,
   NODE_MODULE_PATTERN,
   REVIEW_PATH_LIMITS,
   RULE_CONFLICT_LIMITS,
+  SERVICE_ROLE_LIMITS,
 } from './limits.ts';
 import { HIRE_CAP_DROPPED, IDLE_RETIRE_DROPPED } from './migrate.ts';
 import { ConfigReader, describe, isValidRegex, shortLine, type Check, type ConfigIssue } from './reader.ts';
@@ -103,6 +113,7 @@ import {
   isHiringPolicy,
   isOverAction,
   isHookAsks,
+  isIdleLeaderKeep,
   isIdleMode,
   isOtherAreaListing,
   isPushToProtected,
@@ -118,8 +129,10 @@ import {
   isVerifyGate,
   isWeekday,
   RESET_KINDS,
+  type ModelWeight,
   type ResetStock,
   HOOK_ASKS,
+  IDLE_LEADER_KEEPS,
   IDLE_MODES,
   OTHER_AREA_LISTINGS,
   OVER_ACTIONS,
@@ -144,6 +157,8 @@ import {
   type BudgetLiftConfig,
   type BudgetReset,
   type BurstConfig,
+  type BranchesConfig,
+  type RushConfig,
   type DeliveryConfig,
   type DeliveryRepoConfig,
   type QueueConfig,
@@ -152,8 +167,11 @@ import {
   type DeployCheckConfig,
   type CommitsConfig,
   type GithubConfig,
+  type IssueFieldsConfig,
+  type IssueKind,
   type HiringConfig,
   type RuleConflict,
+  type ServiceRoleConfig,
   type LeadBoundaryConfig,
   type KitConfig,
   type LaunchConfig,
@@ -362,6 +380,40 @@ const isAbsoluteFolder: Check<string> = (text) => (/[\r\n]/.test(text) || !ABSOL
 /** A file named in full, on one line: a hook reads it from whichever folder its session runs in. */
 const isAbsoluteFile: Check<string> = (text) => (/[\r\n]/.test(text) || !ABSOLUTE_PATH.test(text) ? 'expected an absolute file path on one line' : undefined);
 
+/** The owner gate `typed` names, as `ownerGates` spells it, case aside; undefined when it names none. */
+function ownerGateNamed(typed: string, ownerGates: readonly string[]): string | undefined {
+  const key = typed.trim().toLowerCase();
+  return ownerGates.find((gate) => gate.toLowerCase() === key);
+}
+
+/**
+ * `securityGates` (T2761): the owner gates whose cards need the security reviewer's verdict, each spelt as
+ * `ownerGates` spells it. A gate that is no owner gate is an issue and dropped; with the key absent, the default
+ * gates the team's ownerGates names, so a team that renamed its gates is not reported for a key it never wrote.
+ */
+function readSecurityGates(read: ConfigReader, raw: JsonRecord, ownerGates: readonly string[]): readonly string[] {
+  const fallback = DEFAULT_SECURITY_GATES.map((gate) => ownerGateNamed(gate, ownerGates)).filter((gate): gate is string => gate !== undefined);
+  const { maxItems, maxLength } = CONFIG_LIMITS.securityGates;
+  return read.list(
+    raw,
+    'securityGates',
+    '',
+    fallback,
+    (value, itemPath) => {
+      const typed = read.stringItem(value, itemPath, shortLine(maxLength));
+      if (typed === undefined) {
+        return undefined;
+      }
+      const gate = ownerGateNamed(typed, ownerGates);
+      if (gate === undefined) {
+        read.report(itemPath, `"${typed}" is not one of ownerGates`);
+      }
+      return gate;
+    },
+    maxItems,
+  );
+}
+
 /**
  * `launch`: a model, an effort and a project folder for sessions on the team. A wrong field is reported and
  * left out, so the session starts on Claude Code's own choice (or, for the lead, the lead's default) for it,
@@ -469,6 +521,14 @@ export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse
   // T2256: the question picker stopped the lead's session in the meeting too; the meeting asks only in plain text.
   read.dropped(decisions, 'askWith', 'decisions', 'the daily meeting asks the owner each decision in plain text, the picker guard refusing the question picker to the lead too');
   reportRenamedKey(read, raw, '', 'coordinator', 'delivery');
+  const ownerGates = read.stringList(
+    raw,
+    'ownerGates',
+    '',
+    DEFAULT_OWNER_GATES,
+    shortLine(CONFIG_LIMITS.ownerGates.maxLength),
+    CONFIG_LIMITS.ownerGates.maxItems,
+  );
 
   const config: KitConfig = {
     configVersion: read.integer(raw, 'configVersion', '', 1, { min: 1 }),
@@ -482,14 +542,8 @@ export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse
       ...(securityReviewer === undefined ? {} : { securityReviewer }),
     },
     leads,
-    ownerGates: read.stringList(
-      raw,
-      'ownerGates',
-      '',
-      DEFAULT_OWNER_GATES,
-      shortLine(CONFIG_LIMITS.ownerGates.maxLength),
-      CONFIG_LIMITS.ownerGates.maxItems,
-    ),
+    ownerGates,
+    securityGates: readSecurityGates(read, raw, ownerGates),
     ruleConflicts: read.list(
       raw,
       'ruleConflicts',
@@ -547,6 +601,7 @@ export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse
       maxFailureChars: read.integer(read.section(raw, 'tests', ''), 'maxFailureChars', 'tests', DEFAULT_TESTS.maxFailureChars, CONFIG_LIMITS.maxFailureChars),
     },
     github: parseGithub(read, read.section(raw, 'github', ''), sessions),
+    serviceRoles: parseServiceRoles(read, read.section(raw, 'serviceRoles', ''), sessions),
     alerts: parseAlerts(read, read.section(raw, 'alerts', '')),
     decisions: {
       batchTimesUtc: read.stringList(decisions, 'batchTimesUtc', 'decisions', DEFAULT_DECISIONS.batchTimesUtc, isUtcTime, CONFIG_LIMITS.decisionBatchTimes.maxItems),
@@ -564,6 +619,7 @@ export function parseConfig(raw: JsonRecord, above?: AccountBudget): ConfigParse
     refresh: parseRefresh(read, read.section(raw, 'refresh', '')),
     hiring: parseHiring(read, read.section(raw, 'hiring', '')),
     burst: parseBurst(read, read.section(raw, 'burst', '')),
+    rush: parseRush(read, read.section(raw, 'rush', '')),
     open: parseOpen(read, read.section(raw, 'open', ''), sessions),
     statusLine: parseStatusLine(read, read.section(raw, 'statusLine', '')),
     focus: parseFocus(read, read.section(raw, 'focus', '')),
@@ -678,7 +734,7 @@ function parseWake(read: ConfigReader, raw: JsonRecord, quietHours: QuietHours |
 }
 
 /**
- * `github`: the repositories `gh sync` reads and who owns their issues. Repositories and logins are
+ * `github`: the repositories `issue sync` reads and who owns their issues. Repositories and logins are
  * kept in lowercase, as GitHub matches them, so an imported task's ref stays the same however the
  * config spells them; a repository listed twice is reported and read once.
  */
@@ -693,15 +749,109 @@ function parseGithub(read: ConfigReader, raw: JsonRecord, sessions: readonly str
     }
     repos.push(key);
   }
+  const issueAtAdd = readIssueAtAdd(read, raw, repos);
   return {
     repos,
     owners: readGithubOwners(read, read.section(raw, 'owners', 'github'), sessions),
+    areaOwners: readGithubAreaOwners(read, read.section(raw, 'areaOwners', 'github'), sessions),
     sessions: readGithubSessions(read, read.section(raw, 'sessions', 'github'), repos, sessions),
     closedDays: read.integer(raw, 'closedDays', 'github', DEFAULT_GITHUB.closedDays, CONFIG_LIMITS.closedDays),
-    everyMinutes: read.integer(raw, 'everyMinutes', 'github', DEFAULT_GITHUB.everyMinutes, CONFIG_LIMITS.githubEveryMinutes),
+    probeSeconds: readProbeSeconds(read, raw),
+    statusPush: read.boolean(raw, 'statusPush', 'github', DEFAULT_GITHUB.statusPush),
+    fields: parseIssueFields(read, read.section(raw, 'fields', 'github')),
     acceptLabel: read.string(raw, 'acceptLabel', 'github', DEFAULT_GITHUB.acceptLabel, shortLine(GITHUB_LABEL_MAX_LENGTH)),
     similarThreshold: read.number(raw, 'similarThreshold', 'github', DEFAULT_GITHUB.similarThreshold, CONFIG_LIMITS.similarThreshold),
+    activity: read.boolean(raw, 'activity', 'github', DEFAULT_GITHUB.activity),
+    followMax: read.integer(raw, 'followMax', 'github', DEFAULT_GITHUB.followMax, CONFIG_LIMITS.githubFollowMax),
+    ...readGithubWatcher(read, raw, sessions),
+    ...(issueAtAdd === undefined ? {} : { issueAtAdd }),
+    stamp: read.boolean(raw, 'stamp', 'github', DEFAULT_GITHUB.stamp),
   };
+}
+
+/** `github.issueAtAdd`: unset, or one of `repos` in lowercase; any other repository is reported and reads as unset. */
+function readIssueAtAdd(read: ConfigReader, raw: JsonRecord, repos: readonly string[]): string | undefined {
+  const repo = read.optionalString(raw, 'issueAtAdd', 'github')?.trim().toLowerCase();
+  if (repo !== undefined && !repos.includes(repo)) {
+    read.report('github.issueAtAdd', `${describe(repo)} is not one of github.repos`);
+    return undefined;
+  }
+  return repo;
+}
+
+/** A field or type name: one line without control characters, which the host shows as written. */
+const ISSUE_NAME = shortLine(ISSUE_FIELD_NAME_MAX_LENGTH, (value) => (/\p{Cc}/u.test(value) ? 'expected no control characters' : undefined));
+
+/**
+ * `github.fields` (T3406): the push switch, the name of the field each value goes to (an empty name writes none, so
+ * a team turns one field off alone), and the issue types each kind is set as, each list tried in order.
+ */
+function parseIssueFields(read: ConfigReader, raw: JsonRecord): IssueFieldsConfig {
+  const path = 'github.fields';
+  const name = (key: 'priority' | 'startDate' | 'targetDate' | 'score'): string =>
+    raw[key] === '' ? '' : read.string(raw, key, path, DEFAULT_ISSUE_FIELDS[key], ISSUE_NAME);
+  const typesRaw = read.section(raw, 'types', path);
+  const { maxItems } = CONFIG_LIMITS.issueTypeNames;
+  const typeOf = (kind: IssueKind): readonly string[] => read.stringList(typesRaw, kind, `${path}.types`, DEFAULT_ISSUE_FIELDS.types[kind], ISSUE_NAME, maxItems);
+  return {
+    push: read.boolean(raw, 'push', path, DEFAULT_ISSUE_FIELDS.push),
+    priority: name('priority'),
+    priorityOptions: readPriorityOptions(read, read.section(raw, 'priorityOptions', path), maxItems),
+    startDate: name('startDate'),
+    targetDate: name('targetDate'),
+    score: name('score'),
+    types: { task: typeOf('task'), bug: typeOf('bug'), goal: typeOf('goal'), design: typeOf('design') },
+  };
+}
+
+/** A priority level as `github.fields.priorityOptions` names it: `p` and its number. */
+const PRIORITY_LEVEL = /^p[0-9]{1,2}$/;
+
+/** `github.fields.priorityOptions`: each listed level's option names over the default's; a key that is not a level is reported and left out. */
+function readPriorityOptions(read: ConfigReader, raw: JsonRecord, maxItems: number): Readonly<Record<string, readonly string[]>> {
+  const path = 'github.fields.priorityOptions';
+  const options: Record<string, readonly string[]> = { ...DEFAULT_ISSUE_FIELDS.priorityOptions };
+  for (const level of Object.keys(raw)) {
+    if (!PRIORITY_LEVEL.test(level)) {
+      read.report(`${path}.${level}`, 'expected a priority level: p and its number, such as p1');
+      continue;
+    }
+    options[level] = read.stringList(raw, level, path, DEFAULT_ISSUE_FIELDS.priorityOptions[level] ?? [], ISSUE_NAME, maxItems);
+  }
+  return options;
+}
+
+/** Below this, a probe every few seconds would spend gh starts for nothing GitHub shows that fast. */
+export const MIN_PROBE_SECONDS = 30;
+
+/** Why `github.everyMinutes` is no longer read; the configuration page says the same. */
+export const EVERY_MINUTES_DROPPED = 'issue watch syncs when GitHub changed, probing every github.probeSeconds';
+
+/**
+ * `github.probeSeconds`: 0 turns the watch off, else MIN_PROBE_SECONDS to its limit; a value between is reported and
+ * reads as the default. `everyMinutes`, which it replaced, is reported until deleted.
+ */
+function readProbeSeconds(read: ConfigReader, raw: JsonRecord): number {
+  read.dropped(raw, 'everyMinutes', 'github', EVERY_MINUTES_DROPPED);
+  const seconds = read.integer(raw, 'probeSeconds', 'github', DEFAULT_GITHUB.probeSeconds, CONFIG_LIMITS.githubProbeSeconds);
+  if (seconds > 0 && seconds < MIN_PROBE_SECONDS) {
+    read.report('github.probeSeconds', `expected 0 (no watch) or at least ${MIN_PROBE_SECONDS}, got ${seconds}`);
+    return DEFAULT_GITHUB.probeSeconds;
+  }
+  return seconds;
+}
+
+/** `github.watcher`: one of the sessions, else left unset (githubWatcher then picks the GitHub answerer, else the lead) with the wrong one reported. */
+function readGithubWatcher(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): { watcher?: string } {
+  const watcher = read.optionalString(raw, 'watcher', 'github', isSessionName);
+  if (watcher === undefined) {
+    return {};
+  }
+  if (!sessions.includes(watcher)) {
+    read.report('github.watcher', `${describe(watcher)} is not one of the sessions`);
+    return {};
+  }
+  return { watcher };
 }
 
 /**
@@ -732,6 +882,99 @@ function readGithubSessions(read: ConfigReader, raw: JsonRecord, repos: readonly
   return owned;
 }
 
+/** The keys a service role takes: a misspelt one would otherwise be read as absent and grant nothing silently. */
+const SERVICE_ROLE_KEYS: ReadonlySet<string> = new Set(['holders', 'commands']);
+
+/**
+ * `serviceRoles` (T2984): each role's commands and holders. A role names commands only from teamrig's fixed table and
+ * sessions of this team only, so a config chooses among reviewed call shapes and never adds one; every problem is an
+ * issue that fails the load loudly, and the role with it is left out, so it lets nothing run.
+ */
+function parseServiceRoles(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): Record<string, ServiceRoleConfig> {
+  const names = Object.keys(raw);
+  if (names.length > SERVICE_ROLE_LIMITS.maxRoles) {
+    read.report('serviceRoles', `declares ${names.length} roles; at most ${SERVICE_ROLE_LIMITS.maxRoles}`);
+    return {};
+  }
+  const roles: Record<string, ServiceRoleConfig> = {};
+  for (const name of names) {
+    const path = `serviceRoles.${name}`;
+    if (!SERVICE_ROLE_LIMITS.namePattern.test(name)) {
+      read.report(path, 'expected a lowercase role name: a letter, then letters, digits or -, at most 32');
+      continue;
+    }
+    const entry = read.objectItem(raw[name], path);
+    if (entry === undefined) {
+      continue;
+    }
+    const stray = Object.keys(entry).filter((key) => !SERVICE_ROLE_KEYS.has(key));
+    for (const key of stray) {
+      read.report(`${path}.${key}`, 'is no key of a service role; it takes holders and commands');
+    }
+    const commands = readServiceCommands(read, entry, path);
+    const holders = readServiceHolders(read, entry, path, sessions, commands ?? []);
+    if (stray.length === 0 && commands !== undefined && holders !== undefined) {
+      roles[name] = { holders, commands };
+    }
+  }
+  return roles;
+}
+
+/** A role's commands: a non-empty list of names from the table, each once; undefined when any is wrong. */
+function readServiceCommands(read: ConfigReader, entry: JsonRecord, path: string): ServiceCommand[] | undefined {
+  const at = `${path}.commands`;
+  const value = entry['commands'];
+  if (!Array.isArray(value) || value.length === 0) {
+    read.report(at, `expected a non-empty list of command names, each one of: ${SERVICE_COMMANDS.join(', ')}`);
+    return undefined;
+  }
+  const commands: ServiceCommand[] = [];
+  value.forEach((item: unknown, index) => {
+    const itemAt = `${at}[${index}]`;
+    if (typeof item !== 'string' || !isServiceCommand(item)) {
+      read.report(itemAt, `${describe(item)} is no command a service role may hold; one of: ${SERVICE_COMMANDS.join(', ')}`);
+    } else if (commands.includes(item)) {
+      read.report(itemAt, `${describe(item)} is listed twice`);
+    } else {
+      commands.push(item);
+    }
+  });
+  return commands.length === value.length ? commands : undefined;
+}
+
+/**
+ * A role's holders: `team`, only when every command checks its own caller (TEAM_HELD_COMMANDS), else a non-empty list
+ * of this team's session ids, each once; undefined when any is wrong.
+ */
+function readServiceHolders(read: ConfigReader, entry: JsonRecord, path: string, sessions: readonly string[], commands: readonly ServiceCommand[]): readonly string[] | 'team' | undefined {
+  const at = `${path}.holders`;
+  const value = entry['holders'];
+  if (value === 'team') {
+    const ungated = commands.filter((command) => !TEAM_HELD_COMMANDS.has(command));
+    if (ungated.length > 0) {
+      read.report(at, `"team" would give every session ${ungated.join(', ')}, which acts as whoever runs it; name the sessions that hold it`);
+      return undefined;
+    }
+    return 'team';
+  }
+  if (!Array.isArray(value) || value.length === 0) {
+    read.report(at, 'expected "team" or a non-empty list of session ids');
+    return undefined;
+  }
+  const holders: string[] = [];
+  value.forEach((item: unknown, index) => {
+    const itemAt = `${at}[${index}]`;
+    if (typeof item !== 'string' || !sessions.includes(item)) {
+      read.report(itemAt, `${describe(item)} is not one of the sessions`);
+    } else if (holders.includes(item)) {
+      read.report(itemAt, `${describe(item)} is listed twice`);
+    } else {
+      holders.push(item);
+    }
+  });
+  return holders.length === value.length ? holders : undefined;
+}
+
 /** `github.owners`: a session for each GitHub login; a wrong login or a session not on the team is reported and left out. */
 function readGithubOwners(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): Record<string, string> {
   const owners: Record<string, string> = {};
@@ -743,6 +986,38 @@ function readGithubOwners(read: ConfigReader, raw: JsonRecord, sessions: readonl
     }
     const session = read.optionalString(raw, login, 'github.owners', isSessionName);
     const key = login.toLowerCase();
+    if (session === undefined) {
+      continue;
+    }
+    if (!sessions.includes(session)) {
+      read.report(path, `${describe(session)} is not one of the sessions`);
+    } else if (owners[key] !== undefined) {
+      read.report(path, 'is listed twice');
+    } else {
+      owners[key] = session;
+    }
+  }
+  return owners;
+}
+
+/**
+ * `github.areaOwners`: a session for each label, kept in lowercase as GitHub matches labels, in the config's order; a
+ * label past GitHub's length, one on more than one line, one listed twice or a session not on the team is reported
+ * and left out.
+ */
+const AREA_LABEL = shortLine(GITHUB_LABEL_MAX_LENGTH);
+
+function readGithubAreaOwners(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): Record<string, string> {
+  const owners: Record<string, string> = {};
+  for (const label of Object.keys(raw)) {
+    const path = `github.areaOwners.${label}`;
+    const wrong = label.trim() === '' ? 'expected a label, not blank' : AREA_LABEL(label);
+    if (wrong !== undefined) {
+      read.report(path, wrong);
+      continue;
+    }
+    const session = read.optionalString(raw, label, 'github.areaOwners', isSessionName);
+    const key = label.toLowerCase();
     if (session === undefined) {
       continue;
     }
@@ -807,10 +1082,59 @@ function parseDelivery(read: ConfigReader, raw: JsonRecord): DeliveryConfig {
       maxMinutes: read.integer(wait, 'maxMinutes', `${path}.wait`, DEFAULT_DELIVERY_WAIT.maxMinutes, CONFIG_LIMITS.deliveryWaitMaxMinutes),
     },
     checkTimeoutSeconds: read.integer(raw, 'checkTimeoutSeconds', path, DEFAULT_CHECK_TIMEOUT_SECONDS, CONFIG_LIMITS.checkTimeoutSeconds),
+    passEnv: read.stringList(raw, 'passEnv', path, DEFAULT_PASS_ENV, ENV_VARIABLE, CONFIG_LIMITS.passEnv.maxItems),
     freezes: { maxMinutes: read.integer(freezes, 'maxMinutes', `${path}.freezes`, DEFAULT_FREEZES.maxMinutes, CONFIG_LIMITS.freezeMaxMinutes) },
     stablePeriods: parseStablePeriods(read, read.section(raw, 'stablePeriods', path), deployTargetsOf(repos)),
+    branches: parseBranches(read, read.section(raw, 'branches', path)),
     repos,
   };
+}
+
+const isBranchPattern: Check<string> = (pattern) => branchPatternProblem(pattern);
+const isBranchTypeText: Check<string> = (type) => (isBranchType(type) ? undefined : 'expected a branch type: a lowercase letter, then lowercase letters and digits');
+
+/**
+ * `delivery.branches` (T2690). A bad pattern, slug cap or branch type is reported and its default kept; an entry keyed
+ * by no branch type, item type or work class name is reported and left out. The item types merge over the defaults,
+ * so naming `bug` alone keeps a task's `feat`.
+ */
+function parseBranches(read: ConfigReader, raw: JsonRecord): BranchesConfig {
+  const path = 'delivery.branches';
+  const typePatterns = parseBranchMap(read, read.section(raw, 'typePatterns', path), `${path}.typePatterns`, isBranchTypeText, isBranchPattern);
+  const itemTypes: { [T in ItemType]: string } = { ...DEFAULT_BRANCHES.itemTypes };
+  for (const [itemType, value] of Object.entries(read.section(raw, 'itemTypes', path))) {
+    const itemPath = `${path}.itemTypes.${itemType}`;
+    if (!isItemType(itemType)) {
+      read.report(itemPath, `is no item type (${ITEM_TYPES.join(', ')})`);
+      continue;
+    }
+    itemTypes[itemType] = read.stringItem(value, itemPath, isBranchTypeText) ?? itemTypes[itemType];
+  }
+  return {
+    pattern: read.string(raw, 'pattern', path, DEFAULT_BRANCHES.pattern, isBranchPattern),
+    typePatterns,
+    itemTypes,
+    classes: parseBranchMap(read, read.section(raw, 'classes', path), `${path}.classes`, isWorkClassName, isBranchTypeText),
+    slugMax: read.integer(raw, 'slugMax', path, DEFAULT_BRANCHES.slugMax, CONFIG_LIMITS.branchSlugMax),
+  };
+}
+
+/** A map of string values, each key and value checked; a bad entry is reported and left out. */
+function parseBranchMap(read: ConfigReader, raw: JsonRecord, path: string, keyCheck: Check<string>, valueCheck: Check<string>): Record<string, string> {
+  const entries: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const itemPath = `${path}.${key}`;
+    const badKey = keyCheck(key);
+    if (badKey !== undefined) {
+      read.report(itemPath, badKey);
+      continue;
+    }
+    const checked = read.stringItem(value, itemPath, valueCheck);
+    if (checked !== undefined) {
+      entries[key] = checked;
+    }
+  }
+  return entries;
 }
 
 /** When a deploy target's measurement is clean; a settle time for a target no repository deploys, or out of bounds, is reported and left out. */
@@ -876,6 +1200,7 @@ function parseDeliveryRepos(read: ConfigReader, raw: JsonRecord): Record<string,
     const docsFolder = read.optionalString(entry, 'docsFolder', path, isPathText);
     reportRenamedKey(read, entry, path, 'followMainCheckout', 'updateMainCheckout');
     const worktreeFolder = read.optionalString(entry, 'worktreeFolder', path, isPathText);
+    const shipTool = read.optionalString(entry, 'shipTool', path, isPathText);
     const worktreeSetup = entry['worktreeSetup'] === undefined ? undefined : read.stringListItem(entry['worktreeSetup'], `${path}.worktreeSetup`, HOOK_ARGV_MAX_ITEMS);
     repos[name] = {
       mainCheckout,
@@ -888,6 +1213,7 @@ function parseDeliveryRepos(read: ConfigReader, raw: JsonRecord): Record<string,
       decisionRecordGate: read.boolean(entry, 'decisionRecordGate', path, false),
       updateMainCheckout: read.boolean(entry, 'updateMainCheckout', path, false),
       ...(worktreeFolder === undefined ? {} : { worktreeFolder }),
+      ...(shipTool === undefined ? {} : { shipTool }),
       ...(worktreeSetup === undefined ? {} : { worktreeSetup }),
       ...(merge === undefined ? {} : { merge }),
       ...(deploy === undefined ? {} : { deploy }),
@@ -978,8 +1304,11 @@ function parseQueue(read: ConfigReader, raw: JsonRecord): QueueConfig {
     heavyReserveMb: read.integer(raw, 'heavyReserveMb', path, DEFAULT_QUEUE.heavyReserveMb, CONFIG_LIMITS.queueHeavyReserveMb),
     admission: isAdmissionMode(admission) ? admission : DEFAULT_QUEUE.admission,
     agingMinutes: read.integer(raw, 'agingMinutes', path, DEFAULT_QUEUE.agingMinutes, CONFIG_LIMITS.queueAgingMinutes),
+    memoryPassMinutes: read.integer(raw, 'memoryPassMinutes', path, DEFAULT_QUEUE.memoryPassMinutes, CONFIG_LIMITS.queueMemoryPassMinutes),
     perSessionRunning: read.integer(raw, 'perSessionRunning', path, DEFAULT_QUEUE.perSessionRunning, CONFIG_LIMITS.queuePerSessionRunning),
     maxHeavyParallel: read.integer(raw, 'maxHeavyParallel', path, DEFAULT_QUEUE.maxHeavyParallel, CONFIG_LIMITS.queueMaxHeavyParallel),
+    maxSmallParallel: read.integer(raw, 'maxSmallParallel', path, DEFAULT_QUEUE.maxSmallParallel, CONFIG_LIMITS.queueMaxSmallParallel),
+    heavyIdleCpuPct: read.integer(raw, 'heavyIdleCpuPct', path, DEFAULT_QUEUE.heavyIdleCpuPct, CONFIG_LIMITS.queueHeavyIdleCpuPct),
   };
 }
 
@@ -1001,6 +1330,8 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
   const extraWPerUsd = read.optionalInteger(raw, 'extraWPerUsd', path, CONFIG_LIMITS.extraWPerUsd) ?? inherited?.extraWPerUsd;
   const reset = parseBudgetReset(read, raw) ?? inherited?.reset;
   const resets = raw['resets'] === undefined ? (inherited?.resets ?? defaults.resets) : parseResetStocks(read, raw, defaults.resets);
+  const modelWeights =
+    raw['modelWeights'] === undefined ? (inherited?.modelWeights ?? defaults.modelWeights) : parseModelWeights(read, raw, defaults.modelWeights);
   const why = "the team's daily budget is the pace, recomputed at every reading from what is left of the week";
   read.dropped(raw, 'dailyPct', path, why);
   read.dropped(raw, 'maxDailyPct', path, why);
@@ -1014,6 +1345,7 @@ function parseBudget(read: ConfigReader, raw: JsonRecord, sessions: readonly str
     ...(accountLead === undefined ? {} : { accountLead }),
     ...(weeklyLimitW === undefined ? {} : { weeklyLimitW }),
     subagentWeight: read.number(raw, 'subagentWeight', path, inherited?.subagentWeight ?? defaults.subagentWeight, CONFIG_LIMITS.subagentWeight),
+    modelWeights,
     ...(extraWPerUsd === undefined ? {} : { extraWPerUsd }),
     ...(reset === undefined ? {} : { reset }),
     resets,
@@ -1090,6 +1422,36 @@ function parseResetStock(read: ConfigReader, value: unknown, path: string): Rese
     return undefined;
   }
   return { kind, count, expiresUtc, usedUtc, ...(note === undefined ? {} : { note }) };
+}
+
+/** A model prefix: one short line, as model ids are. */
+const MODEL_PREFIX_MAX_LENGTH = 60;
+
+/** `budget.modelWeights`: each entry read whole, or dropped with its issues; a model listed twice is an issue. */
+function parseModelWeights(read: ConfigReader, raw: JsonRecord, fallback: readonly ModelWeight[]): readonly ModelWeight[] {
+  const weights = read.list(raw, 'modelWeights', 'budget', fallback, (value, itemPath) => parseModelWeight(read, value, itemPath), CONFIG_LIMITS.budgetModelWeights.maxItems);
+  const seen = new Set<string>();
+  weights.forEach((entry, index) => {
+    if (seen.has(entry.model)) {
+      read.report(`budget.modelWeights[${index}].model`, `lists ${entry.model} a second time`);
+    }
+    seen.add(entry.model);
+  });
+  return weights;
+}
+
+function parseModelWeight(read: ConfigReader, value: unknown, path: string): ModelWeight | undefined {
+  const section = read.objectItem(value, path);
+  if (section === undefined) {
+    return undefined;
+  }
+  const issues = read.issues.length;
+  const model = read.requiredString(section, 'model', path, shortLine(MODEL_PREFIX_MAX_LENGTH));
+  const weight = read.optionalNumber(section, 'weight', path, CONFIG_LIMITS.modelWeight);
+  if (section['weight'] === undefined) {
+    read.report(`${path}.weight`, 'is required');
+  }
+  return read.issues.length > issues || weight === undefined ? undefined : { model, weight };
 }
 
 /** `budget.quietHours`: a start, an end and the action, or nothing. */
@@ -1217,6 +1579,7 @@ function parseRegister(read: ConfigReader, raw: JsonRecord): RegisterConfig {
       CONFIG_LIMITS.requireFollowupsOn.maxItems,
     ),
     autoArchive: read.boolean(raw, 'autoArchive', path, defaults.autoArchive),
+    leaderDigest: read.boolean(raw, 'leaderDigest', path, defaults.leaderDigest),
     requireProofOnVerifying: read.boolean(raw, 'requireProofOnVerifying', path, defaults.requireProofOnVerifying),
     requireDecisionCard: read.boolean(raw, 'requireDecisionCard', path, defaults.requireDecisionCard),
     verifyGate: isVerifyGate(verifyGate) ? verifyGate : defaults.verifyGate,
@@ -1364,7 +1727,10 @@ function parseOpen(read: ConfigReader, raw: JsonRecord, sessions: readonly strin
   };
 }
 
-/** `open.idle`: whether the idle pass runs, and the sessions it keeps open; one not on the team is reported and left out. */
+/**
+ * `open.idle`: whether the idle pass runs, the sessions it keeps open (one not on the team is reported and left out),
+ * which leads it never closes, and how many unseen inbox lines reopen a closed session.
+ */
 function parseIdle(read: ConfigReader, raw: JsonRecord, sessions: readonly string[]): IdleConfig {
   const path = 'open.idle';
   const mode = read.string(raw, 'mode', path, DEFAULT_IDLE.mode, (value) => (isIdleMode(value) ? undefined : `expected one of ${IDLE_MODES.join(', ')}`));
@@ -1376,7 +1742,10 @@ function parseIdle(read: ConfigReader, raw: JsonRecord, sessions: readonly strin
     }
     return id;
   });
-  return { mode: isIdleMode(mode) ? mode : DEFAULT_IDLE.mode, keepOpen };
+  const leaders = read.string(raw, 'leaders', path, DEFAULT_IDLE.leaders, (value) => (isIdleLeaderKeep(value) ? undefined : `expected one of ${IDLE_LEADER_KEEPS.join(', ')}`));
+  const reopenUnreadLines = read.integer(raw, 'reopenUnreadLines', path, DEFAULT_IDLE.reopenUnreadLines, CONFIG_LIMITS.idleReopenUnreadLines);
+  const reopenForDueToday = read.boolean(raw, 'reopenForDueToday', path, DEFAULT_IDLE.reopenForDueToday);
+  return { mode: isIdleMode(mode) ? mode : DEFAULT_IDLE.mode, keepOpen, leaders: isIdleLeaderKeep(leaders) ? leaders : DEFAULT_IDLE.leaders, reopenUnreadLines, reopenForDueToday };
 }
 
 /** `open.headroom`: the room a new session needs on the host. */
@@ -1604,6 +1973,7 @@ function parsePrompts(read: ConfigReader, raw: JsonRecord): PromptsConfig {
   return {
     hookAsks: isHookAsks(asks) ? asks : DEFAULT_PROMPTS.hookAsks,
     routeAllow: isRouteAllow(routeAllow) ? routeAllow : DEFAULT_PROMPTS.routeAllow,
+    serviceRoleDailyCap: read.integer(raw, 'serviceRoleDailyCap', 'prompts', DEFAULT_PROMPTS.serviceRoleDailyCap, CONFIG_LIMITS.serviceRoleDailyCap),
   };
 }
 
@@ -1752,6 +2122,8 @@ function parseCommits(read: ConfigReader, raw: JsonRecord): CommitsConfig {
 
 /** From a 200k window's compaction point up to far past any window today. */
 const REFRESH_TOKENS = { min: 10_000, max: 10_000_000 } as const;
+/** 0: the same threshold on every window. */
+const LARGE_WINDOW_TOKENS = { min: 0, max: 10_000_000 } as const;
 /** 0 turns the task count off. */
 const REFRESH_TASKS = { min: 0, max: 100 } as const;
 /** Long enough to read the notice and type, short enough that the fresh start is not missed. */
@@ -1784,6 +2156,7 @@ function parseRefresh(read: ConfigReader, raw: JsonRecord): RefreshConfig {
   return {
     enabled: read.boolean(raw, 'enabled', path, defaults.enabled),
     contextTokens: read.integer(raw, 'contextTokens', path, defaults.contextTokens, REFRESH_TOKENS),
+    largeWindowContextTokens: read.integer(raw, 'largeWindowContextTokens', path, defaults.largeWindowContextTokens, LARGE_WINDOW_TOKENS),
     everyTasks: read.integer(raw, 'everyTasks', path, defaults.everyTasks, REFRESH_TASKS),
     everyTasksMinTokens: read.integer(raw, 'everyTasksMinTokens', path, defaults.everyTasksMinTokens, REFRESH_TOKENS),
     tabTitle: read.boolean(raw, 'tabTitle', path, defaults.tabTitle),
@@ -1841,6 +2214,11 @@ function parseBurst(read: ConfigReader, raw: JsonRecord): BurstConfig {
     maxHelpers: read.integer(raw, 'maxHelpers', path, defaults.maxHelpers, CONFIG_LIMITS.burstMaxHelpers),
     maxHires: read.integer(raw, 'maxHires', path, defaults.maxHires, CONFIG_LIMITS.burstMaxHires),
   };
+}
+
+/** `rush`: when a rush pokes an idle tab. */
+function parseRush(read: ConfigReader, raw: JsonRecord): RushConfig {
+  return { pokeAfterMinutes: read.integer(raw, 'pokeAfterMinutes', 'rush', DEFAULT_RUSH.pokeAfterMinutes, CONFIG_LIMITS.rushPokeAfterMinutes) };
 }
 
 function parsePaths(read: ConfigReader, raw: JsonRecord): PathsConfig {
