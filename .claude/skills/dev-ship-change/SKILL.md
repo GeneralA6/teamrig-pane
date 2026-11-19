@@ -7,8 +7,10 @@ description: Land a finished teamrig-pane change through small signed commits, n
 
 1. Work on a branch cut from the newest main: `git fetch origin && git switch -c <branch> origin/main`. A worktree
    works too (`git worktree add -b <branch> <path> origin/main`, then `npm ci` in it).
-2. Commit each logical change once its step passes, with `git commit -s`. Subjects follow the log, `area: what`
-   (`pane:`, `card:`, `core:`, `docs:`, `test:`, `ci:`, `tools:`). A commit past 400 changed non-test lines or 15
+2. Commit each logical change once its step passes, with `git commit -s`. Subjects are Conventional Commits,
+   `<type>(<area>): <what>` (types `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`,
+   `revert`; `!` before the colon for a breaking change); the `commit subjects` check
+   (`tools/ci/commit-subjects-cli.ts`) fails one that is not, and the release pull request raises the version from them. A commit past 400 changed non-test lines or 15
    non-test files carries a `Large-commit: <reason>` line; the `size rule` (`tools/ci/size-rule-cli.ts`) fails one
    without it.
 3. Never raise the version in `plugins/teamrig-pane/.claude-plugin/plugin.json`: the release pull request does, from
