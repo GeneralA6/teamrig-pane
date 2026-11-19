@@ -38,6 +38,7 @@ export function localChecks(base: string, teamrig: string): readonly LocalCheck[
     { name: 'scrub: commits', argv: ['node', 'tools/scrub/cli.ts', '--range', range] },
     { name: 'DCO', argv: ['node', 'tools/dco/cli.ts', '--range', range] },
     { name: 'size rule', argv: ['node', 'tools/ci/size-rule-cli.ts', '--base', base] },
+    { name: 'commit subjects', argv: ['node', 'tools/ci/commit-subjects-cli.ts', '--base', base] },
     { name: 'plugin tests: none skipped', argv: ['node', 'tools/ci/plugin-tests-cli.ts'] },
     { name: 'doc pictures', argv: ['node', 'tools/docs/images-cli.ts', '--check'] },
     { name: 'plugin version gate', argv: ['node', 'tools/ci/plugin-version-cli.ts', '--base', base] },
