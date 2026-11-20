@@ -1,5 +1,6 @@
 // The pane's rows from teamrig's `tasks` document (hooks/tasks-document.ts): a served task reads into the row the views
-// draw, marked text as its text and a source or a ref as what the fold gave; a field a later minor adds is passed over,
+// draw, marked text as its text and a source or a ref as what the fold gave, with whether a tracker brought it in and
+// the tracker item its ref names, the item's page only as an address the pane links to; a field a later minor adds is passed over,
 // with a type or a wait kind the pane does not know; a task with a status or an answer it does not know, or a field of
 // another type, is left out and told in one line; rows come back in the order of their ids' numbers (T4742).
 import { describe, expect, test } from 'claude-code/testing'
@@ -72,6 +73,8 @@ const ROW: TaskRow = {
   statusAt: AT,
   source: 'lead',
   ref: 'notes/plan.md:12',
+  item: null,
+  isImported: false,
   goals: ['G2'],
   week: '2026-03-02',
   size: 1.5,
@@ -93,6 +96,11 @@ const ROW: TaskRow = {
   answer: { verdict: 'approved', by: 'lead', at: AT, note: 'read the diff' },
   decided: { by: 'lead', at: AT, note: 'go on' },
   after: ['T3'],
+}
+
+/** A ref a tracker knows as its item 12, as teamrig serves one, with `url` as the item's page. */
+function trackerRef(url: string | null, over: JsonRecord = {}): JsonRecord {
+  return { text: 'tracker:12', connector: { id: 'tracker', name: 'Tracker' }, id: '#12', label: { text: '#12', source: 'outside' }, url, ...over }
 }
 
 /** A task with every optional field unset, as teamrig serves one just added. */
@@ -149,14 +157,54 @@ describe('tasksOf', () => {
     expect(readOf([task])).toEqual({ rows: [{ ...ROW, description: null, answer: null, size: null }], problems: [] })
   })
 
-  test('keeps the text of outside words, the id of a tracker as the source and the ref as stored', () => {
+  test('keeps the text of outside words, the id of a tracker as the source and the ref as stored, with the item it names', () => {
     const row = rowOf({
       title: { text: 'Crash on start', source: 'outside' },
       description: { text: 'It stops.', source: 'outside' },
       source: { kind: 'connector', id: 'tracker', name: 'Tracker' },
-      ref: { text: 'tracker:12', connector: { id: 'tracker', name: 'Tracker' }, id: '#12', label: { text: '#12', source: 'outside' }, url: 'https://tracker.example/items/12' },
+      ref: trackerRef('https://tracker.example/items/12'),
     })
-    expect(row).toEqual({ ...ROW, title: 'Crash on start', description: 'It stops.', source: 'tracker', ref: 'tracker:12' })
+    expect(row).toEqual({
+      ...ROW,
+      title: 'Crash on start',
+      description: 'It stops.',
+      source: 'tracker',
+      isImported: true,
+      ref: 'tracker:12',
+      item: { tracker: 'Tracker', id: '#12', url: 'https://tracker.example/items/12' },
+    })
+  })
+
+  test("a session's task whose ref a tracker knows has the item, and is not imported", () => {
+    const row = rowOf({ ref: trackerRef('https://tracker.example/items/12') })
+    expect(row?.item).toEqual({ tracker: 'Tracker', id: '#12', url: 'https://tracker.example/items/12' })
+    expect(row?.isImported).toBe(false)
+  })
+
+  test('reads a source of a kind it does not know as not imported', () => {
+    expect(rowOf({ source: { kind: 'robot', id: 'r2', name: null } })).toEqual({ ...ROW, source: 'r2' })
+  })
+
+  test('a ref with no connector names no item, whatever else it holds, and one teamrig cut to its text alone too', () => {
+    expect(rowOf({ ref: trackerRef('https://tracker.example/items/12', { connector: null }) })?.item).toBeNull()
+    expect(rowOf({ ref: { text: 'tracker:12' } })).toEqual({ ...ROW, ref: 'tracker:12' })
+  })
+
+  test("keeps an item's page only as an https address that is whole as a written one reads", () => {
+    const refused = [
+      null,
+      'http://tracker.example/items/12',
+      'javascript:alert(1)',
+      'file:///etc/hosts',
+      'HTTPS://tracker.example/items/12',
+      'https://',
+      'https://tracker.example/items/12 https://other.example',
+      ' https://tracker.example/items/12',
+      'https://tracker.example/items/12)',
+      `https://tracker.example/${'a'.repeat(2048)}`,
+    ]
+    for (const url of refused) expect(rowOf({ ref: trackerRef(url) })?.item).toEqual({ tracker: 'Tracker', id: '#12', url: null })
+    expect(rowOf({ ref: without(trackerRef(null), 'url') })?.item).toEqual({ tracker: 'Tracker', id: '#12', url: null })
   })
 
   test('draws a cut field as the text teamrig put in its place', () => {
@@ -217,7 +265,12 @@ describe('tasksOf', () => {
       [{ type: 3 }, 'type'],
       [{ status: null }, 'status'],
       [{ source: 'lead' }, 'source'],
+      [{ source: { id: 'lead', name: 'the lead' } }, 'source.kind'],
       [{ ref: 'notes/plan.md:12' }, 'ref'],
+      [{ ref: trackerRef(null, { connector: 'tracker' }) }, 'ref.connector'],
+      [{ ref: trackerRef(null, { connector: { id: 'tracker' } }) }, 'ref.connector.name'],
+      [{ ref: trackerRef(null, { id: null }) }, 'ref.id'],
+      [{ ref: trackerRef(null, { url: 7 }) }, 'ref.url'],
       [{ goals: 'G2' }, 'goals'],
       [{ size: '1.5' }, 'size'],
       [{ waits: [{ kind: 'task' }] }, 'waits[0].id'],

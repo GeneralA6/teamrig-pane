@@ -66,6 +66,10 @@ export type TaskRow = {
   source: string
   /** Where the ask is written: `file:line` refs, `;`-separated, or a short quote ref; null when none. */
   ref: string | null
+  /** The tracker item the ref names, when teamrig's `tasks` document says a tracker knows it; null for any other ref, and for none. */
+  item: TaskItem | null
+  /** Whether a tracker brought the task in (the served source is a connector), rather than the owner or a session asking. */
+  isImported: boolean
   /** The goals it serves, as written. */
   goals: readonly string[]
   /** The `YYYY-MM-DD` start of the planning week it belongs to; null when none. */
@@ -99,6 +103,13 @@ export type TaskRow = {
   /** The tasks to finish before this one starts (`after T5`, its plan dependency); empty when none. */
   after: readonly string[]
 }
+
+/**
+ * A tracker's item a task's ref names, as teamrig serves it (hooks/tasks-document.ts): the tracker's name, the item
+ * as the tracker's own people write it, and its page; `url` is null when teamrig served none, or one the pane does
+ * not take as a link (hooks/links.ts pageOf). The pane never works any of them out from the ref's text.
+ */
+export type TaskItem = { readonly tracker: string; readonly id: string; readonly url: string | null }
 
 /**
  * A task another register of the team tree holds (one numbering across the tree), with that register's team: what

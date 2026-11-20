@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow } from '../types'
-import { addressesIn, issueOf, issueUrl, MAX_ADDRESS_CHARS, MAX_LINKS, taskLinks } from '../hooks/links'
+import { addressesIn, issueOf, issueUrl, MAX_ADDRESS_CHARS, MAX_LINKS, pageOf, taskLinks } from '../hooks/links'
 
 /** The fields taskLinks reads, none set. */
 const BARE: Pick<TaskRow, 'source' | 'description' | 'ref' | 'note' | 'proof' | 'evidence'> = {
@@ -45,6 +45,13 @@ describe('links', () => {
     const accented = `${at(MAX_ADDRESS_CHARS - 8)}éé`
     expect(accented.length).toBeLessThan(MAX_ADDRESS_CHARS)
     expect(addressesIn(accented)).toEqual([])
+  })
+
+  test('takes a served page only as an https address that is whole as a written one reads', async () => {
+    expect(pageOf('https://tracker.example/items/12')).toBe('https://tracker.example/items/12')
+    expect(pageOf(null)).toBe(null)
+    const refused = ['http://tracker.example/items/12', 'javascript:alert(1)', 'https://', 'https://a.example/1 https://b.example/2', 'https://a.example/1.', ' https://a.example/1']
+    expect(refused.map(pageOf)).toEqual(refused.map(() => null))
   })
 
   test("a task's links: its issue first, then the addresses in its description, ref, note, proof and evidence, each once, at most MAX_LINKS", async () => {

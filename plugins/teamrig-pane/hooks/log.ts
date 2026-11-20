@@ -46,6 +46,9 @@ export function rowOf(task: Task): TaskRow {
     statusAt: task.statusAt,
     source: task.source,
     ref: task.ref,
+    // Only teamrig's `tasks` document says which tracker knows a ref and what a tracker brought in (tasks-document.ts).
+    item: null,
+    isImported: false,
     goals: task.goals,
     week: task.week,
     size: task.size,

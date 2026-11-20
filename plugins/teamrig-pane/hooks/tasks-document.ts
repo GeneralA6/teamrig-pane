@@ -1,14 +1,16 @@
 // The pane's task rows from teamrig's `tasks` document (T4742): each served task read field by field into the row
 // the views already draw (types/index.d.ts TaskRow), so nothing downstream changes with where a row came from. The
 // document serves a title and a description as marked text, a source and a ref as data; a row keeps the text of each
-// and the source's id, what the register's own fold gave it. Where the pane draws every value its own way it must
+// and the source's id, what the register's own fold gave it, with what only the document says: whether a tracker
+// brought the task in, and the tracker item its ref names. Where the pane draws every value its own way it must
 // know the value: a task whose status or answer it does not know, or with a field of another type, is left out, and
 // the left-out tasks are told in one line rather than drawn wrong. What it can draw without knowing is passed over
 // instead, as the interface says a reader may: a type it does not know reads as a task, and a wait of a kind it does
 // not know is not drawn. Rows come back ordered by the number in their id, as the fold's are. An `unchanged` answer
 // holds no tasks, so it is never handed here. Pure.
-import type { AnswerRow, DecisionRow, TaskRow, TaskStatus, WaitRow } from '../types'
+import type { AnswerRow, DecisionRow, TaskItem, TaskRow, TaskStatus, WaitRow } from '../types'
 import { Fields, isList, isOneOf, leftOutLine, type BodyRead } from './document-fields'
+import { pageOf } from './links'
 import { isRecord, type ReadDocument } from './read-document'
 
 // Each list is typed by the contract's own union, so a status, verdict or type the contract gains or drops fails the
@@ -46,6 +48,27 @@ function decisionOf(decided: Fields | null): DecisionRow | null {
   return decided === null ? null : { by: decided.text('by'), at: decided.text('at'), note: decided.textOrNull('note') }
 }
 
+/** teamrig's kind for a source that is a tracker's connector, not the owner or a session (teamrig's src/interface/source.ts). */
+const CONNECTOR_KIND = 'connector'
+
+/**
+ * The tracker item `ref` names: teamrig fills a ref's connector, id and page together, only when a tracker knows the
+ * ref as one of its items, so a ref with no connector names none. The page is kept only as an address the pane links
+ * to (links.ts pageOf).
+ */
+function itemOf(ref: Fields | null): TaskItem | null {
+  const connector = ref?.partOrNull('connector') ?? null
+  if (ref === null || connector === null) return null
+  return { tracker: connector.text('name'), id: ref.text('id'), url: pageOf(ref.textOrNull('url')) }
+}
+
+/** Who asked and where the ask is written: the source's id and whether it is a tracker, the ref's text and its item. */
+function originOf(task: Fields): Pick<TaskRow, 'source' | 'isImported' | 'ref' | 'item'> {
+  const source = task.part('source')
+  const ref = task.partOrNull('ref')
+  return { source: source.text('id'), isImported: source.text('kind') === CONNECTOR_KIND, ref: ref?.text('text') ?? null, item: itemOf(ref) }
+}
+
 function rowOf(task: Fields): TaskRow {
   return {
     id: task.text('id'),
@@ -64,8 +87,7 @@ function rowOf(task: Fields): TaskRow {
     evidence: task.textOrNull('evidence'),
     skill: task.textOrNull('skill'),
     statusAt: task.text('statusAt'),
-    source: task.part('source').text('id'),
-    ref: task.partOrNull('ref')?.text('text') ?? null,
+    ...originOf(task),
     goals: task.texts('goals'),
     week: task.textOrNull('week'),
     size: task.numberOrNull('size'),

@@ -48,7 +48,7 @@ async function foldOf(disk: FakeDisk, team: Team, pinned: string | null, convers
 
 /** A task as the `tasks` document serves it: the fold's row, its texts marked as the team's, its source and ref as data. */
 function servedTask(row: TaskRow, roster: Roster): JsonRecord {
-  const { descriptionCut: _notServed, title, description, source, ref, ...served } = row
+  const { descriptionCut: _notServed, item: _readFromRef, isImported: _readFromSource, title, description, source, ref, ...served } = row
   return {
     ...served,
     title: { text: title, source: 'team' },

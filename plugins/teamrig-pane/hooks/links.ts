@@ -58,6 +58,16 @@ export function addressesIn(text: string): string[] {
 }
 
 /**
+ * A page address teamrig served, as the pane takes one for a link: `https://` only, and whole as an address written
+ * in a text reads here (no space, no closing punctuation at its end, short enough to draw); null for any other, so a
+ * served address is never trusted further than a written one.
+ */
+export function pageOf(url: string | null): string | null {
+  if (url === null || !url.startsWith('https://')) return null
+  return addressesIn(url)[0] === url ? url : null
+}
+
+/**
  * What a task's card links to: its issue, then the addresses in its description, ref, note, proof and evidence; each
  * once, at most MAX_LINKS.
  */
