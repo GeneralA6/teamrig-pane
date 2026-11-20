@@ -1557,6 +1557,25 @@ describe('source', () => {
     expect((await source.poll({ claudeSession: S1, pinned: 'po', now: NOW }))?.spend).toEqual({ spentPct: { T1: 0.2 }, likeMedians: [] })
   })
 
+  test("pollFiles says a served document's file moved for the register, the inbox and a new area, never for the week file or a bare force", async () => {
+    const files = new MemoryFiles()
+    files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'lead', at: NOW }))
+    const source = new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null, NO_TREE_GOALS)
+    const at = { claudeSession: S1, pinned: 'po', now: NOW }
+    expect((await source.pollFiles(at))?.isServedMoved).toBe(true)
+    expect(await source.pollFiles(at)).toBe(null)
+    files.write(PATHS.tasksWeek, tasksWeekText({ spentPct: { T1: 0.2 }, likeMedians: [] }))
+    const week = await source.pollFiles(at)
+    expect(week?.isServedMoved).toBe(false)
+    expect(week?.snapshot.spend).toEqual({ spentPct: { T1: 0.2 }, likeMedians: [] })
+    expect((await source.pollFiles({ ...at, force: true }))?.isServedMoved).toBe(false)
+    files.write(PATHS.events, [createLine('T1', { owner: 'po', by: 'lead', at: NOW }), createLine('T2', { owner: 'po', by: 'lead', at: NOW })].join('\n'))
+    expect((await source.pollFiles(at))?.isServedMoved).toBe(true)
+    files.write(`${PATHS.inboxDir}/po.md`, '- 2026-01-01 00:00 UTC lead: a line\n')
+    expect((await source.pollFiles(at))?.isServedMoved).toBe(true)
+    expect((await source.pollFiles({ ...at, pinned: 'etl' }))?.isServedMoved).toBe(true)
+  })
+
   test("each snapshot carries the team config's settings the source was made with: its NOT PICKED UP hours, zone and owner marker", async () => {
     const drawn = { notPickedUpAfterHours: 48, timeZone: 'Asia/Jerusalem', ownerSource: 'boss' }
     const source = new TaskRegisterSource(new MemoryFiles(), PATHS, { ...TEAM_SETTINGS, ...drawn }, null, NO_TREE_GOALS)

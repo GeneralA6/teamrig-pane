@@ -3,11 +3,11 @@
 // and that a failed run or an unreadable document keeps what was drawn under its reason, with no title ever taken
 // from the fold (T4742).
 import { describe, expect, test } from 'claude-code/testing'
-import { DocumentSource, READ_EVERY_MS, titledCards, type SnapshotSource } from '../hooks/document-source'
+import { DocumentSource, READ_EVERY_MS, titledCards, type FileSource } from '../hooks/document-source'
 import { parseDocument, type JsonRecord } from '../hooks/read-document'
 import type { ReadPorts } from '../hooks/read-port'
 import { CONTROL_SHOWN } from '../hooks/shown-text'
-import type { PollInput } from '../hooks/source'
+import type { FilePoll, PollInput } from '../hooks/source'
 import { tasksOf } from '../hooks/tasks-document'
 import type { CliRun, TeamrigCli } from '../hooks/teamrig-cli'
 import type { Snapshot, TaskRow } from '../types'
@@ -94,20 +94,33 @@ const BASE: Snapshot = {
   now: NOW,
 }
 
-/** A file source answering `next` once, then null (nothing moved) until it is set again; an Error is thrown. */
-class FakeFiles implements SnapshotSource {
+/**
+ * A file source answering `next` once, then null (nothing moved) until it is set again; an Error is thrown. The move
+ * is of a file a served document is built from unless `numbers` sets it as one of the numbers alone.
+ */
+class FakeFiles implements FileSource {
   next: Snapshot | Error | null
+  private isServedMoved = true
   readonly polls: PollInput[] = []
 
   constructor(first: Snapshot | Error | null = BASE) {
     this.next = first
   }
 
-  poll(input: PollInput): Promise<Snapshot | null> {
+  /** The next poll answers `snapshot` as a move no served document is built from. */
+  numbers(snapshot: Snapshot): void {
+    this.next = snapshot
+    this.isServedMoved = false
+  }
+
+  pollFiles(input: PollInput): Promise<FilePoll | null> {
     this.polls.push(input)
     const next = this.next
+    const isServedMoved = this.isServedMoved
     this.next = null
-    return next instanceof Error ? Promise.reject(next) : Promise.resolve(next)
+    this.isServedMoved = true
+    if (next instanceof Error) return Promise.reject(next)
+    return Promise.resolve(next === null ? null : { snapshot: next, isServedMoved })
   }
 }
 
@@ -268,6 +281,32 @@ describe('DocumentSource: when it reads', () => {
     expect(moved.work).toEqual([])
     await drawn(source, { now: NOW + 2, force: true })
     expect(teamrig.taken()).toHaveLength(1)
+  })
+
+  test('a move of the numbers alone is drawn with the documents held and starts no run, until READ_EVERY_MS', async () => {
+    const { teamrig, files, source } = rig()
+    await drawn(source)
+    teamrig.taken()
+    teamrig.tasks = tasksDocument('t2', [task('T5')])
+    files.numbers({ ...BASE, work: [] })
+    const numbers = await drawn(source, { now: NOW + 1 })
+    expect(teamrig.asked).toEqual([])
+    expect(numbers.work).toEqual([])
+    expect(numbers.now).toBe(NOW + 1)
+    expect(titles(numbers)).toEqual(['T1 Title of T1', 'T2 Title of T2'])
+    expect(await source.poll(input({ now: NOW + READ_EVERY_MS - 1 }))).toBeNull()
+    expect(teamrig.asked).toEqual([])
+    files.numbers(BASE)
+    const late = await drawn(source, { now: NOW + READ_EVERY_MS })
+    expect(teamrig.taken()).toHaveLength(1)
+    expect(titles(late)).toEqual(['T5 Title of T5'])
+  })
+
+  test('the first poll reads though only numbers moved', async () => {
+    const { teamrig, files, source } = rig(null)
+    files.numbers(BASE)
+    await drawn(source)
+    expect(teamrig.asked.map(asked => asked.documents.join(' '))).toEqual(['tasks sessions config', 'inbox'])
   })
 
   test('with no snapshot of the files yet there is nothing to draw on, and nothing is run', async () => {

@@ -16,7 +16,7 @@ import { readDocuments, type ReadPorts } from './read-port'
 import { nameOf, leadsOf } from './session-roster'
 import { sessionsOf, type SessionsRead } from './sessions-document'
 import { shownText } from './shown-text'
-import { joinedProblems, type PollInput } from './source'
+import { joinedProblems, type FilePoll, type PollInput } from './source'
 import { tasksOf } from './tasks-document'
 import type { TeamrigCli } from './teamrig-cli'
 import { isActive } from './view'
@@ -31,6 +31,9 @@ export const READ_EVERY_MS = 60_000
 
 /** What a poll answers: a snapshot when anything it draws from changed (or `force`), else null. */
 export type SnapshotSource = { poll(input: PollInput): Promise<Snapshot | null> }
+
+/** The fold of the team's files beneath the documents: each poll says whether what moved feeds a served document. */
+export type FileSource = { pollFiles(input: PollInput): Promise<FilePoll | null> }
 
 /** One document as the source holds it between reads. */
 class Held<T> {
@@ -107,7 +110,7 @@ export function titledCards(cards: Snapshot['ownerCards'], rows: readonly TaskRo
 }
 
 export class DocumentSource implements SnapshotSource {
-  private readonly files: SnapshotSource
+  private readonly files: FileSource
   private readonly cli: TeamrigCli
   private readonly ports: ReadPorts
   private readonly tasks = new Held(tasksOf)
@@ -122,7 +125,7 @@ export class DocumentSource implements SnapshotSource {
   /** What the last read's runs could not answer. */
   private runProblems: readonly string[] = []
 
-  constructor(files: SnapshotSource, cli: TeamrigCli, ports: ReadPorts) {
+  constructor(files: FileSource, cli: TeamrigCli, ports: ReadPorts) {
     this.files = files
     this.cli = cli
     this.ports = ports
@@ -140,17 +143,20 @@ export class DocumentSource implements SnapshotSource {
   }
 
   /**
-   * A new snapshot when a file moved, on `force`, or when the documents were read: they are read then, and each
-   * READ_EVERY_MS without one. A throw of the file source passes through, as the caller shows it.
+   * A new snapshot when a file moved, on `force`, or when the documents were read. They are read on `force`, when a
+   * file a served document is built from moved, and each READ_EVERY_MS without a read. A move of the numbers alone
+   * (spend, which the budget hooks write on every session's turn, the ranks, the other teams' registers) is drawn
+   * with the documents held and starts no run: none of the four documents holds them, and each run is a `node` start
+   * every open pane would pay. A throw of the file source passes through, as the caller shows it.
    */
   async poll(input: PollInput): Promise<Snapshot | null> {
-    const moved = await this.files.poll(input)
-    if (moved !== null) this.base = moved
+    const moved = await this.files.pollFiles(input)
+    if (moved !== null) this.base = moved.snapshot
     const base = this.base
     if (base === null) return null
-    const isDue = moved !== null || input.force === true || this.readAt === null || input.now - this.readAt >= READ_EVERY_MS
-    if (!isDue) return null
-    await this.read(base.team, input)
+    const isReadDue = moved?.isServedMoved === true || input.force === true || this.readAt === null || input.now - this.readAt >= READ_EVERY_MS
+    if (isReadDue) await this.read(base.team, input)
+    else if (moved === null) return null
     return this.drawn(base, input)
   }
 

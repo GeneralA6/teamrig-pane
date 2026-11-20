@@ -658,7 +658,10 @@ the pane's own register unread, the tab says why. There is no Find field.
 Every word the Tasks view, the Inbox view and the Teams tab draw of a team comes from teamrig itself: the
 pane runs the installed teamrig's `read` command (`node <teamrig>/dist/cli/main.js read`, no shell) for its
 `tasks`, `inbox`, `sessions` and `config` documents, one run for all of them, when a file of its own team
-moved and at least once a minute. Each run hands back the revision it holds of each document, so teamrig
+that a document is built from moved (the register, the team config or its rename log, the session's inbox,
+the inbox read marks) and at least once a minute. The files that hold numbers alone start no run: the
+tasks' week file, which the budget hooks write on every session's turn, the goals and the other teams'
+registers are drawn from the files as they move. Each run hands back the revision it holds of each document, so teamrig
 builds only what changed. A run that fails, or a document the pane cannot read, keeps what was last drawn
 under a `WARN` line naming why (`teamrig read did not finish: …`, `teamrig read printed no tasks document`);
 the pane never falls back to reading the team's files for it. A document of another major interface version
