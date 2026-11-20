@@ -59,7 +59,6 @@ import {
   NO_MEETING_ANSWER,
   NO_MEETING_ASKED,
   NO_PREVIOUS,
-  NO_STATS_LIST,
   NO_TEAM_LOG,
   NO_TEAM_MEETINGS,
   NO_TEAM_STATS,
@@ -68,11 +67,20 @@ import {
 } from './pane-state'
 import type { PaneKey, PaneStore } from './pane-store'
 import { screenOf } from './screen'
-import { clearSearch, focusFind, go, openConversation, scrollTo, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
+import { clearSearch, focusFind, go, openConversation, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails, type RefPlaces } from './details'
-import { openFile as pressFile, openInbox as pressInbox, openPage as pressPage, toggleCard, type ReadsFile } from './presses'
+import {
+  closeStatsFrom as leaveStatsFrom,
+  closeStatsList as leaveStatsList,
+  openFile as pressFile,
+  openInbox as pressInbox,
+  openPage as pressPage,
+  pickStats as pressStats,
+  toggleCard,
+  type ReadsFile,
+} from './presses'
 import { RefFileReader } from './ref-file'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { TreeGoals } from './tree-goals'
@@ -1015,43 +1023,10 @@ export const register: Register = on => {
     // Opening a card reads what the task's refs and goals point at, once (detailOf).
     const toggle = (id: string) => toggleCard(store, snap.tasks, id, detailOf)
     const switchTo = (target: PaneView) => switchView(store, target, livesNow())
-    // A press on the Stats tab's scope or range row picks it, and one on a Health count shows its tasks from their top;
-    // either folds the registers at once. A Teams row's [Stats] shows the tab on that row's scope, its numbers from their
-    // top, and keeps the row for back; the switch has folded the registers by then.
-    const pickStats = async (press: StatsPress) => {
-      switch (press.kind) {
-        case 'open':
-          await update($, statsScope, () => press.scope)
-          await update($, statsList, () => NO_STATS_LIST)
-          await switchTo('stats')
-          await update($, statsFrom, () => press.row)
-          await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
-          return
-        case 'scope':
-          await update($, statsScope, () => press.scope)
-          break
-        case 'range':
-          await update($, statsRange, () => press.range)
-          break
-        case 'list':
-          await update($, statsList, () => press.list)
-          await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
-          break
-      }
-      await tallying?.refresh()
-    }
-    // Back from a Health count's tasks shows the tab's numbers again, from their top.
-    const closeStatsList = async () => {
-      await update($, statsList, () => NO_STATS_LIST)
-      await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
-      await tallying?.refresh()
-    }
-    // Back from a Stats tab a Teams row opened shows the Teams tab at that row. Read first: the switch drops it.
-    const closeStatsFrom = async () => {
-      const row = await read($, statsFrom)
-      await switchTo('team')
-      if (row !== null) await scrollTo(store, { kind: 'row', key: row }).catch(() => undefined)
-    }
+    // The Stats tab's presses (presses.ts): a pick, back from a Health count's tasks, back to the Teams row it opened from.
+    const pickStats = (press: StatsPress) => pressStats(store, press, livesNow())
+    const closeStatsList = () => leaveStatsList(store, livesNow())
+    const closeStatsFrom = () => leaveStatsFrom(store, livesNow())
     // The presses that open a page (presses.ts), on the tasks this drawing shows and the session's own area.
     const openPage = (id: string, from: string) => pressPage(store, snap.tasks, id, from, detailOf)
     const openFile = (file: RefFile, from: string) => pressFile(store, file, from, readFile)
