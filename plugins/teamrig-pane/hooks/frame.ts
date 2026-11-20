@@ -5,7 +5,6 @@
 // same lines), then its open card's parts, a Text or a press cut by lines and a line of presses or a Note field kept whole or left out. The rows
 // between two elements are slots of their own, so the window may start or end on one. Here too are what reads the
 // window: a reveal's offset, the scroll bar, and a scroll move's offset.
-import type { UiScrollInput } from 'claude-code'
 import type { RevealBlock } from '../types'
 import type { CardPart, Drawn } from './layout'
 import type { Span } from './rows'
@@ -227,11 +226,22 @@ export function barSpans(view: View): Span[] {
 }
 
 /**
+ * A scroll move as the surface sizes it: the rows it asks for (negative is up), and the rows of the surface's own
+ * window and of the tree drawn in it. The pane's own type, so no surface's is read here: a surface's scroll event
+ * holding these three passes as one.
+ */
+export type ScrollMove = {
+  readonly by: number
+  readonly bodyRows: number
+  readonly contentRows: number
+}
+
+/**
  * The offset after one of the person's scrolls: a wheel tick or an arrow WHEEL_ROWS rows, a page key the window,
  * a move the engine sizes as the whole of a tree taller than its window an end. Told apart by the rows the move
  * asks for against the engine's window and tree, as it sizes each; held to 0 to the view's last.
  */
-export function scrolledBy(view: View, scroll: Pick<UiScrollInput, 'by' | 'bodyRows' | 'contentRows'>): number {
+export function scrolledBy(view: View, scroll: ScrollMove): number {
   const size = Math.abs(scroll.by)
   const isEnd = size >= scroll.contentRows && scroll.contentRows > scroll.bodyRows
   const step = isEnd ? view.maxOffset : size >= scroll.bodyRows ? Math.max(1, view.visibleRows) : size * WHEEL_ROWS
