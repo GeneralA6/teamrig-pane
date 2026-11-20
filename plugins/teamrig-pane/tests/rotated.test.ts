@@ -28,6 +28,9 @@ function header(changes: Partial<SnapshotHeader> = {}): SnapshotHeader {
   return {
     covered: 1,
     events: 1,
+    // The event window opens before T2's create, so T2 is kept as that raw event and no folded task line.
+    tasks: 0,
+    windowFrom: iso(NOW - 21 * DAY),
     nextId: 'T3',
     orphans: 0,
     unreadable: 0,

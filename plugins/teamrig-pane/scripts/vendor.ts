@@ -75,6 +75,7 @@ export const CORE_FILES: readonly string[] = [
   'register/snapshot.ts',
   'register/stats-health.ts',
   'register/stats.ts',
+  'register/task-line.ts',
   'register/tree.ts',
   'register/verify.ts',
   'register/views.ts',

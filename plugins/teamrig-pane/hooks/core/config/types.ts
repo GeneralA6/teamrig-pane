@@ -117,7 +117,7 @@ export interface RegisterConfig {
   readonly requireDecisionCard: boolean;
   /**
    * Whether `set --status verifying` needs `--proof`, what will prove the shipped change works, and `--waits` naming
-   * when it runs: a time, or a task in progress or verifying.
+   * when it runs: a time, or a task in progress or verifying, or an open one of the same owner.
    */
   readonly requireProofOnVerifying: boolean;
   /** What `set --status in-progress` does while a task it needs is still verifying, or, on a first start, while its owner's own verify steps are due. */
@@ -333,8 +333,9 @@ export interface PromptsConfig {
    */
   readonly routeAllow: RouteAllow;
   /**
-   * How many calls one service role lets run with no permission check in 24 hours (T2984, security condition C6), so a
-   * holder steered by outside text closes or comments only so much; past it, the role's next call is refused.
+   * How many calls one service role lets run with no permission check in 24 hours (T2984, security condition C6), a
+   * migrate counting each issue row (T4606), so a holder steered by outside text closes, comments or migrates only so
+   * much; past it, the role's next call is refused.
    */
   readonly serviceRoleDailyCap: number;
 }
@@ -840,9 +841,18 @@ export interface BudgetReset {
 
 /**
  * The resets the account holds beside its weekly one: `fable` refills the Fable bar and gives back what Fable used of the
- * weekly limit, `full` clears all of the week's usage.
+ * weekly limit, `full` clears all of the week's usage. Both come as grants that expire.
  */
-export const RESET_KINDS = ['fable', 'full'] as const;
+export const EXPIRING_RESET_KINDS = ['fable', 'full'] as const;
+
+export type ExpiringResetKind = (typeof EXPIRING_RESET_KINDS)[number];
+
+/**
+ * `account`: the person's other Claude accounts (T939). teamrig never switches accounts; the user signs
+ * in to the next one, and to the meter that looks like a full reset. Each comes back a week after its use, as that
+ * account's own week runs from about then, so a stock of them never expires.
+ */
+export const RESET_KINDS = [...EXPIRING_RESET_KINDS, 'account'] as const;
 
 export type ResetKind = (typeof RESET_KINDS)[number];
 
@@ -850,20 +860,34 @@ export function isResetKind(value: unknown): value is ResetKind {
   return RESET_KINDS.some((kind) => kind === value);
 }
 
-/**
- * One grant of resets the account holds, with the uses taken from it: what is left is `count` minus `usedUtc`, and
- * none of it can be used past `expiresUtc`. Claude Code does not tell a session about these, so the team writes them
- * down as they are granted and used.
- */
-export interface ResetStock {
-  readonly kind: ResetKind;
+export function isExpiringResetKind(value: unknown): value is ExpiringResetKind {
+  return EXPIRING_RESET_KINDS.some((kind) => kind === value);
+}
+
+/** What every stock of resets holds. Claude Code does not tell a session about these, so the team writes them down. */
+interface ResetStockBase {
   readonly count: number;
-  /** YYYY-MM-DD HH:MM, UTC. */
-  readonly expiresUtc: string;
   /** When each use was taken, YYYY-MM-DD HH:MM UTC; at most `count`. */
   readonly usedUtc: readonly string[];
   readonly note?: string;
 }
+
+/** One grant of resets: what is left is `count` minus `usedUtc`, and none of it can be used past `expiresUtc`. */
+export interface ExpiringResetStock extends ResetStockBase {
+  readonly kind: ExpiringResetKind;
+  /** YYYY-MM-DD HH:MM, UTC. */
+  readonly expiresUtc: string;
+}
+
+/**
+ * The person's other accounts, `count` of them: `usedUtc` holds the last switch to each (a new switch replaces the
+ * oldest), and one is free again a week after its switch (budget/resets.ts `resetsLeft`).
+ */
+export interface AccountResetStock extends ResetStockBase {
+  readonly kind: 'account';
+}
+
+export type ResetStock = ExpiringResetStock | AccountResetStock;
 
 /**
  * What one W of a model's calls moves the weekly meter, against 1 for any model unlisted: the account's limit
