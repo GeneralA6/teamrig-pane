@@ -151,6 +151,44 @@ describe('proveHead', () => {
   });
 });
 
+describe('a light proof (T4363)', () => {
+  const LIGHT_PATH = recordPath(ROOT, '.git', TREE, 'light');
+
+  it('records its pass apart, in light/ beside the full records', async () => {
+    const { deps, out, files } = fixture();
+    assert.deepEqual(await proveHead(CHECKS, deps, 'light'), { passed: true });
+    assert.equal(LIGHT_PATH, join(ROOT, '.git', 'local-ci', 'light', `${TREE}.json`));
+    assert.deepEqual([...files.keys()], [LIGHT_PATH]);
+    assert.equal(out.at(-1), `pre-push checks: 2 passed on tree aaaaaaa, recorded in ${LIGHT_PATH}`);
+  });
+
+  it('takes a full pass as its own, and runs nothing', async () => {
+    const { deps, out, runs } = fixture({ files: { [PATH]: record(TREE) } });
+    assert.deepEqual(await proveHead(CHECKS, deps, 'light'), { passed: true });
+    assert.deepEqual(runs, []);
+    assert.deepEqual(out, ['pre-push checks: passed earlier on tree aaaaaaa (commit bbbbbbb, 2026-10-15T10:00:00.000Z, 2 check(s))']);
+  });
+
+  it('is never taken for a full pass: a full proof runs every check', async () => {
+    const { deps, runs, files } = fixture({ files: { [LIGHT_PATH]: record(TREE) } });
+    assert.deepEqual(await proveHead(CHECKS, deps), { passed: true });
+    assert.deepEqual(runs, ['lint', 'test']);
+    assert.ok(files.has(PATH));
+  });
+
+  it('as the pre-push hook, proves the checked-out commit light and passes a tree a light pass proved', async () => {
+    const pushed: PushUpdate = { localRef: 'refs/heads/topic', localSha: HEAD, remoteRef: 'refs/heads/topic' };
+    const fresh = fixture({ git: { [`rev-parse ${HEAD}^{tree}`]: [TREE] } });
+    assert.deepEqual(await provePush([pushed], CHECKS, fresh.deps, 'light'), { passed: true });
+    assert.deepEqual([...fresh.files.keys()], [LIGHT_PATH]);
+
+    const again = fixture({ git: { [`rev-parse ${HEAD}^{tree}`]: [TREE] }, files: { [LIGHT_PATH]: record(TREE) } });
+    assert.deepEqual(await provePush([pushed], CHECKS, again.deps, 'light'), { passed: true });
+    assert.deepEqual(again.runs, []);
+    assert.deepEqual(again.out, ['pre-push checks: refs/heads/topic (tree aaaaaaa) passed earlier (2026-10-15T10:00:00.000Z, 2 check(s))']);
+  });
+});
+
 describe('parseRecord', () => {
   it('reads a record for the tree and ignores a missing, broken or foreign one', () => {
     assert.deepEqual(parseRecord(record(TREE), TREE), { tree: TREE, commit: HEAD, checks: ['lint', 'test'], passedAt: NOW.toISOString(), node: 'v22.0.0' });
