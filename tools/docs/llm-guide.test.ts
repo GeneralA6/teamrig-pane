@@ -97,16 +97,22 @@ describe('the pane guide documents the command', () => {
 describe('the pane guide documents the keys', () => {
   it("lists each hotkey of the pane, the status bar's counts' and the Keys page's too, and no letter it does not bind", () => {
     const register = read(`${PLUGIN}/hooks/register.tsx`);
-    const fixed = Array.from(register.matchAll(/hotkey="([a-z])"/g), (match) => match[1] ?? '');
+    // The head's keys are data in head.ts, each the third word of a framed button; the dock draws them, and binds the
+    // Find row's own.
+    const head = read(`${PLUGIN}/hooks/head.ts`);
+    const framed = Array.from(head.matchAll(/framed\('[a-z-]+', [^,]+, '([a-z])',/g), (match) => match[1] ?? '');
+    const fixed = [...framed, ...Array.from(register.matchAll(/hotkey="([a-z])"/g), (match) => match[1] ?? '')];
     const counts = Array.from(read(`${PLUGIN}/hooks/status-bar.ts`).matchAll(/hotkey: '([a-z])'/g), (match) => match[1] ?? '');
     const keysPage = captured('keys-page.ts', /export const KEYS_HOTKEY = '([a-z])'/);
     // A key two views bind, each in its own view (b: back on a task page and on a Log page), is one row.
     const bound = [...new Set([...fixed, ...counts, keysPage])].sort();
     const documented = rowsStarting(skill, /^`[a-z]`$/).map((cell) => cell.slice(1, -1)).sort();
-    assert.ok(fixed.length > 0, 'register.tsx binds hotkeys');
+    assert.ok(framed.length > 0, 'head.ts gives its buttons keys');
+    assert.ok(register.includes('hotkey="s"'), 'register.tsx binds the Find key');
     assert.ok(counts.length > 0, 'status-bar.ts gives each count a key');
     assert.ok(register.includes('hotkey={piece.hotkey}'), "register.tsx binds the counts' keys");
-    assert.ok(register.includes('hotkey={KEYS_HOTKEY}'), "register.tsx binds the Keys page's key");
+    assert.ok(head.includes('hotkey: KEYS_HOTKEY'), "head.ts gives the Keys page's button its key");
+    assert.ok(register.includes('{ hotkey: item.hotkey }'), "register.tsx binds the head's keys");
     assert.deepEqual(documented, bound);
   });
 });
