@@ -4,7 +4,7 @@
 // or a run that does not finish is a failure, never a throw; a failure's reason holds nothing a terminal would act
 // on (T4742).
 import { describe, expect, test } from 'claude-code/testing'
-import { READ_TIMEOUT_MS, readDocuments, readResult, readWords, type ReadAsk, type ReadPorts } from '../hooks/read-port'
+import { READ_TIMEOUT_MS, readDocuments, readResult, readWords, type ReadAsk, type ReadAsker, type ReadPorts } from '../hooks/read-port'
 import { CONTROL_SHOWN } from '../hooks/shown-text'
 import { cliArgv, type CliRun, type TeamrigCli } from '../hooks/teamrig-cli'
 
@@ -15,6 +15,9 @@ const WHOLE: readonly ReadAsk[] = [
   { name: 'tasks', held: null },
   { name: 'inbox', held: null },
 ]
+/** The pane's conversation, in a tab drawing session api, and in one that knows no session. */
+const AS_API: ReadAsker = { session: 'api', conversation: 'c-1' }
+const UNTIED: ReadAsker = { session: null, conversation: 'c-1' }
 
 function ok(...printed: readonly unknown[]): CliRun {
   return { exitCode: 0, stdout: printed.map(value => JSON.stringify(value)).join('\n'), stderr: '', isStdoutTruncated: false }
@@ -23,7 +26,7 @@ function ok(...printed: readonly unknown[]): CliRun {
 type Recorded = { runs: { argv: readonly string[]; timeoutMs: number }[] }
 
 /** Ports recording each run; `answer` answers it, an Error by rejecting. */
-function portsOf(answer: CliRun | Error, caller: string | null = 'api'): ReadPorts & Recorded {
+function portsOf(answer: CliRun | Error): ReadPorts & Recorded {
   const runs: Recorded['runs'] = []
   return {
     runs,
@@ -31,26 +34,31 @@ function portsOf(answer: CliRun | Error, caller: string | null = 'api'): ReadPor
       runs.push({ argv, timeoutMs })
       return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer)
     },
-    caller: () => Promise.resolve(caller),
   }
 }
 
 describe('readWords', () => {
-  test('asks for every document in one run, as JSON', () => {
-    expect(readWords(WHOLE, null)).toEqual(['read', 'tasks', 'inbox', '--json'])
+  test('asks for every document in one run, as JSON, naming the conversation it runs in', () => {
+    expect(readWords(WHOLE, UNTIED)).toEqual(['read', 'tasks', 'inbox', '--json', '--conversation', 'c-1'])
   })
 
-  test('hands back the revisions held in one flag, and runs as the caller', () => {
+  test('a conversation id teamrig would refuse the run for is left out', () => {
+    expect(readWords(WHOLE, { session: 'api', conversation: 'c 1;x' })).toEqual(['read', 'tasks', 'inbox', '--json', '--session', 'api'])
+    expect(readWords(WHOLE, { session: null, conversation: '' })).toEqual(['read', 'tasks', 'inbox', '--json'])
+    expect(readWords(WHOLE, { session: null, conversation: 'c'.repeat(129) })).toEqual(['read', 'tasks', 'inbox', '--json'])
+  })
+
+  test('hands back the revisions held in one flag, and asks as the session drawn', () => {
     const asks: readonly ReadAsk[] = [
       { name: 'tasks', held: 'r7' },
       { name: 'inbox', held: null },
       { name: 'config', held: 'c1' },
     ]
-    expect(readWords(asks, 'api')).toEqual(['read', 'tasks', 'inbox', 'config', '--json', '--unless', 'tasks=r7,config=c1', '--session', 'api'])
+    expect(readWords(asks, AS_API)).toEqual(['read', 'tasks', 'inbox', 'config', '--json', '--unless', 'tasks=r7,config=c1', '--session', 'api', '--conversation', 'c-1'])
   })
 
   test('with one revision held the flag names it alone', () => {
-    expect(readWords([{ name: 'tasks', held: 'r7' }, { name: 'inbox', held: null }], null)).toEqual(['read', 'tasks', 'inbox', '--json', '--unless', 'tasks=r7'])
+    expect(readWords([{ name: 'tasks', held: 'r7' }, { name: 'inbox', held: null }], UNTIED)).toEqual(['read', 'tasks', 'inbox', '--json', '--unless', 'tasks=r7', '--conversation', 'c-1'])
   })
 })
 
@@ -122,28 +130,30 @@ describe('readResult', () => {
 })
 
 describe('readDocuments', () => {
-  test('runs the CLI once for every document, as the caller, within the read timeout', async () => {
+  test('runs the CLI once for every document, as the asker, within the read timeout', async () => {
     const ports = portsOf(ok(TASKS, INBOX))
-    const result = await readDocuments(CLI, ports, WHOLE)
+    const result = await readDocuments(CLI, ports, WHOLE, AS_API)
     expect(result.kind).toBe('read')
-    expect(ports.runs).toEqual([{ argv: cliArgv(CLI.main, ['read', 'tasks', 'inbox', '--json', '--session', 'api']), timeoutMs: READ_TIMEOUT_MS }])
+    expect(ports.runs).toEqual([
+      { argv: cliArgv(CLI.main, ['read', 'tasks', 'inbox', '--json', '--session', 'api', '--conversation', 'c-1']), timeoutMs: READ_TIMEOUT_MS },
+    ])
   })
 
-  test('a tab that knows no session leaves the caller to the CLI', async () => {
-    const ports = portsOf(ok(TASKS, INBOX), null)
-    await readDocuments(CLI, ports, WHOLE)
-    expect(ports.runs.map(run => run.argv)).toEqual([cliArgv(CLI.main, ['read', 'tasks', 'inbox', '--json'])])
+  test('a tab that knows no session leaves the asker to the CLI, which finds it by the conversation', async () => {
+    const ports = portsOf(ok(TASKS, INBOX))
+    await readDocuments(CLI, ports, WHOLE, UNTIED)
+    expect(ports.runs.map(run => run.argv)).toEqual([cliArgv(CLI.main, ['read', 'tasks', 'inbox', '--json', '--conversation', 'c-1'])])
   })
 
   test('with nothing to read it runs nothing', async () => {
     const ports = portsOf(ok(TASKS))
-    expect(await readDocuments(CLI, ports, [])).toEqual({ kind: 'read', documents: new Map(), problems: [] })
+    expect(await readDocuments(CLI, ports, [], AS_API)).toEqual({ kind: 'read', documents: new Map(), problems: [] })
     expect(ports.runs).toEqual([])
   })
 
   test('a missing CLI is a failure with its problem, and nothing runs', async () => {
     const ports = portsOf(ok(TASKS))
-    expect(await readDocuments({ kind: 'missing', problem: 'no teamrig command on the PATH' }, ports, WHOLE)).toEqual({
+    expect(await readDocuments({ kind: 'missing', problem: 'no teamrig command on the PATH' }, ports, WHOLE, AS_API)).toEqual({
       kind: 'failed',
       reason: 'no teamrig command on the PATH',
     })
@@ -151,14 +161,14 @@ describe('readDocuments', () => {
   })
 
   test('a run that does not finish is a failure, never a throw', async () => {
-    expect(await readDocuments(CLI, portsOf(new Error('no answer in 35 s')), WHOLE)).toEqual({
+    expect(await readDocuments(CLI, portsOf(new Error('no answer in 35 s')), WHOLE, AS_API)).toEqual({
       kind: 'failed',
       reason: 'teamrig read did not finish: no answer in 35 s',
     })
   })
 
   test('a run that broke is told with nothing in it a terminal would act on', async () => {
-    expect(await readDocuments(CLI, portsOf(new Error('spawn \u0007node\u009b ENOENT')), WHOLE)).toEqual({
+    expect(await readDocuments(CLI, portsOf(new Error('spawn \u0007node\u009b ENOENT')), WHOLE, AS_API)).toEqual({
       kind: 'failed',
       reason: `teamrig read did not finish: spawn ${CONTROL_SHOWN}node${CONTROL_SHOWN} ENOENT`,
     })

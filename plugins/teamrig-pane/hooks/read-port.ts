@@ -18,12 +18,21 @@ export const READ_TIMEOUT_MS = 30_000
 /** A document to read, and the revision the caller still holds of it (null: none, so it is read whole). */
 export type ReadAsk = { readonly name: DocumentName; readonly held: string | null }
 
+/**
+ * Who a read asks as. `session` is the area the pane draws (the CLI's `--session`): named whenever it is known, so
+ * the tab's own session variable never picks another inbox than the one drawn; with null the CLI finds the asker
+ * itself, by that variable and then by the conversation. `conversation` is the host's id of the conversation the
+ * pane runs in, which teamrig answers the `sessions` document's `self` by.
+ */
+export type ReadAsker = { readonly session: string | null; readonly conversation: string }
+
 export type ReadPorts = {
   /** Runs `argv`, the teamrig CLI and its words (teamrig-cli.ts cliArgv); rejects when it cannot start or outlasts `timeoutMs`. */
   run: (argv: readonly string[], timeoutMs: number) => Promise<CliRun>
-  /** The session the CLI runs as (its `--session`); null when the tab knows none, and the CLI asks its own variable. */
-  caller: () => Promise<string | null>
 }
+
+/** A conversation id teamrig's `--conversation` takes; it refuses the whole run for any other. */
+const CONVERSATION = /^[A-Za-z0-9_.:-]{1,128}$/
 
 /** What a read answered: the documents it could read with what it could not, as lines to show; or why it read none. */
 export type ReadResult =
@@ -37,14 +46,17 @@ function failed(reason: string): ReadResult {
 }
 
 /**
- * The CLI's words for one read of `asks`, as `caller` when the tab knows one. The revisions held go in one `--unless`,
- * a comma list: teamrig's parser refuses a flag given twice.
+ * The CLI's words for one read of `asks` as `asker`. The revisions held go in one `--unless`, a comma list: teamrig's
+ * parser refuses a flag given twice. A conversation id teamrig would refuse the run for is left out, so the documents
+ * are still read, with no `self`.
  */
-export function readWords(asks: readonly ReadAsk[], caller: string | null): string[] {
+export function readWords(asks: readonly ReadAsk[], asker: ReadAsker): string[] {
   const words = ['read', ...asks.map(ask => ask.name), '--json']
   const held = asks.flatMap(ask => (ask.held === null ? [] : [`${ask.name}=${ask.held}`]))
   if (held.length > 0) words.push('--unless', held.join(','))
-  return caller === null ? words : [...words, '--session', caller]
+  if (asker.session !== null) words.push('--session', asker.session)
+  if (CONVERSATION.test(asker.conversation)) words.push('--conversation', asker.conversation)
+  return words
 }
 
 /** What `run` answered to `asks`. */
@@ -77,13 +89,12 @@ export function readResult(run: CliRun, asks: readonly ReadAsk[]): ReadResult {
   return { kind: 'read', documents, problems }
 }
 
-/** Reads `asks` in one run of `cli`; with none to read it runs nothing. A run that cannot finish is a failure, never a throw. */
-export async function readDocuments(cli: TeamrigCli, ports: ReadPorts, asks: readonly ReadAsk[]): Promise<ReadResult> {
+/** Reads `asks` as `asker` in one run of `cli`; with none to read it runs nothing. A run that cannot finish is a failure, never a throw. */
+export async function readDocuments(cli: TeamrigCli, ports: ReadPorts, asks: readonly ReadAsk[], asker: ReadAsker): Promise<ReadResult> {
   if (asks.length === 0) return NOTHING_READ
   if (cli.kind === 'missing') return failed(cli.problem)
   try {
-    const words = readWords(asks, await ports.caller())
-    return readResult(await ports.run(cliArgv(cli.main, words), READ_TIMEOUT_MS), asks)
+    return readResult(await ports.run(cliArgv(cli.main, readWords(asks, asker)), READ_TIMEOUT_MS), asks)
   } catch (error) {
     return failed(`teamrig read did not finish: ${messageOf(error)}`)
   }
