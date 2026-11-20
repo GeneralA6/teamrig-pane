@@ -36,10 +36,8 @@
 import { atom, read, update } from 'claude-code'
 import type { Components, Context, ProcessResult, Register, ToolResult } from 'claude-code'
 import type {
-  BarStatus,
   LogRead,
   PaneState,
-  PaneView,
   Snapshot,
   TaskDetail,
   TaskRow,
@@ -67,35 +65,21 @@ import {
 } from './pane-state'
 import type { PaneKey, PaneStore } from './pane-store'
 import { screenOf } from './screen'
-import { clearSearch, focusFind, go, openConversation, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
+import { openConversation, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { lookupSession, type SessionFound } from './session-roster'
 import type { SessionsRead } from './sessions-document'
 import { TaskDetails, type RefPlaces } from './details'
-import {
-  closeCards,
-  closeLog as leaveLog,
-  closeStatsFrom as leaveStatsFrom,
-  closeStatsList as leaveStatsList,
-  filterBar,
-  submitChanges as enterChanges,
-  submitLog as enterLog,
-  submitTasks as enterTasks,
-  submitTeam as enterTeam,
-  openTask,
-  toggleBanner,
-  togglePrevious,
-  type ReadsFile,
-} from './presses'
-import { pressOfDrawn, pressOfPart, pressOfPiece, runPress, type Press } from './press'
+import { openTask, toggleBanner, togglePrevious, type ReadsFile } from './presses'
+import { pressOfDrawn, pressOfPart, pressOfPiece, runPress, submitFind, typeFind, type Press, type PressDeps } from './press'
+import { headOf, headRows, pressOfBar, type HeadButton, type HeadItem, type HeadPart, type HeadPiece, type HeadWords } from './head'
 import { RefFileReader } from './ref-file'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { TreeGoals } from './tree-goals'
 import { TreeRegisters } from './tree-registers'
-import { WrapCache, dockLayout, wrapRow, type CardPart, type Drawn } from './layout'
+import { WrapCache, dockLayout, type CardPart, type Drawn } from './layout'
 import { diffKey, noteKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
-import { buttonCells, packGroups, packRows, type ButtonLook } from './pack'
-import { cells } from './width'
+import { buttonCells } from './pack'
 import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, type FrameSlot, type Placed, type View } from './frame'
 import { scrolledTo, settle, type Settled } from './body-scroll'
 import {
@@ -118,13 +102,13 @@ import {
   previousBlock,
   type Current,
 } from './banner'
-import { sessionName, titleSpans } from './session-title'
+import { sessionName } from './session-title'
 import type { Span } from './rows'
 import type { BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
 import { gitCheck, requirementProblems } from './requirements'
 import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges } from './changes'
-import { changesLabel, paneTitle } from './changes-rows'
+import { paneTitle } from './changes-rows'
 import { LiveDiffs } from './diff'
 import { LiveCopies } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
@@ -139,28 +123,10 @@ import { SessionActs } from './session-acts'
 import { LiveStats } from './stats-source'
 import { findTeamrigCli } from './teamrig-cli'
 import { themeOf } from './theme'
-import {
-  back,
-  canGoBack,
-  canGoForward,
-  currentPlace,
-  doneAt,
-  forward,
-  isPage,
-  KEYS_PAGE,
-  placeLabel,
-  pushed,
-  searched,
-  trail,
-  wentTo,
-} from './nav'
-import { heldWeeks, weekClockOf, weekSteps } from './done'
-import { weekWords } from './done-rows'
+import { currentPlace } from './nav'
 import { treeOf } from './meta'
 import { clockOf, machineZoneOf, zoneNamed } from './zone'
-import { KEYS_HOTKEY, KEYS_LABEL } from './keys-page'
-import { matchCount } from './task-search'
-import { FIRST_MEMO, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
+import { FIRST_MEMO, landedOn, type KeysAt } from './find-field'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -172,21 +138,6 @@ const PAD_COLUMNS = 1
  * (a dock too narrow for its buttons) would leave the body too few rows, so the pane then scrolls as one.
  */
 const HEADER_MAX_SHARE = 0.5
-/** Between two crumbs of a page's trail. */
-const TRAIL_SEPARATOR = ' › '
-/** The Conversations view's switch button (the view keyed 'log'), and the first crumb of a conversation page's trail. */
-const LOG_LABEL = 'Conversations'
-/** The Stats view's switch button, and the first crumb of a Health count's trail. */
-const STATS_LABEL = 'Stats'
-/** The Teams view's switch button with no count, and the first crumb of the trail of a Stats tab a Teams row opened. */
-const TEAMS_LABEL = 'Teams'
-const BACK_LABEL = '‹ back'
-const FORWARD_LABEL = 'forward ›'
-/** The Done page's steps to the week before and the week after the one it shows. */
-const PREV_LABEL = '‹ prev'
-const NEXT_LABEL = 'next ›'
-/** The mode row's button to the Done page, its `›` saying it opens a page. */
-const DONE_LABEL = 'done ›'
 /** What the close hook answers the person's close with: the engine logs it as why the pane stayed. */
 const MINIMIZED = `minimized to its strip: a press on it, or /${COMMAND}, opens it again`
 /** How long one git run may take before it is killed and the repo shows the failure. */
@@ -442,9 +393,6 @@ function drawFindRow({ Box, Button, Input }: FindComponents, row: FindRow) {
     </Box>
   )
 }
-
-/** An element of a header row that wraps, and the cells it takes: the header packs those rows in code (pack.ts). */
-type HeaderItem = { readonly node: JSX.Element; readonly cells: number }
 
 /** A piece of the docked header and the rows it takes: the header's rows are counted as drawn, so the body's window takes the rest (T860). */
 type HeaderPart = { readonly node: JSX.Element; readonly rows: number }
@@ -1004,62 +952,28 @@ export const register: Register = on => {
       tieHint: TIE_HINT,
     })
     keysMemo = screen.memo
-    const {
-      isMinimized,
-      current,
-      changed,
-      snap,
-      shown,
-      open,
-      at,
-      field,
-      landings,
-      scroll,
-      found,
-      teamFound,
-      inboxFound,
-      logFound,
-      changesFound,
-      logTitle,
-      statsTitle,
-      statsBack,
-      setupShown,
-      body,
-      barLines,
-    } = screen
+    const { current, snap, at, scroll, body } = screen
 
-    const switchTo = (target: PaneView) => switchView(store, target, livesNow())
-    // The Stats tab's head presses (presses.ts): back from a Health count's tasks, back to the Teams row it opened from.
-    const closeStatsList = () => leaveStatsList(store, livesNow())
-    const closeStatsFrom = () => leaveStatsFrom(store, livesNow())
-    // Back from a conversation's page shows the list, read again, from its top, or the search the page was opened from:
-    // the page drew no Find field, so it comes back a fresh round holding the search's words (fieldAnew).
-    const closeLog = () => leaveLog(store, logging)
-    // Enter in each view's Find field (presses.ts), on its words as typed (a redraw may lag behind them) and on the
-    // tasks this drawing shows.
-    const submit = (query: string) => enterTasks(store, snap, query, moveFocus, detailOf)
-    const submitTeam = (query: string) => enterTeam(store, query, moveFocus)
-    const submitLog = (query: string) => enterLog(store, snap, query, moveFocus, logging)
-    const submitChanges = (query: string) => enterChanges(store, query, moveFocus, diffing)
-    // A press in the body (press.ts), on the tasks, view and place this drawing shows; the readers are those held
-    // when it is pressed, which a team found since this drawing may have set.
-    const run = (press: Press) =>
-      runPress(press, {
-        store,
-        tasks: snap.tasks,
-        area: snap.area,
-        shown: current,
-        place: currentPlace(at),
-        detailOf,
-        readFile,
-        lives: livesNow(),
-        logging,
-        diffing,
-        pinning: live,
-        scheduling,
-        pressing,
-        acting,
-      })
+    // What a press runs over (press.ts): the tasks, view and place this drawing shows; the readers are those held when
+    // it is pressed, which a team found since this drawing may have set.
+    const pressDeps = (): PressDeps => ({
+      store,
+      snap,
+      shown: current,
+      place: currentPlace(at),
+      focus: moveFocus,
+      detailOf,
+      readFile,
+      lives: livesNow(),
+      logging,
+      diffing,
+      pinning: live,
+      scheduling,
+      pressing,
+      acting,
+    })
+    // A press in the head or the body.
+    const run = (press: Press) => runPress(press, pressDeps())
 
     const spanComponents = { Text, Link }
     const styled = (span: Span, key?: string) => styledSpan(spanComponents, span, key)
@@ -1120,7 +1034,7 @@ export const register: Register = on => {
     }
     // A block's first Text: a press when the drawing names one for it (press.ts pressOfDrawn: its task's card or page,
     // a conversation's Log page, a fold, a Changes file's diff), else words alone.
-    const headOf = (drawn: Drawn) => {
+    const drawBlockHead = (drawn: Drawn) => {
       const press = pressOfDrawn(drawn)
       if (press === null) return drawText(drawn.spans, drawn.wrap, drawn.key)
       return (
@@ -1139,7 +1053,7 @@ export const register: Register = on => {
             {[...drawn.parts, ...(drawn.card ?? [])].map(part => drawPart(part, drawn.wrap, drawn.key))}
           </Box>
         )
-      const head = headOf(drawn)
+      const head = drawBlockHead(drawn)
       if (drawn.card === undefined) return head
       const from = pressesFrom(drawn)
       return (
@@ -1231,271 +1145,44 @@ export const register: Register = on => {
     }
     const drawPane = (header: readonly HeaderPart[]) => (inline ? drawFlat(header, 0) : drawDocked(header))
 
-    // The session's title (session-title.ts) leads every docked view on one line cut at the pane's width; a Text, so it
-    // holds no place in the focus ring. It stays above the body with the rest of the header. Inline the pane draws
-    // none, as it sits by the band above the prompt, which names the session too, in rows screen.ts's INLINE_MAX_ROWS caps and the
-    // engine redraws on every keystroke.
-    const sessionTitle = inline ? null : titleSpans(snap)
-    const titleRow: HeaderPart | null = sessionTitle === null ? null : { node: drawText(sessionTitle, 'truncate-end', 'title'), rows: 1 }
-
-    // The header's rows that wrap (the switch, the mode buttons, a page's trail, the Done week's steps) are packed in
-    // code (pack.ts), each a column Box under its key of one row Box a row, keyed `<key>:<row>`: the rows drawn are the
-    // rows counted, so the body's window can take the rows the header leaves (T860).
-    const drawRows = (key: string, packed: readonly (readonly HeaderItem[])[], gap: number): HeaderPart => ({
-      node: (
-        <Box key={key} flexDirection="column">
-          {packed.map((row, i) => (
-            <Box key={`${key}:${i}`} flexDirection="row" columnGap={gap}>
-              {row.map(item => item.node)}
-            </Box>
-          ))}
-        </Box>
-      ),
-      rows: packed.length,
-    })
-    const drawPacked = (key: string, items: readonly HeaderItem[], gap: number) => drawRows(key, packRows(items, item => item.cells, columns, gap), gap)
-    // A row of groups (the switch and the minimized mark, the modes, the pages they open and the card control) draws a
-    // dim `·` between two groups that share a row, never at a row's end (pack.ts packGroups), keyed `<key>:sep:<group>`.
-    const separator = (key: string) => (group: number): HeaderItem => ({
-      node: (
-        <Text key={`${key}:sep:${group}`} dimColor>
-          ·
+    // The head of this drawing as every front end reads it (head.ts): what it holds, in which rows, and what each
+    // press does are data, and the dock only draws them, each element under the key head.ts names. The rows that wrap
+    // come packed (pack.ts), each a column Box under its key of one row Box a row, keyed `<key>:<row>`: the rows drawn
+    // are the rows counted (headRows), so the body's window can take the rows the header leaves (T860).
+    const head = headOf(screen, { inline, columns, isHeld: e.props.isFocused })
+    /** Words that are no press: a Text, so they hold no place in the focus ring. */
+    const drawWords = (item: HeadWords) => {
+      const tone = item.tone === 'bold' ? { bold: true } : { dimColor: true }
+      const cut = item.cut ? { wrap: 'truncate-end' as const } : {}
+      return (
+        <Text key={item.key} {...tone} {...cut}>
+          {item.text}
         </Text>
-      ),
-      cells: 1,
-    })
-    const drawGrouped = (key: string, groups: readonly (readonly HeaderItem[])[], gap: number) =>
-      drawRows(key, packGroups(groups, item => item.cells, columns, gap, separator(key)), gap)
-    /** A Button as a header item, its cells counted from how it looks. */
-    const pressed = (node: JSX.Element, look: ButtonLook): HeaderItem => ({ node, cells: buttonCells(look) })
-    /** Words as a header item. */
-    const worded = (node: JSX.Element, text: string): HeaderItem => ({ node, cells: cells(text) })
-
-    // The switch: under the title in every state but setup, so another view is always one press (or t / d / g / u / e / j) away,
-    // its buttons wrapping under each other in a dock too narrow for all of them. Minimized, it is the whole
-    // pane, one row, and a press on any button opens the pane in full on that view (switchTo).
-    const changesWords = changesLabel(changed)
-    // The Inbox button counts the unread lines; none unread, or none known (no read mark yet), it is the word alone.
-    const inboxWords = snap.unreadInbox !== null && snap.unreadInbox > 0 ? `Inbox (${snap.unreadInbox})` : 'Inbox'
-    // The Teams button counts the cards waiting on the owner now across the team's sessions; none, it is the word alone.
-    const decisions = Object.values(snap.ownerCards).reduce((sum, cards) => sum + cards.due.length, 0)
-    const teamWords = decisions > 0 ? `${TEAMS_LABEL} (${decisions})` : TEAMS_LABEL
-    const switchItems = [
-      pressed(
-        <Button key="tasks" label="Tasks" hotkey="t" variant={current === 'tasks' ? 'primary' : 'secondary'} onPress={() => void switchTo('tasks')} />,
-        { label: 'Tasks', plain: false, hotkey: 't' },
-      ),
-      pressed(
-        <Button
-          key="changes"
-          label={changesWords}
-          hotkey="d"
-          variant={current === 'changes' ? 'primary' : 'secondary'}
-          onPress={() => void switchTo('changes')}
-        />,
-        { label: changesWords, plain: false, hotkey: 'd' },
-      ),
-      pressed(<Button key="log" label={LOG_LABEL} hotkey="g" variant={current === 'log' ? 'primary' : 'secondary'} onPress={() => void switchTo('log')} />, {
-        label: LOG_LABEL,
-        plain: false,
-        hotkey: 'g',
-      }),
-      pressed(<Button key="inbox" label={inboxWords} hotkey="u" variant={current === 'inbox' ? 'primary' : 'secondary'} onPress={() => void switchTo('inbox')} />, {
-        label: inboxWords,
-        plain: false,
-        hotkey: 'u',
-      }),
-      pressed(<Button key="team" label={teamWords} hotkey="e" variant={current === 'team' ? 'primary' : 'secondary'} onPress={() => void switchTo('team')} />, {
-        label: teamWords,
-        plain: false,
-        hotkey: 'e',
-      }),
-      pressed(
-        <Button key="meetings" label="Meetings" hotkey="j" variant={current === 'meetings' ? 'primary' : 'secondary'} onPress={() => void switchTo('meetings')} />,
-        { label: 'Meetings', plain: false, hotkey: 'j' },
-      ),
-      pressed(<Button key="stats" label={STATS_LABEL} hotkey="r" variant={current === 'stats' ? 'primary' : 'secondary'} onPress={() => void switchTo('stats')} />, {
-        label: STATS_LABEL,
-        plain: false,
-        hotkey: 'r',
-      }),
-    ]
-    // Minimized, a dim mark after the switch says how to open the pane in full again, a group of its own.
-    const minimizedWords = 'minimized, press a view'
-    const minimizedMark = worded(
-      <Text key="hint" dimColor wrap="truncate-end">
-        {minimizedWords}
-      </Text>,
-      minimizedWords,
-    )
-    const switchRow = drawGrouped('switch', isMinimized ? [switchItems, [minimizedMark]] : [switchItems], 1)
-    if (isMinimized && body.length === 0) {
-      drawnWithoutWindow()
-      return <Box paddingX={PAD_COLUMNS}>{switchRow.node}</Box>
+      )
     }
-    // A project teamrig is not set up for has no tasks to switch to, find or filter: its setup shows alone, with no
-    // switch, Find row or mode buttons, so none of their hotkeys (t, d, g, u, e, j, s, m, a, h, k) answers. The minimized strip
-    // above keeps its switch, so a press on it still opens the pane, onto the setup.
-    if (setupShown !== null) return drawPane(titleRow === null ? [] : [titleRow])
-
-    // The mode row in groups, a dim `·` between them (drawGrouped): the modes the list switches between, the pages
-    // a press opens, what acts on the cards open, then the Keys page.
-    const modeButtons = [
-      pressed(<Button label="mine" hotkey="m" variant={shown === 'mine' ? 'primary' : 'secondary'} onPress={() => void showMode(store, 'mine')} />, {
-        label: 'mine',
-        plain: false,
-        hotkey: 'm',
-      }),
-      pressed(<Button label="all" hotkey="a" variant={shown === 'all' ? 'primary' : 'secondary'} onPress={() => void showMode(store, 'all')} />, {
-        label: 'all',
-        plain: false,
-        hotkey: 'a',
-      }),
-    ]
-    const place = currentPlace(at)
-    // The done button opens the Done page (done-rows.ts) at the week of now, its `›` saying it opens a page and is no
-    // mode, in the dock alone, where a page can show: inline, the places are never read.
-    const pageButtons = inline
-      ? []
-      : [
-          // Not `done`: that key is the Tasks list's Done today heading (rows.ts SECTION_KEY), drawn beside this button.
-          pressed(
-            <Button
-              key="done-page"
-              label={DONE_LABEL}
-              hotkey="h"
-              variant={place.kind === 'done' ? 'primary' : 'secondary'}
-              onPress={() => void go(store, current => doneAt(current, heldWeeks(weekClockOf(snap)).newest))}
-            />,
-            { label: DONE_LABEL, plain: false, hotkey: 'h' },
-          ),
-        ]
-    // A page shows no list, so no card in it to close.
-    const cardButtons =
-      Object.keys(open).length > 0 && place.kind === 'list'
-        ? [
-            pressed(
-              <Button key="close-cards" label="close cards" hotkey="c" variant="secondary" onPress={() => void closeCards(atomStore($))} />,
-              { label: 'close cards', plain: false, hotkey: 'c' },
-            ),
-          ]
-        : []
-    // `k: keys` opens the Keys page (keys-page.ts), every key the pane answers, drawn plain with its key as the
-    // status bar's counts are; in the dock alone, as the done button.
-    const keysButtons = inline
-      ? []
-      : [
-          pressed(<Button key="keys" label={KEYS_LABEL} plain hotkey={KEYS_HOTKEY} onPress={() => void go(store, current => pushed(current, KEYS_PAGE))} />, {
-            label: KEYS_LABEL,
-            plain: true,
-            hotkey: KEYS_HOTKEY,
-          }),
-        ]
-
-    // The Find field, under the switch in the dock in the Tasks view whatever it shows, in the Inbox, Team and Changes
-    // views and over the Log view's list, never in the Meetings view (a few rows, nothing to search): the first change
-    // opens a search (a place, so back from a result's page
-    // returns to it), each change shows the results for its words, Enter opens the one match's page (on the Teams tab
-    // its card, on the Changes view its diff) or moves the ring onto the first of more (in the Inbox view, whose lines
-    // open nothing, it does nothing), and an empty field or clear closes the search. It is drawn under its round's key,
-    // holding what the round started with (find-field.ts): the query of the search shown, else nothing; never the
-    // person's typing, which the engine would drop on each redraw. `s: Find` before it moves the focus ring into it,
-    // and clear moves it back in; the field never takes the focus by itself, as it would then hold every key the
-    // pane's hotkeys answer. Esc hands the keys back and leaves the results drawn.
-    const isTeam = current === 'team'
-    const isInbox = current === 'inbox'
-    const isChanges = current === 'changes'
-    // A Log page shows one conversation: the Find field is the list's.
-    const isLogList = current === 'log' && logTitle === null
-    // The field in the view shown: what it shows empty, how many results its words match, and what Enter does; null
-    // in the Meetings view and the Stats tab, which draw none.
-    const find: { placeholder: string; matches: number; submit: ((query: string) => Promise<void>) | null } | null =
-      current === 'meetings' || current === 'stats'
-        ? null
-        : isTeam
-          ? { placeholder: 'id, name, role, scope…', matches: teamFound.length, submit: submitTeam }
-          : isInbox
-            ? { placeholder: 'sender, words…', matches: inboxFound.length, submit: null }
-            : isLogList
-              ? { placeholder: 'task, title, session…', matches: logFound.length, submit: submitLog }
-              : isChanges
-                ? { placeholder: 'path, repo, branch…', matches: changesFound.length, submit: submitChanges }
-                : { placeholder: 'id, title, owner, note…', matches: matchCount(found), submit }
-    // Enter's words, none in the Inbox view or with no field.
-    const enterWords = find === null || find.submit === null ? null : submitWords(find.matches)
-    const findRow =
-      inline || find === null
-        ? null
-        : drawFindRow(components, {
-            key: fieldKey(field),
-            placeholder: find.placeholder,
-            text: field.text,
-            submitLabel: enterWords ?? 'search',
-            onFind: () => void focusFind(store, moveFocus),
-            onInput: value => void go(store, current => searched(current, value), 'typing'),
-            onSubmit: value => void find.submit?.(value),
-            onClear: place.kind === 'search' ? () => void clearSearch(store, moveFocus) : null,
-          })
-    // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
-    // hotkeys or to Claude's prompt, and the key or the click that moves them, wrapped in a narrow dock.
-    const keys: KeysAt = keysAt(e.props.isFocused, landings, keysMemo, place.kind === 'search')
-    const keysLines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(keys, enterWords) }] }, columns).map(line =>
-      line.map(span => span.text).join(''),
-    )
-    const keysLine = inline ? null : drawKeysLine(components, keys, keysLines.join('\n'))
-    // In the tasks view the Find row and its line sit right under the switch, then the mode buttons, in the same block.
-    // The field comes before every element that shows or hides with the place (close cards, clear, a page's steps): the
-    // engine keeps the focus ring at an index among the pane's elements, so one shown or hidden before the field would
-    // move the ring off it as the person types (the first key opens a search, which hides close cards), and the next keys
-    // would press the pane's hotkeys or reach the prompt.
-    // The Find row is one row, as drawFindRow draws it.
-    const modes = drawGrouped('modes', [modeButtons, pageButtons, cardButtons, keysButtons], 1)
-    const controls: HeaderPart =
-      current === 'tasks'
-        ? {
-            node: (
-              <Box key="controls" flexDirection="column">
-                {titleRow?.node}
-                {switchRow.node}
-                {findRow}
-                {keysLine}
-                {modes.node}
-              </Box>
-            ),
-            rows: (titleRow?.rows ?? 0) + switchRow.rows + (findRow === null ? 0 : 1) + (keysLine === null ? 0 : keysLines.length) + modes.rows,
-          }
-        : isTeam || isInbox || isChanges || isLogList
-          ? {
-              // The Inbox, Team and Changes views and the Log view's list draw the Find row and its line under the
-              // switch too; they have no modes.
-              node: (
-                <Box key="controls" flexDirection="column">
-                  {titleRow?.node}
-                  {switchRow.node}
-                  {findRow}
-                  {keysLine}
-                </Box>
-              ),
-              rows: (titleRow?.rows ?? 0) + switchRow.rows + (findRow === null ? 0 : 1) + (keysLine === null ? 0 : keysLines.length),
-            }
-          : {
-            node: (
-              <Box key="controls" flexDirection="column">
-                {titleRow?.node}
-                {switchRow.node}
-              </Box>
-            ),
-            rows: (titleRow?.rows ?? 0) + switchRow.rows,
-          }
-    // The status bar leads the tasks: its segments in one row as wide as the body, its counts under it.
-    // A press on a segment or a count (or the count's key) filters the list to that status, a second
-    // press on the same one clears it, and one on another switches to it.
-    // A count's Button draws its key before it (`o: `), then its glyph in the color its rows wear it in, which the bar
-    // counts in its widths (status-bar.ts drawnText): one Text holding both, as a plain Button holds only strings and Text.
-    const filterTo = (status: BarStatus) => void filterBar(atomStore($), status)
-    const drawPiece = (piece: BarPiece) => {
-      const status = piece.status
-      if (status === null) return styled(piece, piece.key)
+    const drawButton = (item: HeadButton) => {
+      const look = item.look === 'plain' ? { plain: true } : { variant: item.look }
+      const hotkey = item.hotkey === null ? {} : { hotkey: item.hotkey }
+      return <Button key={item.key} label={item.label} {...look} {...hotkey} onPress={() => void run(item.press)} />
+    }
+    const drawItem = (item: HeadItem) => {
+      if (item.kind === 'words') return drawWords(item)
+      if (item.kind === 'button') return drawButton(item)
+      // A place of a trail: a plain Button holds only strings and Text, so its underline is a Text in it.
+      return (
+        <Button key={item.key} plain onPress={() => void run(item.press)}>
+          <Text underline dimColor={item.isAhead}>
+            {item.label}
+          </Text>
+        </Button>
+      )
+    }
+    // A count of the status bar draws its key before it (`o: `), then its glyph in the color its rows wear it in, which
+    // the bar counts in its widths (status-bar.ts drawnText): one Text holding both, as a plain Button holds only
+    // strings and Text.
+    const drawBarPiece = (piece: BarPiece) => {
+      const press = pressOfBar(piece)
+      if (press === null) return styled(piece, piece.key)
       const text =
         piece.mark === null ? (
           styled(piece)
@@ -1505,168 +1192,89 @@ export const register: Register = on => {
           </Text>
         )
       return piece.hotkey === null ? (
-        <Button key={piece.key} plain onPress={() => filterTo(status)}>
+        <Button key={piece.key} plain onPress={() => void run(press)}>
           {text}
         </Button>
       ) : (
-        <Button key={piece.key} plain hotkey={piece.hotkey} onPress={() => filterTo(status)}>
+        <Button key={piece.key} plain hotkey={piece.hotkey} onPress={() => void run(press)}>
           {text}
         </Button>
       )
     }
-    // Its lines come wrapped to the body's width (status-bar.ts), a row each.
-    const statusRows: HeaderPart | null =
-      barLines.length === 0
-        ? null
-        : {
-            node: (
-              <Box key="status-bar" flexDirection="column">
-                {barLines.map((line, i) => (
-                  <Box key={`status-bar:${i}`} flexDirection="row">
-                    {line.map(drawPiece)}
-                  </Box>
-                ))}
-              </Box>
-            ),
-            rows: barLines.length,
-          }
-    // A page, and the list while a page lies ahead of it (back led there), leads with back and forward (b, f; dim
-    // when there is nowhere to go), then the trail of the last places, each one a press away but the one shown
-    // (bold), those ahead of it dim, then a rule. Each key is written out on its Button, where the guide's key check
-    // (tools/docs/llm-guide.test.ts) reads them.
-    const nowhere = (key: string, label: string) => (
-      <Text key={key} dimColor>
-        {label}
-      </Text>
-    )
-    const backStep = canGoBack(at) ? (
-      <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void go(store, back)} />
-    ) : (
-      nowhere('back', BACK_LABEL)
-    )
-    const forwardStep = canGoForward(at) ? (
-      <Button key="forward" label={FORWARD_LABEL} hotkey="f" variant="secondary" onPress={() => void go(store, forward)} />
-    ) : (
-      nowhere('forward', FORWARD_LABEL)
-    )
-    const { crumbs, isCutBefore, isCutAfter } = trail(at)
-    const dimWords = (key: string, text: string) =>
-      worded(
-        <Text key={key} dimColor>
-          {text}
-        </Text>,
-        text,
-      )
-    const crumbRow = crumbs.flatMap((crumb, i) => {
-      const label = placeLabel(crumb.place)
-      const drawn = crumb.isShown
-        ? worded(
-            <Text key={`crumb:${crumb.index}`} bold>
-              {label}
-            </Text>,
-            label,
-          )
-        : pressed(
-            <Button key={`crumb:${crumb.index}`} plain onPress={() => void go(store, current => wentTo(current, crumb.index))}>
-              <Text underline dimColor={crumb.isAhead}>
-                {label}
-              </Text>
-            </Button>,
-            { label, plain: true, hotkey: null },
-          )
-      return i === 0 ? [drawn] : [dimWords(`after:${crumb.index - 1}`, TRAIL_SEPARATOR), drawn]
-    })
-    const trailItems = [
-      ...(isCutBefore ? [dimWords('cut-before', `…${TRAIL_SEPARATOR}`)] : []),
-      ...crumbRow,
-      ...(isCutAfter ? [dimWords('cut-after', `${TRAIL_SEPARATOR}…`)] : []),
-    ]
-    // The Done page's week between its steps to the week before and after (p, l), each dim where the pane holds no
-    // older or newer week. A step changes the page's week in place, so back returns to where the page was opened from.
-    const stepTo = (week: string) => () => void go(store, current => doneAt(current, week))
-    const steps = place.kind === 'done' ? weekSteps(place.week, weekClockOf(snap)) : null
-    const weekText = steps === null ? '' : `week of ${weekWords(steps.week)}`
-    const weekRow =
-      steps === null
-        ? null
-        : drawPacked(
-            'week-steps',
-            [
-              steps.prev === null
-                ? worded(nowhere('prev', PREV_LABEL), PREV_LABEL)
-                : pressed(<Button key="prev" label={PREV_LABEL} hotkey="p" variant="secondary" onPress={stepTo(steps.prev)} />, {
-                    label: PREV_LABEL,
-                    plain: false,
-                    hotkey: 'p',
-                  }),
-              worded(
-                <Text key="week" bold>
-                  {weekText}
-                </Text>,
-                weekText,
-              ),
-              steps.next === null
-                ? worded(nowhere('next', NEXT_LABEL), NEXT_LABEL)
-                : pressed(<Button key="next" label={NEXT_LABEL} hotkey="l" variant="secondary" onPress={stepTo(steps.next)} />, {
-                    label: NEXT_LABEL,
-                    plain: false,
-                    hotkey: 'l',
-                  }),
-            ],
-            2,
-          )
-    // Its steps' row, the trail's packed rows and the rule.
-    const trailRows = drawPacked('trail', trailItems, 0)
-    const pageHead: HeaderPart | null =
-      isPage(place) || canGoForward(at)
-        ? {
-            node: (
-              <Box key="page-head" flexDirection="column">
-                <Box flexDirection="row" columnGap={2}>
-                  {backStep}
-                  {forwardStep}
+    const drawHeadPiece = (piece: HeadPiece) => {
+      switch (piece.kind) {
+        case 'text':
+          return drawText(piece.spans, 'truncate-end', piece.key)
+        case 'packed':
+          return (
+            <Box key={piece.key} flexDirection="column">
+              {piece.rows.map((row, i) => (
+                <Box key={`${piece.key}:${i}`} flexDirection="row" columnGap={piece.gap}>
+                  {row.map(drawItem)}
                 </Box>
-                {trailRows.node}
-                <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
-              </Box>
-            ),
-            rows: 1 + trailRows.rows + 1,
-          }
-        : null
-    // A conversation's page leads with back (b) to the list, then its trail, `Conversations › <title>`, as a page of
-    // the other views says where it is, cut at its row's end (back is the press to the list), then a rule.
-    const logHead: HeaderPart | null =
-      logTitle === null
-        ? null
-        : {
-            node: (
-              <Box key="log-head" flexDirection="column">
-                <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void closeLog()} />
-                {drawText([{ text: LOG_LABEL }, { text: TRAIL_SEPARATOR, dim: true }, ...logTitle], 'truncate-end', 'log-trail')}
-                <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
-              </Box>
-            ),
-            rows: 3,
-          }
-    const statsHeadOf = (onBack: () => void, from: string, shown: string): HeaderPart => ({
-      node: (
-        <Box key="stats-head" flexDirection="column">
-          <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={onBack} />
-          {drawText([{ text: from }, { text: TRAIL_SEPARATOR, dim: true }, { text: shown }], 'truncate-end', 'stats-trail')}
-          <Text dimColor>{'─'.repeat(Math.max(1, columns))}</Text>
-        </Box>
-      ),
-      rows: 3,
+              ))}
+            </Box>
+          )
+        case 'row':
+          return (
+            <Box flexDirection="row" columnGap={piece.gap}>
+              {piece.items.map(drawItem)}
+            </Box>
+          )
+        case 'item':
+          return drawItem(piece.item)
+        case 'find': {
+          // The field is drawn under its round's key, holding what the round started with, never the person's typing,
+          // which the engine would drop on each redraw; it never takes the focus by itself, as it would then hold
+          // every key the pane's hotkeys answer (find-field.ts). Enter runs on the words as typed: a redraw may lag
+          // behind them.
+          const { find } = piece
+          const { submits } = find
+          return drawFindRow(components, {
+            key: find.key,
+            placeholder: find.placeholder,
+            text: find.text,
+            submitLabel: find.submitLabel,
+            onFind: () => void run({ kind: 'find' }),
+            onInput: value => void typeFind(store, value),
+            onSubmit: value => void (submits === null ? undefined : submitFind(submits, value, pressDeps())),
+            onClear: find.clears ? () => void run({ kind: 'find-clear' }) : null,
+          })
+        }
+        case 'keys':
+          return drawKeysLine(components, piece.at, piece.lines.join('\n'))
+        case 'rule':
+          return <Text dimColor>{'─'.repeat(piece.cells)}</Text>
+        case 'bar':
+          return (
+            <Box key="status-bar" flexDirection="column">
+              {piece.lines.map((line, i) => (
+                <Box key={`status-bar:${i}`} flexDirection="row">
+                  {line.map(drawBarPiece)}
+                </Box>
+              ))}
+            </Box>
+          )
+      }
+    }
+    const drawHeadPart = (part: HeadPart): HeaderPart => ({
+      node:
+        part.kind === 'group' ? (
+          <Box key={part.key} flexDirection="column">
+            {part.pieces.map(drawHeadPiece)}
+          </Box>
+        ) : (
+          drawHeadPiece(part)
+        ),
+      rows: headRows(part),
     })
-    // A Health count's tasks lead with back (b) to the tab's numbers, then the trail `Stats › Overdue (35)`, then a rule;
-    // the numbers of a tab a Teams row opened, with back to that row and the trail `Teams › Stats`.
-    const statsHead: HeaderPart | null =
-      statsTitle !== null
-        ? statsHeadOf(() => void closeStatsList(), STATS_LABEL, statsTitle)
-        : statsBack
-          ? statsHeadOf(() => void closeStatsFrom(), TEAMS_LABEL, STATS_LABEL)
-          : null
-    return drawPane([controls, pageHead, logHead, statsHead, weekRow, statusRows].filter((part): part is HeaderPart => part !== null))
+    const header = head.parts.map(drawHeadPart)
+    // Minimized, the switch is the whole pane, and a press on any of its buttons opens the pane in full on that view.
+    if (head.strip) {
+      drawnWithoutWindow()
+      return <Box paddingX={PAD_COLUMNS}>{header.map(part => part.node)}</Box>
+    }
+    return drawPane(header)
   })
 
   /** The banner's own: each layout settles its cache, so one shared with the pane's body would drop its rows. */
