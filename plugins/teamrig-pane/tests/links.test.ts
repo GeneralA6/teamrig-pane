@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TaskRow } from '../types'
-import { addressesIn, issueOf, issueUrl, MAX_ADDRESS_CHARS, MAX_LINKS, pageOf, taskLinks } from '../hooks/links'
+import { addressesIn, MAX_ADDRESS_CHARS, MAX_LINKS, pageOf, taskLinks } from '../hooks/links'
 
 /** The fields taskLinks reads, none set. */
-const BARE: Pick<TaskRow, 'source' | 'description' | 'ref' | 'note' | 'proof' | 'evidence'> = {
-  source: 'owner',
+const BARE: Pick<TaskRow, 'item' | 'description' | 'ref' | 'note' | 'proof' | 'evidence'> = {
+  item: null,
   description: null,
   ref: null,
   note: null,
@@ -13,18 +13,12 @@ const BARE: Pick<TaskRow, 'source' | 'description' | 'ref' | 'note' | 'proof' | 
 }
 
 describe('links', () => {
-  test('a task teamrig opened from a GitHub issue links to that issue, its ref spelled as teamrig writes it', async () => {
-    expect(issueUrl({ source: 'github', ref: 'gh:acme/app#12' })).toBe('https://github.com/acme/app/issues/12')
-    expect(issueOf({ source: 'github', ref: 'gh:acme/app#12' })).toEqual({ repo: 'acme/app', number: 12 })
-    expect(issueOf({ source: 'owner', ref: 'gh:acme/app#12' })).toBe(null)
-    expect(issueUrl({ source: 'github', ref: ' gh:Acme-Co/app.js_2#7 ' })).toBe('https://github.com/Acme-Co/app.js_2/issues/7')
-  })
-
-  test('an odd ref, or the same ref on a task no issue opened, links to no issue', async () => {
-    const odd = ['gh:acme#12', 'gh:acme/app#0', 'gh:acme/app#12x', 'gh:-acme/app#1', 'acme/app#12', 'gh:acme/app/x#1', 'gh:acme/app#12; docs/x.md:3', 'docs/x.md:3']
-    expect(odd.map(ref => issueUrl({ source: 'github', ref }))).toEqual(odd.map(() => null))
-    expect(issueUrl({ source: 'github', ref: null })).toBe(null)
-    expect(issueUrl({ source: 'owner', ref: 'gh:acme/app#12' })).toBe(null)
+  test("a ref's own spelling links nowhere: only the page teamrig served for its tracker item does", async () => {
+    expect(taskLinks({ ...BARE, ref: 'gh:acme/app#12' })).toEqual([])
+    expect(taskLinks({ ...BARE, ref: 'gh:acme/app#12', item: { tracker: 'GitHub', id: 'acme/app#12', url: null } })).toEqual([])
+    expect(taskLinks({ ...BARE, ref: 'gh:acme/app#12', item: { tracker: 'GitHub', id: 'acme/app#12', url: 'https://github.com/acme/app/issues/12' } })).toEqual([
+      'https://github.com/acme/app/issues/12',
+    ])
   })
 
   test('finds each web address in a text, the punctuation that ends a sentence or closes a bracket or quote cut from its end', async () => {
@@ -54,10 +48,10 @@ describe('links', () => {
     expect(refused.map(pageOf)).toEqual(refused.map(() => null))
   })
 
-  test("a task's links: its issue first, then the addresses in its description, ref, note, proof and evidence, each once, at most MAX_LINKS", async () => {
+  test("a task's links: its tracker item's page first, then the addresses in its description, ref, note, proof and evidence, each once, at most MAX_LINKS", async () => {
     expect(taskLinks(BARE)).toEqual([])
     const task = {
-      source: 'github',
+      item: { tracker: 'GitHub', id: 'acme/app#12', url: 'https://github.com/acme/app/issues/12' },
       description: 'the spec: https://example.com/spec',
       ref: 'gh:acme/app#12',
       note: 'review at https://example.com/pr/7, same as https://example.com/pr/7. issue https://github.com/acme/app/issues/12',
