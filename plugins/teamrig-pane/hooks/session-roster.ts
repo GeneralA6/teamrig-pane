@@ -18,14 +18,15 @@ function activeOn(read: SessionsRead, team: string): SessionRow[] {
 }
 
 /**
- * Who leads `team`'s sessions: its lead is the one session served with no leader, and each other session answers to
- * the leader served for it, in the served order (hooks/leads.ts teamSessions lists them by it). A second session
- * served with no leader answers to the lead, as an owner off the lead tree does (leadOf). Null for a team the
- * document holds no lead of.
+ * Who leads `team`'s sessions: its lead is the session served with the `lead` role (its config's `roles.lead`), and
+ * each other session answers to the leader served for it, in the served order (hooks/leads.ts teamSessions lists
+ * them by it). Another session served with no leader answers to the lead, as an owner off the lead tree does
+ * (leadOf). Null for a team the document holds no lead of: one not served, and one whose config names no lead, whose
+ * sessions are all served with no leader, so the first of them is never taken for it.
  */
 export function leadsOf(read: SessionsRead, team: string): TeamLeads | null {
   const active = activeOn(read, team)
-  const lead = active.find(session => session.leader === null)
+  const lead = active.find(session => session.roles.includes('lead'))
   if (lead === undefined) return null
   const leaderOf: Record<string, string> = {}
   for (const session of active) {

@@ -47,7 +47,7 @@ const SESSIONS: readonly SessionRow[] = [
   session('ui', { leader: 'front', ledBy: ['front', 'lead'] }),
   session('ops'),
   retired('old', { formerNames: ['web-legacy'] }),
-  session('boss', { team: 'shop', name: 'shop-boss', leader: null, ledBy: [] }),
+  session('boss', { team: 'shop', name: 'shop-boss', leader: null, ledBy: [], roles: ['lead'] }),
   session('api', { team: 'shop', name: 'shop-api', leader: 'boss', ledBy: ['boss'] }),
 ]
 
@@ -67,7 +67,7 @@ function readOf(over: Partial<SessionsRead> = {}): SessionsRead {
 const LISTED = 'lead (web-lead), front (web-front), api (web-api), ui (web-ui), ops (web-ops)'
 
 describe('leadsOf', () => {
-  test("the team's lead is the session served with no leader, each other one under the leader served for it", () => {
+  test("the team's lead is the session served with the lead role, each other one under the leader served for it", () => {
     expect(leadsOf(readOf(), 'web')).toEqual({ lead: 'lead', leaderOf: { front: 'lead', api: 'front', ui: 'front', ops: 'lead' } })
     expect(leadsOf(readOf(), 'shop')).toEqual({ lead: 'boss', leaderOf: { api: 'boss' } })
   })
@@ -91,6 +91,12 @@ describe('leadsOf', () => {
   test('null for a team the document holds no lead of', () => {
     expect(leadsOf(readOf(), 'nowhere')).toBe(null)
     expect(leadsOf(readOf({ sessions: [retired('old')] }), 'web')).toBe(null)
+  })
+
+  test('a team whose config names no lead has none: its sessions, all served with no leader, lead no one', () => {
+    const read = readOf({ sessions: [session('api', { leader: null, ledBy: [] }), session('ui', { leader: null, ledBy: [] })] })
+    expect(leadsOf(read, 'web')).toBe(null)
+    expect(leadOf('ui', leadsOf(read, 'web'))).toBe(null)
   })
 })
 

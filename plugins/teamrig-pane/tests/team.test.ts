@@ -168,6 +168,10 @@ describe('teamTree', () => {
     ])
   })
 
+  test('a team whose config names no lead, every session served with no leader and no lead role, is listed flat', () => {
+    expect(outlineWith(row => ({ ...row, roles: [], leader: null, ledBy: [], leads: 0 }))).toEqual(['▾ team acme', '  · lead', '  · web', '  · api', '  · ui', '  · ops', '  ▸ retired'])
+  })
+
   test('a session whose leader is not on its team is listed on top; leaders that go round a loop are each drawn once, the first on top', () => {
     expect(outlineWith(row => (row.id === 'ops' ? { ...row, leader: 'gone' } : row))).toEqual(['▾ team acme', '  ▾ lead', '    ▾ web', '      · api', '      · ui', '  · ops', '  ▸ retired'])
     expect(outlineWith(row => (row.id === 'web' ? { ...row, leader: 'api' } : row))).toEqual([
