@@ -3,6 +3,7 @@ import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiF
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
 import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT, PREVIOUS_ALL_KEY, PREVIOUS_ALL_LABEL, PREVIOUS_FRAME_KEY, PREVIOUS_HEAD_KEY, PREVIOUS_KEY, PREVIOUS_LABEL, PREVIOUS_OPEN_KEY, PREVIOUS_PRESS_KEY } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
+import { READ_EVERY_MS } from '../hooks/document-source'
 import { barKeys, KEY_GROUPS } from '../hooks/keys-page'
 import { POLL_MS } from '../hooks/live'
 import type { Files } from '../hooks/source'
@@ -2286,8 +2287,8 @@ test("the Teams tab and the Tasks view share one search: a switch between them c
   expect(await drawsLine(pane, /^▾ tools · 1 active · 0 retired \[Stats\]$/)).toBe(true)
 })
 
-test('the Teams tab reads no team folder while another view shows, and reads what moved when it shows again', async ($, on) => {
-  const { clock, disk } = await startWithTeam(on)
+test("the Teams tab reads nothing while another view shows and starts no read of teamrig when it shows again: what moved in another team is drawn from the documents' next read", async ($, on) => {
+  const { clock, disk, readRuns } = await startWithTeam(on)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   const teamReads = () => disk.reads.filter(path => path.startsWith(`${TEAMS}/tools/`) || path.endsWith('/hires.jsonl'))
@@ -2295,15 +2296,26 @@ test('the Teams tab reads no team folder while another view shows, and reads wha
   await pane.press({ key: 'team' })
   await pane.press({ key: 'tasks' })
   disk.reads.length = 0
+  readRuns.length = 0
   disk.write(`${TEAMS}/tools/config.json`, [JSON.stringify({ ...TOOLS_CONFIG, sessions: ['boss', 'dev'] })])
   await clock.advance(POLL_MS)
   // The task list's read of the tree's other registers (tree-registers.ts) reads the changed config once on its own
   // poll, as its plan order needs them whatever view shows; a Teams tab read while hidden would read it a second time.
   expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
+  expect(readRuns).toEqual([])
 
+  // Shown again, the tab reads the changed config once more, for where that team's week file is (team-weeks.ts), and
+  // draws the tree from the sessions document the pane holds: it runs teamrig for none of its own.
   disk.reads.length = 0
   await pane.press({ key: 'team' })
   expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
+  expect(readRuns).toEqual([])
+  expect(await drawsLine(pane, /● tools-dev \[Wake\] \[Stats\]$/)).toBe(false)
+
+  // The documents' next read (READ_EVERY_MS after the last) serves the new session, and the tab's next poll draws it.
+  await clock.advance(READ_EVERY_MS)
+  await clock.advance(POLL_MS)
+  expect(readRuns.length).toBeGreaterThan(0)
   expect(await drawsLine(pane, /● tools-dev \[Wake\] \[Stats\]$/)).toBe(true)
 })
 
