@@ -1,17 +1,35 @@
 // A press as data and what running it does, on a store kept in memory with fake ports: no engine, as a front end
 // other than the Claude Code dock names and runs them.
 import { describe, expect, test } from 'claude-code/testing'
-import type { LogRead, MeetingPress, OwnerActPress, PaneState, RefFileRead, SessionPress, TaskDetail, TaskRow } from '../types'
+import type {
+  ChangesSnapshot,
+  LogConversation,
+  LogList,
+  LogRead,
+  MeetingPress,
+  OwnerActPress,
+  PaneState,
+  RefFileRead,
+  SessionPress,
+  Snapshot,
+  TaskDetail,
+  TaskRow,
+  TeamView,
+} from '../types'
+import { changesResultKey, searchChanges } from '../hooks/changes-search'
 import { readRegister } from '../hooks/core/read/index'
 import type { Drawn } from '../hooks/layout'
 import { rowOf } from '../hooks/log'
+import { AT_LIST, KEYS_PAGE, back, currentPlace, doneAt, fromList, searched } from '../hooks/nav'
 import { INITIAL_STATE } from '../hooks/pane-state'
 import { MemoryStore } from '../hooks/pane-store'
-import { pressOfDrawn, pressOfPart, pressOfPiece, runPress, type Press, type PressDeps } from '../hooks/press'
+import { pressOfDrawn, pressOfPart, pressOfPiece, runPress, submitFind, typeFind, type Press, type PressDeps } from '../hooks/press'
 import type { PressPiece } from '../hooks/press-keys'
 import type { Span } from '../hooks/rows'
 import type { ViewLives } from '../hooks/steps'
-import { HOUR, NOW, createLine } from './fixtures'
+import { searchTeam } from '../hooks/team-search'
+import { HOUR, NOW, NO_TEAM, SNAPSHOT_SETTINGS, createLine } from './fixtures'
+import { ACME, treeOf } from './team-fixtures'
 
 /** A store that starts as a pane does, but for `changed`. */
 const from = (changed: Partial<PaneState> = {}) => new MemoryStore({ ...INITIAL_STATE, ...changed })
@@ -24,6 +42,8 @@ const TASKS: TaskRow[] = [
     ].join('\n'),
   ).state.tasks.values(),
 ].map(task => rowOf(task))
+/** The register read, as the drawing a press was made in shows it. */
+const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: 'pinned', unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...SNAPSHOT_SETTINGS, now: NOW }
 
 const DETAIL_T50: TaskDetail = { ref: 'docs/x.md:3', quotes: [], goals: [] }
 const DETAIL_T51: TaskDetail = { ref: null, quotes: [], goals: [] }
@@ -36,6 +56,10 @@ const SESSION: SessionPress = { act: 'wake', team: 'acme', session: 'po' }
 /** What the fake ports were asked, in order. */
 type Asked = {
   readonly logs: LogRead[]
+  /** One `close` for each time the Log reader was asked to close its page. */
+  readonly closes: string[]
+  /** The keys the focus ring was moved onto. */
+  readonly focused: string[]
   readonly diffs: string[]
   readonly pins: string[]
   readonly meetings: MeetingPress[]
@@ -53,22 +77,28 @@ function keeping<T>(list: T[]): (asked: T) => Promise<void> {
 
 /** Deps over `store` whose ports keep what they were asked, the pane showing the Tasks view's list as area `po`. */
 function deps(store: MemoryStore, changed: Partial<PressDeps> = {}): { readonly deps: PressDeps; readonly asked: Asked } {
-  const asked: Asked = { logs: [], diffs: [], pins: [], meetings: [], sessions: [], acts: [] }
+  const asked: Asked = { logs: [], closes: [], focused: [], diffs: [], pins: [], meetings: [], sessions: [], acts: [] }
   return {
     asked,
     deps: {
       store,
-      tasks: TASKS,
-      area: 'po',
+      snap: SNAP,
       shown: 'tasks',
       place: { kind: 'list', row: null },
+      focus: keeping(asked.focused),
       detailOf: task => Promise.resolve({ ref: task.ref, quotes: [], goals: [] }),
       readFile: file => {
         const found: RefFileRead = { kind: 'read', path: `C:/kit/${file}`, text: 'one\n\ntwo' }
         return Promise.resolve(found)
       },
       lives: NO_READERS,
-      logging: { open: keeping(asked.logs) },
+      logging: {
+        open: keeping(asked.logs),
+        close: () => {
+          asked.closes.push('close')
+          return Promise.resolve()
+        },
+      },
       diffing: { toggle: keeping(asked.diffs) },
       pinning: { pin: keeping(asked.pins) },
       scheduling: { press: keeping(asked.meetings) },
@@ -254,6 +284,8 @@ describe('runPress', () => {
     await runPress({ kind: 'act', act: { task: 'T50', press: 'next' } }, on)
     expect(asked).toEqual({
       logs: [],
+      closes: [],
+      focused: [],
       diffs: ['repo:a.ts'],
       pins: ['etl'],
       meetings: [MEETING],
@@ -278,5 +310,203 @@ describe('runPress', () => {
     const store = from()
     await runPress({ kind: 'log', read: CONVERSATION }, deps(store, NO_PORTS).deps)
     expect(store.state.bodyScroll.to).toEqual({ kind: 'end' })
+  })
+})
+
+/** Readers whose Stats fold counts its refreshes. */
+function folding(): { readonly lives: ViewLives; readonly folds: { count: number } } {
+  const folds = { count: 0 }
+  return {
+    folds,
+    lives: {
+      ...NO_READERS,
+      tallying: {
+        refresh: () => {
+          folds.count += 1
+          return Promise.resolve()
+        },
+      },
+    },
+  }
+}
+
+describe("runPress on the head's presses", () => {
+  const ON_T50 = fromList('row:T50', { kind: 'task', id: 'T50' })
+
+  test('a view press shows that view, the pane opened on its list', async () => {
+    const store = from({ nav: ON_T50 })
+    await runPress({ kind: 'view', view: 'team' }, deps(store).deps)
+    expect(store.state.view).toBe('team')
+    expect(store.state.nav).toEqual({ places: [{ kind: 'list', row: 'row:T50' }], at: 0 })
+  })
+
+  test('a mode press shows the other list alone', async () => {
+    const store = from({ nav: ON_T50 })
+    await runPress({ kind: 'mode', mode: 'all' }, deps(store).deps)
+    expect(store.state.mode).toBe('all')
+    expect(store.state.nav).toEqual(AT_LIST)
+  })
+
+  test('a done-week press shows the Done page at that week', async () => {
+    const store = from()
+    await runPress({ kind: 'done-week', week: '2026-W41' }, deps(store).deps)
+    expect(store.state.nav).toEqual(doneAt(AT_LIST, '2026-W41'))
+    expect(currentPlace(store.state.nav)).toEqual({ kind: 'done', week: '2026-W41' })
+  })
+
+  test('a close-cards press closes every open card', async () => {
+    const store = from({ expanded: { T50: DETAIL_T50, T51: DETAIL_T51 } })
+    await runPress({ kind: 'close-cards' }, deps(store).deps)
+    expect(store.state.expanded).toEqual({})
+  })
+
+  test('a keys press shows the Keys page over the place shown', async () => {
+    const store = from()
+    await runPress({ kind: 'keys' }, deps(store).deps)
+    expect(currentPlace(store.state.nav)).toEqual(KEYS_PAGE)
+    expect(store.state.nav.at).toBe(1)
+  })
+
+  test('a filter press lists its status alone, a second press every task again', async () => {
+    const store = from()
+    const { deps: on } = deps(store)
+    await runPress({ kind: 'filter', status: 'waiting' }, on)
+    expect(store.state.filter).toBe('waiting')
+    await runPress({ kind: 'filter', status: 'waiting' }, on)
+    expect(store.state.filter).toBeNull()
+  })
+
+  test('back, forward and a crumb step among the places kept', async () => {
+    const store = from({ nav: ON_T50 })
+    const { deps: on } = deps(store)
+    await runPress({ kind: 'back' }, on)
+    expect(store.state.nav).toEqual(back(ON_T50))
+    expect(store.state.nav.at).toBe(0)
+    await runPress({ kind: 'forward' }, on)
+    expect(store.state.nav).toEqual(ON_T50)
+    await runPress({ kind: 'crumb', index: 0 }, on)
+    expect(store.state.nav.at).toBe(0)
+    await runPress({ kind: 'crumb', index: 1 }, on)
+    expect(currentPlace(store.state.nav)).toEqual({ kind: 'task', id: 'T50' })
+  })
+
+  test("a log-close press closes the conversation's page through the Log reader, the Find field a new round's", async () => {
+    const store = from({ view: 'log', findField: { round: 2, text: 'old' }, nav: searched(AT_LIST, 'ship') })
+    const { deps: on, asked } = deps(store)
+    await runPress({ kind: 'log-close' }, on)
+    expect(asked.closes).toEqual(['close'])
+    expect(asked.logs).toEqual([])
+    expect(store.state.findField).toEqual({ round: 3, text: 'ship' })
+    expect(store.state.bodyScroll.to).toEqual({ kind: 'offset', offset: 0 })
+  })
+
+  test('a log-close press with no Log reader still moves the field and the window', async () => {
+    const store = from({ view: 'log', findField: { round: 0, text: 'old' } })
+    await runPress({ kind: 'log-close' }, deps(store, NO_PORTS).deps)
+    expect(store.state.findField).toEqual({ round: 1, text: '' })
+    expect(store.state.bodyScroll.to).toEqual({ kind: 'offset', offset: 0 })
+  })
+
+  test("a stats-list-close press shows the tab's numbers again, folded anew", async () => {
+    const store = from({ view: 'stats', statsList: 'opened' })
+    const { lives, folds } = folding()
+    await runPress({ kind: 'stats-list-close' }, deps(store, { lives }).deps)
+    expect(store.state.statsList).toBeNull()
+    expect(folds.count).toBe(1)
+  })
+
+  test('a stats-from-close press shows the Teams tab at the row the Stats tab was opened from', async () => {
+    const store = from({ view: 'stats', statsFrom: 'team:acme/po' })
+    await runPress({ kind: 'stats-from-close' }, deps(store).deps)
+    expect(store.state.view).toBe('team')
+    expect(store.state.statsFrom).toBeNull()
+    expect(store.state.bodyScroll.to).toEqual({ kind: 'reveal', key: 'team:acme/po', block: 'center' })
+  })
+
+  test("a find press moves the ring into the field of its round, the store left as it was", async () => {
+    const store = from({ findField: { round: 2, text: 'api' } })
+    const { deps: on, asked } = deps(store)
+    await runPress({ kind: 'find' }, on)
+    expect(asked.focused).toEqual(['find:2'])
+    expect(store.state.nav).toEqual(AT_LIST)
+  })
+
+  test("a find-clear press closes the search and moves the ring into the new round's field", async () => {
+    const store = from({ nav: searched(AT_LIST, 'api') })
+    const { deps: on, asked } = deps(store)
+    await runPress({ kind: 'find-clear' }, on)
+    expect(store.state.nav).toEqual(AT_LIST)
+    expect(store.state.findField).toEqual({ round: 1, text: '' })
+    expect(asked.focused).toEqual(['find:1'])
+  })
+})
+
+describe('typeFind', () => {
+  test('the first words open a search, each change shows its words, and no new round of the field starts', async () => {
+    const store = from()
+    await typeFind(store, 'fe')
+    expect(store.state.nav).toEqual(searched(AT_LIST, 'fe'))
+    await typeFind(store, 'feed')
+    expect(currentPlace(store.state.nav)).toEqual({ kind: 'search', query: 'feed' })
+    expect(store.state.findField).toEqual(INITIAL_STATE.findField)
+  })
+
+  test('an empty field closes the search', async () => {
+    const store = from({ nav: searched(AT_LIST, 'feed') })
+    await typeFind(store, '')
+    expect(currentPlace(store.state.nav).kind).toBe('list')
+    expect(store.state.findField).toEqual(INITIAL_STATE.findField)
+  })
+})
+
+describe('submitFind', () => {
+  test("in the Tasks view, the one match's page opens and the ring moves onto its back step", async () => {
+    const store = from({ nav: searched(AT_LIST, 'chart') })
+    const { deps: on, asked } = deps(store)
+    await submitFind('tasks', 'chart', on)
+    expect(store.state.pages).toEqual({ T51: DETAIL_T51 })
+    expect(currentPlace(store.state.nav)).toEqual({ kind: 'task', id: 'T51' })
+    expect(asked.focused).toEqual(['back'])
+  })
+
+  test("in the Teams tab, the one match's card opens and the ring moves onto it", async () => {
+    const teamTree: TeamView = { kind: 'tree', root: treeOf([ACME], 'acme'), failures: [] }
+    const key = searchTeam(teamTree.root, 'api')[0]?.row.key ?? ''
+    const store = from({ view: 'team', teamTree })
+    const { deps: on, asked } = deps(store)
+    await submitFind('team', 'api', on)
+    expect(store.state.teamToggled.length).toBe(INITIAL_STATE.teamToggled.length + 1)
+    expect(asked.focused).toEqual([`team-search:${key}`])
+  })
+
+  test("in the Log view, the one match's page opens through the Log reader and the ring moves onto its back step", async () => {
+    const conversation = (session: string, claude: string): LogConversation => ({
+      session,
+      claude,
+      firstAt: NOW - 2 * HOUR,
+      lastAt: NOW - HOUR,
+      nextAt: null,
+      lines: 4,
+      opening: null,
+    })
+    const logList: LogList = { kind: 'conversations', hours: 24, conversations: [conversation('po', 'c-1'), conversation('api', 'c-2')] }
+    const store = from({ view: 'log', logList })
+    const { deps: on, asked } = deps(store)
+    await submitFind('log', 'api', on)
+    expect(asked.logs).toEqual([{ session: 'api', claude: 'c-2' }])
+    expect(asked.focused).toEqual(['back'])
+    const none = deps(from({ view: 'log', logList }), NO_PORTS)
+    await submitFind('log', 'api', none.deps)
+    expect(none.asked.focused).toEqual(['back'])
+  })
+
+  test("in the Changes view, the one match's diff opens through its port and the ring moves onto it", async () => {
+    const changes: ChangesSnapshot = { repos: [], outside: ['C:/kit/notes/plan.md', 'C:/kit/notes/map.md'], isRead: true }
+    const hit = searchChanges(changes, 'plan')[0]
+    if (hit === undefined) throw new Error('no hit for plan')
+    const { deps: on, asked } = deps(from({ view: 'changes', changes }))
+    await submitFind('changes', 'plan', on)
+    expect(asked.diffs.length).toBe(1)
+    expect(asked.focused).toEqual([changesResultKey(hit.row)])
   })
 })
