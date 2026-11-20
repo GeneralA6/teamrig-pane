@@ -1,10 +1,11 @@
 // What a press in the pane's body does to its state: a task's card opened or closed, a task's page, a reference
-// file's page, an inbox, a pick on the Stats tab, a heading folded, the bar's filter, Enter in a view's Find field,
-// back from a conversation's page. Each
+// file's page, an inbox, a pick on the Stats tab, a heading folded, the bar's filter, the band above the prompt,
+// Enter in a view's Find field, back from a conversation's page. Each
 // reads and writes through the store port (pane-store.ts) and takes the steps of steps.ts, with the readers it needs
 // handed in, so the Claude Code dock and a front end with no engine answer a press the same way; the tests run them on
 // a store kept in memory.
 import type { BarStatus, ExpandedTasks, LogRead, PaneView, Place, RefFile, RefFileRead, TaskDetail, TaskRow } from '../types'
+import { currentRowKey, lookShowing, type Current } from './banner'
 import { scrolledTo } from './body-scroll'
 import { changesResultKey, diffKeyOf, searchChanges } from './changes-search'
 import { inboxFile } from './details'
@@ -13,7 +14,7 @@ import { fieldAnew, fieldKey } from './find-field'
 import { logResultKey, searchLog } from './log-search'
 import type { Worked } from './log-title'
 import { treeOf, type TreeSource } from './meta'
-import { leavingList, pushed, reset } from './nav'
+import { fromList, leavingList, pushed, reset } from './nav'
 import { NO_STATS_LIST } from './pane-state'
 import type { PaneStore } from './pane-store'
 import { NOTHING_EXPANDED, type InboxPress, type StatsPress } from './rows'
@@ -189,6 +190,33 @@ export async function closeCards(store: PaneStore): Promise<void> {
 /** A press on a status of the bar lists that status alone; a second press on it lists every task again. */
 export async function filterBar(store: PaneStore, status: BarStatus): Promise<void> {
   await store.update('filter', current => (current === status ? null : status))
+}
+
+/** A press on the banner above the prompt opens the current task's card there, a second closes it. */
+export async function toggleBanner(store: PaneStore): Promise<void> {
+  await store.update('banner', wasOpen => !wasOpen)
+}
+
+/** A press on the previous conversation's title above the prompt opens it there, a second closes it. */
+export async function togglePrevious(store: PaneStore): Promise<void> {
+  await store.update('previousOpen', wasOpen => !wasOpen)
+}
+
+/**
+ * The banner's open step, once the front end shows the pane: the Tasks view at `shown`'s page (read as its card's is)
+ * over the list at the task's row (nav.ts fromList), so back shows the list scrolled to it. A status-bar filter or a
+ * fold that hides the row gives way first (banner.ts lookShowing), else back would have no row to land on.
+ */
+export async function openTask(store: PaneStore, shown: Current, detailOf: ReadsDetail): Promise<void> {
+  const { task } = shown
+  const detail = await detailOf(task)
+  await store.update('pages', kept => ({ ...kept, [task.id]: detail }))
+  await store.update('view', () => 'tasks')
+  const mode = await store.read('mode')
+  const look = lookShowing(shown, mode, { filter: await store.read('filter'), folded: await store.read('tasksFolded') })
+  await store.update('filter', () => look.filter)
+  await store.update('tasksFolded', () => look.folded)
+  await go(store, () => fromList(currentRowKey(shown, mode), { kind: 'task', id: task.id }))
 }
 
 /** The Log view's reader, as back from a conversation's page uses it. */
