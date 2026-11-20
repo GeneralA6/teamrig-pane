@@ -1,6 +1,7 @@
 // Copied from teamrig's src/register/task-line.ts by scripts/sync-core.ts: change it there, then run the sync.
 import { isNonNegativeInteger, isRecord, type JsonRecord } from '../core/guards.ts';
 import { parseCard, type DecisionCard } from './card.ts';
+import { parseDescriptionCut } from './description-cut.ts';
 import { isApprovalVerdict, parseCompleteTaskFields, parseFollowups, parseSizeBase, type SizeBase } from './events.ts';
 import type { ApprovalAnswer, OwnerDecision, Task } from './fold.ts';
 import { parseAuditPin, type HandStepAudit } from './hand-step.ts';
@@ -199,5 +200,12 @@ export function parseTaskLine(record: JsonRecord): Task | string {
   if (typeof securityVerdict === 'string') {
     return problem(securityVerdict);
   }
-  return { ...fields, id, status, ...nullable, waits, card, answer, decided, reparks, followups, review, sizeBase, audits, securityVerdict, ...texts };
+  const descriptionCut = parseDescriptionCut(task['descriptionCut']);
+  if (typeof descriptionCut === 'string') {
+    return problem(descriptionCut);
+  }
+  if (descriptionCut !== null && fields.description !== null) {
+    return problem('holds a description and the mark of a cut one');
+  }
+  return { ...fields, id, status, descriptionCut, ...nullable, waits, card, answer, decided, reparks, followups, review, sizeBase, audits, securityVerdict, ...texts };
 }
