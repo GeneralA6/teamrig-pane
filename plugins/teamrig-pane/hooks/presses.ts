@@ -1,14 +1,16 @@
 // What a press in the pane's body does to its state: a task's card opened or closed, a task's page, a reference
-// file's page, an inbox. Each reads and writes through the store port (pane-store.ts) and takes the steps of
+// file's page, an inbox, a pick on the Stats tab. Each reads and writes through the store port (pane-store.ts) and takes the steps of
 // steps.ts, with the readers it needs handed in, so the Claude Code dock and a front end with no engine answer a
 // press the same way; the tests run them on a store kept in memory.
 import type { ExpandedTasks, Place, RefFile, RefFileRead, TaskDetail, TaskRow } from '../types'
+import { scrolledTo } from './body-scroll'
 import { inboxFile } from './details'
 import { unreadLine } from './file-page'
 import { leavingList, pushed, reset } from './nav'
+import { NO_STATS_LIST } from './pane-state'
 import type { PaneStore } from './pane-store'
-import type { InboxPress } from './rows'
-import { go, switchView, type ViewLives } from './steps'
+import type { InboxPress, StatsPress } from './rows'
+import { go, scrollTo, switchView, type ViewLives } from './steps'
 
 /** Reads what a task's refs and goals point at, for its card or its page; a failed read still resolves, unquoted. */
 export type ReadsDetail = (task: TaskRow) => Promise<TaskDetail>
@@ -90,4 +92,52 @@ export async function openInbox(
   const file = inboxFile(press.area)
   const found = await readFilePage(store, file, readFile)
   await openPlace(store, { kind: 'file', file, line: unreadLine(found, press.unread) }, from)
+}
+
+/** The body's window back at its top, as a Stats pick that changes what the tab lists leaves it. */
+async function toTop(store: PaneStore): Promise<void> {
+  await store.update('bodyScroll', current => scrolledTo(current, { kind: 'offset', offset: 0 }))
+}
+
+/**
+ * A press on the Stats tab's scope or range row picks it, and one on a Health count shows its tasks from their top;
+ * each folds the registers at once. A Teams row's [Stats] shows the tab on that row's scope, its numbers from their
+ * top, and keeps the row for back; the switch has folded the registers by then.
+ */
+export async function pickStats(store: PaneStore, press: StatsPress, lives: ViewLives): Promise<void> {
+  switch (press.kind) {
+    case 'open':
+      await store.update('statsScope', () => press.scope)
+      await store.update('statsList', () => NO_STATS_LIST)
+      await switchView(store, 'stats', lives)
+      // After the switch, which drops the row a Stats tab was opened from.
+      await store.update('statsFrom', () => press.row)
+      await toTop(store)
+      return
+    case 'scope':
+      await store.update('statsScope', () => press.scope)
+      break
+    case 'range':
+      await store.update('statsRange', () => press.range)
+      break
+    case 'list':
+      await store.update('statsList', () => press.list)
+      await toTop(store)
+      break
+  }
+  await lives.tallying?.refresh()
+}
+
+/** Back from a Health count's tasks shows the tab's numbers again, from their top, folded anew. */
+export async function closeStatsList(store: PaneStore, lives: ViewLives): Promise<void> {
+  await store.update('statsList', () => NO_STATS_LIST)
+  await toTop(store)
+  await lives.tallying?.refresh()
+}
+
+/** Back from a Stats tab a Teams row opened shows the Teams tab at that row. Read first: the switch drops it. */
+export async function closeStatsFrom(store: PaneStore, lives: ViewLives): Promise<void> {
+  const row = await store.read('statsFrom')
+  await switchView(store, 'team', lives)
+  if (row !== null) await scrollTo(store, { kind: 'row', key: row }).catch(() => undefined)
 }
