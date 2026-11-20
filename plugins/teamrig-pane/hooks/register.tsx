@@ -41,45 +41,51 @@ import type {
   ExpandedTasks,
   FilePages,
   FindField,
-  LogConversation,
-  LogList,
-  LogPage,
   LogRead,
-  MeetingAnswer,
-  MeetingAsked,
-  MeetingsView,
   Nav,
-  OwnerAct,
-  PageDetails,
   PaneView,
   Place,
   RefFile,
   RefFileRead,
-  RequirementProblem,
   RingLandings,
-  SessionAnswer,
   SetupView,
   Snapshot,
-  StatsChoice,
-  StatsListPick,
-  StatsView,
   TaskDetail,
   TaskRow,
   TeamSettings,
-  TeamView,
   ViewMode,
 } from '../types'
 import { claudeCodeCheck, claudeCodeOldLine } from './claude-code-version'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { bounded } from './bounded-run'
 import { LiveRegister, pinKey } from './live'
+import {
+  AT_LOG_LIST,
+  EMPTY_SNAPSHOT,
+  INITIAL_STATE,
+  LOG_READING,
+  NO_ACT,
+  NO_ANSWER,
+  NO_CONFIG_LOG,
+  NO_FILES,
+  NO_MEETING_ANSWER,
+  NO_MEETING_ASKED,
+  NO_PREVIOUS,
+  NO_STATS_FROM,
+  NO_STATS_LIST,
+  NO_TEAM_LOG,
+  NO_TEAM_MEETINGS,
+  NO_TEAM_STATS,
+  NO_TEAM_TREE,
+  NOT_SETTING_UP,
+  TEAM_READING,
+} from './pane-state'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { inboxFile, TaskDetails, type RefPlaces } from './details'
 import { RefFileReader } from './ref-file'
-import { DEFAULT_FOCUS, DEFAULT_REGISTER, TimeZone, type StatsRange } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
-import { NO_GOAL_RANKS, TreeGoals } from './tree-goals'
+import { TreeGoals } from './tree-goals'
 import { TreeRegisters } from './tree-registers'
 import { NO_ELSEWHERE } from './elsewhere'
 import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
@@ -111,15 +117,15 @@ import {
   type Current,
 } from './banner'
 import { sessionName, titleSpans } from './session-title'
-import { NOTHING_EXPANDED, NOTHING_FOLDED, paneBlocks, type Block, type InboxPress, type Span, type StatsPress } from './rows'
+import { NOTHING_EXPANDED, paneBlocks, type Block, type InboxPress, type Span, type StatsPress } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
 import { gitCheck, isGitMissing, requirementBlocks, requirementProblems } from './requirements'
-import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from './changes'
+import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges } from './changes'
 import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 import { changesResultKey, diffKeyOf, searchChanges, type ChangeHit } from './changes-search'
-import { LiveDiffs, NO_DIFFS } from './diff'
-import { LiveCopies, NO_COPIES } from './outside-copies'
+import { LiveDiffs } from './diff'
+import { LiveCopies } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { LivePrevious } from './previous-conversation'
 import { logListBlocks, logPageBlocks, logPageTitle } from './log-rows'
@@ -132,7 +138,6 @@ import { cardKey, openedWith, teamBlocks, toggledWith } from './team-rows'
 import { searchTeam, TEAM_SEARCH_VIEW, type SessionHit } from './team-search'
 import { SetupWatch } from './setup'
 import { setupBlocks } from './setup-rows'
-import { NO_TASK_COUNTS } from './task-counts'
 import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
 import type { CardActs } from './act-rows'
@@ -170,7 +175,6 @@ import {
 import { heldWeeks, weekClockOf, weekSteps } from './done'
 import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
-import { NO_SPEND } from './ranking'
 import { clockOf, machineZoneOf, zoneNamed } from './zone'
 import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
 import { KEYS_HOTKEY, KEYS_LABEL, keysBlocks } from './keys-page'
@@ -212,29 +216,8 @@ const MINIMIZED = `minimized to its strip: a press on it, or /${COMMAND}, opens 
 /** How long one git run may take before it is killed and the repo shows the failure. */
 const GIT_TIMEOUT_MS = 10_000
 
-// The pane's $.state (declared in ../types); the engine's scan wants atoms written in the module that uses them.
-const EMPTY_SNAPSHOT: Snapshot = {
-  tasks: [],
-  area: null,
-  areaSource: null,
-  team: null,
-  areaName: null,
-  leads: null,
-  work: [],
-  unreadInbox: null,
-  inbox: [],
-  problem: null,
-  notPickedUpAfterHours: DEFAULT_REGISTER.check.notPickedUpAfterHours,
-  timeZone: TimeZone.UTC.name,
-  ownerSource: DEFAULT_REGISTER.ownerSource,
-  focus: DEFAULT_FOCUS,
-  goals: NO_GOAL_RANKS,
-  spend: NO_SPEND,
-  ownerCards: {},
-  taskCounts: NO_TASK_COUNTS,
-  elsewhere: [],
-  now: 0,
-}
+// The pane's $.state (declared in ../types), each key starting from what pane-state.ts INITIAL_STATE gives it; the
+// engine's scan wants atoms written in the module that uses them.
 /**
  * The tag the snapshot is kept under. $.state outlives a hot reload, so without it a new pane would
  * draw the snapshot the old code wrote, rows missing the fields it now reads; under another tag that
@@ -242,124 +225,100 @@ const EMPTY_SNAPSHOT: Snapshot = {
  * Snapshot or TaskRow type in ../types changes shape.
  */
 const SNAPSHOT_SHAPE = 'register-v17'
-const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
-const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
+const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, INITIAL_STATE.snapshot, { shape: SNAPSHOT_SHAPE })
+const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, INITIAL_STATE.mode)
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */
 const CARDS_SHAPE = 'cards-v1'
-const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, NOTHING_EXPANDED, { shape: CARDS_SHAPE })
+const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, INITIAL_STATE.expanded, { shape: CARDS_SHAPE })
 /** The Tasks view's headings whose tasks are folded away (rows.ts paneBlocks), by block key: a press on one flips it. */
-const tasksFolded = atom({ plugin: 'teamrig-pane', key: 'tasksFolded' } as const, NOTHING_FOLDED)
-const size = atom({ plugin: 'teamrig-pane', key: 'size' } as const, 'open')
-const view = atom({ plugin: 'teamrig-pane', key: 'view' } as const, 'tasks')
+const tasksFolded = atom({ plugin: 'teamrig-pane', key: 'tasksFolded' } as const, INITIAL_STATE.tasksFolded)
+const size = atom({ plugin: 'teamrig-pane', key: 'size' } as const, INITIAL_STATE.size)
+const view = atom({ plugin: 'teamrig-pane', key: 'view' } as const, INITIAL_STATE.view)
 /** The changes are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when ChangesSnapshot changes shape. */
 const CHANGES_SHAPE = 'changes-v3'
-const changes = atom({ plugin: 'teamrig-pane', key: 'changes' } as const, EMPTY_CHANGES, { shape: CHANGES_SHAPE })
+const changes = atom({ plugin: 'teamrig-pane', key: 'changes' } as const, INITIAL_STATE.changes, { shape: CHANGES_SHAPE })
 /**
  * The repo roots and outside files found, kept apart from the drawn changes: a version that bumps
  * CHANGES_SHAPE reads the drawn ones as absent after a hot reload, and would forget every repo the
  * session found. Bump KNOWN_SHAPE only when KnownChanges itself changes.
  */
 const KNOWN_SHAPE = 'known-v1'
-const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KNOWN, { shape: KNOWN_SHAPE })
+const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, INITIAL_STATE.known, { shape: KNOWN_SHAPE })
 /** The open diffs are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when FileDiff or DiffLine changes shape. */
 const DIFFS_SHAPE = 'diffs-v1'
-const diffs = atom({ plugin: 'teamrig-pane', key: 'diffs' } as const, NO_DIFFS, { shape: DIFFS_SHAPE })
+const diffs = atom({ plugin: 'teamrig-pane', key: 'diffs' } as const, INITIAL_STATE.diffs, { shape: DIFFS_SHAPE })
 /** The outside files' copies are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when OutsideCopy changes shape. */
 const COPIES_SHAPE = 'copies-v1'
-const copies = atom({ plugin: 'teamrig-pane', key: 'copies' } as const, NO_COPIES, { shape: COPIES_SHAPE })
+const copies = atom({ plugin: 'teamrig-pane', key: 'copies' } as const, INITIAL_STATE.copies, { shape: COPIES_SHAPE })
 /** The Log view's list and page are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when LogList, LogPage or TurnEntry changes shape. */
 const LOG_SHAPE = 'log-v3'
-const LOG_READING: LogList = { kind: 'reading' }
-const NO_TEAM_LOG: LogList = { kind: 'no-team' }
-const NO_CONFIG_LOG: LogList = { kind: 'no-config' }
-const logList = atom({ plugin: 'teamrig-pane', key: 'logList' } as const, LOG_READING, { shape: LOG_SHAPE })
-const AT_LOG_LIST: LogPage | null = null
-const logPage = atom({ plugin: 'teamrig-pane', key: 'logPage' } as const, AT_LOG_LIST, { shape: LOG_SHAPE })
+const logList = atom({ plugin: 'teamrig-pane', key: 'logList' } as const, INITIAL_STATE.logList, { shape: LOG_SHAPE })
+const logPage = atom({ plugin: 'teamrig-pane', key: 'logPage' } as const, INITIAL_STATE.logPage, { shape: LOG_SHAPE })
 /** The area's conversation before the one of now, for the band (previous-conversation.ts); null for none. */
-const NO_PREVIOUS: LogConversation | null = null
-const previousConversation = atom({ plugin: 'teamrig-pane', key: 'previousConversation' } as const, NO_PREVIOUS, {
+const previousConversation = atom({ plugin: 'teamrig-pane', key: 'previousConversation' } as const, INITIAL_STATE.previousConversation, {
   shape: LOG_SHAPE,
 })
-const NOTHING_MISSING: RequirementProblem[] = []
 /** What the pane lacks (requirements.ts); each session start checks again and writes it anew, a hot reload's too. */
-const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, NOTHING_MISSING)
+const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, INITIAL_STATE.requirements)
 /** The setup kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when SetupView or ProjectSetup changes shape. */
 const SETUP_SHAPE = 'setup-v1'
-const NOT_SETTING_UP: SetupView | null = null
 /** What the pane shows alone in a project teamrig is not set up for (setup.ts), whatever the view; null once a register is found. */
-const setup = atom({ plugin: 'teamrig-pane', key: 'setup' } as const, NOT_SETTING_UP, { shape: SETUP_SHAPE })
+const setup = atom({ plugin: 'teamrig-pane', key: 'setup' } as const, INITIAL_STATE.setup, { shape: SETUP_SHAPE })
 /** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
-const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
+const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, INITIAL_STATE.filter)
 /** The places are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when Place or Nav changes shape. */
 const NAV_SHAPE = 'nav-v4'
-const nav = atom({ plugin: 'teamrig-pane', key: 'nav' } as const, AT_LIST, { shape: NAV_SHAPE })
-const NO_PAGES: PageDetails = {}
+const nav = atom({ plugin: 'teamrig-pane', key: 'nav' } as const, INITIAL_STATE.nav, { shape: NAV_SHAPE })
 /** The pages' details, kept under CARDS_SHAPE as the open cards are: both hold TaskDetail. */
-const pages = atom({ plugin: 'teamrig-pane', key: 'pages' } as const, NO_PAGES, { shape: CARDS_SHAPE })
+const pages = atom({ plugin: 'teamrig-pane', key: 'pages' } as const, INITIAL_STATE.pages, { shape: CARDS_SHAPE })
 /** The file pages' reads are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when RefFileRead changes shape. */
 const FILES_SHAPE = 'files-v1'
-const NO_FILES: FilePages = {}
-const filePages = atom({ plugin: 'teamrig-pane', key: 'filePages' } as const, NO_FILES, { shape: FILES_SHAPE })
+const filePages = atom({ plugin: 'teamrig-pane', key: 'filePages' } as const, INITIAL_STATE.filePages, { shape: FILES_SHAPE })
 /** The Find field's round (find-field.ts): the key it is drawn under and the text it starts with. */
-const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, FIRST_FIELD)
+const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, INITIAL_STATE.findField)
 /** The focus ring's landings in the pane (find-field.ts), counted by the ui.focus hook, kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when RingLandings changes shape. */
 const RING_SHAPE = 'ring-v1'
-const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS, { shape: RING_SHAPE })
+const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, INITIAL_STATE.ring, { shape: RING_SHAPE })
 /** Whether the banner (banner.ts) in the band above the prompt shows its task's card: a press on it opens and closes it. */
-const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, false)
+const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, INITIAL_STATE.banner)
 /** Whether the band's previous conversation (banner.ts previousBlock) shows its whole titles and facts: a press on its title opens and closes it. */
-const previousOpen = atom({ plugin: 'teamrig-pane', key: 'previousOpen' } as const, false)
+const previousOpen = atom({ plugin: 'teamrig-pane', key: 'previousOpen' } as const, INITIAL_STATE.previousOpen)
 /** Where the docked body's window is to stand (body-scroll.ts), kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when BodyScroll or ScrollTarget changes shape. */
 const SCROLL_SHAPE = 'scroll-v1'
-const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, AT_TOP, { shape: SCROLL_SHAPE })
+const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, INITIAL_STATE.bodyScroll, { shape: SCROLL_SHAPE })
 /** The Teams tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
 const TEAM_SHAPE = 'team-v7'
-const TEAM_READING: TeamView = { kind: 'reading' }
-const NO_TEAM_TREE: TeamView = { kind: 'no-team' }
-const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, TEAM_READING, { shape: TEAM_SHAPE })
-const NOTHING_TOGGLED: readonly string[] = []
+const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, INITIAL_STATE.teamTree, { shape: TEAM_SHAPE })
 /** The Teams tab's nodes the person opened or closed against their default (team.ts teamRows), by key: a press flips one. */
-const teamToggled = atom({ plugin: 'teamrig-pane', key: 'teamToggled' } as const, NOTHING_TOGGLED)
+const teamToggled = atom({ plugin: 'teamrig-pane', key: 'teamToggled' } as const, INITIAL_STATE.teamToggled)
 /** The Meetings view's list (meetings.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when MeetingsView or Meeting changes shape. */
 const MEETINGS_SHAPE = 'meetings-v1'
-const MEETINGS_READING: MeetingsView = { kind: 'reading' }
-const NO_TEAM_MEETINGS: MeetingsView = { kind: 'no-team' }
-const meetings = atom({ plugin: 'teamrig-pane', key: 'meetings' } as const, MEETINGS_READING, { shape: MEETINGS_SHAPE })
+const meetings = atom({ plugin: 'teamrig-pane', key: 'meetings' } as const, INITIAL_STATE.meetings, { shape: MEETINGS_SHAPE })
 /** The Meetings view's meetings whose cards are open (meetings-rows.ts meetingKey), by key: a press on a row flips one. */
-const meetingsOpen = atom({ plugin: 'teamrig-pane', key: 'meetingsOpen' } as const, NOTHING_TOGGLED)
-const NO_MEETING_ANSWER: MeetingAnswer | null = null
-const NO_MEETING_ASKED: MeetingAsked | null = null
+const meetingsOpen = atom({ plugin: 'teamrig-pane', key: 'meetingsOpen' } as const, INITIAL_STATE.meetingsOpen)
 /** What the last run press on a meeting answered (meetings.ts): cleared at each session start and each switch to the view. */
-const meetingAnswer = atom({ plugin: 'teamrig-pane', key: 'meetingAnswer' } as const, NO_MEETING_ANSWER)
+const meetingAnswer = atom({ plugin: 'teamrig-pane', key: 'meetingAnswer' } as const, INITIAL_STATE.meetingAnswer)
 /** The second line a meeting's card shows (Move, Postpone, Drop or End asked, meetings-rows.ts): cleared with the answer. */
-const meetingAsked = atom({ plugin: 'teamrig-pane', key: 'meetingAsked' } as const, NO_MEETING_ASKED)
+const meetingAsked = atom({ plugin: 'teamrig-pane', key: 'meetingAsked' } as const, INITIAL_STATE.meetingAsked)
 /** The Stats tab's numbers (stats-source.ts) are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when StatsView or the core's RegisterStats or RegisterHealth changes shape. */
 const STATS_SHAPE = 'stats-v2'
-const STATS_READING: StatsView = { kind: 'reading' }
-const NO_TEAM_STATS: StatsView = { kind: 'no-team' }
-const stats = atom({ plugin: 'teamrig-pane', key: 'stats' } as const, STATS_READING, { shape: STATS_SHAPE })
-const TREE_SCOPE: StatsChoice = { kind: 'tree' }
+const stats = atom({ plugin: 'teamrig-pane', key: 'stats' } as const, INITIAL_STATE.stats, { shape: STATS_SHAPE })
 /** What the Stats tab folds (stats-source.ts): the whole tree until a press on its scope row picks a team or a session. */
-const statsScope = atom({ plugin: 'teamrig-pane', key: 'statsScope' } as const, TREE_SCOPE)
-const FIRST_RANGE: StatsRange = '7d'
+const statsScope = atom({ plugin: 'teamrig-pane', key: 'statsScope' } as const, INITIAL_STATE.statsScope)
 /** The days the Stats tab folds: the last 7 until a press on its range row picks others. */
-const statsRange = atom({ plugin: 'teamrig-pane', key: 'statsRange' } as const, FIRST_RANGE)
-const NO_STATS_LIST: StatsListPick | null = null
+const statsRange = atom({ plugin: 'teamrig-pane', key: 'statsRange' } as const, INITIAL_STATE.statsRange)
 /** The Health count whose tasks the Stats tab lists in place of its numbers: none until a tile's press picks one, back clears it. */
-const statsList = atom({ plugin: 'teamrig-pane', key: 'statsList' } as const, NO_STATS_LIST)
-const NO_STATS_FROM: string | null = null
+const statsList = atom({ plugin: 'teamrig-pane', key: 'statsList' } as const, INITIAL_STATE.statsList)
 /** The Teams tab row whose [Stats] opened the Stats tab, back's landing: none until such a press, and any view switch drops it. */
-const statsFrom = atom({ plugin: 'teamrig-pane', key: 'statsFrom' } as const, NO_STATS_FROM)
+const statsFrom = atom({ plugin: 'teamrig-pane', key: 'statsFrom' } as const, INITIAL_STATE.statsFrom)
 /** The Stats tab's sections the person opened or closed against their default (stats-rows.ts isSectionOpen), by key: a press on a header flips one. */
-const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as const, NOTHING_TOGGLED)
+const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as const, INITIAL_STATE.statsToggled)
 /** The Done page's days, groups and `n more` rows the person flipped against their default (done-rows.ts), by key. */
-const doneToggled = atom({ plugin: 'teamrig-pane', key: 'doneToggled' } as const, NOTHING_TOGGLED)
-const NO_ANSWER: SessionAnswer | null = null
+const doneToggled = atom({ plugin: 'teamrig-pane', key: 'doneToggled' } as const, INITIAL_STATE.doneToggled)
 /** What the last press on a Teams tab session row ([Meet], [Wake]) answered (session-acts.ts): cleared at each session start and each switch to the tab. */
-const sessionAnswer = atom({ plugin: 'teamrig-pane', key: 'sessionAnswer' } as const, NO_ANSWER)
-const NO_ACT: OwnerAct | null = null
+const sessionAnswer = atom({ plugin: 'teamrig-pane', key: 'sessionAnswer' } as const, INITIAL_STATE.sessionAnswer)
 /** Where the owner's Note or Next on a task's card stands (owner-acts.ts): cleared at each session start. */
-const ownerAct = atom({ plugin: 'teamrig-pane', key: 'ownerAct' } as const, NO_ACT)
+const ownerAct = atom({ plugin: 'teamrig-pane', key: 'ownerAct' } as const, INITIAL_STATE.ownerAct)
 
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
