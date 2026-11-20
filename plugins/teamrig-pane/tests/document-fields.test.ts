@@ -47,6 +47,21 @@ describe('Fields', () => {
     expect(fields.bad).toEqual(['wrong', 'worded'])
   })
 
+  test('reads an optional moment as milliseconds, to the second or the millisecond, and null when null or left out', () => {
+    const fields = new Fields({ at: '2026-03-02T09:00:00.000Z', whole: '2026-03-02T09:00:05Z', none: null })
+    expect(fields.momentOrNull('at')).toBe(Date.UTC(2026, 2, 2, 9, 0, 0))
+    expect(fields.momentOrNull('whole')).toBe(Date.UTC(2026, 2, 2, 9, 0, 5))
+    expect(fields.momentOrNull('none')).toBeNull()
+    expect(fields.momentOrNull('absent')).toBeNull()
+    expect(fields.bad).toEqual([])
+  })
+
+  test('notes a moment of another type, another shape or a day no calendar holds', () => {
+    const fields = new Fields({ ms: 1_772_442_000_000, day: '2026-03-02', local: '2026-03-02T09:00:00', worded: 'March 2, 2026', never: '2026-13-45T09:00:00.000Z' })
+    for (const name of ['ms', 'day', 'local', 'worded', 'never']) expect(fields.momentOrNull(name)).toBeNull()
+    expect(fields.bad).toEqual(['ms', 'day', 'local', 'worded', 'never'])
+  })
+
   test('a word outside its known set is noted with the word, and one that is no text by its path alone', () => {
     const fields = new Fields({ colour: 'blue', shade: 3, built: 'toString' })
     expect(fields.oneOf('colour', COLOURS, 'red')).toBe('red')

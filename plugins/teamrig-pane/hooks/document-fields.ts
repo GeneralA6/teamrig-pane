@@ -53,6 +53,12 @@ export function leftOutLine(what: string, left: readonly string[]): string {
   return `teamrig served ${left.length} ${what}${left.length === 1 ? '' : 's'} the pane cannot read, ${left.slice(0, NAMED).join(', ')}${more}: update teamrig-pane`
 }
 
+/**
+ * A moment as teamrig serves one: ISO 8601 in UTC, to the second or the millisecond. `Date.parse` alone reads far
+ * more, each engine its own way, so the shape is checked first and the calendar by the parse.
+ */
+const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/
+
 const NO_FIELDS: JsonRecord = {}
 
 /** One record's fields, read by name, with the ones that could not be read noted for it and the records inside it. */
@@ -96,6 +102,14 @@ export class Fields {
 
   flag(name: string): boolean {
     return this.required(name, isFlag, false)
+  }
+
+  /** An optional moment, as milliseconds; a text that is no moment, or one no calendar holds, is noted. */
+  momentOrNull(name: string): number | null {
+    const value = this.optional(name, isText)
+    if (value === null) return null
+    const at = MOMENT.test(value) ? Date.parse(value) : Number.NaN
+    return Number.isNaN(at) ? this.note(name, null) : at
   }
 
   /** A list of texts; one entry of another type and the whole field is noted. */
