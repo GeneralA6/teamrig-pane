@@ -72,9 +72,12 @@ import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails, type RefPlaces } from './details'
 import {
+  closeCards,
   closeLog as leaveLog,
   closeStatsFrom as leaveStatsFrom,
   closeStatsList as leaveStatsList,
+  filterBar,
+  fold as pressFold,
   openFile as pressFile,
   openInbox as pressInbox,
   openPage as pressPage,
@@ -84,6 +87,7 @@ import {
   submitTasks as enterTasks,
   submitTeam as enterTeam,
   toggleCard,
+  toggleTeamKey,
   type ReadsFile,
 } from './presses'
 import { RefFileReader } from './ref-file'
@@ -120,7 +124,7 @@ import {
   type Current,
 } from './banner'
 import { sessionName, titleSpans } from './session-title'
-import { NOTHING_EXPANDED, type InboxPress, type Span, type StatsPress } from './rows'
+import type { InboxPress, Span, StatsPress } from './rows'
 import type { BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
 import { gitCheck, requirementProblems } from './requirements'
@@ -131,7 +135,6 @@ import { LiveCopies } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { LivePrevious } from './previous-conversation'
 import { LiveTeam } from './team-source'
-import { toggledWith } from './team-rows'
 import { SetupWatch } from './setup'
 import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
@@ -1112,7 +1115,7 @@ export const register: Register = on => {
               case 'toggle': {
                 const key = piece.toggles
                 return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void update($, teamToggled, toggled => toggledWith(toggled, key))}>
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void toggleTeamKey(atomStore($), key)}>
                     {styled(piece.span)}
                   </Button>
                 )
@@ -1164,16 +1167,7 @@ export const register: Register = on => {
     }
     // A Teams tab key, a meeting's card in the Meetings view, a Stats tab section, a Done page's day or group, or a
     // Tasks view heading's tasks, opened or closed.
-    const fold = (key: string) =>
-      current === 'meetings'
-        ? update($, meetingsOpen, opened => toggledWith(opened, key))
-        : current === 'stats'
-        ? update($, statsToggled, toggled => toggledWith(toggled, key))
-        : current === 'tasks'
-          ? currentPlace(at).kind === 'done'
-            ? update($, doneToggled, toggled => toggledWith(toggled, key))
-            : update($, tasksFolded, folded => toggledWith(folded, key))
-          : update($, teamToggled, toggled => toggledWith(toggled, key))
+    const fold = (key: string) => pressFold(atomStore($), key, current, currentPlace(at))
     // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
     // conversation's Log page (`reads`), opens or closes a Teams tab key or a meeting's card (`folds`), or a Changes
     // file's diff (`expands`: inline a file's row, docked a Changes search result), else words alone.
@@ -1460,7 +1454,7 @@ export const register: Register = on => {
       Object.keys(open).length > 0 && place.kind === 'list'
         ? [
             pressed(
-              <Button key="close-cards" label="close cards" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />,
+              <Button key="close-cards" label="close cards" hotkey="c" variant="secondary" onPress={() => void closeCards(atomStore($))} />,
               { label: 'close cards', plain: false, hotkey: 'c' },
             ),
           ]
@@ -1577,7 +1571,7 @@ export const register: Register = on => {
     // press on the same one clears it, and one on another switches to it.
     // A count's Button draws its key before it (`o: `), then its glyph in the color its rows wear it in, which the bar
     // counts in its widths (status-bar.ts drawnText): one Text holding both, as a plain Button holds only strings and Text.
-    const filterTo = (status: BarStatus) => void update($, barFilter, current => (current === status ? null : status))
+    const filterTo = (status: BarStatus) => void filterBar(atomStore($), status)
     const drawPiece = (piece: BarPiece) => {
       const status = piece.status
       if (status === null) return styled(piece, piece.key)
