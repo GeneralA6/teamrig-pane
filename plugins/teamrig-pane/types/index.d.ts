@@ -409,16 +409,17 @@ export type RequirementProblem =
 export type PaneView = 'tasks' | 'changes' | 'log' | 'inbox' | 'team' | 'meetings' | 'stats'
 
 /**
- * A team folder the Teams tab's last read could not read (hooks/team-source.ts): its team id, why, and whether the tree
- * draws the team as it last read it (true) or leaves it out, never read before (false).
+ * A team folder a tab could not show the read of: its team id, why, and whether the tab draws the team as it last read
+ * it (true) or leaves it out (false). The Stats tab's are folders its own read failed on (hooks/stats-source.ts); the
+ * Teams tab's are the ones teamrig's `sessions` document names as not served, always left out (hooks/team-source.ts).
  */
 export type TeamFolderFailure = { readonly team: string; readonly reason: string; readonly isLastRead: boolean }
 
 /**
  * The Teams tab's tree (hooks/team-source.ts): the tree of teams that holds the pane's team (hooks/team.ts), its root
- * null when the team's config is missing or teamrig refuses it, and the team folders that read failed; or that it is
- * not read yet, that the pane found no team, or why the team folders could not be listed, the register read, or the
- * pane's own team folder read before any read of it worked.
+ * null when teamrig's `sessions` document does not serve the pane's team, and the team folders teamrig could not
+ * serve; or that no `sessions` document is read yet, that the pane found no team, or why the register or the teams'
+ * week files could not be read.
  */
 export type TeamView =
   | { readonly kind: 'tree'; readonly root: import('../hooks/team').TeamTreeNode | null; readonly failures: readonly TeamFolderFailure[] }

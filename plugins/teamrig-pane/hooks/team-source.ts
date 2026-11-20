@@ -1,13 +1,13 @@
-// The Teams tab's source (T780): the kit home's team folders and, in each, the team's config and, in the state folder
-// that config names, the rename and hire logs and the week file teamrig's budget hooks write (T1713), each file re-read
-// only when its stamp moves (source.ts WatchedFile). It puts them into the tree (team.ts teamTree, at the pane's clock's
-// now) and writes it only when it changed, reading every POLL_MS (live.ts) and
-// only while the tab shows, as the Log view's LiveLog does. The pane's own team's register tasks, its sessions' cards
-// on the owner, their tasks counted (task-counts.ts) and their unread inbox lines (team-inboxes.ts) go with its read; a
-// peer team's register and inboxes are not the pane's, so its sessions show none of them. A team folder whose read
-// fails draws as it last read, or is left out before one, and the view names it with why (T1234); the others draw on.
-// The own team's folder, never read yet, holds the tree up: its failure fails the view.
-import type { SessionOwnerCards, Snapshot, TaskCounts, TaskRow, TeamFolderFailure, TeamView } from '../types'
+// The Teams tab's source (T780, T4742). LiveTeam puts teamrig's `sessions` document, as the pane last read it
+// (document-source.ts), into the tree (team.ts teamTree, at the pane's clock's now) and writes it only when it
+// changed, looking every POLL_MS (live.ts) and only while the tab shows, as the Log view's LiveLog does. Before a
+// document is held the tab says it is reading; no team file stands in for one. The pane's own team's register tasks,
+// its sessions' cards on the owner and their tasks counted (task-counts.ts) go with it, and each team's week from
+// its week file (team-weeks.ts, T1713); a peer team's register is not the pane's, so its sessions show none of them.
+// A team folder teamrig could not serve is left out and named with teamrig's reason (T1234); the others draw on.
+// TeamFolder, one team's config, logs and week file read from its folder, is what the Stats tab still folds
+// (stats-source.ts).
+import type { SessionOwnerCards, TaskCounts, TaskRow, TeamView } from '../types'
 import {
   parseConfigText,
   parseTeamWeek,
@@ -19,10 +19,11 @@ import {
   type TeamWeekSummary,
 } from './core/read/index'
 import { POLL_MS, type Timer } from './live'
-import { teamIds, teamStateDir, type TeamFiles } from './places'
+import { teamStateDir } from './places'
+import type { SessionsRead } from './sessions-document'
 import { WatchedFile, type Files } from './source'
-import { teamTree, type TeamRead } from './team'
-import { TeamInboxes, type InboxPaths } from './team-inboxes'
+import { teamTree, type TeamRead, type TeamRegister } from './team'
+import type { TeamInboxes } from './team-inboxes'
 
 /**
  * What the pane reads of its own team beside its folder: the register's tasks, each session's cards on the owner and
@@ -119,10 +120,12 @@ export class TeamFolder {
 }
 
 export type TeamPorts = {
-  /** The names of the folders right under a folder; none when it is not there. It rejects when it cannot list one. */
-  folders: (dir: string) => Promise<readonly string[]>
+  /** teamrig's `sessions` document as the pane last read it; null before the first one. */
+  sessions: () => SessionsRead | null
+  /** Each of the teams' own week, by team id, a team with none absent (team-weeks.ts). */
+  weeks: (teams: readonly string[]) => Promise<ReadonlyMap<string, TeamWeekSummary>>
   /** The pane's own team's register tasks, its sessions' cards on the owner and their tasks counted, as the pane last read them. */
-  register: () => Promise<Pick<Snapshot, 'tasks' | 'ownerCards' | 'taskCounts'>>
+  register: () => Promise<TeamRegister>
   /** True while the pane shows the Teams tab, open (not minimized). */
   isShown: () => Promise<boolean>
   publish: (view: TeamView) => Promise<void>
@@ -137,23 +140,17 @@ function reasonOf(error: unknown): string {
 
 /** Reads the team tree again while the Teams tab shows, and writes it when it changed. */
 export class LiveTeam {
-  private readonly files: Files
-  private readonly team: TeamFiles
+  /** The pane's own team. */
+  private readonly team: string
   private readonly ports: TeamPorts
-  /** The own team's inboxes; null when the pane found no register, so no inbox marks. */
-  private readonly inboxes: TeamInboxes | null
-  /** Each team folder read, by id; a folder no longer listed is dropped, so a team made again is read anew. */
-  private readonly teams = new Map<string, TeamFolder>()
   private timers: Timer[] = []
   private isPolling = false
   /** The view last written, as JSON: a read that finds the same tree writes nothing. */
   private shown: string | null = null
 
-  constructor(files: Files, team: TeamFiles, ports: TeamPorts, inbox: InboxPaths | null) {
-    this.files = files
+  constructor(team: string, ports: TeamPorts) {
     this.team = team
     this.ports = ports
-    this.inboxes = inbox === null ? null : new TeamInboxes(files, inbox)
   }
 
   startTimers(every: (ms: number, fn: () => void) => Timer): void {
@@ -194,34 +191,18 @@ export class LiveTeam {
   }
 
   /**
-   * The tree the team folders hold now, a folder whose read failed drawn as it last read, or left out before one, and
-   * named with why; or why the folders could not be listed, the register read, or the own team's folder read before
-   * any read of it worked.
+   * The tree of the `sessions` document held now, each team teamrig could not serve left out and named with
+   * teamrig's reason; that it is not read yet, before a document; or why the register or the weeks could not be read.
    */
   private async read(): Promise<TeamView> {
     try {
-      const ids = teamIds(await this.ports.folders(this.team.teamsDir))
-      for (const id of this.teams.keys()) if (!ids.includes(id)) this.teams.delete(id)
-      const { tasks, ownerCards, taskCounts } = await this.ports.register()
-      const own: OwnReads = { tasks, ownerCards, taskCounts, inboxes: this.inboxes }
-      const reads: TeamRead[] = []
-      const failures: TeamFolderFailure[] = []
-      for (const id of ids) {
-        const folder = this.teams.get(id) ?? new TeamFolder(this.files, this.team.teamsDir, id)
-        this.teams.set(id, folder)
-        const folderOwn = id === this.team.team ? own : null
-        try {
-          const read = await folder.read(folderOwn)
-          if (read !== null) reads.push(read)
-        } catch (error) {
-          const last = folder.lastRead(folderOwn)
-          // With no read of the own team, there is no tree to draw the others in: the whole read failed.
-          if (last === null && id === this.team.team) throw error
-          if (last !== null) reads.push(last)
-          failures.push({ team: id, reason: reasonOf(error), isLastRead: last !== null })
-        }
-      }
-      return { kind: 'tree', root: teamTree(reads, this.team.team, await this.ports.now()), failures }
+      const read = this.ports.sessions()
+      if (read === null) return { kind: 'reading' }
+      const registers = new Map([[this.team, await this.ports.register()]])
+      const weeks = await this.ports.weeks(read.teams.map(team => team.id))
+      const root = teamTree({ read, own: this.team, registers, weeks, now: await this.ports.now() })
+      // teamrig serves no last read of a folder it cannot read, so a failed team is never drawn.
+      return { kind: 'tree', root, failures: read.failures.map(failure => ({ ...failure, isLastRead: false })) }
     } catch (error) {
       return { kind: 'failed', reason: reasonOf(error) }
     }

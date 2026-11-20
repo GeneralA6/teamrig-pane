@@ -71,6 +71,7 @@ import { screenOf } from './screen'
 import { clearSearch, focusFind, go, openConversation, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { lookupSession, type SessionFound } from './session-roster'
+import type { SessionsRead } from './sessions-document'
 import { TaskDetails, type RefPlaces } from './details'
 import {
   closeCards,
@@ -136,6 +137,7 @@ import { LiveCopies } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { LivePrevious } from './previous-conversation'
 import { LiveTeam } from './team-source'
+import { TeamWeeks } from './team-weeks'
 import { SetupWatch } from './setup'
 import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
@@ -268,7 +270,7 @@ const previousOpen = atom({ plugin: 'teamrig-pane', key: 'previousOpen' } as con
 const SCROLL_SHAPE = 'scroll-v1'
 const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, INITIAL_STATE.bodyScroll, { shape: SCROLL_SHAPE })
 /** The Teams tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
-const TEAM_SHAPE = 'team-v7'
+const TEAM_SHAPE = 'team-v8'
 const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, INITIAL_STATE.teamTree, { shape: TEAM_SHAPE })
 /** The Teams tab's nodes the person opened or closed against their default (team.ts teamRows), by key: a press flips one. */
 const teamToggled = atom({ plugin: 'teamrig-pane', key: 'teamToggled' } as const, INITIAL_STATE.teamToggled)
@@ -606,6 +608,7 @@ export const register: Register = on => {
       // The tasks, inbox, sessions and settings come from `teamrig read` (document-source.ts); the fold of the
       // register's files beneath it feeds only what the documents do not serve yet.
       let source: LivePorts['source']
+      let sessionsRead: () => SessionsRead | null = () => null
       if (places.kind === 'found') {
         const paths = registerPaths(places.dirs)
         const { team } = places
@@ -615,7 +618,8 @@ export const register: Register = on => {
           { run: (argv, timeoutMs) => run(argv, { cwd: e.cwd, timeoutMs }) },
         )
         source = documents
-        lookUp = word => lookupSession(word, team.team, documents.sessionsRead)
+        sessionsRead = () => documents.sessionsRead
+        lookUp =word => lookupSession(word, team.team, documents.sessionsRead)
       } else {
         source = { missing: places.problem }
         lookUp = NO_TEAM_LOOKUP
@@ -680,26 +684,23 @@ export const register: Register = on => {
         await update($, logPage, () => AT_LOG_LIST)
         await update($, previousConversation, () => NO_PREVIOUS)
       }
+      const teamWeeks = teamFiles === null ? null : new TeamWeeks(files, teamFiles.teamsDir, folders)
       const teamLive =
-        teamFiles === null
+        teamFiles === null || teamWeeks === null
           ? null
-          : new LiveTeam(
-              files,
-              teamFiles,
-              {
-                folders,
-                register: async () => {
-                  const { tasks, ownerCards, taskCounts } = await read($, snapshot)
-                  return { tasks, ownerCards, taskCounts }
-                },
-                isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
-                publish: async tree => {
-                  await update($, teamTree, () => tree)
-                },
-                now: () => $.clock.now(),
+          : new LiveTeam(teamFiles.team, {
+              sessions: sessionsRead,
+              weeks: teams => teamWeeks.read(teams),
+              register: async () => {
+                const { tasks, ownerCards, taskCounts } = await read($, snapshot)
+                return { tasks, ownerCards, taskCounts }
               },
-              'missing' in registerAt ? null : registerAt.paths,
-            )
+              isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
+              publish: async tree => {
+                await update($, teamTree, () => tree)
+              },
+              now: () => $.clock.now(),
+            })
       teaming = teamLive
       if (teamLive === null) await update($, teamTree, () => NO_TEAM_TREE)
       // The CLI runs as the tab's session: its TEAMRIG_SESSION, else the area the pane shows.

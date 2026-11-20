@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 import { foundRows, sessionKey, teamRows, teamTree, type SessionFacts, type TeamRead, type TeamRow, type TeamTreeNode } from '../hooks/team'
 import { HOUR, NOW } from './fixtures'
-import { ACME, ACME_COUNTS, OTHER, TOOLS, WEEK_RESET, configOf, treeOf, weekFile } from './team-fixtures'
+import type { SessionRow } from '../hooks/sessions-document'
+import { ACME, ACME_COUNTS, OTHER, TOOLS, WEEK_RESET, configOf, hire, retire, treeInput, treeOf, weekFile } from './team-fixtures'
 
 /** One line per row: indented by depth, ▾ open, ▸ closed, · nothing under it, then the node. */
 function outline(rows: readonly TeamRow[]): string[] {
@@ -21,6 +22,12 @@ function sessionOf(root: TeamTreeNode, team: string, id: string): SessionFacts {
 }
 
 const NONE: ReadonlySet<string> = new Set()
+
+/** acme's tree drawn from its served sessions after `change`, as an outline. */
+function outlineWith(change: (row: SessionRow) => SessionRow): string[] {
+  const input = treeInput([ACME], 'acme')
+  return outline(teamRows(teamTree({ ...input, read: { ...input.read, sessions: input.read.sessions.map(change) } }), NONE))
+}
 
 describe('teamTree', () => {
   test('the root team over its lead, each session under its leader, the retired group (closed), then the child team', () => {
@@ -60,7 +67,7 @@ describe('teamTree', () => {
       roles: [],
       leads: 0,
       ledBy: ['web', 'lead'],
-      launch: {},
+      launch: { model: null, effort: null, text: 'the default model and effort' },
       hire: null,
       rehiredFrom: null,
       retire: null,
@@ -88,16 +95,26 @@ describe('teamTree', () => {
     })
   })
 
-  test("the launch teamrig starts a session on: its own entry, the lead's defaults under the keys it leaves unset", () => {
+  test("the launch teamrig starts a session on, as served: its model and effort, and the two in teamrig's words", () => {
     const root = treeOf([ACME], 'acme')
-    expect(sessionOf(root, 'acme', 'ui')).toMatchObject({ launch: { model: 'claude-opus-5-5', effort: 'xhigh' }, unread: null })
-    expect(sessionOf(root, 'acme', 'lead').launch).toEqual({ model: 'opus', effort: 'xhigh' })
+    expect(sessionOf(root, 'acme', 'ui')).toMatchObject({
+      launch: { model: 'claude-opus-5-5', effort: 'xhigh', text: 'model claude-opus-5-5 at xhigh effort' },
+      unread: null,
+    })
+    expect(sessionOf(root, 'acme', 'lead').launch).toEqual({ model: 'opus', effort: 'xhigh', text: 'model opus at xhigh effort' })
   })
 
-  test('a hired session carries its hire; one hired again also the retire it came back from', () => {
+  test('a hired session carries its hire as served; one hired again also the retire it came back from', () => {
     const root = treeOf([ACME], 'acme')
-    expect(sessionOf(root, 'acme', 'ui')).toMatchObject({ hire: ACME.hires[0], rehiredFrom: null })
-    expect(sessionOf(root, 'acme', 'ops')).toMatchObject({ active: true, roles: ['securityReviewer'], hire: ACME.hires[5], rehiredFrom: ACME.hires[3], retire: null })
+    const hired = { by: 'lead', scope: "ui's job", reason: 'more hands', reviewBy: '2026-10-25', approvedBy: null, burst: null }
+    expect(sessionOf(root, 'acme', 'ui')).toMatchObject({ hire: { ...hired, at: NOW - 96 * HOUR }, rehiredFrom: null })
+    expect(sessionOf(root, 'acme', 'ops')).toMatchObject({
+      active: true,
+      roles: ['securityReviewer'],
+      hire: { ...hired, at: NOW - 50 * HOUR, scope: 'ops again' },
+      rehiredFrom: { at: NOW - 70 * HOUR, by: 'lead', reason: 'its job is done', heir: null },
+      retire: null,
+    })
   })
 
   test('the retired group opens on a toggle: a retired session under its last name, with its retire and no roles, leaders, launch, tasks, unread lines or cards on the owner', () => {
@@ -114,7 +131,7 @@ describe('teamTree', () => {
       launch: null,
       hire: null,
       rehiredFrom: null,
-      retire: ACME.hires[4],
+      retire: { at: NOW - 60 * HOUR, by: 'lead', reason: 'its job is done', heir: 'web' },
       now: [],
       tasks: null,
       unread: null,
@@ -122,8 +139,52 @@ describe('teamTree', () => {
     })
   })
 
-  test("a team whose register and inbox the pane does not read knows no session's tasks, unread lines or cards on the owner", () => {
+  test("a team whose register the pane does not read knows no session's tasks or cards on the owner, nor unread lines teamrig does not serve", () => {
     expect(sessionOf(treeOf([ACME, TOOLS], 'acme'), 'tools', 'dev')).toMatchObject({ now: null, tasks: null, unread: null, decisions: null })
+  })
+
+  test("a team below the pane's own is served without its own words: a launch, a hire and a retire hold what is no text of its own", () => {
+    const tools = { ...TOOLS, hires: [hire('old', NOW - 9 * HOUR), retire('old', NOW - 8 * HOUR), hire('dev', NOW - 7 * HOUR), retire('dev', NOW - 6 * HOUR), hire('dev', NOW - 5 * HOUR)] }
+    const root = treeOf([ACME, tools], 'acme')
+    expect(sessionOf(root, 'tools', 'dev')).toMatchObject({
+      launch: { model: null, effort: null, text: null },
+      hire: { at: NOW - 5 * HOUR, by: 'lead', scope: null, reason: null, reviewBy: '2026-10-25', approvedBy: null, burst: null },
+      rehiredFrom: { at: NOW - 6 * HOUR, by: 'lead', reason: null, heir: null },
+    })
+    expect(sessionOf(root, 'tools', 'old').retire).toEqual({ at: NOW - 8 * HOUR, by: 'lead', reason: null, heir: null })
+    // The same team's own pane is served them.
+    expect(sessionOf(treeOf([ACME, tools], 'tools'), 'tools', 'dev').hire).toMatchObject({ scope: "dev's job", reason: 'more hands' })
+  })
+
+  test('sessions teamrig names no leader for, an empty one too, are listed flat under their team', () => {
+    expect(outlineWith(row => ({ ...row, leader: row.id === 'ui' ? null : '', ledBy: [], leads: 0 }))).toEqual([
+      '▾ team acme',
+      '  · lead',
+      '  · web',
+      '  · api',
+      '  · ui',
+      '  · ops',
+      '  ▸ retired',
+    ])
+  })
+
+  test('a session whose leader is not on its team is listed on top; leaders that go round a loop are each drawn once, the first on top', () => {
+    expect(outlineWith(row => (row.id === 'ops' ? { ...row, leader: 'gone' } : row))).toEqual(['▾ team acme', '  ▾ lead', '    ▾ web', '      · api', '      · ui', '  · ops', '  ▸ retired'])
+    expect(outlineWith(row => (row.id === 'web' ? { ...row, leader: 'api' } : row))).toEqual([
+      '▾ team acme',
+      '  ▾ lead',
+      '    · ops',
+      '  ▾ web',
+      '    · api',
+      '    · ui',
+      '  ▸ retired',
+    ])
+  })
+
+  test('a team teamrig does not serve is left out with its sessions', () => {
+    const input = treeInput([ACME, TOOLS], 'acme')
+    const read = { ...input.read, teams: input.read.teams.filter(team => team.id !== 'tools') }
+    expect(outline(teamRows(teamTree({ ...input, read }), NONE))).toEqual(outline(teamRows(treeOf([ACME], 'acme'), NONE)))
   })
 
   test("a register a compaction rotated marks each session's counts archived, as it misses the tasks finished long ago", () => {
@@ -144,8 +205,8 @@ describe('teamTree', () => {
     expect(outline(teamRows(treeOf([a, b], 'a'), NONE))).toEqual(['▾ team a', '  · lead', '  ▾ team b', '    · lead'])
   })
 
-  test('no config read for the own team: no tree, and no rows', () => {
-    expect(teamTree([TOOLS], 'acme', NOW)).toBe(null)
+  test('the own team not served: no tree, and no rows', () => {
+    expect(teamTree(treeInput([TOOLS], 'acme'))).toBe(null)
     expect(teamRows(null, NONE)).toEqual([])
   })
 })
