@@ -59,6 +59,12 @@ export function leftOutLine(what: string, left: readonly string[]): string {
  */
 const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/
 
+/** The milliseconds of a served moment; null for a text of another shape, or a day or hour no calendar holds. */
+function momentOf(text: string): number | null {
+  const at = MOMENT.test(text) ? Date.parse(text) : Number.NaN
+  return Number.isNaN(at) ? null : at
+}
+
 const NO_FIELDS: JsonRecord = {}
 
 /** One record's fields, read by name, with the ones that could not be read noted for it and the records inside it. */
@@ -104,12 +110,16 @@ export class Fields {
     return this.required(name, isFlag, false)
   }
 
+  /** A moment, as milliseconds; a field that is missing, no moment, or one no calendar holds, is noted. */
+  moment(name: string): number {
+    const value = this.record[name]
+    return (isText(value) ? momentOf(value) : null) ?? this.note(name, 0)
+  }
+
   /** An optional moment, as milliseconds; a text that is no moment, or one no calendar holds, is noted. */
   momentOrNull(name: string): number | null {
     const value = this.optional(name, isText)
-    if (value === null) return null
-    const at = MOMENT.test(value) ? Date.parse(value) : Number.NaN
-    return Number.isNaN(at) ? this.note(name, null) : at
+    return value === null ? null : (momentOf(value) ?? this.note(name, null))
   }
 
   /** A list of texts; one entry of another type and the whole field is noted. */

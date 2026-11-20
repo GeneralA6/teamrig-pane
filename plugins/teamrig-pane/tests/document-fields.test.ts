@@ -1,7 +1,7 @@
 // The fields of a `teamrig read` record (hooks/document-fields.ts): a field of the type asked is answered as it is,
 // any other is noted under its path with a stand-in in its place, an optional field reads null when null or left out,
-// a record inside a record notes under the outer field's path, every text and quoted word is answered as the pane
-// may draw it, and the left-out line names the first few (T4742).
+// a moment reads as milliseconds, required or optional, a record inside a record notes under the outer field's path,
+// every text and quoted word is answered as the pane may draw it, and the left-out line names the first few (T4742).
 import { describe, expect, test } from 'claude-code/testing'
 import { Fields, isList, isOneOf, leftOutLine } from '../hooks/document-fields'
 import { CONTROL_SHOWN } from '../hooks/shown-text'
@@ -60,6 +60,20 @@ describe('Fields', () => {
     const fields = new Fields({ ms: 1_772_442_000_000, day: '2026-03-02', local: '2026-03-02T09:00:00', worded: 'March 2, 2026', never: '2026-13-45T09:00:00.000Z' })
     for (const name of ['ms', 'day', 'local', 'worded', 'never']) expect(fields.momentOrNull(name)).toBeNull()
     expect(fields.bad).toEqual(['ms', 'day', 'local', 'worded', 'never'])
+  })
+
+  test('reads a required moment as milliseconds, to the second or the millisecond, the first one of the calendar too', () => {
+    const fields = new Fields({ at: '2026-03-02T09:00:00.000Z', whole: '2026-03-02T09:00:05Z', first: '1970-01-01T00:00:00Z' })
+    expect(fields.moment('at')).toBe(Date.UTC(2026, 2, 2, 9, 0, 0))
+    expect(fields.moment('whole')).toBe(Date.UTC(2026, 2, 2, 9, 0, 5))
+    expect(fields.moment('first')).toBe(0)
+    expect(fields.bad).toEqual([])
+  })
+
+  test('notes a required moment that is missing, null, of another type or shape, or a day no calendar holds', () => {
+    const fields = new Fields({ none: null, ms: 1_772_442_000_000, day: '2026-03-02', never: '2026-13-45T09:00:00.000Z' })
+    for (const name of ['none', 'absent', 'ms', 'day', 'never']) expect(fields.moment(name)).toBe(0)
+    expect(fields.bad).toEqual(['none', 'absent', 'ms', 'day', 'never'])
   })
 
   test('a word outside its known set is noted with the word, and one that is no text by its path alone', () => {
