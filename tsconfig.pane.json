@@ -30,6 +30,7 @@
     "plugins/teamrig-pane/tests",
     "plugins/teamrig-pane/scripts",
     "plugins/teamrig-pane/types",
-    "plugins/teamrig-pane/typecheck"
+    "plugins/teamrig-pane/typecheck",
+    "plugins/teamrig-pane/ui"
   ]
 }
