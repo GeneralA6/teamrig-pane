@@ -12,6 +12,9 @@ export const ARGUMENT_HINT = '[mine | all | auto | <session>]'
 
 export const USAGE = `usage: /${COMMAND} ${ARGUMENT_HINT}`
 
+/** What the dock tells a tab tied to no session ties it to one (rows.ts noSessionBlock): the command with a session. */
+export const TIE_HINT = `/${COMMAND} <session>`
+
 /**
  * open: show the pane; mode: switch the view; auto: drop this session's pin and follow its
  * `inbox read` again; pin: show the session `word` names (an id or a name, looked up by session-roster.ts) in

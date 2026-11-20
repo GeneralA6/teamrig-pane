@@ -70,6 +70,7 @@ const look = (changed: Partial<ScreenLook> = {}): ScreenLook => ({
   noteHold: new NoteHold<Snapshot>(),
   wraps: new WrapCache(),
   hostOld: running => `host ${running.major}.${running.minor}.${running.patch} is too old`,
+  tieHint: null,
   ...changed,
 })
 
@@ -135,6 +136,20 @@ describe('the tasks view', () => {
     expect(screen.shown).toBe('all')
     expect(screen.barLines).toEqual([])
     expect(screen.body).toEqual(docked(paneBlocks(SNAP, 'all', NOTHING_EXPANDED, null, ['owner:etl'], null)))
+  })
+
+  test('a tab tied to no session shows the front end’s words for tying one, in Tasks and in Inbox, and none for a front end without them', async () => {
+    const untied: Snapshot = { ...SNAP, area: null, areaSource: null }
+    const tie = 'tie <session>'
+    const tasks = await screenOf(from({ snapshot: untied }), look({ tieHint: tie }))
+    expect(tasks.body).toEqual(docked(paneBlocks(untied, 'mine', NOTHING_EXPANDED, null, NOTHING_FOLDED, null, tie)))
+    expect(JSON.stringify(tasks.body)).toContain(tie)
+    const inbox = await screenOf(from({ snapshot: untied, view: 'inbox' }), look({ tieHint: tie }))
+    expect(inbox.body).toEqual(docked(inboxBlocks(untied, null, tie)))
+    expect(JSON.stringify(inbox.body)).toContain(tie)
+    const none = await screenOf(from({ snapshot: untied }), look())
+    expect(none.body).toEqual(docked(paneBlocks(untied, 'mine')))
+    expect(JSON.stringify(none.body)).not.toContain('<session>')
   })
 
   test('a task’s page shows its card with no bar over it', async () => {

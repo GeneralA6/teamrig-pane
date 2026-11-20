@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Snapshot, TaskRow, TaskStatus, TeamLeads } from '../types'
 import { LABEL_CELLS } from '../hooks/card'
-import { COMMAND, inlineReason, parsePaneArgs, USAGE } from '../hooks/command'
+import { COMMAND, inlineReason, parsePaneArgs, TIE_HINT, USAGE } from '../hooks/command'
 import { LiveRegister, pinKey, type LivePorts, type Timer } from '../hooks/live'
 import { EVENT_VERSION, indexMarks, readMarks, readRegister, TASK_STATUSES } from '../hooks/core/read/index'
 import { ANSWER_CONTRACT_MATCHES, DECISION_CONTRACT_MATCHES, FOCUS_CONTRACT_MATCHES, ITEM_TYPE_CONTRACT_MATCHES, rowOf, SPEND_CONTRACT_MATCHES, STATUS_CONTRACT_MATCHES } from '../hooks/log'
@@ -662,9 +662,9 @@ describe('rows', () => {
     expect(inlineLayout([leader], 6)[0]?.folds).toBe('web')
   })
 
-  test("a tab tied to no session lists its team's sessions, the lead first, docked each a press of its own; with no team config read, the command alone", () => {
+  test("a tab tied to no session lists its team's sessions, the lead first, docked each a press of its own, then the front end's words for tying one; with no team config read, those words alone", () => {
     const leads: TeamLeads = { lead: 'lead', leaderOf: { api: 'lead', etl: 'lead' } }
-    const block = noSessionBlock('no-area', { team: 'web', leads })
+    const block = noSessionBlock('no-area', { team: 'web', leads }, TIE_HINT)
     expect(block.rows.map(row => row.spans.map(span => span.text).join(''))).toEqual([
       'This tab is not tied to a session of team web yet. Press the one this tab is:',
       'lead   api   etl',
@@ -681,10 +681,25 @@ describe('rows', () => {
     expect(line?.kind === 'line' ? line.pieces.map(piece => piece.kind) : []).toEqual(['pin', 'words', 'pin', 'words', 'pin'])
     // The Tasks view draws it in place of the area's tasks.
     const snap: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, team: 'web', leads, ...SNAPSHOT_SETTINGS, now: NOW }
-    expect(paneBlocks(snap, 'mine')).toEqual([block])
-    const lone = (team: string | null) => noSessionBlock('no-area', { team, leads: null }).rows.map(row => row.spans.map(span => span.text).join(''))
+    expect(paneBlocks(snap, 'mine', NOTHING_EXPANDED, null, [], null, TIE_HINT)).toEqual([block])
+    const lone = (team: string | null) => noSessionBlock('no-area', { team, leads: null }, TIE_HINT).rows.map(row => row.spans.map(span => span.text).join(''))
     expect(lone('web')).toEqual(['This tab is not tied to a session of team web yet: /teamrig-pane <session> ties it to one.'])
     expect(lone(null)).toEqual(['This tab is not tied to a session yet: /teamrig-pane <session> ties it to one.'])
+  })
+
+  test('a front end with no words for tying a tab shows the sessions to press alone, and with no team config read only that the tab is tied to none', () => {
+    const leads: TeamLeads = { lead: 'lead', leaderOf: { api: 'lead' } }
+    const block = noSessionBlock('no-area', { team: 'web', leads })
+    expect(block.rows.map(row => [row.key, row.spans.map(span => span.text).join('')])).toEqual([
+      ['no-area', 'This tab is not tied to a session of team web yet. Press the one this tab is:'],
+      ['no-area:sessions', 'lead   api'],
+    ])
+    // The Tasks view passes no words on unless its front end gives some.
+    const snap: Snapshot = { tasks: [], area: null, areaSource: null, unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, team: 'web', leads, ...SNAPSHOT_SETTINGS, now: NOW }
+    expect(paneBlocks(snap, 'mine')).toEqual([block])
+    const lone = (team: string | null) => noSessionBlock('no-area', { team, leads: null }).rows.map(row => row.spans.map(span => span.text).join(''))
+    expect(lone('web')).toEqual(['This tab is not tied to a session of team web yet.'])
+    expect(lone(null)).toEqual(['This tab is not tied to a session yet.'])
   })
 
   test("the more line names how many the cap cut and the key of the status bar's filter that lists them all", async () => {

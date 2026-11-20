@@ -7,7 +7,7 @@
 import type { InboxItem, Snapshot } from '../types'
 import { INBOX_WINDOW_HOURS, inboxDrawn } from './inbox'
 import { INBOX_SEARCH_VIEW, type InboxHit, type InboxSearchedField } from './inbox-search'
-import { noSessionBlock, SEPARATOR, single, type Block, type Span } from './rows'
+import { noSessionBlock, SEPARATOR, single, type Block, type Span, type TieHint } from './rows'
 import { marksOf, type Mark } from './search'
 import { markedSpans, resultKey, searchViewBlocks, type Noun } from './search-view'
 import { clockOf, momentWords, type Clock } from './zone'
@@ -71,10 +71,11 @@ function foundBlocks(search: InboxSearch, clock: Clock): Block[] {
 
 /**
  * The Inbox view: the lines it shows at the snapshot's now, the last written first under their count, or why none
- * show; while `search` holds the Find field's query, the search's body instead.
+ * show; while `search` holds the Find field's query, the search's body instead. A tab tied to no session shows `tie`,
+ * the front end's words for tying one (rows.ts noSessionBlock).
  */
-export function inboxBlocks(snap: InboxSource, search: InboxSearch | null = null): Block[] {
-  if (snap.area === null) return [noSessionBlock(`${VIEW}:no-area`, snap)]
+export function inboxBlocks(snap: InboxSource, search: InboxSearch | null = null, tie: TieHint = null): Block[] {
+  if (snap.area === null) return [noSessionBlock(`${VIEW}:no-area`, snap, tie)]
   const clock = clockOf(snap)
   if (search !== null) return foundBlocks(search, clock)
   const items = inboxDrawn(snap.inbox, snap.now)

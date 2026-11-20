@@ -40,14 +40,13 @@ import type {
   LogRead,
   PaneState,
   PaneView,
-  RefFile,
   Snapshot,
   TaskDetail,
   TaskRow,
   TeamSettings,
 } from '../types'
 import { claudeCodeCheck, claudeCodeOldLine } from './claude-code-version'
-import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
+import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs, TIE_HINT } from './command'
 import { bounded } from './bounded-run'
 import { DocumentSource } from './document-source'
 import { LiveRegister, pinKey, type LivePorts } from './live'
@@ -79,22 +78,16 @@ import {
   closeStatsFrom as leaveStatsFrom,
   closeStatsList as leaveStatsList,
   filterBar,
-  fold as pressFold,
-  openFile as pressFile,
-  openInbox as pressInbox,
-  openPage as pressPage,
-  pickStats as pressStats,
   submitChanges as enterChanges,
   submitLog as enterLog,
   submitTasks as enterTasks,
   submitTeam as enterTeam,
   openTask,
   toggleBanner,
-  toggleCard,
   togglePrevious,
-  toggleTeamKey,
   type ReadsFile,
 } from './presses'
+import { pressOfDrawn, pressOfPart, pressOfPiece, runPress, type Press } from './press'
 import { RefFileReader } from './ref-file'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { TreeGoals } from './tree-goals'
@@ -126,7 +119,7 @@ import {
   type Current,
 } from './banner'
 import { sessionName, titleSpans } from './session-title'
-import type { InboxPress, Span, StatsPress } from './rows'
+import type { Span } from './rows'
 import type { BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
 import { gitCheck, requirementProblems } from './requirements'
@@ -1008,6 +1001,7 @@ export const register: Register = on => {
       noteHold,
       wraps,
       hostOld: claudeCodeOldLine,
+      tieHint: TIE_HINT,
     })
     keysMemo = screen.memo
     const {
@@ -1034,20 +1028,12 @@ export const register: Register = on => {
       barLines,
     } = screen
 
-    // Opening a card reads what the task's refs and goals point at, once (detailOf).
-    const toggle = (id: string) => toggleCard(store, snap.tasks, id, detailOf)
     const switchTo = (target: PaneView) => switchView(store, target, livesNow())
-    // The Stats tab's presses (presses.ts): a pick, back from a Health count's tasks, back to the Teams row it opened from.
-    const pickStats = (press: StatsPress) => pressStats(store, press, livesNow())
+    // The Stats tab's head presses (presses.ts): back from a Health count's tasks, back to the Teams row it opened from.
     const closeStatsList = () => leaveStatsList(store, livesNow())
     const closeStatsFrom = () => leaveStatsFrom(store, livesNow())
-    // The presses that open a page (presses.ts), on the tasks this drawing shows and the session's own area.
-    const openPage = (id: string, from: string) => pressPage(store, snap.tasks, id, from, detailOf)
-    const openFile = (file: RefFile, from: string) => pressFile(store, file, from, readFile)
-    const openInbox = (press: InboxPress, from: string) => pressInbox(store, press, from, snap.area, readFile, livesNow())
     // Back from a conversation's page shows the list, read again, from its top, or the search the page was opened from:
     // the page drew no Find field, so it comes back a fresh round holding the search's words (fieldAnew).
-    const openLog = (conversation: LogRead) => openConversation(store, conversation, logging)
     const closeLog = () => leaveLog(store, logging)
     // Enter in each view's Find field (presses.ts), on its words as typed (a redraw may lag behind them) and on the
     // tasks this drawing shows.
@@ -1055,6 +1041,25 @@ export const register: Register = on => {
     const submitTeam = (query: string) => enterTeam(store, query, moveFocus)
     const submitLog = (query: string) => enterLog(store, snap, query, moveFocus, logging)
     const submitChanges = (query: string) => enterChanges(store, query, moveFocus, diffing)
+    // A press in the body (press.ts), on the tasks, view and place this drawing shows; the readers are those held
+    // when it is pressed, which a team found since this drawing may have set.
+    const run = (press: Press) =>
+      runPress(press, {
+        store,
+        tasks: snap.tasks,
+        area: snap.area,
+        shown: current,
+        place: currentPlace(at),
+        detailOf,
+        readFile,
+        lives: livesNow(),
+        logging,
+        diffing,
+        pinning: live,
+        scheduling,
+        pressing,
+        acting,
+      })
 
     const spanComponents = { Text, Link }
     const styled = (span: Span, key?: string) => styledSpan(spanComponents, span, key)
@@ -1082,7 +1087,7 @@ export const register: Register = on => {
       if (part.kind === 'text') return drawText(part.spans, wrap, part.key)
       if (part.kind === 'press')
         return (
-          <Button key={diffKey(from, part.key)} plain onPress={() => void diffing?.toggle(part.expands)}>
+          <Button key={diffKey(from, part.key)} plain onPress={() => void run(pressOfPart(part))}>
             {drawText(part.spans, wrap)}
           </Button>
         )
@@ -1102,119 +1107,24 @@ export const register: Register = on => {
       return (
         <Box key={part.key} flexDirection="row">
           {part.pieces.map((piece, i) => {
-            switch (piece.kind) {
-              case 'words':
-                return drawText(piece.spans, wrap, String(i))
-              case 'id':
-                return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void openPage(piece.task, from)}>
-                    {drawPress(piece.span, 'id')}
-                  </Button>
-                )
-              case 'file':
-                return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void openFile(piece.file, from)}>
-                    {drawPress(piece.span, 'file')}
-                  </Button>
-                )
-              case 'inbox':
-                return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void openInbox(piece.inbox, from)}>
-                    {drawPress(piece.span, 'inbox')}
-                  </Button>
-                )
-              case 'toggle': {
-                const key = piece.toggles
-                return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void toggleTeamKey(atomStore($), key)}>
-                    {styled(piece.span)}
-                  </Button>
-                )
-              }
-              case 'pin': {
-                const id = piece.pins
-                return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void live?.pin(id)}>
-                    {drawPress(piece.span, 'pin')}
-                  </Button>
-                )
-              }
-              case 'meeting': {
-                const press = piece.meets
-                return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void scheduling?.press(press)}>
-                    {drawPress(piece.span, 'meeting')}
-                  </Button>
-                )
-              }
-              case 'session-act': {
-                const press = piece.sessionAct
-                return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void pressing?.press(press)}>
-                    {drawPress(piece.span, press.act)}
-                  </Button>
-                )
-              }
-              case 'act': {
-                const { press, task } = piece.acts
-                return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void acting?.press(press, task)}>
-                    {drawPress(piece.span, 'act')}
-                  </Button>
-                )
-              }
-              case 'stats': {
-                const press = piece.stats
-                return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void pickStats(press)}>
-                    {drawPress(piece.span, 'stats')}
-                  </Button>
-                )
-              }
-            }
+            if (piece.kind === 'words') return drawText(piece.spans, wrap, String(i))
+            const press = pressOfPiece(piece, from)
+            return (
+              <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void run(press)}>
+                {piece.kind === 'toggle' ? styled(piece.span) : drawPress(piece.span, piece.kind === 'session-act' ? piece.sessionAct.act : piece.kind)}
+              </Button>
+            )
           })}
         </Box>
       )
     }
-    // A Teams tab key, a meeting's card in the Meetings view, a Stats tab section, a Done page's day or group, or a
-    // Tasks view heading's tasks, opened or closed.
-    const fold = (key: string) => pressFold(atomStore($), key, current, currentPlace(at))
-    // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
-    // conversation's Log page (`reads`), opens or closes a Teams tab key or a meeting's card (`folds`), or a Changes
-    // file's diff (`expands`: inline a file's row, docked a Changes search result), else words alone.
+    // A block's first Text: a press when the drawing names one for it (press.ts pressOfDrawn: its task's card or page,
+    // a conversation's Log page, a fold, a Changes file's diff), else words alone.
     const headOf = (drawn: Drawn) => {
-      const id = drawn.toggle
-      const opens = drawn.opens
-      const reads = drawn.reads
-      const folds = drawn.folds
-      const expands = drawn.expands
-      if (folds !== undefined)
-        return (
-          <Button key={drawn.key} plain onPress={() => void fold(folds)}>
-            {drawText(drawn.spans, drawn.wrap)}
-          </Button>
-        )
-      if (reads !== undefined)
-        return (
-          <Button key={drawn.key} plain onPress={() => void openLog(reads)}>
-            {drawText(drawn.spans, drawn.wrap)}
-          </Button>
-        )
-      if (expands !== undefined)
-        return (
-          <Button key={drawn.key} plain onPress={() => void diffing?.toggle(expands)}>
-            {drawText(drawn.spans, drawn.wrap)}
-          </Button>
-        )
-      if (opens !== undefined)
-        return (
-          <Button key={drawn.key} plain onPress={() => void openPage(opens, drawn.key)}>
-            {drawText(drawn.spans, drawn.wrap)}
-          </Button>
-        )
-      if (id === null) return drawText(drawn.spans, drawn.wrap, drawn.key)
+      const press = pressOfDrawn(drawn)
+      if (press === null) return drawText(drawn.spans, drawn.wrap, drawn.key)
       return (
-        <Button key={drawn.key} plain onPress={() => void toggle(id)}>
+        <Button key={drawn.key} plain onPress={() => void run(press)}>
           {drawText(drawn.spans, drawn.wrap)}
         </Button>
       )
