@@ -43,6 +43,7 @@ import type {
   FindField,
   LogRead,
   Nav,
+  PaneState,
   PaneView,
   Place,
   RefFile,
@@ -80,6 +81,7 @@ import {
   NOT_SETTING_UP,
   TEAM_READING,
 } from './pane-state'
+import type { PaneKey, PaneStore } from './pane-store'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { inboxFile, TaskDetails, type RefPlaces } from './details'
@@ -320,6 +322,62 @@ const sessionAnswer = atom({ plugin: 'teamrig-pane', key: 'sessionAnswer' } as c
 /** Where the owner's Note or Next on a task's card stands (owner-acts.ts): cleared at each session start. */
 const ownerAct = atom({ plugin: 'teamrig-pane', key: 'ownerAct' } as const, INITIAL_STATE.ownerAct)
 
+/** One key of the pane's state as the engine keeps it. */
+type Cell<T> = { readonly read: () => Promise<T>; readonly update: (change: (current: T) => T) => Promise<T> }
+
+/**
+ * The pane's state as the engine keeps it, behind the store port (pane-store.ts) the pane's steps take. Each key names
+ * its atom in its own read and update: the engine's scan reads a state call only when its atom is written there, never
+ * one picked from a map or passed in. A top-level function, as the engine wants every function `$` is passed to.
+ */
+function atomStore($: Context): PaneStore {
+  const cells: { readonly [K in PaneKey]: Cell<PaneState[K]> } = {
+    snapshot: { read: () => read($, snapshot), update: change => update($, snapshot, change) },
+    mode: { read: () => read($, mode), update: change => update($, mode, change) },
+    expanded: { read: () => read($, expanded), update: change => update($, expanded, change) },
+    tasksFolded: { read: () => read($, tasksFolded), update: change => update($, tasksFolded, change) },
+    size: { read: () => read($, size), update: change => update($, size, change) },
+    view: { read: () => read($, view), update: change => update($, view, change) },
+    changes: { read: () => read($, changes), update: change => update($, changes, change) },
+    known: { read: () => read($, known), update: change => update($, known, change) },
+    diffs: { read: () => read($, diffs), update: change => update($, diffs, change) },
+    copies: { read: () => read($, copies), update: change => update($, copies, change) },
+    logList: { read: () => read($, logList), update: change => update($, logList, change) },
+    logPage: { read: () => read($, logPage), update: change => update($, logPage, change) },
+    previousConversation: { read: () => read($, previousConversation), update: change => update($, previousConversation, change) },
+    requirements: { read: () => read($, requirements), update: change => update($, requirements, change) },
+    filter: { read: () => read($, barFilter), update: change => update($, barFilter, change) },
+    nav: { read: () => read($, nav), update: change => update($, nav, change) },
+    pages: { read: () => read($, pages), update: change => update($, pages, change) },
+    filePages: { read: () => read($, filePages), update: change => update($, filePages, change) },
+    findField: { read: () => read($, findField), update: change => update($, findField, change) },
+    ring: { read: () => read($, ring), update: change => update($, ring, change) },
+    banner: { read: () => read($, bannerOpen), update: change => update($, bannerOpen, change) },
+    previousOpen: { read: () => read($, previousOpen), update: change => update($, previousOpen, change) },
+    setup: { read: () => read($, setup), update: change => update($, setup, change) },
+    bodyScroll: { read: () => read($, bodyScroll), update: change => update($, bodyScroll, change) },
+    teamTree: { read: () => read($, teamTree), update: change => update($, teamTree, change) },
+    teamToggled: { read: () => read($, teamToggled), update: change => update($, teamToggled, change) },
+    meetings: { read: () => read($, meetings), update: change => update($, meetings, change) },
+    meetingsOpen: { read: () => read($, meetingsOpen), update: change => update($, meetingsOpen, change) },
+    meetingAnswer: { read: () => read($, meetingAnswer), update: change => update($, meetingAnswer, change) },
+    meetingAsked: { read: () => read($, meetingAsked), update: change => update($, meetingAsked, change) },
+    sessionAnswer: { read: () => read($, sessionAnswer), update: change => update($, sessionAnswer, change) },
+    ownerAct: { read: () => read($, ownerAct), update: change => update($, ownerAct, change) },
+    stats: { read: () => read($, stats), update: change => update($, stats, change) },
+    statsScope: { read: () => read($, statsScope), update: change => update($, statsScope, change) },
+    statsRange: { read: () => read($, statsRange), update: change => update($, statsRange, change) },
+    statsList: { read: () => read($, statsList), update: change => update($, statsList, change) },
+    statsFrom: { read: () => read($, statsFrom), update: change => update($, statsFrom, change) },
+    statsToggled: { read: () => read($, statsToggled), update: change => update($, statsToggled, change) },
+    doneToggled: { read: () => read($, doneToggled), update: change => update($, doneToggled, change) },
+  }
+  return {
+    read: key => cells[key].read(),
+    update: (key, change) => cells[key].update(change),
+  }
+}
+
 /** The open cards less one. */
 function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
   return Object.fromEntries(Object.entries(current).filter(([key]) => key !== id))
@@ -384,7 +442,7 @@ async function clearSearch($: Context): Promise<void> {
 
 /** The mine or all view, the list shown alone: the rows a page left from belong to the other list. */
 async function showMode($: Context, shown: ViewMode): Promise<void> {
-  await update($, mode, () => shown)
+  await atomStore($).update('mode', () => shown)
   await go($, current => reset(current, false))
 }
 
