@@ -47,7 +47,7 @@ import type {
   TeamSettings,
 } from '../types'
 import { claudeCodeCheck, claudeCodeOldLine } from './claude-code-version'
-import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
+import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs, TIE_HINT } from './command'
 import { bounded } from './bounded-run'
 import { LiveRegister, pinKey } from './live'
 import {
@@ -997,6 +997,7 @@ export const register: Register = on => {
       noteHold,
       wraps,
       hostOld: claudeCodeOldLine,
+      tieHint: TIE_HINT,
     })
     keysMemo = screen.memo
     const {

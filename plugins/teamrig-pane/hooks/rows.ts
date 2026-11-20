@@ -8,7 +8,6 @@
 import type { BarStatus, ExpandedTasks, LogRead, MeetingPress, OwnerActPress, RefFile, SessionPress, Snapshot, StatsChoice, StatsListPick, TaskRow, TaskStatus, ViewMode } from '../types'
 import { actRows, type CardActs } from './act-rows'
 import { cardRows, GUIDE } from './card'
-import { COMMAND } from './command'
 import type { StatsRange } from './core/read/index'
 import { teamSessions } from './leads'
 import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
@@ -25,7 +24,7 @@ import { cells } from './width'
  * (file-page.ts); never split. With `inbox` the text is an unread count (a Teams tab card's), which a press
  * on opens: the session's own in the Inbox view, another area's as a file's page at its first unread line; never split. With `toggles` the text is a press that opens or closes that Teams tab key
  * (team-rows.ts): a leader's fold mark its node, its id its card; never split. With `pins` the text is a session's id
- * a press on ties the tab to, as `/teamrig-pane <session>` does (a tab tied to no session, noSessionBlock); never split.
+ * a press on ties the tab to (a tab tied to no session, noSessionBlock); never split.
  * With `meets` the text is a press on that meeting (a meeting card's Start, Move, Drop, End, Postpone or a choice of its second line, meetings-rows.ts); never
  * split. With `sessionAct` the text is a press that runs that act on that session (session-acts.ts): a Teams tab row's
  * [Meet], team-rows.ts, which brings the owner its cards, or its [Wake], which wakes the session; never split. With `acts` the text is a press of the owner's Note or Next on
@@ -191,19 +190,26 @@ export const GLYPH_COLOR: Partial<Record<TaskStatus, Tone>> = { 'in-progress': '
 const SESSION_GAP: Span = { text: '   ' }
 
 /**
- * What the Tasks and Inbox views show while the tab is tied to no session (it has no area): the team's sessions, each
- * a press that ties the tab to it as `/teamrig-pane <session>` does; with no team config read, that command alone.
+ * The words a front end ties a tab to a session with, as it writes them to its user (the Claude Code dock's slash
+ * command with its argument); null for a front end that has none, whose user ties the tab by a press alone.
  */
-export function noSessionBlock(key: string, snap: Pick<Snapshot, 'team' | 'leads'>): Block {
+export type TieHint = string | null
+
+/**
+ * What the Tasks and Inbox views show while the tab is tied to no session (it has no area): the team's sessions, each
+ * a press that ties the tab to it, then the front end's own words for it, `tie`, when it has any; with no team config
+ * read, those words alone, or with none only that the tab is tied to no session.
+ */
+export function noSessionBlock(key: string, snap: Pick<Snapshot, 'team' | 'leads'>, tie: TieHint = null): Block {
   const team = snap.team === null ? '' : ` of team ${snap.team}`
-  if (snap.leads === null) return single(key, [{ text: `This tab is not tied to a session${team} yet: /${COMMAND} <session> ties it to one.`, dim: true }])
+  if (snap.leads === null) return single(key, [{ text: `This tab is not tied to a session${team} yet${tie === null ? '.' : `: ${tie} ties it to one.`}`, dim: true }])
   const sessions = teamSessions(snap.leads).flatMap((id, i): Span[] => (i === 0 ? [{ text: id, pins: id }] : [SESSION_GAP, { text: id, pins: id }]))
   return {
     key,
     rows: [
       { key, spans: [{ text: `This tab is not tied to a session${team} yet. Press the one this tab is:`, dim: true }] },
       { key: `${key}:sessions`, spans: sessions },
-      { key: `${key}:command`, spans: [{ text: `(or /${COMMAND} <session>)`, dim: true }] },
+      ...(tie === null ? [] : [{ key: `${key}:command`, spans: [{ text: `(or ${tie})`, dim: true }] }]),
     ],
   }
 }
@@ -365,8 +371,8 @@ export function noneActiveText(asked: number, pinned: string | null): string {
  * of others (its asks still active, which the bar counts as waiting too) and Done today, each heading its count, those
  * in `folded` their heading alone.
  */
-function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null, folded: ReadonlySet<string>, acts: CardActs | null): Block[] {
-  if (snap.area === null) return [noSessionBlock('no-area', snap)]
+function mineBlocks(snap: Snapshot, expanded: ExpandedTasks, filter: BarStatus | null, folded: ReadonlySet<string>, acts: CardActs | null, tie: TieHint): Block[] {
+  if (snap.area === null) return [noSessionBlock('no-area', snap, tie)]
   const tree = treeOf(snap)
   const view = areaView(snap.tasks, snap.area, tree)
   // The session's own area goes unnamed, as the title above names the session (session-title.ts); a pin names the area it shows.
@@ -422,7 +428,8 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks, folded: ReadonlySet<
  * an empty list or a missing area it has not yet looked for. `filter`, the status bar's (status-bar.ts),
  * narrows the mine view to the area's tasks at that status; null shows them all. The headings in `folded` (a section's
  * key in mine, `owner:<id>` in all) show without their tasks. An open card ends in the owner's acts drawn from `acts`
- * (act-rows.ts); none with `acts` null.
+ * (act-rows.ts); none with `acts` null. `tie` is the front end's words for tying a tab, which a tab tied to no session
+ * shows (noSessionBlock).
  */
 export function paneBlocks(
   snap: Snapshot,
@@ -431,11 +438,12 @@ export function paneBlocks(
   filter: BarStatus | null = null,
   folded: readonly string[] = NOTHING_FOLDED,
   acts: CardActs | null = null,
+  tie: TieHint = null,
 ): Block[] {
   const reading = readingBlock(snap)
   if (reading !== null) return [reading]
   const keys = new Set(folded)
-  return [...problemBlocks(snap), ...(mode === 'mine' ? mineBlocks(snap, expanded, filter, keys, acts) : allBlocks(snap, expanded, keys, acts))]
+  return [...problemBlocks(snap), ...(mode === 'mine' ? mineBlocks(snap, expanded, filter, keys, acts, tie) : allBlocks(snap, expanded, keys, acts))]
 }
 
 /**
