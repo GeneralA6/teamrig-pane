@@ -12,7 +12,7 @@ export const USAGE = `usage: /${COMMAND} ${ARGUMENT_HINT}`
 
 /**
  * open: show the pane; mode: switch the view; auto: drop this session's pin and follow its
- * `inbox read` again; pin: show the session `word` names (an id or a name, looked up by sessions.ts) in
+ * `inbox read` again; pin: show the session `word` names (an id or a name, looked up by session-roster.ts) in
  * this session from now on. The keywords come first, so a session named mine, all or auto is pinned by its id.
  */
 export type PaneCommand = { kind: 'open' } | { kind: 'mode'; mode: ViewMode } | { kind: 'auto' } | { kind: 'pin'; word: string }

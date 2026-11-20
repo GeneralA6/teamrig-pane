@@ -2,8 +2,7 @@
 // again at each poll until it is (setup.ts). The register is always the one teamrig keeps for the session's team
 // (`<kit home>/teams/<team>/state`, or the team config's `paths.state` and `paths.inbox`, read by teamrig's own
 // reader): a team config is the one setup, as `teamrig read` answers only for a team. The goals document comes from
-// its variable or the pane's settings file, else none. The team's config and rename log, read again by sessions.ts at each
-// `/teamrig-pane <session>`, name its sessions. The team config also sets how long a task may stand untouched by its
+// its variable or the pane's settings file, else none. The team config also sets how long a task may stand untouched by its
 // owner before it reads NOT PICKED UP, the team's zone (its `timeZone`, else the machine's, as teamrig resolves it),
 // which waits are the owner's (its `register.ownerSource` and `register.requireDecisionCard`), how the team ranks its
 // tasks (its `focus`) and how many hours teamrig keeps its turn log, the Log view's window.

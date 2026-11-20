@@ -1370,7 +1370,7 @@ describe('command', () => {
     expect(parsePaneArgs('')).toEqual({ kind: 'open' })
     expect(parsePaneArgs(' All ')).toEqual({ kind: 'mode', mode: 'all' })
     expect(parsePaneArgs('auto')).toEqual({ kind: 'auto' })
-    // Any other word names a session, by its id or its name (sessions.ts looks it up).
+    // Any other word names a session, by its id or its name (session-roster.ts looks it up).
     expect(parsePaneArgs('po')).toEqual({ kind: 'pin', word: 'po' })
     expect(parsePaneArgs(' Web-API ')).toEqual({ kind: 'pin', word: 'web-api' })
     expect(parsePaneArgs('no such area!')).toEqual({ kind: 'pin', word: 'no such area!' })

@@ -12,7 +12,7 @@
 import type { Snapshot } from '../types'
 import { SESSION_NAME } from './core/read/index'
 import { messageOf } from './errors'
-import type { TaskRegisterSource } from './source'
+import type { SnapshotSource } from './document-source'
 import { sameView } from './view'
 
 export const POLL_MS = 3_000
@@ -21,8 +21,8 @@ export const TICK_MS = 60_000
 export type Timer = { cancel: () => void }
 
 export type LivePorts = {
-  /** The register, or the problem the pane shows while nothing names where it is (places.ts). */
-  source: TaskRegisterSource | { missing: string }
+  /** What answers the snapshot (document-source.ts), or the problem the pane shows while nothing names where the register is (places.ts). */
+  source: SnapshotSource | { missing: string }
   sessionId: () => Promise<string>
   now: () => Promise<number>
   /** Writes the snapshot atom (each write redraws the pane). */
