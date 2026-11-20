@@ -183,7 +183,7 @@ describe('logPageBlocks', () => {
     // An item's bullet is drawn and its wrapped lines start under its words; each line's key names its entry and its line.
     expect(blocks[2]?.rows[2]).toEqual({ key: 'log-page:2026-10-19T20:01:00Z:reply:line:2', spans: [{ text: '  • ' }, { text: 'reader' }], hang: { text: '    ' } })
     expect(blocks[1]?.rows[0]?.spans[0]).toEqual({ text: 'owner', bold: true, color: 'suggestion' })
-    expect(blocks[2]?.rows[0]?.spans[0]).toEqual({ text: 'Claude', bold: true, color: 'claude' })
+    expect(blocks[2]?.rows[0]?.spans[0]).toEqual({ text: 'Claude', bold: true, color: 'accent' })
   })
 
   test('a conversation the list holds heads its page with its title as the list draws it, over its session and count', () => {

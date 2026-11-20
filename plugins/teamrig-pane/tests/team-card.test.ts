@@ -134,7 +134,7 @@ describe('sessionCard', () => {
     ])
     const colors = Object.values(ROLE_COLORS)
     expect(new Set(colors).size).toBe(colors.length)
-    expect(valueOf(sessionCard(sessionOf('acme', 'lead'), GUIDE, UTC), 'team-card:acme/lead:role')).toEqual([{ text: 'lead', color: 'claude' }, SEPARATOR, { text: 'leads 2 sessions' }])
+    expect(valueOf(sessionCard(sessionOf('acme', 'lead'), GUIDE, UTC), 'team-card:acme/lead:role')).toEqual([{ text: 'lead', color: 'accent' }, SEPARATOR, { text: 'leads 2 sessions' }])
     expect(valueOf(sessionCard(sessionOf('acme', 'api'), GUIDE, UTC), 'team-card:acme/api:role')).toEqual([{ text: 'area owner' }])
   })
 

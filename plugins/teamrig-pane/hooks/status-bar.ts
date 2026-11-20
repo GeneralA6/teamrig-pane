@@ -9,12 +9,12 @@
 // its count, or the count's key, filters the list to that status (rows.ts) and a second press clears
 // it; the filtered segment and count draw bold, a dim line under the counts says so. With no filter on, that dim line
 // says a count is a press instead (HINT_TEXT). Pure data: register.tsx draws the pieces and keeps the filter.
-import type { ThemeKey } from 'claude-code'
 import type { BarStatus, Snapshot, TaskRow } from '../types'
 import { ACTIVE_STATUSES, type TimeZone } from './core/read/index'
 import { wrapRow } from './layout'
 import { listedTasks, treeOf } from './meta'
 import type { Span } from './rows'
+import type { Tone } from './tone'
 import { cells } from './width'
 import { dayOf, type Clock } from './zone'
 
@@ -29,7 +29,7 @@ type BarLook = {
   /** The block its segment is drawn with. */
   block: string
   /** Its segment's color and its glyph's, the rows' (rows.ts GLYPH_COLOR); none draws them dim. */
-  color: ThemeKey | undefined
+  color: Tone | undefined
   /** The key that filters to it, one free of the pane's others (keys-page.ts KEY_GROUPS, its test holding them apart). */
   hotkey: string
   /** What the list says when it is filtered to the status and none is left. */

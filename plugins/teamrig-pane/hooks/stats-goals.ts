@@ -7,10 +7,10 @@
 // move of its target, its pace and its tasks. Under the goals, the share of the range's done tasks that served none.
 // Pure.
 import type { StatsGoal, StatsGoals, StatsListRow, StatsView } from '../types'
-import type { ThemeKey } from 'claude-code'
 import { GOAL_PACE_DAYS, type GoalSlip, type GoalState, type TimeZone } from './core/read/index'
 import { FOLDED_MARK, OPEN_MARK, SEPARATOR, titleRow, type Block, type Row, type Span } from './rows'
 import { dim, HANG, INDENT, noteRow, padded, percent, plural, sectionBlock, title, VIEW } from './stats-parts'
+import type { Tone } from './tone'
 import { cells } from './width'
 import { dayOf } from './zone'
 
@@ -28,7 +28,7 @@ export const PLANNED_GLYPH = '░'
 /** The goal states the section's header names, as `teamrig stats` does on its GOALS line; the others it only counts. */
 const NAMED_STATES: readonly GoalState[] = ['at risk', 'late']
 /** A state's colour in a goal's row; a done goal's state is dim. */
-const STATE_COLOR: Readonly<Record<Exclude<GoalState, 'done'>, ThemeKey>> = { late: 'error', 'at risk': 'warning', 'on track': 'success' }
+const STATE_COLOR: Readonly<Record<Exclude<GoalState, 'done'>, Tone>> = { late: 'error', 'at risk': 'warning', 'on track': 'success' }
 /** Between a goal row's columns. */
 const GAP = 2
 const DAY_MS = 86_400_000
@@ -146,7 +146,7 @@ function headerRow(axis: Axis, columns: Columns): Row {
 function goalRow(key: string, goal: StatsGoal, open: boolean, view: StatsGoals, axis: Axis, columns: Columns): Row {
   const spans = columnSpans([
     { span: { text: goal.tag, bold: true }, cells: columns.tag },
-    { span: { text: timeline(goal, axis, columns.timeline), color: 'claude' }, cells: columns.timeline },
+    { span: { text: timeline(goal, axis, columns.timeline), color: 'accent' }, cells: columns.timeline },
     { span: { text: doneWords(goal) }, cells: columns.done },
     { span: dim(shortDay(goal.forecast)), cells: columns.forecast },
     { span: stateSpan(goal, stateWords(goal, view.today)), cells: columns.state },

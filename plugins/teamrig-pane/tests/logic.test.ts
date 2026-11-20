@@ -932,7 +932,7 @@ describe('rows', () => {
     expect(blockAt(blocks, 'security:T1')?.rows.map(r => r.key)).toEqual(['security:T1', 'security-meta:T1'])
     expect(metaAt(blocks, 'security-meta:T1')).toBe('      p3 · waiting since 14:00 UTC: needs owner')
     expect(rowAt(blocks, 'owner:security')?.spans).toEqual([{ text: 'security', bold: true }, { text: ' · 1 active · 1 waiting', dim: true }])
-    expect(rowAt(blocks, 'owner:etl')?.spans).toEqual([{ text: 'etl', color: 'claude', bold: true }, { text: ' (you) · 1 active', dim: true }])
+    expect(rowAt(blocks, 'owner:etl')?.spans).toEqual([{ text: 'etl', color: 'accent', bold: true }, { text: ' (you) · 1 active', dim: true }])
     expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => b.opensSection)).toEqual([false, true])
   })
 
@@ -956,7 +956,7 @@ describe('rows', () => {
     const tasks = fold(createLine('T1', { owner: 'security', by: 'lead', at: NOW }), createLine('T2', { owner: 'etl', by: 'etl', at: NOW, source: 'etl' }))
     const blocks = paneBlocks(snapshotOf(tasks, 'etl'), 'all', NOTHING_EXPANDED, null, ['owner:etl'])
     expect(blocks.map(b => b.key)).toEqual(['owner:etl', 'owner:security', 'security:T1'])
-    expect(rowAt(blocks, 'owner:etl')?.spans).toEqual([{ text: '▸ ', dim: true }, { text: 'etl', color: 'claude', bold: true }, { text: ' (you) · 1 active', dim: true }])
+    expect(rowAt(blocks, 'owner:etl')?.spans).toEqual([{ text: '▸ ', dim: true }, { text: 'etl', color: 'accent', bold: true }, { text: ' (you) · 1 active', dim: true }])
     expect(blocks.filter(b => b.key.startsWith('owner:')).map(b => [b.folds, b.opensSection])).toEqual([['owner:etl', false], ['owner:security', true]])
   })
 

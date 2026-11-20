@@ -5,7 +5,6 @@
 // the pane costs, so a block is one Text (its unstyled spans plain strings, a task's inside the Button that
 // opens its card), never a box per row, and inline the rows are capped. An open task's card (card.ts) takes
 // its meta line's place as a second Text under the Button, outside it, so the card's links take their own press.
-import type { ThemeKey } from 'claude-code'
 import type { BarStatus, ExpandedTasks, LogRead, MeetingPress, OwnerActPress, RefFile, SessionPress, Snapshot, StatsChoice, StatsListPick, TaskRow, TaskStatus, ViewMode } from '../types'
 import { actRows, type CardActs } from './act-rows'
 import { cardRows, GUIDE } from './card'
@@ -14,12 +13,13 @@ import type { StatsRange } from './core/read/index'
 import { teamSessions } from './leads'
 import { metaParts, treeOf, whenWords, type PaneTree } from './meta'
 import { BAR_LOOK } from './status-bar'
+import type { Tone } from './tone'
 import { areaView, ownerGroups, statusLines } from './view'
 import { cells } from './width'
 
 /**
- * A run of text in one style. No `color` (absent or undefined, as a span picks it by a condition) draws in the theme's
- * text color. With `href` the text is a link to that address (a card's Links row), never split across lines. With
+ * A run of text in one style. `color` is a tone (tone.ts), which the surface drawing the span gives its color; none
+ * (absent or undefined, as a span picks it by a condition) draws in the surface's text color. With `href` the text is a link to that address (a card's Links row), never split across lines. With
  * `task` the text is that task's id in an open card (ids.ts), which a press on opens as a page; never split either.
  * With `file` the text names a file a card's Reference row lists (ref-file.ts), which a press on opens as a page too
  * (file-page.ts); never split. With `inbox` the text is an unread count (a Teams tab card's), which a press
@@ -36,7 +36,7 @@ import { cells } from './width'
  */
 export type Span = {
   text: string
-  color?: ThemeKey | undefined
+  color?: Tone | undefined
   bold?: boolean
   dim?: boolean
   underline?: boolean
@@ -185,7 +185,7 @@ export const SEPARATOR: Span = { text: ' · ', dim: true }
 
 /** By the task's status: `◑` is shipped work being verified, the other half of `◐` working. */
 export const GLYPH: Readonly<Record<TaskStatus, string>> = { open: '○', 'in-progress': '◐', verifying: '◑', waiting: '■', done: '✓', dropped: '✗' }
-export const GLYPH_COLOR: Partial<Record<TaskStatus, ThemeKey>> = { 'in-progress': 'warning', verifying: 'success', waiting: 'error', done: 'success' }
+export const GLYPH_COLOR: Partial<Record<TaskStatus, Tone>> = { 'in-progress': 'warning', verifying: 'success', waiting: 'error', done: 'success' }
 
 /** Between two of the sessions a tab tied to none lists. */
 const SESSION_GAP: Span = { text: '   ' }
@@ -406,7 +406,7 @@ function allBlocks(snap: Snapshot, expanded: ExpandedTasks, folded: ReadonlySet<
     const waiting = group.waiting > 0 ? ` · ${group.waiting} waiting` : ''
     const verifying = group.verifying > 0 ? ` · ${group.verifying} verifying` : ''
     const isOwn = group.owner === snap.area
-    const owner: Span = { text: group.owner, color: isOwn ? 'claude' : undefined }
+    const owner: Span = { text: group.owner, color: isOwn ? 'accent' : undefined }
     const mark = !isOwn ? '' : snap.areaSource === 'pinned' ? ' (pinned)' : ' (you)'
     const key = `owner:${group.owner}`
     // The first group sits under the buttons, already a gap away.
