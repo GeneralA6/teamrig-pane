@@ -58,6 +58,7 @@ const ROW: TaskRow = {
   id: 'T7',
   title: 'Draw the list',
   description: 'So a row reads the same wherever it came from.',
+  descriptionCut: null,
   owner: 'api',
   priority: 2,
   type: 'bug',

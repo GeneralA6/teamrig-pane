@@ -51,6 +51,8 @@ function rowOf(task: Fields): TaskRow {
     id: task.text('id'),
     title: task.part('title').text('text'),
     description: task.partOrNull('description')?.text('text') ?? null,
+    // Interface 1.0 serves no mark of a description the register's snapshot left out, so a row never says one was.
+    descriptionCut: null,
     owner: task.text('owner'),
     priority: task.number('priority'),
     type: typeOf(task.textOrNull('type')),
