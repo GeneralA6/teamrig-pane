@@ -72,12 +72,17 @@ import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { TaskDetails, type RefPlaces } from './details'
 import {
+  closeLog as leaveLog,
   closeStatsFrom as leaveStatsFrom,
   closeStatsList as leaveStatsList,
   openFile as pressFile,
   openInbox as pressInbox,
   openPage as pressPage,
   pickStats as pressStats,
+  submitChanges as enterChanges,
+  submitLog as enterLog,
+  submitTasks as enterTasks,
+  submitTeam as enterTeam,
   toggleCard,
   type ReadsFile,
 } from './presses'
@@ -121,15 +126,12 @@ import { PaneSizer, SIZE_KEY } from './size'
 import { gitCheck, requirementProblems } from './requirements'
 import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges } from './changes'
 import { changesLabel, paneTitle } from './changes-rows'
-import { changesResultKey, diffKeyOf, searchChanges } from './changes-search'
 import { LiveDiffs } from './diff'
 import { LiveCopies } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { LivePrevious } from './previous-conversation'
-import { logResultKey, searchLog } from './log-search'
 import { LiveTeam } from './team-source'
-import { cardKey, openedWith, toggledWith } from './team-rows'
-import { searchTeam, TEAM_SEARCH_VIEW } from './team-search'
+import { toggledWith } from './team-rows'
 import { SetupWatch } from './setup'
 import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
@@ -159,10 +161,8 @@ import { weekWords } from './done-rows'
 import { treeOf } from './meta'
 import { clockOf, machineZoneOf, zoneNamed } from './zone'
 import { KEYS_HOTKEY, KEYS_LABEL } from './keys-page'
-import { matchCount, searchTasks, topResult } from './task-search'
-import { SEARCH_VIEW } from './search-rows'
-import { resultKey } from './search-view'
-import { FIRST_MEMO, fieldAnew, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
+import { matchCount } from './task-search'
+import { FIRST_MEMO, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -1034,65 +1034,13 @@ export const register: Register = on => {
     // Back from a conversation's page shows the list, read again, from its top, or the search the page was opened from:
     // the page drew no Find field, so it comes back a fresh round holding the search's words (fieldAnew).
     const openLog = (conversation: LogRead) => openConversation(store, conversation, logging)
-    const closeLog = async () => {
-      await logging?.close()
-      const shown = await read($, nav)
-      await update($, findField, field => fieldAnew(field, shown))
-      await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
-    }
-    // Enter in the Find field, on its words as typed (a redraw may lag behind them): with more than one match it moves
-    // the ring onto the first result drawn (task-search.ts topResult), where Enter opens it and the arrows move on; with
-    // one it opens that page and moves the ring onto the page's back step: left in the field, a new round's and empty,
-    // it would type the next keys into a new search, so b, f and s would never answer.
-    const submit = async (query: string) => {
-      const results = searchTasks(snap.tasks, query, treeOf(snap))
-      const top = topResult(results)
-      if (top === null) return
-      if (matchCount(results) > 1) {
-        await focusOn($, resultKey(SEARCH_VIEW, top.id))
-        return
-      }
-      await openPage(top.id, fieldKey(field))
-      await focusOn($, 'back')
-    }
-    // Enter in the Find field on the Teams tab: with one match it opens that session's card too (openedWith, never
-    // closing it), and either way moves the ring onto the first match drawn, where Enter opens or closes its card.
-    const submitTeam = async (query: string) => {
-      const tree = await read($, teamTree)
-      const top = tree.kind === 'tree' ? searchTeam(tree.root, query) : []
-      const first = top[0]
-      if (first === undefined) return
-      if (top.length === 1) await update($, teamToggled, toggled => openedWith(toggled, cardKey(first.row.key)))
-      await focusOn($, resultKey(TEAM_SEARCH_VIEW, first.row.key))
-    }
-    // Enter in the Find field on the Log view's list: with more than one match it moves the ring onto the first drawn;
-    // with one it opens that conversation's page and moves the ring onto the page's back step, as submit does. Back
-    // from the page shows the search again: its place is still the search.
-    const submitLog = async (query: string) => {
-      const top = searchLog(await read($, logList), snap, query)
-      const first = top[0]
-      if (first === undefined) return
-      if (top.length > 1) {
-        await focusOn($, logResultKey(first.row.conversation))
-        return
-      }
-      const { session, claude } = first.row.conversation
-      await openLog({ session, claude })
-      await focusOn($, 'back')
-    }
-    // Enter in the Find field on the Changes view: with one match it opens that file's diff too (never closing it), and
-    // either way moves the ring onto the first match with a diff, where Enter opens or closes it; an untracked folder
-    // has none to open.
-    const submitChanges = async (query: string) => {
-      const hits = searchChanges(await read($, changes), query)
-      const first = hits.flatMap(hit => {
-        const key = diffKeyOf(hit.row)
-        return key === null ? [] : [{ hit, key }]
-      })[0]
-      if (first === undefined) return
-      if (hits.length === 1 && (await read($, diffs))[first.key] === undefined) await diffing?.toggle(first.key)
-      await focusOn($, changesResultKey(first.hit.row))
-    }
+    const closeLog = () => leaveLog(store, logging)
+    // Enter in each view's Find field (presses.ts), on its words as typed (a redraw may lag behind them) and on the
+    // tasks this drawing shows.
+    const submit = (query: string) => enterTasks(store, snap, query, moveFocus, detailOf)
+    const submitTeam = (query: string) => enterTeam(store, query, moveFocus)
+    const submitLog = (query: string) => enterLog(store, snap, query, moveFocus, logging)
+    const submitChanges = (query: string) => enterChanges(store, query, moveFocus, diffing)
 
     const spanComponents = { Text, Link }
     const styled = (span: Span, key?: string) => styledSpan(spanComponents, span, key)
