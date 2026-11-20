@@ -31,6 +31,8 @@ export type DiffPorts = {
   git: (args: readonly string[], cwd: string) => Promise<GitRun>
   /** A file written outside git as it is now against its copy from before the session first wrote it (outside-copies.ts). Never rejects. */
   outside: (path: string) => Promise<FileDiff>
+  /** The diffs the engine holds now: they can differ from the last written, as Claude Code can set the stored copy back to its default. */
+  held: () => Promise<OpenDiffs>
   /** Writes the diffs atom (each write redraws the pane). */
   publish: (next: OpenDiffs) => Promise<void>
 }
@@ -116,8 +118,6 @@ export function fileOf(changes: ChangesSnapshot, key: string): DiffFile | null {
 export class LiveDiffs {
   private readonly open: Map<string, FileDiff>
   private changes: ChangesSnapshot
-  /** What was last written, as JSON; null before the first write or after a failed one. */
-  private shown: string | null = null
 
   private readonly ports: DiffPorts
 
@@ -164,14 +164,11 @@ export class LiveDiffs {
   /** Writes the open diffs when they changed; a failed write is tried again by the next. */
   private async write(): Promise<void> {
     const next: OpenDiffs = Object.fromEntries(this.open)
-    const json = JSON.stringify(next)
-    if (json === this.shown) return
-    this.shown = null
     try {
+      if (JSON.stringify(next) === JSON.stringify(await this.ports.held())) return
       await this.ports.publish(next)
-      this.shown = json
     } catch {
-      // Left unshown: the next write tries again.
+      // Left unwritten: the next write finds the held diffs still differ and tries again.
     }
   }
 }

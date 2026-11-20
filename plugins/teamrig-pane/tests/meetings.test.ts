@@ -48,7 +48,7 @@ const LISTED = ok(JSON.stringify({ meetings: [PRINTED] }))
 const NOW = Date.UTC(2026, 9, 13, 14, 0)
 const UTC_CLOCK: Clock = { now: NOW, zone: TimeZone.UTC }
 
-type Recorded = { runs: { args: readonly string[]; timeoutMs: number }[]; views: MeetingsView[]; told: MeetingAnswer[]; asked: (MeetingAsked | null)[] }
+type Recorded = { runs: { args: readonly string[]; timeoutMs: number }[]; views: MeetingsView[]; told: MeetingAnswer[]; asked: (MeetingAsked | null)[]; atom: { value: MeetingsView } }
 
 /** Ports recording each run, publish, tell and ask; `answers` answer the runs in turn, the last one again after. */
 function portsOf(answers: readonly (CliRun | Error)[], shown = true): MeetingsPorts & Recorded {
@@ -56,7 +56,10 @@ function portsOf(answers: readonly (CliRun | Error)[], shown = true): MeetingsPo
   const views: MeetingsView[] = []
   const told: MeetingAnswer[] = []
   const asked: (MeetingAsked | null)[] = []
+  const held: { value: MeetingsView } = { value: { kind: 'reading' } }
   return {
+    held: async () => held.value,
+    atom: held,
     runs,
     views,
     told,
@@ -75,6 +78,7 @@ function portsOf(answers: readonly (CliRun | Error)[], shown = true): MeetingsPo
     isShown: async () => shown,
     publish: async view => {
       views.push(view)
+      held.value = view
     },
     tell: async answer => {
       told.push(answer)
@@ -306,5 +310,28 @@ describe('LiveMeetings', () => {
     expect(ports.views).toEqual([{ kind: 'failed', reason: `teamrig meeting list did not finish: no answer in ${limitS} s` }])
     await live.refresh()
     expect(ports.views[1]).toEqual({ kind: 'list', meetings: [MEETING], unreadable: 0 })
+  })
+})
+
+describe('LiveMeetings against the view the engine holds', () => {
+  test('a view the engine set back to its default is written again by the next read that answers the same', async () => {
+    const ports = portsOf([])
+    const live = new LiveMeetings({ kind: 'missing', problem: 'teamrig is not installed' }, ports)
+    await live.refresh()
+    expect(ports.views).toEqual([{ kind: 'failed', reason: 'teamrig is not installed' }])
+
+    ports.atom.value = { kind: 'reading' }
+    await live.poll()
+    expect(ports.views).toEqual([{ kind: 'failed', reason: 'teamrig is not installed' }, { kind: 'failed', reason: 'teamrig is not installed' }])
+    expect(ports.atom.value).toEqual({ kind: 'failed', reason: 'teamrig is not installed' })
+  })
+
+  test('a view the engine still holds is not written again', async () => {
+    const ports = portsOf([])
+    const live = new LiveMeetings(CLI, ports)
+    await live.refresh()
+    await live.poll()
+    await live.poll()
+    expect(ports.views.length).toBe(1)
   })
 })

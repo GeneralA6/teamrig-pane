@@ -206,7 +206,9 @@ function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
   const register: { answer: Pick<Snapshot, 'tasks' | 'ownerCards' | 'taskCounts'> } = { answer: { tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS } }
   const views: TeamView[] = []
   let failWrites = false
+  const atom: { value: TeamView } = { value: { kind: 'reading' } }
   const live = new LiveTeam(disk, FILES, {
+    held: async () => atom.value,
     folders: async dir => {
       if (listed.failure !== null) throw new Error(listed.failure)
       return dir === TEAMS ? listed.names : []
@@ -216,13 +218,14 @@ function fakeTeam(disk: MemoryFiles, inbox: InboxPaths | null = null) {
     publish: async view => {
       if (failWrites) throw new Error('write refused')
       views.push(view)
+      atom.value = view
     },
     now: async () => clock.now,
   }, inbox)
   const setFailWrites = (fails: boolean) => {
     failWrites = fails
   }
-  return { live, shown, listed, register, clock, views, failWrites: setFailWrites }
+  return { live, shown, listed, register, clock, views, atom, failWrites: setFailWrites }
 }
 
 describe('LiveTeam', () => {
@@ -382,5 +385,24 @@ describe('LiveTeam', () => {
     expect(timers).toEqual([{ ms: POLL_MS, isCancelled: false }])
     live.stop()
     expect(timers[0]?.isCancelled).toBe(true)
+  })
+})
+
+describe('LiveTeam against the view the engine holds', () => {
+  test('a view the engine set back to its default is written again by the next refresh that reads the same', async () => {
+    const { live, views, atom } = fakeTeam(teamsDisk())
+    await live.refresh()
+    expect(views.length).toBe(1)
+    atom.value = { kind: 'reading' }
+    await live.refresh()
+    expect(views.length).toBe(2)
+    expect(views[1]).toEqual(views[0])
+  })
+
+  test('a view the engine still holds is not written again', async () => {
+    const { live, views } = fakeTeam(teamsDisk())
+    await live.refresh()
+    await live.refresh()
+    expect(views.length).toBe(1)
   })
 })

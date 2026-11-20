@@ -27,7 +27,9 @@ function fakePorts(first: Places | Error) {
   const calls: string[] = []
   const shown: Array<SetupView | null> = []
   const bound: FoundPlaces[] = []
+  const atom: { value: SetupView | null } = { value: null }
   const ports: SetupPorts = {
+    held: async () => atom.value,
     find: async () => {
       calls.push('find')
       if (answer instanceof Error) throw answer
@@ -37,6 +39,7 @@ function fakePorts(first: Places | Error) {
       calls.push(view === null ? 'clear' : 'show')
       if (isShowFailing) throw new Error('store is down')
       shown.push(view)
+      atom.value = view
     },
     bind: async places => {
       calls.push('bind')
@@ -46,6 +49,7 @@ function fakePorts(first: Places | Error) {
   }
   return {
     ports,
+    atom,
     calls,
     shown,
     bound,
@@ -180,5 +184,18 @@ describe('SetupWatch', () => {
     const watch = new SetupWatch(fake.ports, SETUP)
     await Promise.all([watch.look(), watch.look()])
     expect(fake.calls.filter(call => call === 'find')).toEqual(['find'])
+  })
+})
+
+describe('SetupWatch against the view the engine holds', () => {
+  test('a setup the engine set back to its default is written again by the next look that finds the same', async () => {
+    const kit = fakePorts({ kind: 'unset', setup: SETUP })
+    const watch = new SetupWatch(kit.ports, SETUP)
+    await watch.show()
+    await watch.look()
+    expect(kit.shown.length).toBe(1)
+    kit.atom.value = null
+    await watch.look()
+    expect(kit.shown.length).toBe(2)
   })
 })

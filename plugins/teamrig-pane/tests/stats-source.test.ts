@@ -178,7 +178,9 @@ function fakeStats(disk: MemoryFiles, settings: StatsSettings = SETTINGS) {
   const gate: { held: Promise<void> | null } = { held: null }
   const views: StatsView[] = []
   const writes = { fail: false }
+  const atom: { value: StatsView } = { value: { kind: 'reading' } }
   const live = new LiveStats(files, FILES, settings, {
+    held: async () => atom.value,
     folders: async dir => {
       if (listed.failure !== null) throw new Error(listed.failure)
       return dir === TEAMS ? listed.names : []
@@ -192,10 +194,11 @@ function fakeStats(disk: MemoryFiles, settings: StatsSettings = SETTINGS) {
     publish: async view => {
       if (writes.fail) throw new Error('write refused')
       views.push(view)
+      atom.value = view
     },
     now: async () => clock.now,
   })
-  return { live, files, shown, clock, pick, listed, gate, views, writes }
+  return { live, files, shown, clock, pick, listed, gate, views, writes, atom }
 }
 
 describe('LiveStats', () => {
@@ -623,5 +626,25 @@ describe('goalsOf', () => {
     const lists = listsOf({ active: [planned('T4')], opened: [], closed: [], overdue: [], overdueP1: [], ownerDecisions: [] }, TimeZone.UTC, placedOf)
     const { goals } = goalsOf({ goals: [progress([planned('T4')])], offGoal: 0, doneInRange: 0 }, TimeZone.UTC, '2026-10-31', placedOf)
     expect(goals[0]?.rows[0]).toBe(lists.active[0])
+  })
+})
+
+describe('LiveStats against the view the engine holds', () => {
+  test('a view the engine set back to its default is written again by the next refresh that reads the same', async () => {
+    const { live, views, atom } = fakeStats(teamsDisk())
+    await live.refresh()
+    expect(views.length).toBe(1)
+    atom.value = { kind: 'reading' }
+    await live.refresh()
+    expect(views.length).toBe(2)
+    expect(views[1]).toEqual(views[0])
+  })
+
+  test('a view the engine still holds is not written again', async () => {
+    const { live, views } = fakeStats(teamsDisk())
+    await live.refresh()
+    await live.refresh()
+    await live.refresh()
+    expect(views.length).toBe(1)
   })
 })

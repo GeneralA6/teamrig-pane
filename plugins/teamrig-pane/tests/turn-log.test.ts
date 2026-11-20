@@ -420,7 +420,10 @@ function fakeLive(disk: ReturnType<typeof fakeDisk>) {
   const lists: LogList[] = []
   const pages: (LogPage | null)[] = []
   let failWrites = false
+  const atom: { list: LogList; page: LogPage | null } = { list: { kind: 'reading' }, page: null }
   const live = new LiveLog({
+    heldList: async () => atom.list,
+    heldPage: async () => atom.page,
     reader: new TurnLogReader(disk.ports, LOG),
     now: async () => NOW,
     isShown: async () => shown.view,
@@ -428,17 +431,19 @@ function fakeLive(disk: ReturnType<typeof fakeDisk>) {
     publishList: async list => {
       if (failWrites) throw new Error('write refused')
       lists.push(list)
+      atom.list = list
     },
     publishPage: async page => {
       if (failWrites) throw new Error('write refused')
       pages.push(page)
+      atom.page = page
       shown.page = page === null ? null : { session: page.session, claude: page.claude }
     },
   })
   const setFailWrites = (fails: boolean) => {
     failWrites = fails
   }
-  return { live, shown, lists, pages, failWrites: setFailWrites }
+  return { live, shown, lists, pages, atom, failWrites: setFailWrites }
 }
 
 describe('LiveLog', () => {
@@ -515,5 +520,41 @@ describe('LiveLog', () => {
     expect(timers).toEqual([{ ms: POLL_MS, isCancelled: false }])
     live.stop()
     expect(timers[0]?.isCancelled).toBe(true)
+  })
+})
+
+describe('LiveLog against the views the engine holds', () => {
+  test('a list the engine set back to its default is written again by the next poll that reads the same', async () => {
+    const disk = fakeDisk()
+    disk.write('lead', '2026-10-19T20', [line('2026-10-19T20:00:00Z', 'prompt', 'hello')])
+    const { live, lists, atom } = fakeLive(disk)
+    await live.poll()
+    expect(lists.length).toBe(1)
+    atom.list = { kind: 'reading' }
+    await live.poll()
+    expect(lists.length).toBe(2)
+    expect(lists[1]).toEqual(lists[0])
+  })
+
+  test('a page the engine set back to the list is written again by the next poll that reads the same', async () => {
+    const disk = fakeDisk()
+    disk.write('lead', '2026-10-19T20', [line('2026-10-19T20:00:00Z', 'prompt', 'hello')])
+    const { live, shown, pages, atom } = fakeLive(disk)
+    await live.open({ session: 'lead', claude: 'c-1' })
+    shown.page = { session: 'lead', claude: 'c-1' }
+    await live.poll()
+    const written = pages.length
+    atom.page = null
+    await live.poll()
+    expect(pages.length).toBe(written + 1)
+  })
+
+  test('views the engine still holds are not written again', async () => {
+    const disk = fakeDisk()
+    disk.write('lead', '2026-10-19T20', [line('2026-10-19T20:00:00Z', 'prompt', 'hello')])
+    const { live, lists } = fakeLive(disk)
+    await live.poll()
+    await live.poll()
+    expect(lists.length).toBe(1)
   })
 })

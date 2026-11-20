@@ -34,6 +34,8 @@ export type MeetingsPorts = {
   isShown: () => Promise<boolean>
   /** Now, in the team's zone: where a Move or Postpone press moves a meeting to. */
   clock: () => Promise<Clock>
+  /** The view the engine holds now: it can differ from the last one written, as Claude Code can set the stored copy back to its default. */
+  held: () => Promise<MeetingsView>
   publish: (view: MeetingsView) => Promise<void>
   /** Writes what the last run press answered. */
   tell: (answer: MeetingAnswer) => Promise<void>
@@ -121,7 +123,7 @@ export function runOutcome(id: string, verb: MeetingRun['verb'], run: CliRun): M
   return { id, verb, outcome: 'done', lines: linesOf(run.stdout).filter(line => !line.startsWith(FIRST_WORD[verb])) }
 }
 
-/** Reads the meetings again while the view shows, writes them when they changed, and starts one on a press. */
+/** Reads the meetings again while the view shows, writes them when they differ from what is held, and starts one on a press. */
 export class LiveMeetings {
   private readonly cli: TeamrigCli
   private readonly ports: MeetingsPorts
@@ -130,8 +132,6 @@ export class LiveMeetings {
   /** Set when a read is asked for while one runs: that one may have read the schedule before a start changed it. */
   private isAskedAgain = false
   private isRunning = false
-  /** The view last written, as JSON: a read that finds the same list writes nothing. */
-  private shown: string | null = null
 
   constructor(cli: TeamrigCli, ports: MeetingsPorts) {
     this.cli = cli
@@ -243,9 +243,8 @@ export class LiveMeetings {
   }
 
   private async write(view: MeetingsView): Promise<void> {
-    const json = JSON.stringify(view)
-    if (json === this.shown) return
+    // A read that finds the list the engine holds writes nothing.
+    if (JSON.stringify(view) === JSON.stringify(await this.ports.held())) return
     await this.ports.publish(view)
-    this.shown = json
   }
 }

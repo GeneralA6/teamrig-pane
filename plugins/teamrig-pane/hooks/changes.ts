@@ -43,6 +43,8 @@ export type ChangesPorts = {
   git: (args: readonly string[], cwd: string) => Promise<GitRun>
   /** Whether a file or folder is there; may reject when it cannot tell. */
   exists: (path: string) => Promise<boolean>
+  /** The changes the engine holds now: they can differ from the last written, as Claude Code can set the stored copy back to its default. */
+  held: () => Promise<ChangesSnapshot>
   /** Writes the changes atom (each write redraws the pane). */
   publish: (next: ChangesSnapshot) => Promise<void>
   /** Runs after each read, whether or not it changed what is drawn: the open diffs (diff.ts) are read again, as an edit can keep a file's counts. Never rejects. */
@@ -195,7 +197,6 @@ export class LiveChanges {
   private outside: string[]
   private isDirty = true
   private isReading = false
-  private shown: ChangesSnapshot | null = null
   private timers: Timer[] = []
 
   private readonly ports: ChangesPorts
@@ -260,10 +261,7 @@ export class LiveChanges {
     try {
       const read = await Promise.all([...this.repos].map(root => this.readRepo(root)))
       const next: ChangesSnapshot = { repos: read.filter(repo => repo !== null), outside: [...this.outside], isRead: true }
-      if (this.shown === null || JSON.stringify(this.shown) !== JSON.stringify(next)) {
-        await this.ports.publish(next)
-        this.shown = next
-      }
+      if (JSON.stringify(await this.ports.held()) !== JSON.stringify(next)) await this.ports.publish(next)
       await this.ports.onRead(next)
     } catch {
       this.isDirty = true

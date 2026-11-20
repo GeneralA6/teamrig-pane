@@ -25,6 +25,8 @@ export type LivePorts = {
   source: TaskRegisterSource | { missing: string }
   sessionId: () => Promise<string>
   now: () => Promise<number>
+  /** The snapshot the engine holds now: it can differ from the last one written, as Claude Code can set the stored copy back to its default. */
+  held: () => Promise<Snapshot>
   /** Writes the snapshot atom (each write redraws the pane). */
   publish: (change: (current: Snapshot) => Snapshot) => Promise<void>
   /** The session's stored pin, as $.store.get answers it. */
@@ -50,7 +52,7 @@ export class LiveRegister {
   private session: BoundSession | null = null
   /** Set after a failed poll, a new pin or a new session, so the next good poll redraws even when no file moved. */
   private mustPublish = true
-  /** The snapshot it last wrote; null until its first write (a hot reload starts it over). */
+  /** The snapshot it last wrote; null until its first write (a hot reload starts it over). Only to tell a held one that was reset from outside. */
   private shown: Snapshot | null = null
   private readonly ports: LivePorts
 
@@ -68,7 +70,8 @@ export class LiveRegister {
   async tick(): Promise<void> {
     try {
       const now = await this.ports.now()
-      if (this.shown !== null && sameView(this.shown, { ...this.shown, now })) return
+      const held = await this.ports.held()
+      if (this.shown !== null && sameView(held, { ...held, now })) return
       await this.write(s => ({ ...s, now }))
     } catch (error) {
       this.mustPublish = true
@@ -89,6 +92,9 @@ export class LiveRegister {
       if ('missing' in source) return await this.showProblem(source.missing)
       const session = await this.currentSession()
       const now = await this.ports.now()
+      // A held snapshot that no longer draws as the one written was reset from outside: it is built again.
+      const held = await this.ports.held()
+      if (this.shown !== null && !sameView(this.shown, held)) this.mustPublish = true
       const next = await source.poll({
         claudeSession: session.id,
         pinned: session.pinned,
@@ -96,7 +102,7 @@ export class LiveRegister {
         force: this.mustPublish,
       })
       this.mustPublish = false
-      if (next && (this.shown === null || !sameView(this.shown, next))) await this.write(() => next)
+      if (next && (this.shown === null || !sameView(held, next))) await this.write(() => next)
     } catch (error) {
       this.mustPublish = true
       await this.showProblem(messageOf(error))
@@ -124,8 +130,8 @@ export class LiveRegister {
 
   /** Shows `problem` over the last good tasks; a write that fails too is left to the next poll (mustPublish is set). */
   private async showProblem(problem: string): Promise<void> {
-    if (this.shown?.problem === problem) return
     try {
+      if ((await this.ports.held()).problem === problem) return
       await this.write(s => ({ ...s, problem }))
     } catch {
       // Nothing is left to draw it with: the pane keeps its last frame, never a blank one.

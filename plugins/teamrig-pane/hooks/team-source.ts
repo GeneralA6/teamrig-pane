@@ -125,6 +125,8 @@ export type TeamPorts = {
   register: () => Promise<Pick<Snapshot, 'tasks' | 'ownerCards' | 'taskCounts'>>
   /** True while the pane shows the Teams tab, open (not minimized). */
   isShown: () => Promise<boolean>
+  /** The view the engine holds now: it can differ from the last one written, as Claude Code can set the stored copy back to its default. */
+  held: () => Promise<TeamView>
   publish: (view: TeamView) => Promise<void>
   /** The time now, epoch ms: which week files are for the week still running, and how far it is. */
   now: () => Promise<number>
@@ -146,8 +148,6 @@ export class LiveTeam {
   private readonly teams = new Map<string, TeamFolder>()
   private timers: Timer[] = []
   private isPolling = false
-  /** The view last written, as JSON: a read that finds the same tree writes nothing. */
-  private shown: string | null = null
 
   constructor(files: Files, team: TeamFiles, ports: TeamPorts, inbox: InboxPaths | null) {
     this.files = files
@@ -181,11 +181,8 @@ export class LiveTeam {
     this.isPolling = true
     try {
       const view = await this.read()
-      const json = JSON.stringify(view)
-      if (json !== this.shown) {
-        await this.ports.publish(view)
-        this.shown = json
-      }
+      // A read that finds the tree the engine holds writes nothing.
+      if (JSON.stringify(view) !== JSON.stringify(await this.ports.held())) await this.ports.publish(view)
     } catch {
       // A failed write is written by the next poll, which finds the view still unwritten.
     } finally {

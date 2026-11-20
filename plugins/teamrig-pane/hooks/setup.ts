@@ -20,6 +20,8 @@ export type SetupPorts = {
   find: () => Promise<Places>
   /** Writes what the tasks view shows in place of tasks; null once the register is found. */
   show: (view: SetupView | null) => Promise<void>
+  /** What the engine holds now: it can differ from the last view written, as Claude Code can set the stored copy back to its default. */
+  held: () => Promise<SetupView | null>
   /** Starts reading the register a look found, in place of any started before (register.tsx). */
   bind: (places: FoundPlaces) => Promise<void>
 }
@@ -36,10 +38,8 @@ function isSameSetup(a: SetupView, b: SetupView): boolean {
 export class SetupWatch {
   private timers: Timer[] = []
   private isLooking = false
-  /** The view it last wrote, or the first, which `show` writes. */
+  /** The view it last wrote, or the first, which `show` writes: the setup a problem is drawn over. */
   private shown: SetupView
-  /** Set when a write failed, so the next look writes even a view that did not change. */
-  private mustShow = true
   private readonly ports: SetupPorts
 
   constructor(ports: SetupPorts, setup: ProjectSetup) {
@@ -80,7 +80,8 @@ export class SetupWatch {
         return
       }
       const next: SetupView = places.kind === 'unset' ? { setup: places.setup, problem: null } : { setup: this.shown.setup, problem: places.problem }
-      if (!this.mustShow && isSameSetup(next, this.shown)) return
+      const held = await this.ports.held()
+      if (held !== null && isSameSetup(next, held)) return
       await this.write(next)
     } catch (error) {
       await this.write({ setup: this.shown.setup, problem: messageOf(error) })
@@ -94,9 +95,8 @@ export class SetupWatch {
     try {
       await this.ports.show(view)
       this.shown = view
-      this.mustShow = false
     } catch {
-      this.mustShow = true
+      // The held view then differs, so the next look writes.
     }
   }
 }

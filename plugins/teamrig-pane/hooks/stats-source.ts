@@ -145,6 +145,8 @@ export type StatsPorts = {
   isShown: () => Promise<boolean>
   /** The scope and range the tab shows now. */
   choice: () => Promise<StatsPick>
+  /** The view the engine holds now: it can differ from the last one written, as Claude Code can set the stored copy back to its default. */
+  held: () => Promise<StatsView>
   publish: (view: StatsView) => Promise<void>
   /** The time now, epoch ms. */
   now: () => Promise<number>
@@ -221,8 +223,6 @@ export class LiveStats {
   /** True when a refresh was asked while one ran: the running one reads again, so the press is not lost. */
   private isAsked = false
   private fold: Fold | null = null
-  /** The view last written, as JSON: a read that finds the same numbers writes nothing. */
-  private shown: string | null = null
 
   constructor(files: Files, team: TeamFiles, settings: StatsSettings, ports: StatsPorts) {
     this.files = files
@@ -271,11 +271,8 @@ export class LiveStats {
     try {
       const pick = await this.ports.choice()
       const view = await this.read(pick, await this.ports.now())
-      const json = JSON.stringify(view)
-      if (json !== this.shown) {
-        await this.ports.publish(view)
-        this.shown = json
-      }
+      // A read that finds the numbers the engine holds writes nothing.
+      if (JSON.stringify(view) !== JSON.stringify(await this.ports.held())) await this.ports.publish(view)
     } catch {
       // A failed write is written by the next refresh, which finds the view still unwritten.
     }

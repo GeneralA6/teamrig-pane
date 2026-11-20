@@ -1644,6 +1644,7 @@ function livePorts(files: MemoryFiles, ids: string[]) {
   const pins = new Map<string, string>()
   const ports: LivePorts = {
     source: new TaskRegisterSource(files, PATHS, TEAM_SETTINGS, null, NO_TREE_GOALS),
+    held: async () => current,
     sessionId: async () => ids[0] ?? 'none',
     now: async () => clock.now,
     publish: async change => {
@@ -1656,7 +1657,10 @@ function livePorts(files: MemoryFiles, ids: string[]) {
       else pins.set(id, area)
     },
   }
-  return { ports, pins, clock, snapshot: () => current, writes: () => writes }
+  const reset = (to: Snapshot) => {
+    current = to
+  }
+  return { ports, pins, clock, snapshot: () => current, writes: () => writes, reset }
 }
 
 describe('live', () => {
@@ -1837,5 +1841,35 @@ describe('live', () => {
   test('keeps a session’s pin under a store key of its own', () => {
     expect(pinKey(S1)).toBe(`pin:${S1}`)
     expect(pinKey(S2)).not.toBe(pinKey(S1))
+  })
+})
+
+describe('live against the snapshot the engine holds', () => {
+  test('a snapshot the engine set back to its default is built and written again by the next poll though no file moved', async () => {
+    const files = new MemoryFiles()
+    files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW }))
+    const { ports, snapshot, writes, reset } = livePorts(files, [S1])
+    const live = new LiveRegister(ports)
+    await live.refresh()
+    const empty = snapshot()
+    expect(empty.tasks.length).toBe(1)
+    const first = writes()
+
+    reset({ ...empty, tasks: [], problem: null })
+    await live.refresh()
+    expect(snapshot().tasks.length).toBe(1)
+    expect(writes()).toBe(first + 1)
+  })
+
+  test('a snapshot the engine still holds is not written again', async () => {
+    const files = new MemoryFiles()
+    files.write(PATHS.events, createLine('T1', { owner: 'po', by: 'po', at: NOW }))
+    const { ports, writes } = livePorts(files, [S1])
+    const live = new LiveRegister(ports)
+    await live.refresh()
+    const first = writes()
+    await live.refresh()
+    await live.refresh()
+    expect(writes()).toBe(first)
   })
 })

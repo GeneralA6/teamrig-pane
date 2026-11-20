@@ -722,6 +722,7 @@ export const register: Register = on => {
               ),
         sessionId: () => $.session.id(),
         now: () => $.clock.now(),
+        held: () => read($, snapshot),
         publish: async change => {
           await update($, snapshot, change)
         },
@@ -742,9 +743,11 @@ export const register: Register = on => {
                 const page = await read($, logPage)
                 return page === null ? null : { session: page.session, claude: page.claude }
               },
+              heldList: () => read($, logList),
               publishList: async list => {
                 await update($, logList, () => list)
               },
+              heldPage: () => read($, logPage),
               publishPage: async page => {
                 await update($, logPage, () => page)
               },
@@ -758,6 +761,7 @@ export const register: Register = on => {
               now: () => $.clock.now(),
               area: async () => (await read($, snapshot)).area,
               claude: () => $.session.id(),
+              held: () => read($, previousConversation),
               publish: async previous => {
                 await update($, previousConversation, () => previous)
               },
@@ -782,6 +786,7 @@ export const register: Register = on => {
                   return { tasks, ownerCards, taskCounts }
                 },
                 isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
+                held: () => read($, teamTree),
                 publish: async tree => {
                   await update($, teamTree, () => tree)
                 },
@@ -799,6 +804,7 @@ export const register: Register = on => {
               run: (argv, timeoutMs) => run(argv, { cwd: e.cwd, timeoutMs }),
               caller: async () => (await $.env.get('TEAMRIG_SESSION')) ?? (await read($, snapshot)).area,
               isShown: async () => (await read($, view)) === 'meetings' && (await read($, size)) !== 'minimized',
+              held: () => read($, meetings),
               publish: async shown => {
                 await update($, meetings, () => shown)
               },
@@ -824,6 +830,7 @@ export const register: Register = on => {
                 folders,
                 isShown: async () => (await read($, view)) === 'stats' && (await read($, size)) !== 'minimized',
                 choice: async () => ({ scope: await read($, statsScope), range: await read($, statsRange), list: await read($, statsList) }),
+                held: () => read($, stats),
                 publish: async shown => {
                   await update($, stats, () => shown)
                 },
@@ -891,6 +898,7 @@ export const register: Register = on => {
       {
         git,
         outside: path => copiesLive.diff(path),
+        held: () => read($, diffs),
         publish: async opened => {
           await update($, diffs, () => opened)
         },
@@ -901,6 +909,7 @@ export const register: Register = on => {
       {
         git,
         exists: path => $.fs.exists(path),
+        held: () => read($, changes),
         publish: async fresh => {
           await update($, changes, () => fresh)
           await update($, known, () => knownOf(fresh))
@@ -947,6 +956,7 @@ export const register: Register = on => {
       const watching = new SetupWatch(
         {
           find: findHere,
+          held: () => read($, setup),
           show: async shown => {
             await update($, setup, () => shown)
           },

@@ -19,6 +19,7 @@ function fakePrevious() {
   const reads: string[] = []
   const written: (LogConversation | null)[] = []
   const fail = { read: false, write: false }
+  const atom: { value: LogConversation | null } = { value: null }
   const live = new LivePrevious({
     reader: {
       previous: async (session, claude, now) => {
@@ -31,12 +32,14 @@ function fakePrevious() {
     now: async () => NOW,
     area: async () => state.area,
     claude: async () => state.claude,
+    held: async () => atom.value,
     publish: async previous => {
       if (fail.write) throw new Error('write failed')
       written.push(previous)
+      atom.value = previous
     },
   })
-  return { live, state, answers, reads, written, fail }
+  return { live, state, answers, reads, written, fail, atom }
 }
 
 describe('LivePrevious', () => {
@@ -84,13 +87,14 @@ describe('LivePrevious', () => {
     await kit.live.poll()
     await kit.live.poll()
     expect(kit.reads).toEqual([])
-    expect(kit.written).toEqual([null])
+    // None is what the engine holds at the start, so nothing is written.
+    expect(kit.written).toEqual([])
 
     kit.state.area = 'lead'
     await kit.live.poll()
     await kit.live.poll()
     expect(kit.reads).toEqual(['lead|c-2'])
-    expect(kit.written).toEqual([null])
+    expect(kit.written).toEqual([])
   })
 
   test('a failed read or write never rejects, and the next poll reads and writes again', async () => {
@@ -120,5 +124,26 @@ describe('LivePrevious', () => {
     expect(asked).toEqual([POLL_MS])
     kit.live.stop()
     expect(cancelled).toBe(1)
+  })
+})
+
+describe('LivePrevious against what the engine holds', () => {
+  test('a conversation the engine set back to its default is written again by the next read that finds the same', async () => {
+    const kit = fakePrevious()
+    kit.answers.set('lead|c-2', conversation('lead', 'c-1', null))
+    await kit.live.poll()
+    expect(kit.written.length).toBe(1)
+    kit.atom.value = null
+    await kit.live.poll()
+    expect(kit.written).toEqual([conversation('lead', 'c-1', null), conversation('lead', 'c-1', null)])
+  })
+
+  test('one the engine still holds is not written again', async () => {
+    const kit = fakePrevious()
+    kit.answers.set('lead|c-2', conversation('lead', 'c-1', null))
+    await kit.live.poll()
+    await kit.live.poll()
+    await kit.live.poll()
+    expect(kit.written.length).toBe(1)
   })
 })

@@ -286,8 +286,12 @@ export type LogPorts = {
   isShown: () => Promise<boolean>
   /** The conversation whose page shows, null for the list. */
   shownPage: () => Promise<LogRead | null>
+  /** The list the engine holds now: it can differ from the last one written, as Claude Code can set the stored copy back to its default. */
+  heldList: () => Promise<LogList>
   publishList: (list: LogList) => Promise<void>
   /** Writes the page, or with null goes back to the list. */
+  /** The page the engine holds now, null for the list. */
+  heldPage: () => Promise<LogPage | null>
   publishPage: (page: LogPage | null) => Promise<void>
 }
 
@@ -331,8 +335,6 @@ export class LiveLog {
   private readonly ports: LogPorts
   private timers: Timer[] = []
   private isPolling = false
-  private shownList: LogList | null = null
-  private shownPage: LogPage | null = null
 
   constructor(ports: LogPorts) {
     this.ports = ports
@@ -366,16 +368,10 @@ export class LiveLog {
       const now = await this.ports.now()
       if (shown === null) {
         const list = await this.ports.reader.list(now)
-        if (this.shownList === null || !sameList(this.shownList, list)) {
-          await this.ports.publishList(list)
-          this.shownList = list
-        }
+        if (!sameList(await this.ports.heldList(), list)) await this.ports.publishList(list)
       } else {
         const page = await this.ports.reader.page(shown.session, shown.claude, now)
-        if (page !== this.shownPage) {
-          await this.ports.publishPage(page)
-          this.shownPage = page
-        }
+        if (JSON.stringify(page) !== JSON.stringify(await this.ports.heldPage())) await this.ports.publishPage(page)
       }
     } catch {
       // A failed write is drawn by the next poll that reads a change.
@@ -388,13 +384,11 @@ export class LiveLog {
   async open(read: LogRead): Promise<void> {
     const page = await this.ports.reader.page(read.session, read.claude, await this.ports.now())
     await this.ports.publishPage(page)
-    this.shownPage = page
   }
 
   /** Goes back to the list and reads it again. */
   async close(): Promise<void> {
     await this.ports.publishPage(null)
-    this.shownPage = null
     await this.refresh()
   }
 }

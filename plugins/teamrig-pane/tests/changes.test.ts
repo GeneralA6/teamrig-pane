@@ -73,7 +73,9 @@ function fakeGit(roots: Record<string, string>, statuses: Record<string, GitRun 
   const checked: string[] = []
   const published: ChangesSnapshot[] = []
   const reads: ChangesSnapshot[] = []
+  const held = { value: EMPTY_CHANGES }
   const ports: ChangesPorts = {
+    held: async () => held.value,
     exists: async path => {
       checked.push(path)
       return !gone.has(path)
@@ -94,12 +96,13 @@ function fakeGit(roots: Record<string, string>, statuses: Record<string, GitRun 
     },
     publish: async next => {
       published.push(next)
+      held.value = next
     },
     onRead: async read => {
       reads.push(read)
     },
   }
-  return { argv, calls, checked, published, ports, reads }
+  return { argv, calls, checked, published, ports, reads, atom: held }
 }
 
 describe('changes', () => {
@@ -718,5 +721,30 @@ describe('changes rows', () => {
     const opened: OpenDiffs = { [`${REPO}:hooks/a.ts`]: { kind: 'read', lines: [{ kind: 'del', text: 'old' }], more: 0, isCut: false } }
     expect(searched('a.ts', opened)[1]?.card?.map(row => row.spans.map(span => span.text).join(''))).toEqual(['   -old'])
     expect(searched('hooks', opened)[2]?.card).toBeUndefined()
+  })
+})
+
+describe('LiveChanges against the changes the engine holds', () => {
+  test('changes the engine set back to its default are written again by the next read that finds the same', async () => {
+    const { published, ports, atom } = fakeGit({ 'C:/work/repo': REPO }, {})
+    const changes = new LiveChanges(ports)
+    await changes.addFolder('C:/work/repo')
+    await changes.refresh()
+    expect(published).toHaveLength(1)
+
+    atom.value = EMPTY_CHANGES
+    await changes.refresh()
+    expect(published).toHaveLength(2)
+    expect(published[1]).toEqual(published[0])
+  })
+
+  test('changes the engine still holds are not written again', async () => {
+    const { published, ports } = fakeGit({ 'C:/work/repo': REPO }, {})
+    const changes = new LiveChanges(ports)
+    await changes.addFolder('C:/work/repo')
+    await changes.refresh()
+    await changes.refresh()
+    await changes.refresh()
+    expect(published).toHaveLength(1)
   })
 })

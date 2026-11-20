@@ -16,6 +16,8 @@ export type PreviousPorts = {
   area: () => Promise<string | null>
   /** The Claude Code session id it works in now. */
   claude: () => Promise<string>
+  /** What the engine holds now: it can differ from the last one written, as Claude Code can set the stored copy back to its default. */
+  held: () => Promise<LogConversation | null>
   publish: (previous: LogConversation | null) => Promise<void>
 }
 
@@ -35,8 +37,6 @@ export class LivePrevious {
   private isPolling = false
   /** The area and Claude Code session id of the last settled read; null before one. */
   private settledFor: string | null = null
-  /** What it last wrote; undefined before a write. */
-  private shown: LogConversation | null | undefined = undefined
 
   constructor(ports: PreviousPorts) {
     this.ports = ports
@@ -62,10 +62,7 @@ export class LivePrevious {
       const readFor = JSON.stringify([area, claude])
       if (readFor === this.settledFor) return
       const previous = area === null ? null : await this.ports.reader.previous(area, claude, await this.ports.now())
-      if (this.shown === undefined || !samePrevious(this.shown, previous)) {
-        await this.ports.publish(previous)
-        this.shown = previous
-      }
+      if (!samePrevious(await this.ports.held(), previous)) await this.ports.publish(previous)
       this.settledFor = isSettled(previous) ? readFor : null
     } catch {
       // The next poll reads again.

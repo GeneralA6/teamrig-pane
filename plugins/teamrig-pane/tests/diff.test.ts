@@ -53,7 +53,9 @@ const NO_OUTSIDE: DiffPorts['outside'] = async path => ({ kind: 'failed', proble
 function fakeDiffs(answers: Record<string, GitRun | Error>, outside: Record<string, FileDiff> = {}) {
   const runs: string[] = []
   const published: OpenDiffs[] = []
+  const held = { value: NO_DIFFS }
   const ports: DiffPorts = {
+    held: async () => held.value,
     git: async (args, cwd) => {
       const path = (args.at(-1) ?? '').replace(':(literal)', '')
       runs.push(`${cwd} ${path}`)
@@ -67,9 +69,10 @@ function fakeDiffs(answers: Record<string, GitRun | Error>, outside: Record<stri
     },
     publish: async next => {
       published.push(next)
+      held.value = next
     },
   }
-  return { ports, published, runs }
+  return { ports, published, runs, atom: held }
 }
 
 describe('diff', () => {
@@ -243,7 +246,9 @@ describe('diff', () => {
       started = resolve
     })
     const published: OpenDiffs[] = []
+    let held: OpenDiffs = NO_DIFFS
     const ports: DiffPorts = {
+      held: async () => held,
       git: () =>
         new Promise(resolve => {
           answer = resolve
@@ -252,6 +257,7 @@ describe('diff', () => {
       outside: NO_OUTSIDE,
       publish: async next => {
         published.push(next)
+        held = next
       },
     }
     const diffs = new LiveDiffs(ports, { diffs: NO_DIFFS, changes: snapshot([change(' M', 'a.ts')]) })
@@ -267,16 +273,45 @@ describe('diff', () => {
     const key = `${REPO}:a.ts`
     let fails = 1
     const published: OpenDiffs[] = []
+    let held: OpenDiffs = NO_DIFFS
     const ports: DiffPorts = {
+      held: async () => held,
       git: async () => ran(PATCH),
       outside: NO_OUTSIDE,
       publish: async next => {
         if (fails-- > 0) throw new Error('state write failed')
         published.push(next)
+        held = next
       },
     }
     const diffs = new LiveDiffs(ports, { diffs: NO_DIFFS, changes: snapshot([change(' M', 'a.ts')]) })
     await diffs.toggle(key)
     expect(Object.values(published[0] ?? {}).map(diff => diff.kind)).toEqual(['read'])
+  })
+})
+
+describe('LiveDiffs against the diffs the engine holds', () => {
+  const key = `${REPO}:a.ts`
+
+  test('diffs the engine set back to its default are written again by the next read that finds the same', async () => {
+    const { ports, published, atom } = fakeDiffs({ 'a.ts': ran(PATCH) })
+    const diffs = new LiveDiffs(ports, { diffs: { [key]: { kind: 'reading' } }, changes: snapshot([]) })
+    const listed = snapshot([change(' M', 'a.ts')])
+    await diffs.refresh(listed)
+    expect(published).toHaveLength(1)
+
+    atom.value = NO_DIFFS
+    await diffs.refresh(listed)
+    expect(published).toHaveLength(2)
+    expect(published[1]).toEqual(published[0])
+  })
+
+  test('diffs the engine still holds are not written again', async () => {
+    const { ports, published } = fakeDiffs({ 'a.ts': ran(PATCH) })
+    const diffs = new LiveDiffs(ports, { diffs: { [key]: { kind: 'reading' } }, changes: snapshot([]) })
+    const listed = snapshot([change(' M', 'a.ts')])
+    await diffs.refresh(listed)
+    await diffs.refresh(listed)
+    expect(published).toHaveLength(1)
   })
 })
