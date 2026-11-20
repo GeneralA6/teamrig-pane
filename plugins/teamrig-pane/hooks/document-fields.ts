@@ -36,6 +36,10 @@ function isTexts(value: unknown): value is readonly string[] {
   return isList(value) && value.every(isText)
 }
 
+function isNumbers(value: unknown): value is readonly number[] {
+  return isList(value) && value.every(isNumber)
+}
+
 /** Whether `value` is one of the words `known` lists, each as a key: only its own keys, never an object's built-ins. */
 export function isOneOf<Word extends string>(known: Readonly<Record<Word, true>>, value: string): value is Word {
   return Object.hasOwn(known, value)
@@ -125,6 +129,11 @@ export class Fields {
   /** A list of texts; one entry of another type and the whole field is noted. */
   texts(name: string): readonly string[] {
     return this.required(name, isTexts, []).map(shownText)
+  }
+
+  /** A list of numbers; one entry of another type, or one too large to hold, and the whole field is noted. */
+  numbers(name: string): readonly number[] {
+    return this.required(name, isNumbers, [])
   }
 
   /**

@@ -1,6 +1,6 @@
 // The fields of a `teamrig read` record (hooks/document-fields.ts): a field of the type asked is answered as it is,
 // any other is noted under its path with a stand-in in its place, an optional field reads null when null or left out,
-// a moment reads as milliseconds, required or optional, a record inside a record notes under the outer field's path,
+// a moment reads as milliseconds, required or optional, a list of numbers whole or not at all, a record inside a record notes under the outer field's path,
 // every text and quoted word is answered as the pane may draw it, and the left-out line names the first few (T4742).
 import { describe, expect, test } from 'claude-code/testing'
 import { Fields, isList, isOneOf, leftOutLine } from '../hooks/document-fields'
@@ -74,6 +74,19 @@ describe('Fields', () => {
     const fields = new Fields({ none: null, ms: 1_772_442_000_000, day: '2026-03-02', never: '2026-13-45T09:00:00.000Z' })
     for (const name of ['none', 'absent', 'ms', 'day', 'never']) expect(fields.moment(name)).toBe(0)
     expect(fields.bad).toEqual(['none', 'absent', 'ms', 'day', 'never'])
+  })
+
+  test('reads a list of numbers in its order, an empty one too', () => {
+    const fields = new Fields({ ranks: [100, 62.5, 0, -1], none: [] })
+    expect(fields.numbers('ranks')).toEqual([100, 62.5, 0, -1])
+    expect(fields.numbers('none')).toEqual([])
+    expect(fields.bad).toEqual([])
+  })
+
+  test('notes a list of numbers that is missing, no list, or holds one entry that is no number a field can mean', () => {
+    const fields = new Fields({ worded: [1, '2'], huge: [1, Infinity], one: 4, gone: null })
+    for (const name of ['worded', 'huge', 'one', 'gone', 'absent']) expect(fields.numbers(name)).toEqual([])
+    expect(fields.bad).toEqual(['worded', 'huge', 'one', 'gone', 'absent'])
   })
 
   test('a word outside its known set is noted with the word, and one that is no text by its path alone', () => {
