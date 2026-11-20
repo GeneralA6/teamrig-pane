@@ -147,7 +147,7 @@ export function skippedText(paths: RegisterPaths, register: RegisterSnapshot, ma
 }
 
 /** A snapshot's problem from each part's: those it has, joined as skippedText joins its own; null when none has one. */
-function joinedProblems(parts: readonly (string | null)[]): string | null {
+export function joinedProblems(parts: readonly (string | null)[]): string | null {
   const named = parts.flatMap(part => (part === null ? [] : [part]))
   return named.length > 0 ? named.join('; ') : null
 }
