@@ -1,40 +1,26 @@
-// The pane's requirements check: the Claude Code version and git, over fake engine answers.
-import type { ProcessResult, SessionVersion } from 'claude-code'
+// The pane's requirements check with no engine: versions, the git check, the checks run together and the lines.
 import { describe, expect, test } from 'claude-code/testing'
-import type { RequirementProblem } from '../types'
+import type { RequirementProblem, Version } from '../types'
 import {
-  MIN_CLAUDE_CODE,
   describeRequirement,
+  gitCheck,
   isGitMissing,
   isOlder,
   parseVersion,
   requirementBlocks,
   requirementProblems,
   versionText,
-  type RequirementPorts,
+  type RequirementCheck,
+  type RunResult,
 } from '../hooks/requirements'
 
-const GIT_RAN: ProcessResult = { exitCode: 0, stdout: 'git version 2.47.1\n', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+const GIT_RAN: RunResult = { exitCode: 0 }
+const FLOOR: Version = { major: 2, minor: 1, patch: 295 }
 
-/** Ports that answer `version` as the engine and run git as `git` does; each records its calls. */
-function ports(version: () => Promise<SessionVersion>, git: () => Promise<ProcessResult> = async () => GIT_RAN) {
-  const calls: string[] = []
-  const answered: RequirementPorts = {
-    version: () => {
-      calls.push('version')
-      return version()
-    },
-    gitVersion: () => {
-      calls.push('git')
-      return git()
-    },
-  }
-  return { answered, calls }
-}
+/** A surface's line for its host too old, as a stand-in words it. */
+const hostOld = (running: Version): string => `the host ${versionText(running)} is too old: update it.`
 
-const running = (version: string) => async (): Promise<SessionVersion> => ({ version })
-
-describe('the Claude Code version', () => {
+describe('a version', () => {
   test('reads a release and a development build, and nothing else', () => {
     expect(parseVersion('2.1.300')).toEqual({ major: 2, minor: 1, patch: 300 })
     expect(parseVersion(' 2.1.295-dev.20260920.t101500.sha1a2b3c4\n')).toEqual({ major: 2, minor: 1, patch: 295 })
@@ -43,70 +29,75 @@ describe('the Claude Code version', () => {
   })
 
   test('compares by major, then minor, then patch', () => {
-    expect(isOlder({ major: 2, minor: 1, patch: 294 }, MIN_CLAUDE_CODE)).toBe(true)
-    expect(isOlder({ major: 2, minor: 0, patch: 999 }, MIN_CLAUDE_CODE)).toBe(true)
-    expect(isOlder({ major: 1, minor: 9, patch: 999 }, MIN_CLAUDE_CODE)).toBe(true)
-    expect(isOlder(MIN_CLAUDE_CODE, MIN_CLAUDE_CODE)).toBe(false)
-    expect(isOlder({ major: 2, minor: 2, patch: 0 }, MIN_CLAUDE_CODE)).toBe(false)
-    expect(isOlder({ major: 3, minor: 0, patch: 0 }, MIN_CLAUDE_CODE)).toBe(false)
-    expect(versionText(MIN_CLAUDE_CODE)).toBe('2.1.295')
+    expect(isOlder({ major: 2, minor: 1, patch: 294 }, FLOOR)).toBe(true)
+    expect(isOlder({ major: 2, minor: 0, patch: 999 }, FLOOR)).toBe(true)
+    expect(isOlder({ major: 1, minor: 9, patch: 999 }, FLOOR)).toBe(true)
+    expect(isOlder(FLOOR, FLOOR)).toBe(false)
+    expect(isOlder({ major: 2, minor: 2, patch: 0 }, FLOOR)).toBe(false)
+    expect(isOlder({ major: 3, minor: 0, patch: 0 }, FLOOR)).toBe(false)
+    expect(versionText(FLOOR)).toBe('2.1.295')
+  })
+})
+
+describe('gitCheck', () => {
+  test('finds nothing when git starts, whatever its exit code', async () => {
+    expect(await gitCheck(async () => GIT_RAN)()).toBeNull()
+    expect(await gitCheck(async () => ({ exitCode: 129 }))()).toBeNull()
+  })
+
+  test('a git that cannot be started, with the reason of an error or of a bare text', async () => {
+    expect(await gitCheck(() => Promise.reject(new Error('spawn git ENOENT')))()).toEqual({ kind: 'git-unstartable', reason: 'spawn git ENOENT' })
+    expect(await gitCheck(() => Promise.reject('timed out'))()).toEqual({ kind: 'git-unstartable', reason: 'timed out' })
   })
 })
 
 describe('requirementProblems', () => {
-  test('finds nothing when Claude Code is new enough and git starts, and asks each once', async () => {
-    const { answered, calls } = ports(running('2.1.300'))
-    expect(await requirementProblems(answered)).toEqual([])
-    expect([...calls].sort()).toEqual(['git', 'version'])
+  /** Checks that answer in turn, each recording its call. */
+  function checks(...answers: readonly (RequirementProblem | null)[]) {
+    const calls: number[] = []
+    const made: RequirementCheck[] = answers.map((answer, index) => async () => {
+      calls.push(index)
+      return answer
+    })
+    return { made, calls }
+  }
+
+  test('finds nothing when every requirement is met, and asks each check once', async () => {
+    const { made, calls } = checks(null, null)
+    expect(await requirementProblems(made)).toEqual([])
+    expect(calls).toEqual([0, 1])
   })
 
-  test('a Claude Code older than 2.1.295, a development build of one too', async () => {
-    expect(await requirementProblems(ports(running('2.1.290')).answered)).toEqual([{ kind: 'claude-code-old', running: { major: 2, minor: 1, patch: 290 } }])
-    expect(await requirementProblems(ports(running('2.1.294-dev.20260920.t101500.sha1a2b3c4')).answered)).toEqual([
-      { kind: 'claude-code-old', running: { major: 2, minor: 1, patch: 294 } },
-    ])
-    expect(await requirementProblems(ports(running('2.1.295')).answered)).toEqual([])
+  test('keeps the problems in the order of their checks, and a problem never stops the checks after it', async () => {
+    const old: RequirementProblem = { kind: 'claude-code-old', running: { major: 2, minor: 1, patch: 290 } }
+    const git: RequirementProblem = { kind: 'git-unstartable', reason: 'ENOENT' }
+    const { made, calls } = checks(old, null, git)
+    expect(await requirementProblems(made)).toEqual([old, git])
+    expect(calls).toEqual([0, 1, 2])
   })
 
-  test('never calls a version it cannot read old', async () => {
-    expect(await requirementProblems(ports(running('a build of my own')).answered)).toEqual([])
-  })
-
-  test('a git that cannot be started, with the reason; any exit code means it started', async () => {
-    const missing = ports(running('2.1.300'), () => Promise.reject(new Error('spawn git ENOENT')))
-    expect(await requirementProblems(missing.answered)).toEqual([{ kind: 'git-unstartable', reason: 'spawn git ENOENT' }])
-    const failing = ports(running('2.1.300'), async () => ({ ...GIT_RAN, exitCode: 129, stdout: '' }))
-    expect(await requirementProblems(failing.answered)).toEqual([])
-  })
-
-  test('a version the engine cannot give is a failed check, and git is still checked', async () => {
-    const { answered, calls } = ports(() => Promise.reject(new Error('no session.version on this engine')), () => Promise.reject('timed out'))
-    expect(await requirementProblems(answered)).toEqual([
-      { kind: 'check-failed', requirement: 'Claude Code', reason: 'no session.version on this engine' },
-      { kind: 'git-unstartable', reason: 'timed out' },
-    ])
-    expect(calls).toContain('git')
+  test('with no check there is nothing to lack', async () => {
+    expect(await requirementProblems([])).toEqual([])
   })
 })
 
 describe('the lines', () => {
-  test('say what is missing in plain words, then the fix', () => {
-    expect(describeRequirement({ kind: 'claude-code-old', running: { major: 2, minor: 1, patch: 290 } })).toBe(
-      'Claude Code 2.1.290 is older than teamrig-pane needs (2.1.295 or later): run claude update, then restart Claude Code.',
-    )
-    expect(describeRequirement({ kind: 'git-unstartable', reason: 'spawn git ENOENT' })).toBe(
+  test('say what is missing in plain words, then the fix; the host too old in the words of its surface', () => {
+    expect(describeRequirement({ kind: 'claude-code-old', running: { major: 2, minor: 1, patch: 290 } }, hostOld)).toBe('the host 2.1.290 is too old: update it.')
+    expect(describeRequirement({ kind: 'git-unstartable', reason: 'spawn git ENOENT' }, hostOld)).toBe(
       'git could not be started (spawn git ENOENT): install it from git-scm.com, then restart Claude Code. The Changes view needs it.',
     )
-    expect(describeRequirement({ kind: 'check-failed', requirement: 'Claude Code', reason: 'denied' })).toBe('The teamrig-pane check for Claude Code failed (denied).')
+    expect(describeRequirement({ kind: 'check-failed', requirement: 'Claude Code', reason: 'denied' }, hostOld)).toBe('The teamrig-pane check for Claude Code failed (denied).')
   })
 
   test('are drawn as one WARN block each, in order, and only a git problem empties the Changes view', () => {
     const old: RequirementProblem = { kind: 'claude-code-old', running: { major: 2, minor: 1, patch: 290 } }
     const git: RequirementProblem = { kind: 'git-unstartable', reason: 'ENOENT' }
-    const blocks = requirementBlocks([old, git])
+    const blocks = requirementBlocks([old, git], hostOld)
     expect(blocks.map(block => block.key)).toEqual(['requirement-claude-code-old', 'requirement-git-unstartable'])
-    expect(blocks[1]?.rows[0]?.spans).toEqual([{ text: `WARN ${describeRequirement(git)}`, color: 'warning' }])
-    expect(requirementBlocks([])).toEqual([])
+    expect(blocks[0]?.rows[0]?.spans).toEqual([{ text: 'WARN the host 2.1.290 is too old: update it.', color: 'warning' }])
+    expect(blocks[1]?.rows[0]?.spans).toEqual([{ text: `WARN ${describeRequirement(git, hostOld)}`, color: 'warning' }])
+    expect(requirementBlocks([], hostOld)).toEqual([])
     expect(isGitMissing([old, git])).toBe(true)
     expect(isGitMissing([old])).toBe(false)
   })

@@ -1,4 +1,6 @@
 // The /teamrig-pane command: its name and its argument, parsed apart from the engine so every form is testable.
+// The Claude Code dock's own: only it has a slash command and a fullscreen layout to dock in (`inlineReason`
+// reads the engine's `CommandPresentation`), so this file is on the dock's side of the engine boundary.
 import type { CommandPresentation } from 'claude-code'
 import type { ViewMode } from '../types'
 

@@ -69,6 +69,7 @@ import type {
   TeamView,
   ViewMode,
 } from '../types'
+import { claudeCodeCheck, claudeCodeOldLine } from './claude-code-version'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { bounded } from './bounded-run'
 import { LiveRegister, pinKey } from './live'
@@ -113,7 +114,7 @@ import { sessionName, titleSpans } from './session-title'
 import { NOTHING_EXPANDED, NOTHING_FOLDED, paneBlocks, type Block, type InboxPress, type Span, type StatsPress } from './rows'
 import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
-import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
+import { gitCheck, isGitMissing, requirementBlocks, requirementProblems } from './requirements'
 import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from './changes'
 import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
 import { changesResultKey, diffKeyOf, searchChanges, type ChangeHit } from './changes-search'
@@ -967,10 +968,7 @@ export const register: Register = on => {
     void $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
     // Once per start: git --version and the engine's version, never on a poll. The check never rejects; a
     // failed write only leaves the lines out.
-    void requirementProblems({
-      version: () => $.session.version(),
-      gitVersion: () => run(['git', '--version'], { timeoutMs: GIT_TIMEOUT_MS }),
-    })
+    void requirementProblems([claudeCodeCheck(() => $.session.version()), gitCheck(() => run(['git', '--version'], { timeoutMs: GIT_TIMEOUT_MS }))])
       .then(found => update($, requirements, () => found))
       .catch(() => undefined)
     void changesLive.addFolder(e.cwd).then(() => changesLive.refresh())
@@ -1214,7 +1212,7 @@ export const register: Register = on => {
                   : logShown === null
                   ? logListBlocks(logs, clockOf(snap), snap, place.kind === 'search' ? { query: place.query, hits: logFound } : null)
                   : logPageBlocks(logShown, clockOf(snap), logs, snap)
-        const blocks = [...requirementBlocks(missing), ...viewBlocks]
+        const blocks = [...requirementBlocks(missing, claudeCodeOldLine), ...viewBlocks]
         // Inline, the bar's lines count in the capped rows.
         const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
         barLines = bar === null ? [] : inline ? bar.lines.slice(0, inlineBarRows(bar, cap)) : bar.lines
