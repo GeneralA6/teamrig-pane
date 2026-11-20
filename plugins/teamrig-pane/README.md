@@ -92,7 +92,9 @@ the value column, and shows only when it has a value:
 
 - **Description:** what the task is and why, as written with it (`teamrig add --description`, or the
   body of the GitHub issue it came from); a task written before teamrig kept one shows the ask quoted as
-  plain text from where its ref points (`file:N`, `N-M` up to 3 lines, or `N,M`);
+  plain text from where its ref points (`file:N`, `N-M` up to 3 lines, or `N,M`); one whose description
+  the register's snapshot left out to stay small (set more than two days ago) says
+  `description cut (N characters): teamrig show T<id> prints it`;
 - **Status:** `not started`, `in progress`, `waiting`, `verifying`, `done` or `dropped`, since when,
   and who set it when that was the task's newest change, then why a waiting task waits, in red;
 - **Note:** its newest status note;

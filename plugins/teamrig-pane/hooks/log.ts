@@ -23,6 +23,8 @@ export const ANSWER_CONTRACT_MATCHES: Same<AnswerRow | null, Task['answer']> = t
 export const DECISION_CONTRACT_MATCHES: Same<DecisionRow | null, Task['decided']> = true
 // The same for what tasks have cost, which a ranking sizes them by (core register/ranking.ts storedSizing).
 export const SPEND_CONTRACT_MATCHES: Same<TaskSpend, StoredSpend> = true
+// The same for the mark of a description the snapshot left out (core register/description-cut.ts).
+export const DESCRIPTION_CUT_CONTRACT_MATCHES: Same<TaskRow['descriptionCut'], Task['descriptionCut']> = true
 
 /** A task as the pane draws it. */
 export function rowOf(task: Task): TaskRow {
@@ -30,6 +32,7 @@ export function rowOf(task: Task): TaskRow {
     id: task.id,
     title: task.title,
     description: task.description,
+    descriptionCut: task.descriptionCut,
     owner: task.owner,
     priority: task.priority,
     type: task.type,

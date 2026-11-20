@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TaskDetail, TaskRow, TeamLeads } from '../types'
 import { cardRows, LABEL_CELLS } from '../hooks/card'
 import { readRegister } from '../hooks/core/read/index'
+import { cutTask } from '../hooks/core/register/description-cut'
 import { wrapRow } from '../hooks/layout'
 import { rowOf } from '../hooks/log'
 import type { Row } from '../hooks/rows'
@@ -199,6 +200,20 @@ describe('card', () => {
     const stale = cardOf(tasks, 'T2', { ref: 'old', quotes: [{ ref: 'old', lines: ['the old ask'] }], goals: [] })
     expect(stale.some(row => row.key.includes(':description'))).toBe(false)
     expect([rowNamed(stale, 'goal'), rowNamed(stale, 'reference')].map(textOf)).toEqual([labelled('Goal', 'G10.2'), labelled('Reference', 'new')])
+  })
+
+  test("a description the snapshot left out: its length and the command that prints it, in place of any quote (teamrig T4781)", async () => {
+    const description = 'Ship the card.\n\nIt reads like a tracker.'
+    const folded = readRegister(createLine('T1', { owner: 'po', by: 'po', at: NOW - HOUR, source: 'po', ref: 'docs/x.md:9', goals: [], description })).state.tasks.get('T1')
+    if (folded === undefined) throw new Error('no T1 in the fold')
+    // The task as a snapshot's task line holds it, cut by teamrig's own writer.
+    const tasks = [rowOf(cutTask(folded))]
+    const quoted: TaskDetail = { ref: 'docs/x.md:9', quotes: [{ ref: 'docs/x.md:9', lines: ['the quoted ask'] }], goals: [] }
+    const card = cardOf(tasks, 'T1', quoted)
+    expect(card.filter(row => row.key.includes(':description')).map(textOf)).toEqual([
+      labelled('Description', `description cut (${description.length} characters): teamrig show T1 prints it`),
+    ])
+    expect(card.some(row => row.spans.some(span => span.text === 'the quoted ask'))).toBe(false)
   })
 
   test('says who set the status only while that is the newest event; the note in the text color, the proof in green under a Verify by due', async () => {
