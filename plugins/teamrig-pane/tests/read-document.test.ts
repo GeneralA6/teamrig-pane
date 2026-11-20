@@ -1,9 +1,10 @@
 // The envelope of a `teamrig read` document (hooks/read-document.ts): the interface version read as major.minor, a
 // document of the served major read at any minor with fields it does not know kept aside, one of another major refused
-// with the side to update, a document the pane does not ask for passed over, and a run's lines read one by one so a
-// bad line never takes the others with it (T4742).
+// with the side to update, a document the pane does not ask for passed over, its problems kept as lines the pane may
+// draw, and a run's lines read one by one so a bad line never takes the others with it (T4742).
 import { describe, expect, test } from 'claude-code/testing'
 import { DOCUMENT_NAMES, SERVED_MAJOR, isDocumentName, isRecord, parseDocument, parseInterface, readAnswer } from '../hooks/read-document'
+import { CONTROL_SHOWN } from '../hooks/shown-text'
 
 const TASKS = { interface: '1.0', document: 'tasks', revision: 'r7', problems: [], tasks: [{ id: 'T1' }] }
 
@@ -72,6 +73,11 @@ describe('parseDocument', () => {
     expect(read.kind === 'document' ? read.document.problems : null).toEqual(['team beta: its folder is locked', 'one line skipped'])
     const none = parseDocument({ ...TASKS, problems: 'locked' })
     expect(none.kind === 'document' ? none.document.problems : null).toEqual([])
+  })
+
+  test('keeps a problem with nothing in it a terminal would act on', () => {
+    const read = parseDocument({ ...TASKS, problems: ['team \u001b[31mbeta\u001b[0m: locked', 'T4 ‮enod'] })
+    expect(read.kind === 'document' ? read.document.problems : null).toEqual([`team ${CONTROL_SHOWN}[31mbeta${CONTROL_SHOWN}[0m: locked`, 'T4 enod'])
   })
 
   test('a newer major is refused, naming the pane as the side to update', () => {

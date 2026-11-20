@@ -4,9 +4,12 @@
 // nothing where the pane could be misled: a failed run, or one whose output the engine cut (teamrig-cli.ts CliRun), is
 // a failure with its reason, never documents read from part of it. Past that each document stands alone: one that is
 // missing or cannot be read is named as a problem and the others are served, so the pane keeps what it last drew of
-// the missing one. Runs the CLI only; no model calls.
+// the missing one. A failure's reason may quote what the run wrote to stderr or how it broke: that is another
+// program's text as much as a document is, so every reason leaves here as the pane may draw it (shown-text.ts).
+// Runs the CLI only; no model calls.
 import { messageOf } from './errors'
 import { readAnswer, type DocumentName, type ReadDocument } from './read-document'
+import { shownText } from './shown-text'
 import { cliArgv, failureLines, type CliRun, type TeamrigCli } from './teamrig-cli'
 
 /** A read takes no lock: far under this, unless the machine is swamped. */
@@ -29,6 +32,10 @@ export type ReadResult =
 
 const NOTHING_READ: ReadResult = { kind: 'read', documents: new Map(), problems: [] }
 
+function failed(reason: string): ReadResult {
+  return { kind: 'failed', reason: shownText(reason) }
+}
+
 /**
  * The CLI's words for one read of `asks`, as `caller` when the tab knows one. The revisions held go in one `--unless`,
  * a comma list: teamrig's parser refuses a flag given twice.
@@ -42,8 +49,8 @@ export function readWords(asks: readonly ReadAsk[], caller: string | null): stri
 
 /** What `run` answered to `asks`. */
 export function readResult(run: CliRun, asks: readonly ReadAsk[]): ReadResult {
-  if (run.exitCode !== 0) return { kind: 'failed', reason: failureLines(run, 'read').join(' ') }
-  if (run.isStdoutTruncated) return { kind: 'failed', reason: 'teamrig read printed more than the pane can take in one run' }
+  if (run.exitCode !== 0) return failed(failureLines(run, 'read').join(' '))
+  if (run.isStdoutTruncated) return failed('teamrig read printed more than the pane can take in one run')
   const answer = readAnswer(run.stdout)
   const documents = new Map<DocumentName, ReadDocument>()
   const problems = [...answer.unreadable]
@@ -62,7 +69,7 @@ export function readResult(run: CliRun, asks: readonly ReadAsk[]): ReadResult {
     }
   }
   if (documents.size === 0) {
-    return { kind: 'failed', reason: problems.length > 0 ? problems.join('; ') : 'teamrig read printed no document the pane can read: update teamrig' }
+    return failed(problems.length > 0 ? problems.join('; ') : 'teamrig read printed no document the pane can read: update teamrig')
   }
   for (const ask of asks) {
     if (!documents.has(ask.name) && !told.has(ask.name)) problems.push(`teamrig read printed no ${ask.name} document`)
@@ -73,11 +80,11 @@ export function readResult(run: CliRun, asks: readonly ReadAsk[]): ReadResult {
 /** Reads `asks` in one run of `cli`; with none to read it runs nothing. A run that cannot finish is a failure, never a throw. */
 export async function readDocuments(cli: TeamrigCli, ports: ReadPorts, asks: readonly ReadAsk[]): Promise<ReadResult> {
   if (asks.length === 0) return NOTHING_READ
-  if (cli.kind === 'missing') return { kind: 'failed', reason: cli.problem }
+  if (cli.kind === 'missing') return failed(cli.problem)
   try {
     const words = readWords(asks, await ports.caller())
     return readResult(await ports.run(cliArgv(cli.main, words), READ_TIMEOUT_MS), asks)
   } catch (error) {
-    return { kind: 'failed', reason: `teamrig read did not finish: ${messageOf(error)}` }
+    return failed(`teamrig read did not finish: ${messageOf(error)}`)
   }
 }

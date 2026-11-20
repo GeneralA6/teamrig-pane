@@ -1,8 +1,10 @@
 // The fields of a `teamrig read` record (hooks/document-fields.ts): a field of the type asked is answered as it is,
 // any other is noted under its path with a stand-in in its place, an optional field reads null when null or left out,
-// a record inside a record notes under the outer field's path, and the left-out line names the first few (T4742).
+// a record inside a record notes under the outer field's path, every text and quoted word is answered as the pane
+// may draw it, and the left-out line names the first few (T4742).
 import { describe, expect, test } from 'claude-code/testing'
 import { Fields, isList, isOneOf, leftOutLine } from '../hooks/document-fields'
+import { CONTROL_SHOWN } from '../hooks/shown-text'
 
 const COLOURS = { red: true, green: true } as const
 
@@ -51,6 +53,26 @@ describe('Fields', () => {
     expect(fields.oneOf('shade', COLOURS, 'red')).toBe('red')
     expect(fields.oneOf('built', COLOURS, 'green')).toBe('green')
     expect(fields.bad).toEqual(['colour "blue"', 'shade', 'built "toString"'])
+  })
+
+  test('answers every text with nothing in it a terminal would act on', () => {
+    const fields = new Fields({
+      title: '\u001b[2Jwiped',
+      note: 'approved ‮denied',
+      tags: ['a\u0007', 'b\tc'],
+      body: { text: 'one\r\ntwo\u009b' },
+    })
+    expect(fields.text('title')).toBe(`${CONTROL_SHOWN}[2Jwiped`)
+    expect(fields.textOrNull('note')).toBe('approved denied')
+    expect(fields.texts('tags')).toEqual([`a${CONTROL_SHOWN}`, 'b c'])
+    expect(fields.part('body').text('text')).toBe(`one\ntwo${CONTROL_SHOWN}`)
+    expect(fields.bad).toEqual([])
+  })
+
+  test('quotes a word outside its known set with nothing in it a terminal would act on', () => {
+    const fields = new Fields({ colour: 'bl\u009b31mue‮' })
+    expect(fields.oneOf('colour', COLOURS, 'red')).toBe('red')
+    expect(fields.bad).toEqual([`colour "bl${CONTROL_SHOWN}31mue"`])
   })
 
   test('reads a record inside a record, noting under the outer field', () => {

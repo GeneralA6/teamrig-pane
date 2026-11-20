@@ -4,14 +4,25 @@
 // or a field this file does not name is never a problem. A major changes meaning, so a document of another major is
 // not read at all, and the pane says which side to update. `revision` is teamrig's opaque mark of what a document was
 // built from: handed back on the next read, teamrig answers `unchanged` in the document's place and the pane keeps
-// what it drew. One run prints a document per line, so one that cannot be read never takes the others with it.
+// what it drew. One run prints a document per line, so one that cannot be read never takes the others with it. A
+// document's `problems` are lines the pane shows, so they leave here as it may draw them (shown-text.ts).
 // Parses text only; runs nothing.
+import { shownText } from './shown-text'
 import { linesOf } from './teamrig-cli'
 
 export type JsonRecord = Readonly<Record<string, unknown>>
 
 export function isRecord(value: unknown): value is JsonRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isText(value: unknown): value is string {
+  return typeof value === 'string'
+}
+
+/** The lines `problems` holds, each as the pane may draw it; an entry that is no text is passed over. */
+function problemLines(problems: unknown): string[] {
+  return Array.isArray(problems) ? problems.filter(isText).map(shownText) : []
 }
 
 /** The documents the pane asks for, by the name `teamrig read` takes and prints. */
@@ -85,7 +96,7 @@ export function parseDocument(value: unknown): DocumentRead {
       interface: version,
       revision: typeof revision === 'string' ? revision : null,
       isUnchanged: unchanged === true,
-      problems: Array.isArray(problems) ? problems.filter(problem => typeof problem === 'string') : [],
+      problems: problemLines(problems),
       fields: value,
     },
   }

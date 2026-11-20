@@ -4,8 +4,11 @@
 // a caller reads the whole record first and asks once, at the end, whether it may use what it built (`bad`). A record
 // that noted anything must not be used: its stand-ins mean nothing. An optional field is one teamrig serves as null or
 // leaves out: both read null, and only a value of another type is noted. A field no reader asks for is never looked
-// at, so what a later minor adds passes through unseen. Pure.
+// at, so what a later minor adds passes through unseen. Every text leaves here as the pane may draw it
+// (shown-text.ts), the word a noted path quotes too: this is the one door a served text takes into a view, so no
+// reader can forget to clean one. Pure.
 import { isRecord, type JsonRecord } from './read-document'
+import { shownText } from './shown-text'
 
 /** What a document's own reader made of it: its value with what it left out, as lines to show; or why it read none. */
 export type BodyRead<T> =
@@ -75,11 +78,12 @@ export class Fields {
   }
 
   text(name: string): string {
-    return this.required(name, isText, '')
+    return shownText(this.required(name, isText, ''))
   }
 
   textOrNull(name: string): string | null {
-    return this.optional(name, isText)
+    const value = this.optional(name, isText)
+    return value === null ? null : shownText(value)
   }
 
   number(name: string): number {
@@ -96,7 +100,7 @@ export class Fields {
 
   /** A list of texts; one entry of another type and the whole field is noted. */
   texts(name: string): readonly string[] {
-    return this.required(name, isTexts, [])
+    return this.required(name, isTexts, []).map(shownText)
   }
 
   /**
@@ -106,7 +110,7 @@ export class Fields {
   oneOf<Word extends string>(name: string, known: Readonly<Record<Word, true>>, standIn: Word): Word {
     const value = this.record[name]
     if (!isText(value)) return this.note(name, standIn)
-    return isOneOf(known, value) ? value : this.note(`${name} ${JSON.stringify(value)}`, standIn)
+    return isOneOf(known, value) ? value : this.note(`${name} ${JSON.stringify(shownText(value))}`, standIn)
   }
 
   /** The record in a field. */

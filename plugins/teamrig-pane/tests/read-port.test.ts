@@ -1,9 +1,11 @@
 // One run of `teamrig read` (hooks/read-port.ts): every document a poll asks for goes in one run, with the revision
 // held of each handed back; a failed or cut run is a failure with its reason and no documents; a document that is
 // missing, unreadable or unchanged from nothing held is a named problem beside the ones that were read; a missing CLI
-// or a run that does not finish is a failure, never a throw (T4742).
+// or a run that does not finish is a failure, never a throw; a failure's reason holds nothing a terminal would act
+// on (T4742).
 import { describe, expect, test } from 'claude-code/testing'
 import { READ_TIMEOUT_MS, readDocuments, readResult, readWords, type ReadAsk, type ReadPorts } from '../hooks/read-port'
+import { CONTROL_SHOWN } from '../hooks/shown-text'
 import { cliArgv, type CliRun, type TeamrigCli } from '../hooks/teamrig-cli'
 
 const CLI: TeamrigCli = { kind: 'found', main: 'K/teamrig/dist/cli/main.js' }
@@ -66,6 +68,11 @@ describe('readResult', () => {
     const said: CliRun = { exitCode: 2, stdout: JSON.stringify(TASKS), stderr: 'REFUSED: no team here\n', isStdoutTruncated: false }
     expect(readResult(said, WHOLE)).toEqual({ kind: 'failed', reason: 'REFUSED: no team here' })
     expect(readResult({ ...said, stderr: '' }, WHOLE)).toEqual({ kind: 'failed', reason: 'teamrig read exited 2' })
+  })
+
+  test('a failed run is told with nothing in it a terminal would act on', () => {
+    const said: CliRun = { exitCode: 2, stdout: '', stderr: '\u001b[31mREFUSED\u001b[0m: no team ‮ereh\n', isStdoutTruncated: false }
+    expect(readResult(said, WHOLE)).toEqual({ kind: 'failed', reason: `${CONTROL_SHOWN}[31mREFUSED${CONTROL_SHOWN}[0m: no team ereh` })
   })
 
   test('a cut answer is a failure, with no document read from its start', () => {
@@ -147,6 +154,13 @@ describe('readDocuments', () => {
     expect(await readDocuments(CLI, portsOf(new Error('no answer in 35 s')), WHOLE)).toEqual({
       kind: 'failed',
       reason: 'teamrig read did not finish: no answer in 35 s',
+    })
+  })
+
+  test('a run that broke is told with nothing in it a terminal would act on', async () => {
+    expect(await readDocuments(CLI, portsOf(new Error('spawn \u0007node\u009b ENOENT')), WHOLE)).toEqual({
+      kind: 'failed',
+      reason: `teamrig read did not finish: spawn ${CONTROL_SHOWN}node${CONTROL_SHOWN} ENOENT`,
     })
   })
 })
