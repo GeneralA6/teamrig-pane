@@ -1,7 +1,8 @@
 // The card an open task shows in place of its meta line (rows.ts): what the register, the task's refs and its
 // goals say about it, one labelled row per fact, each only when it has a value, in the words a task tracker uses.
 // Description: what the task is and why, as written (`teamrig add --description`, a GitHub issue's body); a task
-// written before teamrig kept one shows the ask quoted from its ref (details.ts) instead. Status: since when, who
+// written before teamrig kept one shows the ask quoted from its ref (details.ts) instead, and one whose description
+// the snapshot left out says how long it is and that `teamrig show` prints it. Status: since when, who
 // set it when that is known, then why a waiting task waits. Note: the newest status note. Proof: what proves a
 // verifying task. Owner: the session that owns it, on every card. Lead: the lead its owner answers to (leads.ts),
 // when the team's config is read. Priority, Class and Score (what its place in plan order reads; a finished task has
@@ -75,11 +76,15 @@ export function textLines(text: string | null, style: Omit<Span, 'text'> = {}): 
 }
 
 /**
- * The description as written, a line a row; for a task with none, each line quoted from its ref, so long as the
- * quotes were read for the ref it has now (its ref can change after its card opened).
+ * The description as written, a line a row; for one the snapshot left out, a line saying so and where to read it (the
+ * task has a description, so no quote stands in for it); for a task with none, each line quoted from its ref, so long
+ * as the quotes were read for the ref it has now (its ref can change after its card opened).
  */
 function descriptionLines(task: TaskRow, detail: TaskDetail): Lines {
   if (task.description !== null) return textLines(task.description)
+  if (task.descriptionCut !== null) {
+    return [[{ text: `description cut (${task.descriptionCut.chars} characters): teamrig show ${task.id} prints it` }]]
+  }
   const quotes = detail.ref === task.ref ? detail.quotes : []
   return quotes.flatMap(quote => quote.lines.map(text => [{ text }]))
 }

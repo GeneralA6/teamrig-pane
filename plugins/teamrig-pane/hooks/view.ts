@@ -123,6 +123,7 @@ const TASK_FIELDS: { readonly [K in keyof TaskRow]-?: K } = {
   id: 'id',
   title: 'title',
   description: 'description',
+  descriptionCut: 'descriptionCut',
   owner: 'owner',
   priority: 'priority',
   type: 'type',

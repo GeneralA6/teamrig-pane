@@ -37,6 +37,11 @@ export type TaskRow = {
   title: string
   /** What the task is and why, in plain words (`teamrig add --description`, a GitHub issue's body); null for a task written before teamrig kept one. */
   description: string | null
+  /**
+   * The mark of a description the register's snapshot left out to stay small (teamrig keeps the whole text in its
+   * history, and `teamrig show` prints it): `chars` is the whole text's length. When not null, `description` is null.
+   */
+  descriptionCut: { readonly chars: number; readonly hash: string } | null
   owner: string
   /** 0 is the most urgent (teamrig's own level for work done right now); drawn `p0` in a list, `Priority 0` on a card. */
   priority: number
