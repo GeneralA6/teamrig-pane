@@ -86,7 +86,10 @@ import {
   submitLog as enterLog,
   submitTasks as enterTasks,
   submitTeam as enterTeam,
+  openTask,
+  toggleBanner,
   toggleCard,
+  togglePrevious,
   toggleTeamKey,
   type ReadsFile,
 } from './presses'
@@ -117,9 +120,7 @@ import {
   PREVIOUS_OPEN_KEY,
   PREVIOUS_PRESS_KEY,
   bannerBlock,
-  currentRowKey,
   currentTask,
-  lookShowing,
   previousBlock,
   type Current,
 } from './banner'
@@ -150,7 +151,6 @@ import {
   currentPlace,
   doneAt,
   forward,
-  fromList,
   isPage,
   KEYS_PAGE,
   placeLabel,
@@ -1776,25 +1776,16 @@ export const register: Register = on => {
     const [banner] = dockLayout([bannerBlock(current, isOpen, tree, name)], e.props.bodyColumns - openCells, bannerWraps)
     if (banner === undefined) return next(e)
     const press = (
-      <Button key={BANNER_KEY} plain onPress={() => void update($, bannerOpen, wasOpen => !wasOpen)}>
+      <Button key={BANNER_KEY} plain onPress={() => void toggleBanner(atomStore($))}>
         {drawSpans({ Text, Link }, banner.spans, banner.wrap)}
       </Button>
     )
-    // Opens the pane as /teamrig-pane does, minimized or never opened too, at the task's page (read as its card's is)
-    // over the list at the task's row (nav.ts fromList): back shows the list scrolled to it. A status-bar filter or a
-    // fold that hides the row gives way first (banner.ts lookShowing), else back would have no row to land on.
+    // Opens the pane as /teamrig-pane does, minimized or never opened too, at the task's page over the list at the
+    // task's row (presses.ts openTask): back shows the list scrolled to it.
     const openInPane = async (shown: Current) => {
       await sizer?.set('open')
       await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
-      const detail = await detailOf(shown.task)
-      await update($, pages, kept => ({ ...kept, [shown.task.id]: detail }))
-      await update($, view, () => 'tasks')
-      const listMode = await read($, mode)
-      const look = lookShowing(shown, listMode, { filter: await read($, barFilter), folded: await read($, tasksFolded) })
-      await update($, barFilter, () => look.filter)
-      await update($, tasksFolded, () => look.folded)
-      const row = currentRowKey(shown, listMode)
-      await go(atomStore($), () => fromList(row, { kind: 'task', id: shown.task.id }))
+      await openTask(atomStore($), shown, detailOf)
     }
     // The banner's Box takes the columns the banner leaves free, so the button ends the row, beside the engine's [-].
     const bannerRow =
@@ -1833,7 +1824,7 @@ export const register: Register = on => {
             <Button key={PREVIOUS_ALL_KEY} label={PREVIOUS_ALL_LABEL} variant="secondary" onPress={() => void openConversations(null)} />
           </Box>
           <Box key={PREVIOUS_KEY}>
-            <Button key={PREVIOUS_PRESS_KEY} plain onPress={() => void update($, previousOpen, wasOpen => !wasOpen)}>
+            <Button key={PREVIOUS_PRESS_KEY} plain onPress={() => void togglePrevious(atomStore($))}>
               {drawSpans({ Text, Link }, line.spans, line.wrap)}
             </Button>
           </Box>
