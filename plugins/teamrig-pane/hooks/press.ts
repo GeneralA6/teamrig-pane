@@ -1,15 +1,40 @@
-// A press in the pane's body as data, and what running it does. The drawing (layout.ts) says where a press is: a
-// piece of a card's line, a row of a card that is a press of its own, an element's head. `pressOf...` names the press
-// each holds and `runPress` answers it through presses.ts and the ports of the readers that act outside the store, so
-// a front end only draws something to press and hands the press back: the Claude Code dock and a front end with no
-// engine answer it the same way. The tests run every kind on a store kept in memory.
-import type { LogRead, MeetingPress, PaneView, Place, RefFile, SessionPress, TaskRow } from '../types'
+// A press in the pane as data, and what running it does. The drawing says where a press is: in the body (layout.ts)
+// a piece of a card's line, a row of a card that is a press of its own, an element's head; in the head (head.ts) a
+// button, a place of a trail, a piece of the status bar. `pressOf...` names the press each of the body's holds, the
+// head's pieces carry theirs, and `runPress` answers it through presses.ts, steps.ts and the ports of the readers that
+// act outside the store, so a front end only draws something to press and hands the press back: the Claude Code dock
+// and a front end with no engine answer it the same way. The Find field is typed into, not pressed: `typeFind` and
+// `submitFind` answer its words. The tests run every kind on a store kept in memory.
+import type { BarStatus, LogRead, MeetingPress, PaneView, Place, RefFile, SessionPress, Snapshot, ViewMode } from '../types'
 import type { CardPart, Drawn } from './layout'
+import { back, doneAt, forward, KEYS_PAGE, pushed, searched, wentTo } from './nav'
 import type { PaneStore } from './pane-store'
 import type { PressPiece } from './press-keys'
-import { fold, openFile, openInbox, openPage, pickStats, toggleCard, toggleTeamKey, type OpensLog, type ReadsDetail, type ReadsFile, type TogglesDiff } from './presses'
+import {
+  closeCards,
+  closeLog,
+  closeStatsFrom,
+  closeStatsList,
+  filterBar,
+  fold,
+  openFile,
+  openInbox,
+  openPage,
+  pickStats,
+  submitChanges,
+  submitLog,
+  submitTasks,
+  submitTeam,
+  toggleCard,
+  toggleTeamKey,
+  type ClosesLog,
+  type OpensLog,
+  type ReadsDetail,
+  type ReadsFile,
+  type TogglesDiff,
+} from './presses'
 import type { ActPress, InboxPress, StatsPress } from './rows'
-import { openConversation, type ViewLives } from './steps'
+import { clearSearch, focusFind, go, openConversation, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
 
 /**
  * A press in the body: a task's card opened or closed (`card`), a task's page (`page`), a reference file's (`file`)
@@ -18,8 +43,29 @@ import { openConversation, type ViewLives } from './steps'
  * (`meeting`); a session row's act (`session-act`); a task card's owner act (`act`); a Stats tab pick (`stats`); a
  * heading that opens or closes what is under it (`fold`); a conversation's Log page (`log`); a Changes file's diff
  * opened or closed (`diff`).
+ *
+ * A press in the head (head.ts): a view of the switch (`view`); the Tasks view's mine or all (`mode`); the Done page
+ * at a week (`done-week`); every open card closed (`close-cards`); the Keys page (`keys`); the list filtered to a
+ * status of the bar, or unfiltered by a second press (`filter`); a step back or forward (`back`, `forward`) or to a
+ * place of the trail (`crumb`, the place's index among the places kept); back from a conversation's page
+ * (`log-close`), from a Health count's tasks (`stats-list-close`) and from a Stats tab a Teams row opened
+ * (`stats-from-close`); the focus ring moved into the Find field (`find`); the search closed (`find-clear`).
  */
 export type Press =
+  | { readonly kind: 'view'; readonly view: PaneView }
+  | { readonly kind: 'mode'; readonly mode: ViewMode }
+  | { readonly kind: 'done-week'; readonly week: string }
+  | { readonly kind: 'close-cards' }
+  | { readonly kind: 'keys' }
+  | { readonly kind: 'filter'; readonly status: BarStatus }
+  | { readonly kind: 'back' }
+  | { readonly kind: 'forward' }
+  | { readonly kind: 'crumb'; readonly index: number }
+  | { readonly kind: 'log-close' }
+  | { readonly kind: 'stats-list-close' }
+  | { readonly kind: 'stats-from-close' }
+  | { readonly kind: 'find' }
+  | { readonly kind: 'find-clear' }
   | { readonly kind: 'card'; readonly task: string }
   | { readonly kind: 'page'; readonly task: string; readonly from: string }
   | { readonly kind: 'file'; readonly file: RefFile; readonly from: string }
@@ -46,22 +92,29 @@ export type PressesSession = { press(press: SessionPress): Promise<void> }
 /** The owner acts, as a press on a task card's act uses them. */
 export type PressesAct = { press(press: ActPress['press'], task: string): Promise<void> }
 
+/** The Log view's reader, as the presses use it: a conversation's page opened, and back from it. */
+export type ReadsLog = OpensLog & ClosesLog
+
+/** The view whose search Enter in the Find field runs. */
+export type FindSubmit = 'tasks' | 'team' | 'log' | 'changes'
+
 /**
- * What a press runs on: the store, the tasks the drawing shows and the session's own area, the view shown and the
- * Tasks view's place (a fold reads both), the readers of a card's detail and of a file, the view readers a switch
- * folds, and a port for each reader that acts outside the store. A port is null while the pane has no such reader
- * (no team found, no teamrig CLI); its press then does nothing.
+ * What a press runs on: the store, the snapshot the drawing shows (its tasks, the session's own area, what a
+ * conversation's title reads), the view shown and the Tasks view's place (a fold reads both), the front end's focus
+ * ring, the readers of a card's detail and of a file, the view readers a switch folds, and a port for each reader
+ * that acts outside the store. A port is null while the pane has no such reader (no team found, no teamrig CLI); its
+ * press then does nothing outside the store.
  */
 export type PressDeps = {
   readonly store: PaneStore
-  readonly tasks: readonly TaskRow[]
-  readonly area: string | null
+  readonly snap: Snapshot
   readonly shown: PaneView
   readonly place: Place
+  readonly focus: MoveFocus
   readonly detailOf: ReadsDetail
   readonly readFile: ReadsFile
   readonly lives: ViewLives
-  readonly logging: OpensLog | null
+  readonly logging: ReadsLog | null
   readonly diffing: TogglesDiff | null
   readonly pinning: PinsArea | null
   readonly scheduling: PressesMeeting | null
@@ -118,14 +171,42 @@ export function pressOfDrawn(drawn: Drawn): Press | null {
 export async function runPress(press: Press, deps: PressDeps): Promise<void> {
   const { store } = deps
   switch (press.kind) {
+    case 'view':
+      return switchView(store, press.view, deps.lives)
+    case 'mode':
+      return showMode(store, press.mode)
+    case 'done-week':
+      return go(store, current => doneAt(current, press.week))
+    case 'close-cards':
+      return closeCards(store)
+    case 'keys':
+      return go(store, current => pushed(current, KEYS_PAGE))
+    case 'filter':
+      return filterBar(store, press.status)
+    case 'back':
+      return go(store, back)
+    case 'forward':
+      return go(store, forward)
+    case 'crumb':
+      return go(store, current => wentTo(current, press.index))
+    case 'log-close':
+      return closeLog(store, deps.logging)
+    case 'stats-list-close':
+      return closeStatsList(store, deps.lives)
+    case 'stats-from-close':
+      return closeStatsFrom(store, deps.lives)
+    case 'find':
+      return focusFind(store, deps.focus)
+    case 'find-clear':
+      return clearSearch(store, deps.focus)
     case 'card':
-      return toggleCard(store, deps.tasks, press.task, deps.detailOf)
+      return toggleCard(store, deps.snap.tasks, press.task, deps.detailOf)
     case 'page':
-      return openPage(store, deps.tasks, press.task, press.from, deps.detailOf)
+      return openPage(store, deps.snap.tasks, press.task, press.from, deps.detailOf)
     case 'file':
       return openFile(store, press.file, press.from, deps.readFile)
     case 'inbox':
-      return openInbox(store, press.inbox, press.from, deps.area, deps.readFile, deps.lives)
+      return openInbox(store, press.inbox, press.from, deps.snap.area, deps.readFile, deps.lives)
     case 'team-key':
       return toggleTeamKey(store, press.key)
     case 'pin':
@@ -144,5 +225,28 @@ export async function runPress(press: Press, deps: PressDeps): Promise<void> {
       return openConversation(store, press.read, deps.logging)
     case 'diff':
       return deps.diffing?.toggle(press.key)
+  }
+}
+
+/**
+ * The Find field's words as the person types them: the first open a search, each change shows the results for its
+ * words, and an empty field closes it (nav.ts searched). Typing starts no new round of the field.
+ */
+export async function typeFind(store: PaneStore, words: string): Promise<void> {
+  await go(store, current => searched(current, words), 'typing')
+}
+
+/** Enter in the Find field of the view `submits` names, on its words as typed (presses.ts). */
+export async function submitFind(submits: FindSubmit, words: string, deps: PressDeps): Promise<void> {
+  const { store, focus } = deps
+  switch (submits) {
+    case 'tasks':
+      return submitTasks(store, deps.snap, words, focus, deps.detailOf)
+    case 'team':
+      return submitTeam(store, words, focus)
+    case 'log':
+      return submitLog(store, deps.snap, words, focus, deps.logging)
+    case 'changes':
+      return submitChanges(store, words, focus, deps.diffing)
   }
 }

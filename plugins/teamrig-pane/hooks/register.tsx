@@ -1035,10 +1035,10 @@ export const register: Register = on => {
     const run = (press: Press) =>
       runPress(press, {
         store,
-        tasks: snap.tasks,
-        area: snap.area,
+        snap,
         shown: current,
         place: currentPlace(at),
+        focus: moveFocus,
         detailOf,
         readFile,
         lives: livesNow(),
