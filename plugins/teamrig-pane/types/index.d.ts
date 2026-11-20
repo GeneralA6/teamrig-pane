@@ -391,7 +391,10 @@ export type OutsideCopies = { readonly [path: string]: OutsideCopy }
 /** A version's three numbers: `2.1.295` is major 2, minor 1, patch 295. */
 export type Version = { major: number; minor: number; patch: number }
 
-/** What the pane needs and lacks (hooks/requirements.ts), each drawn as one line with its fix. */
+/**
+ * What the pane needs and lacks (hooks/requirements.ts), each drawn as one line with its fix. `claude-code-old`
+ * is the Claude Code dock's own (hooks/claude-code-version.ts): it finds it and words its line.
+ */
 export type RequirementProblem =
   | { kind: 'claude-code-old'; running: Version }
   | { kind: 'git-unstartable'; reason: string }
