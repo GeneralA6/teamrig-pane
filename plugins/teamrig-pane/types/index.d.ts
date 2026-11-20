@@ -786,78 +786,113 @@ export type ScrollTarget =
 /** The last step's target, `seq` counting the steps, so a drawing tells a new reveal from one it settled. */
 export type BodyScroll = { readonly seq: number; readonly to: ScrollTarget }
 
+/**
+ * What the pane holds between drawings, by key: what its readers last read and where the person left each view. Any
+ * front end keeps it behind the store port (hooks/pane-store.ts); the Claude Code dock keeps it in the engine's
+ * `$.state`, declared below.
+ */
+export type PaneState = {
+  snapshot: Snapshot
+  mode: ViewMode
+  expanded: ExpandedTasks
+  /** The Tasks view's headings whose tasks are folded away (hooks/rows.ts paneBlocks): a section's key in mine, `owner:<id>` in all. */
+  tasksFolded: readonly string[]
+  size: PaneSize
+  view: PaneView
+  changes: ChangesSnapshot
+  known: KnownChanges
+  /** The Changes files whose diffs are open (hooks/diff.ts), as git last read them. */
+  diffs: OpenDiffs
+  /** The files written outside git as they were before the session first wrote them (hooks/outside-copies.ts). */
+  copies: OutsideCopies
+  /** The conversations the Log view lists (hooks/turn-log.ts), as last read. */
+  logList: LogList
+  /** The conversation page the Log view shows, as last read; null while it shows the list. */
+  logPage: LogPage | null
+  /** The area's conversation before the one the host runs now (hooks/previous-conversation.ts), which the band names; null for none. */
+  previousConversation: LogConversation | null
+  requirements: RequirementProblem[]
+  /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
+  filter: BarStatus | null
+  /** Where the tasks view is (hooks/nav.ts): the list, a task's page, a search with its query, the Done page with its week or a file's page, and the way back. */
+  nav: Nav
+  pages: PageDetails
+  filePages: FilePages
+  /** The Find field's round and the text it holds as drawn (hooks/find-field.ts). */
+  findField: FindField
+  /** The focus ring's landings in the pane (hooks/find-field.ts): the line under the Find field reads them. */
+  ring: RingLandings
+  /** Whether the banner (hooks/banner.ts) in the band above the prompt shows its task's card; a press on it opens and closes it. */
+  banner: boolean
+  /** Whether the band's previous conversation (hooks/banner.ts previousBlock) shows its whole titles and facts; a press on its title opens and closes it. */
+  previousOpen: boolean
+  /** What the Tasks view shows in a project teamrig is not set up for (hooks/setup.ts), null once a register is found. */
+  setup: SetupView | null
+  /** Where the docked body's window is to stand: the last step that moved it (hooks/body-scroll.ts). */
+  bodyScroll: BodyScroll
+  /** The team tree the Teams tab shows (hooks/team-source.ts), as last read. */
+  teamTree: TeamView
+  /** The Teams tab's nodes the person opened or closed against their default (hooks/team.ts teamRows), by key. */
+  teamToggled: readonly string[]
+  /** The team's meetings the Meetings view shows (hooks/meetings.ts), as last read. */
+  meetings: MeetingsView
+  /** The Meetings view's meetings whose cards are open (hooks/meetings-rows.ts meetingKey), by key. */
+  meetingsOpen: readonly string[]
+  /** What the last run press on a meeting answered; null before one, and after a session start or a switch to the view. */
+  meetingAnswer: MeetingAnswer | null
+  /** The second line a meeting's card shows (Move, Postpone, Drop or End asked); null when none. */
+  meetingAsked: MeetingAsked | null
+  /** What the last session act pressed on the Teams tab answered; null before one, and after a session start or a switch to the tab. */
+  sessionAnswer: SessionAnswer | null
+  /** Where the owner's Note or Next on a task card stands (hooks/owner-acts.ts); null before one, after a cancel and after a session start. */
+  ownerAct: OwnerAct | null
+  /** The Stats tab's numbers (hooks/stats-source.ts), as last folded. */
+  stats: StatsView
+  /** What the Stats tab folds: the tree, a team or a session (its scope row's presses pick it). */
+  statsScope: StatsChoice
+  /** The days the Stats tab folds (its range row's presses pick them). */
+  statsRange: import('../hooks/core/read/index').StatsRange
+  /** The Health count or area cell whose tasks the Stats tab lists in place of its numbers (a press picks it, back clears it); null for the numbers. */
+  statsList: StatsListPick | null
+  /** The Teams tab row whose [Stats] opened the Stats tab, back's landing; null when the tab shows from its switch. */
+  statsFrom: string | null
+  /** The Stats tab's sections the person opened or closed against their default (hooks/stats-rows.ts isSectionOpen), by key. */
+  statsToggled: readonly string[]
+  /** The Done page's days, groups and `n more` rows the person flipped against their default (hooks/done-rows.ts), by key. */
+  doneToggled: readonly string[]
+}
+
+/**
+ * The keys the dock keeps under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE,
+ * NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, COPIES_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE, TEAM_SHAPE,
+ * MEETINGS_SHAPE, STATS_SHAPE), so a reload never draws a value an older pane wrote: the snapshot, the open cards, the
+ * changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the outside
+ * files' copies, the Log view's list and page, the focus ring's landings, the setup, the body's window, the team tree,
+ * the meetings and the Stats tab's numbers.
+ */
+export type ShapedPaneKey =
+  | 'snapshot'
+  | 'expanded'
+  | 'changes'
+  | 'known'
+  | 'diffs'
+  | 'copies'
+  | 'logList'
+  | 'logPage'
+  | 'previousConversation'
+  | 'nav'
+  | 'pages'
+  | 'filePages'
+  | 'ring'
+  | 'setup'
+  | 'bodyScroll'
+  | 'teamTree'
+  | 'meetings'
+  | 'stats'
+
 declare module 'claude-code' {
   interface PluginState {
-    // The snapshot, the open cards, the changes, the known repos, the places, the pages' details and the file pages' reads, the open diffs, the outside files' copies, the Log view's list and page, the focus ring's landings, the setup, the body's window, the team tree, the meetings and the Stats tab's numbers are kept under shape tags (hooks/register.tsx SNAPSHOT_SHAPE, CARDS_SHAPE, CHANGES_SHAPE, KNOWN_SHAPE, NAV_SHAPE, FILES_SHAPE, DIFFS_SHAPE, COPIES_SHAPE, LOG_SHAPE, RING_SHAPE, SETUP_SHAPE, SCROLL_SHAPE, TEAM_SHAPE, MEETINGS_SHAPE, STATS_SHAPE), so a reload never draws one an older pane wrote.
-    'teamrig-pane': {
-      snapshot: Shaped<Snapshot>
-      mode: ViewMode
-      expanded: Shaped<ExpandedTasks>
-      /** The Tasks view's headings whose tasks are folded away (hooks/rows.ts paneBlocks): a section's key in mine, `owner:<id>` in all. */
-      tasksFolded: readonly string[]
-      size: PaneSize
-      view: PaneView
-      changes: Shaped<ChangesSnapshot>
-      known: Shaped<KnownChanges>
-      /** The Changes files whose diffs are open (hooks/diff.ts), as git last read them. */
-      diffs: Shaped<OpenDiffs>
-      /** The files written outside git as they were before the session first wrote them (hooks/outside-copies.ts). */
-      copies: Shaped<OutsideCopies>
-      /** The conversations the Log view lists (hooks/turn-log.ts), as last read. */
-      logList: Shaped<LogList>
-      /** The conversation page the Log view shows, as last read; null while it shows the list. */
-      logPage: Shaped<LogPage | null>
-      /** The area's conversation before the one Claude Code runs now (hooks/previous-conversation.ts), which the band names; null for none. */
-      previousConversation: Shaped<LogConversation | null>
-      requirements: RequirementProblem[]
-      /** The status the status bar filters the mine view to, null for all; cleared at each session start, a hot reload's too. */
-      filter: BarStatus | null
-      /** Where the tasks view is (hooks/nav.ts): the list, a task's page, a search with its query, the Done page with its week or a file's page, and the way back. */
-      nav: Shaped<Nav>
-      pages: Shaped<PageDetails>
-      filePages: Shaped<FilePages>
-      /** The Find field's round and the text it holds as drawn (hooks/find-field.ts). */
-      findField: FindField
-      /** The focus ring's landings in the pane (hooks/find-field.ts): the line under the Find field reads them. */
-      ring: Shaped<RingLandings>
-      /** Whether the banner (hooks/banner.ts) in the band above the prompt shows its task's card; a press on it opens and closes it. */
-      banner: boolean
-      /** Whether the band's previous conversation (hooks/banner.ts previousBlock) shows its whole titles and facts; a press on its title opens and closes it. */
-      previousOpen: boolean
-      /** What the Tasks view shows in a project teamrig is not set up for (hooks/setup.ts), null once a register is found. */
-      setup: Shaped<SetupView | null>
-      /** Where the docked body's window is to stand: the last step that moved it (hooks/body-scroll.ts). */
-      bodyScroll: Shaped<BodyScroll>
-      /** The team tree the Teams tab shows (hooks/team-source.ts), as last read. */
-      teamTree: Shaped<TeamView>
-      /** The Teams tab's nodes the person opened or closed against their default (hooks/team.ts teamRows), by key. */
-      teamToggled: readonly string[]
-      /** The team's meetings the Meetings view shows (hooks/meetings.ts), as last read. */
-      meetings: Shaped<MeetingsView>
-      /** The Meetings view's meetings whose cards are open (hooks/meetings-rows.ts meetingKey), by key. */
-      meetingsOpen: readonly string[]
-      /** What the last run press on a meeting answered; null before one, and after a session start or a switch to the view. */
-      meetingAnswer: MeetingAnswer | null
-      /** The second line a meeting's card shows (Move, Postpone, Drop or End asked); null when none. */
-      meetingAsked: MeetingAsked | null
-      /** What the last session act pressed on the Teams tab answered; null before one, and after a session start or a switch to the tab. */
-      sessionAnswer: SessionAnswer | null
-      /** Where the owner's Note or Next on a task card stands (hooks/owner-acts.ts); null before one, after a cancel and after a session start. */
-      ownerAct: OwnerAct | null
-      /** The Stats tab's numbers (hooks/stats-source.ts), as last folded. */
-      stats: Shaped<StatsView>
-      /** What the Stats tab folds: the tree, a team or a session (its scope row's presses pick it). */
-      statsScope: StatsChoice
-      /** The days the Stats tab folds (its range row's presses pick them). */
-      statsRange: import('../hooks/core/read/index').StatsRange
-      /** The Health count or area cell whose tasks the Stats tab lists in place of its numbers (a press picks it, back clears it); null for the numbers. */
-      statsList: StatsListPick | null
-      /** The Teams tab row whose [Stats] opened the Stats tab, back's landing; null when the tab shows from its switch. */
-      statsFrom: string | null
-      /** The Stats tab's sections the person opened or closed against their default (hooks/stats-rows.ts isSectionOpen), by key. */
-      statsToggled: readonly string[]
-      /** The Done page's days, groups and `n more` rows the person flipped against their default (hooks/done-rows.ts), by key. */
-      doneToggled: readonly string[]
-    }
+    // The pane's state as the engine keeps it: each key of PaneState, those of ShapedPaneKey under their shape tags.
+    'teamrig-pane': { [K in keyof PaneState]: K extends ShapedPaneKey ? Shaped<PaneState[K]> : PaneState[K] }
   }
 }
