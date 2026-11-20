@@ -1,9 +1,10 @@
 // What a press in the pane's body does to its state: a task's card opened or closed, a task's page, a reference
-// file's page, an inbox, a pick on the Stats tab, Enter in a view's Find field, back from a conversation's page. Each
+// file's page, an inbox, a pick on the Stats tab, a heading folded, the bar's filter, Enter in a view's Find field,
+// back from a conversation's page. Each
 // reads and writes through the store port (pane-store.ts) and takes the steps of steps.ts, with the readers it needs
 // handed in, so the Claude Code dock and a front end with no engine answer a press the same way; the tests run them on
 // a store kept in memory.
-import type { ExpandedTasks, LogRead, Place, RefFile, RefFileRead, TaskDetail, TaskRow } from '../types'
+import type { BarStatus, ExpandedTasks, LogRead, PaneView, Place, RefFile, RefFileRead, TaskDetail, TaskRow } from '../types'
 import { scrolledTo } from './body-scroll'
 import { changesResultKey, diffKeyOf, searchChanges } from './changes-search'
 import { inboxFile } from './details'
@@ -15,12 +16,12 @@ import { treeOf, type TreeSource } from './meta'
 import { leavingList, pushed, reset } from './nav'
 import { NO_STATS_LIST } from './pane-state'
 import type { PaneStore } from './pane-store'
-import type { InboxPress, StatsPress } from './rows'
+import { NOTHING_EXPANDED, type InboxPress, type StatsPress } from './rows'
 import { SEARCH_VIEW } from './search-rows'
 import { resultKey } from './search-view'
 import { go, openConversation, scrollTo, switchView, type MoveFocus, type ViewLives } from './steps'
 import { matchCount, searchTasks, topResult } from './task-search'
-import { cardKey, openedWith } from './team-rows'
+import { cardKey, openedWith, toggledWith } from './team-rows'
 import { searchTeam, TEAM_SEARCH_VIEW } from './team-search'
 
 /** Reads what a task's refs and goals point at, for its card or its page; a failed read still resolves, unquoted. */
@@ -151,6 +152,43 @@ export async function closeStatsFrom(store: PaneStore, lives: ViewLives): Promis
   const row = await store.read('statsFrom')
   await switchView(store, 'team', lives)
   if (row !== null) await scrollTo(store, { kind: 'row', key: row }).catch(() => undefined)
+}
+
+/**
+ * A press on a heading that opens or closes what is under it, by what the pane shows: a meeting's card in the
+ * Meetings view, a Stats tab section, a Done page's day or group (`place` the Tasks view's place), a Tasks view
+ * heading's tasks, else a Teams tab key.
+ */
+export async function fold(store: PaneStore, key: string, shown: PaneView, place: Place): Promise<void> {
+  switch (shown) {
+    case 'meetings':
+      await store.update('meetingsOpen', opened => toggledWith(opened, key))
+      return
+    case 'stats':
+      await store.update('statsToggled', toggled => toggledWith(toggled, key))
+      return
+    case 'tasks':
+      if (place.kind === 'done') await store.update('doneToggled', toggled => toggledWith(toggled, key))
+      else await store.update('tasksFolded', folded => toggledWith(folded, key))
+      return
+    default:
+      await toggleTeamKey(store, key)
+  }
+}
+
+/** A press on a Teams tab key drawn inside a row opens a closed node or card and closes an open one. */
+export async function toggleTeamKey(store: PaneStore, key: string): Promise<void> {
+  await store.update('teamToggled', toggled => toggledWith(toggled, key))
+}
+
+/** The `close cards` step closes every task's card at once. */
+export async function closeCards(store: PaneStore): Promise<void> {
+  await store.update('expanded', () => NOTHING_EXPANDED)
+}
+
+/** A press on a status of the bar lists that status alone; a second press on it lists every task again. */
+export async function filterBar(store: PaneStore, status: BarStatus): Promise<void> {
+  await store.update('filter', current => (current === status ? null : status))
 }
 
 /** The Log view's reader, as back from a conversation's page uses it. */
