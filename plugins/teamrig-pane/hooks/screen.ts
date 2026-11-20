@@ -26,7 +26,7 @@ import { pageBlocks } from './page'
 import { EMPTY_SNAPSHOT, LOG_READING, NO_FILES, NOT_SETTING_UP, TEAM_READING } from './pane-state'
 import type { PaneStore } from './pane-store'
 import { isGitMissing, requirementBlocks, type HostOldLine } from './requirements'
-import { NOTHING_EXPANDED, paneBlocks, type Block, type Span } from './rows'
+import { NOTHING_EXPANDED, paneBlocks, type Block, type Span, type TieHint } from './rows'
 import { searchBlocks } from './search-rows'
 import { setupBlocks } from './setup-rows'
 import { listTitle, statsBlocks } from './stats-rows'
@@ -60,6 +60,8 @@ export type ScreenLook = {
   readonly wraps: WrapCache
   /** The line a host too old for the pane is told (requirements.ts). */
   readonly hostOld: HostOldLine
+  /** The words this front end ties a tab to a session with, which a tab tied to none shows; null when it has none. */
+  readonly tieHint: TieHint
 }
 
 /** One drawing of the pane. */
@@ -188,7 +190,7 @@ export async function screenOf(store: PaneStore, look: ScreenLook): Promise<Scre
                 ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
                 : place.kind === 'keys'
                   ? keysBlocks(columns)
-                  : paneBlocks(snap, shown, open, bar?.filter ?? null, await store.read('tasksFolded'), acts)
+                  : paneBlocks(snap, shown, open, bar?.filter ?? null, await store.read('tasksFolded'), acts, look.tieHint)
       // Inline, the Log view shows its list alone: a page opens docked.
       const logShown = setupShown === null && current === 'log' && !inline ? await store.read('logPage') : null
       logTitle = logShown === null ? null : logPageTitle(logShown, logs, snap)
@@ -227,7 +229,7 @@ export async function screenOf(store: PaneStore, look: ScreenLook): Promise<Scre
                         clock: clockOf(snap),
                       })
                     : current === 'inbox'
-                      ? inboxBlocks(snap, search(inboxFound))
+                      ? inboxBlocks(snap, search(inboxFound), look.tieHint)
                       : logShown === null
                         ? logListBlocks(logs, clockOf(snap), snap, search(logFound))
                         : logPageBlocks(logShown, clockOf(snap), logs, snap)

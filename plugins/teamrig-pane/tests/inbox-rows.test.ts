@@ -41,12 +41,17 @@ describe('inboxBlocks', () => {
     expect(countLine(read)).toBe('2 read in the last 24 hours')
   })
 
-  test("with the tab tied to no session, its team's sessions to press, else the command", () => {
+  test("with the tab tied to no session, its team's sessions to press and the front end's words for tying one, else those words; a front end with none shows neither", () => {
     const leads = { lead: 'lead', leaderOf: { api: 'lead' } }
-    expect(words(inboxBlocks({ ...SOURCE, area: null, team: 'web', leads }))).toEqual([
+    const tie = '/teamrig-pane <session>'
+    expect(words(inboxBlocks({ ...SOURCE, area: null, team: 'web', leads }, null, tie))).toEqual([
       ['inbox:no-area', ['This tab is not tied to a session of team web yet. Press the one this tab is:', 'lead   api', '(or /teamrig-pane <session>)']],
     ])
-    expect(words(inboxBlocks({ ...SOURCE, area: null }))).toEqual([['inbox:no-area', ['This tab is not tied to a session yet: /teamrig-pane <session> ties it to one.']]])
+    expect(words(inboxBlocks({ ...SOURCE, area: null }, null, tie))).toEqual([['inbox:no-area', ['This tab is not tied to a session yet: /teamrig-pane <session> ties it to one.']]])
+    expect(words(inboxBlocks({ ...SOURCE, area: null, team: 'web', leads }))).toEqual([
+      ['inbox:no-area', ['This tab is not tied to a session of team web yet. Press the one this tab is:', 'lead   api']],
+    ])
+    expect(words(inboxBlocks({ ...SOURCE, area: null }))).toEqual([['inbox:no-area', ['This tab is not tied to a session yet.']]])
   })
 
   test('a dim line says why no line shows: none of the last 24 hours and none unread', () => {
