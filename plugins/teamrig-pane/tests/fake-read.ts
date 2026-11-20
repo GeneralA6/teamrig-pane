@@ -1,19 +1,22 @@
 // A teamrig that answers `read` from a register's files, for the specs that run the whole pane (pane.test.ts): the
 // pane draws its tasks, inbox, sessions and settings from `teamrig read` alone (T4742), so a test that writes a
 // register's files needs a teamrig that serves them. It finds the team as the pane does (hooks/places.ts), folds the
-// register with the pane's own fold (hooks/source.ts) and prints each document as interface 1.0 serves it. What it
-// does not do as teamrig does: a session's row carries no unread count, state, launch, hire or retire; the inbox is
-// the day's lines and the unread ones, as the fold windows them; a revision is the hash of the document's own text.
-import { parseConfigText, readRenames, Roster, type KitConfig } from '../hooks/core/read/index'
-import { teamLeads } from '../hooks/leads'
+// register with the pane's own fold (hooks/source.ts) and prints each document as interface 1.0 serves it. Its
+// `sessions` document is the tree of the kit home's team folders that holds the team (served-sessions.ts), each
+// team's sessions from its config, rename log and hire log, the asking team's with their unread inbox lines. What it
+// does not do as teamrig does: a session's row carries no state, ask, host or conversation, and a peer team's no
+// unread count; the inbox is the day's lines and the unread ones, as the fold windows them; a team folder it cannot
+// read fails the run instead of being named; a revision is the hash of the document's own text.
+import { indexMarks, inboxLines, parseConfigText, readHiringLog, readMarks, readRenames, Roster, unreadOf, type KitConfig } from '../hooks/core/read/index'
 import { lineHash } from '../hooks/line-hash'
-import { findPlaces, type Places, type PlacesInput, type TeamFiles } from '../hooks/places'
+import { findPlaces, teamIds, teamStateDir, type Places, type PlacesInput, type TeamFiles } from '../hooks/places'
 import { DOCUMENT_NAMES, isDocumentName, type DocumentName, type JsonRecord } from '../hooks/read-document'
 import { registerPaths, TaskRegisterSource, type Files, type RegisterDirs } from '../hooks/source'
 import type { CliRun } from '../hooks/teamrig-cli'
 import type { Snapshot, TaskRow, TeamSettings } from '../types'
 import { NO_TREE_GOALS } from './fixtures'
 import { askedOf, printed, refused, settingRows, type Asked } from './served-documents'
+import { servedSessions, type TeamSessions } from './served-sessions'
 
 /** Where the fake finds the register: what the pane's own search takes, over files the fold can read. */
 export type FakeDisk = Omit<PlacesInput, 'files'> & { readonly files: Files }
@@ -55,36 +58,50 @@ function servedTask(row: TaskRow, roster: Roster): JsonRecord {
   }
 }
 
-/** The leaders over `id`, the nearest first. */
-function ledBy(id: string, leaderOf: Readonly<Record<string, string>>): string[] {
-  const above: string[] = []
-  for (let leader = leaderOf[id]; leader !== undefined && !above.includes(leader); leader = leaderOf[leader]) above.push(leader)
-  return above
+/** A file's text; null when it is not there. */
+async function textOf(files: Files, path: string): Promise<string | null> {
+  return (await files.stamp(path)) === null ? null : await files.read(path)
 }
 
-function servedSession(id: string, team: Team, at: string): JsonRecord {
-  const { leaderOf } = teamLeads(team.config)
-  return {
-    team: team.files.team,
-    id,
-    name: team.roster.nameOf(id) ?? id,
-    formerNames: team.roster.formerNamesOf(id),
-    roles: team.roster.rolesOf(id),
-    leader: leaderOf[id] ?? null,
-    ledBy: ledBy(id, leaderOf),
-    leads: Object.values(leaderOf).filter(leader => leader === id).length,
-    active: true,
-    launch: null,
-    hire: null,
-    rehiredFrom: null,
-    retire: null,
-    unread: null,
-    state: null,
-    ask: null,
-    since: at,
-    host: null,
-    conversation: null,
+/** The unread inbox lines of each of the team's sessions that ever marked its inbox read, by id, as teamrig counts them. */
+async function unreadCounts(disk: FakeDisk, team: Team): Promise<ReadonlyMap<string, number>> {
+  const paths = registerPaths(team.dirs)
+  const marks = await textOf(disk.files, paths.marks)
+  const { byArea } = indexMarks(marks === null ? [] : readMarks(marks).marks)
+  const counts = new Map<string, number>()
+  for (const id of team.config.sessions) {
+    const mark = byArea.get(id)
+    if (mark === undefined) continue
+    const inbox = await textOf(disk.files, `${paths.inboxDir}/${id}.md`)
+    counts.set(id, unreadOf(id, inbox === null ? [] : inboxLines(inbox), mark, lineHash).lines.length)
   }
+  return counts
+}
+
+/**
+ * Every team in the kit home's teams folder whose config teamrig takes, as its files say: its config and, in the
+ * state folder that names, its rename and hire logs; the asking team's unread counts with it.
+ */
+async function machineTeams(disk: FakeDisk, own: Team): Promise<TeamSessions[]> {
+  const { teamsDir } = own.files
+  const teams: TeamSessions[] = []
+  for (const id of teamIds(await disk.folders(teamsDir))) {
+    const home = `${teamsDir}/${id}`
+    const text = await textOf(disk.files, `${home}/config.json`)
+    const read = text === null ? null : parseConfigText(text)
+    if (read?.status !== 'loaded') continue
+    const state = teamStateDir(home, read.config)
+    const renames = await textOf(disk.files, `${state}/renames.jsonl`)
+    const hires = await textOf(disk.files, `${state}/hires.jsonl`)
+    teams.push({
+      team: id,
+      config: read.config,
+      renames: renames === null ? [] : readRenames(renames).renames,
+      hires: hires === null ? [] : readHiringLog(hires).records,
+      unread: id === own.files.team ? await unreadCounts(disk, own) : null,
+    })
+  }
+  return teams
 }
 
 /** Each config key the pane draws with, at the value the team's settings hold. */
@@ -134,13 +151,8 @@ async function teamBody(name: DocumentName, disk: FakeDisk, team: Team, asked: A
     }
     case 'sessions': {
       const area = asked.conversation === null ? null : (await foldOf(disk, team, null, asked.conversation, now)).area
-      const at = new Date(now).toISOString()
-      return {
-        self: area === null || !team.roster.ids.includes(area) ? null : { team: team.files.team, session: area },
-        teams: [{ id: team.files.team, parent: null, active: team.roster.ids.length, retired: 0 }],
-        sessions: team.roster.ids.map(id => servedSession(id, team, at)),
-        failures: [],
-      }
+      const self = area === null || !team.roster.ids.includes(area) ? null : { team: team.files.team, session: area }
+      return servedSessions(await machineTeams(disk, team), team.files.team, self)
     }
     case 'inbox': {
       const id = inboxSession(team, asked.session)

@@ -13,7 +13,8 @@ import { tasksOf } from '../hooks/tasks-document'
 import type { CliRun } from '../hooks/teamrig-cli'
 import type { Snapshot } from '../types'
 import { fakeRead, type FakeDisk } from './fake-read'
-import { HOUR, INBOX_LINES, MemoryFiles, NO_TREE_GOALS, NOW, S1, S2, TEAM_SETTINGS, createLine, markLine, statusLine } from './fixtures'
+import { HOUR, INBOX_LINES, MemoryFiles, NO_TREE_GOALS, NOW, S1, S2, TEAM_SETTINGS, createLine, iso, markLine, statusLine } from './fixtures'
+import { hire, retire } from './team-fixtures'
 
 const HOME = '/Homes/tester'
 const TEAMS = `${HOME}/.teamrig/teams`
@@ -105,6 +106,36 @@ describe('the fake teamrig read', () => {
       ['api', 'backend', 'po', ['po', 'lead'], 0, []],
       ['ui', 'web-ui', 'lead', ['lead'], 0, []],
     ])
+  })
+
+  test("serves the tree of team folders that holds the team: each session's launch, hire and retire from its team's logs, the asking team's unread lines, and no other project's team", async () => {
+    const { files } = teamDisk()
+    const disk: FakeDisk = { ...diskOf(files, '/work'), folders: async path => (path === TEAMS ? ['web', 'tools', 'other', 'empty'] : []) }
+    files.write(`${TEAMS}/web/config.json`, JSON.stringify({ ...CONFIG, launch: { ui: { model: 'claude-opus-5-5', effort: 'xhigh' } } }))
+    const hires = [hire('ui', NOW - 96 * HOUR), hire('qa', NOW - 90 * HOUR), retire('qa', NOW - 60 * HOUR)]
+    files.write(`${STATE}/hires.jsonl`, hires.map(record => JSON.stringify({ v: 2, ...record, at: iso(record.at) })).join('\n'))
+    files.write(`${TEAMS}/tools/config.json`, JSON.stringify({ team: { id: 'tools', parent: 'web' }, sessions: ['boss'], roles: { lead: 'boss' } }))
+    files.write(`${TEAMS}/other/config.json`, JSON.stringify({ team: { id: 'other' }, sessions: ['lead'], roles: { lead: 'lead' } }))
+
+    const read = readOf(await fakeRead(disk, () => NOW)(words('sessions', '--conversation', S1)), 'sessions', sessionsOf)
+    expect(read.teams).toEqual([
+      { id: 'web', parent: null, active: 4, retired: 1 },
+      { id: 'tools', parent: 'web', active: 1, retired: 0 },
+    ])
+    expect(read.sessions.map(row => [row.team, row.id, row.active, row.unread, row.hire?.by ?? null, row.retire?.by ?? null])).toEqual([
+      ['web', 'lead', true, null, null, null],
+      // po read 3 of its 5 inbox lines (teamDisk); the others never marked theirs read.
+      ['web', 'po', true, 2, null, null],
+      ['web', 'api', true, null, null, null],
+      ['web', 'ui', true, null, 'lead', null],
+      ['web', 'qa', false, null, null, 'lead'],
+      ['tools', 'boss', true, null, null, null],
+    ])
+    const launches = new Map(read.sessions.map(row => [`${row.team}/${row.id}`, row.launch]))
+    expect(launches.get('web/ui')).toMatchObject({ model: 'claude-opus-5-5', effort: 'xhigh' })
+    expect(launches.get('web/qa')).toBeNull()
+    // A team below the asking one is served without its own words.
+    expect(launches.get('tools/boss')?.text).toBeNull()
   })
 
   test('names no session of its own for a conversation no mark names, or for a run that names none', async () => {
