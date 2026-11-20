@@ -78,7 +78,7 @@ describe('parseTurnLines', () => {
   })
 
   test('skips a line of another version or none, a torn line, one missing a field, one of an unknown kind, and one that is no object', () => {
-    expect(parseTurnLines(JSON.stringify({ v: 2, at: 'a', kind: 'prompt', text: 't', claude: 'c' }))).toEqual([])
+    expect(parseTurnLines(JSON.stringify({ v: 3, at: 'a', kind: 'prompt', text: 't', hostSession: 'c' }))).toEqual([])
     expect(parseTurnLines(JSON.stringify({ at: 'a', kind: 'prompt', text: 't', claude: 'c' }))).toEqual([])
     expect(parseTurnLines('{"v":1,"at":"2026-10-19T20:0')).toEqual([])
     expect(parseTurnLines(JSON.stringify({ v: 1, at: 'a', kind: 'prompt', text: 't' }))).toEqual([])
@@ -86,6 +86,12 @@ describe('parseTurnLines', () => {
     expect(parseTurnLines(JSON.stringify({ v: 1, at: 'a', kind: 'tool', text: 't', claude: 'c' }))).toEqual([])
     expect(parseTurnLines('[1]')).toEqual([])
     expect(parseTurnLines('null')).toEqual([])
+  })
+
+  test('reads the next version of a turn line, naming its tab hostSession, as the line teamrig writes now (T4777)', () => {
+    const next = parseTurnLines(JSON.stringify({ v: 2, at: 'a', kind: 'prompt', text: 't', hostSession: 'c' }))
+    expect(next.length).toBe(1)
+    expect(next).toEqual(parseTurnLines(JSON.stringify({ v: 1, at: 'a', kind: 'prompt', text: 't', claude: 'c' })))
   })
 
   test("a file's lines, oldest first: CRLF ends, blank lines and a torn last line are skipped", () => {

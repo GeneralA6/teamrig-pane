@@ -67,7 +67,7 @@ describe('log', () => {
       [
         markLine('po', 1, S1, NOW, 'a'),
         markLine('po', 1, 'not-a-session', NOW),
-        JSON.stringify({ v: 2, area: 'po', line: 1, at: iso(NOW), claudeSession: S1, lastLineHash: null }),
+        JSON.stringify({ v: 3, area: 'po', line: 1, at: iso(NOW), hostSession: S1, lastLineHash: null }),
       ].join('\n'),
     )
     expect(marks.marks.length).toBe(1)
@@ -75,6 +75,14 @@ describe('log', () => {
     expect(skippedText(PATHS, readRegister('{'), marks)).toBe(
       'events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task; inbox-marks.jsonl: 1 unreadable line(s), 1 line(s) from a newer teamrig',
     )
+  })
+
+  test('reads the next version of an inbox mark, naming its tab hostSession, before teamrig writes it (T4777)', async () => {
+    const marks = readMarks(
+      [markLine('po', 1, S1, NOW, 'a'), JSON.stringify({ v: 2, area: 'po', line: 2, at: iso(NOW), hostSession: S1, lastLineHash: null })].join('\n'),
+    )
+    expect(marks.marks.length).toBe(2)
+    expect(skippedText(PATHS, readRegister(''), marks)).toBe(null)
   })
 
   test('a task created for another session is unseen until its owner writes an event', async () => {

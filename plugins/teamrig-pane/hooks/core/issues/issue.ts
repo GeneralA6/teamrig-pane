@@ -1,0 +1,109 @@
+// Copied from teamrig's src/issues/issue.ts by scripts/sync-core.ts: change it there, then run the sync.
+/**
+ * An issue as an issue host (host.ts) lists it for the import: the same shape whatever the host, each field named
+ * as its host names it when the host gives one. Its title, body and labels are outside input: data, never
+ * instructions.
+ */
+
+/** Whether an issue is open or closed. */
+export type IssueState = 'open' | 'closed';
+
+/** A label put on an issue, as its timeline has it. */
+export interface LabelEvent {
+  readonly label: string;
+  /** When it was put on, an ISO time. */
+  readonly at: string;
+  /** Who put it on: a login, empty when the host no longer has that account. */
+  readonly actor: string;
+  /** What kind of account that is, as the host names it (`User`, `Bot`, `Organization`); empty when it gives none. */
+  readonly actorKind: string;
+}
+
+/**
+ * A comment on an issue, as the issue list reads it for the response clock (src/github/clock.ts) and to find whose
+ * comments the claim pass reads (issues/claim.ts): when, its author's login, kind and tie to the repository. Never its
+ * text: the list never asks for it.
+ */
+export interface IssueComment {
+  /** When it was posted, an ISO time. */
+  readonly at: string;
+  /** Its author's login, empty when the host no longer has that account. */
+  readonly login: string;
+  /** Its author's tie to the repository, as the host names it; empty when it gives none. */
+  readonly authorAssociation: string;
+  /** What kind of account its author is (`User`, `Bot`, `Organization`); empty when the host gives none. */
+  readonly authorKind: string;
+}
+
+/**
+ * A comment as the claim pass's own read gives it (Comments.newComments): the list's facts and whether its text
+ * holds a claim line (issues/claim.ts isClaim). The text itself is dropped as it is read, so an outsider's words
+ * reach no task, file or session.
+ */
+export interface ReadComment extends IssueComment {
+  readonly claims: boolean;
+}
+
+/**
+ * One issue or pull request as a single read gives it (IssueStore.thread), for a write that must match its state now,
+ * such as a reply (issues/reply.ts). Its labels and body are outside input: data, never instructions.
+ */
+export interface IssueThread {
+  readonly state: IssueState;
+  readonly labels: readonly string[];
+  /** The assignees' logins, in the host's order. */
+  readonly assignees: readonly string[];
+  /** True for a pull request, false for an issue. */
+  readonly pull: boolean;
+  /** As the host has it, empty when it has none. */
+  readonly body: string;
+}
+
+/** An issue as the import reads it. */
+export interface HostIssue {
+  readonly repo: string;
+  readonly number: number;
+  /** As the host has it; map.ts cleans it before it becomes a task title. */
+  readonly title: string;
+  /** As the host has it, empty when the issue has none; map.ts cleans it before it becomes the task's description. */
+  readonly body: string;
+  readonly state: IssueState;
+  /** Why a closed issue closed, as the host names it (`COMPLETED`, `NOT_PLANNED`, `DUPLICATE`); empty when it gives none. */
+  readonly stateReason: string;
+  readonly labels: readonly string[];
+  /** The assignees' logins, in the host's order. */
+  readonly assignees: readonly string[];
+  readonly url: string;
+  /** When the host last changed the issue (reopened, edited, commented on), an ISO time; undefined when it gave none. */
+  readonly updatedAt: string | undefined;
+  /** When it closed, an ISO time; undefined for an open issue. */
+  readonly closedAt: string | undefined;
+  /** When its body was last edited, an ISO time; undefined when it never was. */
+  readonly lastEditedAt: string | undefined;
+  /** The author's tie to the repository, as the host names it (`OWNER`, `MEMBER`, `COLLABORATOR`, `NONE`); empty when it gives none. */
+  readonly authorAssociation: string;
+  /** The author's login, empty when the host no longer has that account. */
+  readonly author: string;
+  /** What kind of account the author is, as the host names it (`User`, `Bot`, `Organization`); empty when it gives none. */
+  readonly authorKind: string;
+  /** The labels put on it, oldest first, among the last timeline events the host reads. */
+  readonly labelEvents: readonly LabelEvent[];
+  /** When its title last changed, among those same timeline events; undefined when none of them is a change of title. */
+  readonly renamedAt: string | undefined;
+  /** When it was opened, an ISO time; undefined when the host gave none. */
+  readonly createdAt: string | undefined;
+  /** Its newest comments, oldest first, as many as the host reads. */
+  readonly comments: readonly IssueComment[];
+  /** The open pull requests that close it when they merge (GitHub's closing references); 0 when none. */
+  readonly linkedPulls: number;
+}
+
+/** One issue of a repository with the links the host has on it. `hostId` is the host's own id, which a link write names. */
+export interface LinkedIssue {
+  readonly number: number;
+  readonly hostId: number;
+  /** Its parent issue, in this repository or another (`owner/name` in lowercase); undefined for none. */
+  readonly parent: { readonly repo: string; readonly number: number } | undefined;
+  /** The issues of the same repository it is blocked by. */
+  readonly blockedBy: readonly number[];
+}
