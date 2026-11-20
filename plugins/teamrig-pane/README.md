@@ -284,37 +284,36 @@ What the host draws and the mod can't change:
 By default the pane reads the register where teamrig keeps it for the session's team:
 `<kit home>/teams/<team>/state` (the kit home is `$TEAMRIG_HOME`, else `~/.teamrig`; the team is
 `$TEAMRIG_TEAM`, else the nearest `.teamrig.json` up from the session's folder), with its inbox in
-`state/inbox`. A team config's `paths.state` and `paths.inbox` move them, as they do for teamrig. With
-both folders named below, the session's team is still looked for, for the files that name its sessions
-and for its notes: when none can be found or read, the pane goes without them.
+`state/inbox`. A team config's `paths.state` and `paths.inbox` move them, as they do for teamrig.
 
-In a project teamrig is not set up for (no team and no folder named), the pane shows how to set it up
+In a project teamrig is not set up for (no team), the pane shows how to set it up
 and nothing else, with no view buttons, Find row or mine/all/done until it finds a team (the minimized
 strip keeps its buttons, and a press opens the setup): one step, set up a team (ask Claude, or run
 `/teamrig:team-setup`, which makes the team and ties the project to it), opening with installing teamrig
 while no team is under the kit home. Joining a team already made (write `{"team": "<id>"}` to the
-project's `.teamrig.json`) and naming both folders below still work; the pane no longer lists them. The
+project's `.teamrig.json`) still works; the pane no longer lists it. The
 pane looks again every 3 s and lists the tasks once it finds a team, with no restart; a problem a look
-finds, such as a pointer with no team in it, is a `WARN` line over the step. One folder named alone is a `WARN`.
+finds, such as a pointer with no team in it, is a `WARN` line over the step.
 
-Any folder can be named instead, each on its own; a variable wins over the settings file, which wins
-over the team default:
+The register is always the team's: a team config is the one setup, and the folders can no longer be
+named apart from it (`TEAMRIG_PANE_TASKS_DIR`, `TEAMRIG_PANE_INBOX_DIR` and the settings `tasksDir` and
+`inboxDir` are gone; a settings file still holding one is a `WARN` naming the key). To keep a register
+somewhere else, set the team config's `paths.state` and `paths.inbox`. One setting is the pane's own; its
+variable wins over the settings file:
 
 | Variable | Setting | What it holds |
 | --- | --- | --- |
-| `TEAMRIG_PANE_TASKS_DIR` | `tasksDir` | `events.jsonl`, `inbox-marks.jsonl`, `goals.jsonl`, `usage/tasks.week.json` |
-| `TEAMRIG_PANE_INBOX_DIR` | `inboxDir` | one `<area>.md` inbox per area |
 | `TEAMRIG_PANE_GOALS_DOC` | `goalsDoc` | the goals document, a path from the workspace root (unset: no goal items are quoted) |
 
 The settings file is `<kit home>/pane.json`, or the file `TEAMRIG_PANE_SETTINGS` names, a JSON object
-of those settings; a folder in it is absolute or starts with `~/`:
+of that setting:
 
-    { "tasksDir": "~/notes/tasks", "inboxDir": "~/notes/board/inbox" }
+    { "goalsDoc": "docs/GOALS.md" }
 
 The variables are read from the environment Claude Code runs in (its settings' `env` block works
-too), all of it once when the session starts. When nothing names the register, or the settings file,
-the pointer file or the team config cannot be used, the pane draws one `WARN` line saying what to set
-or what is wrong.
+too), all of it once when the session starts. When the settings file, the pointer file or the team
+config cannot be used, or the session has no folder or no home folder to find a team from, the pane
+draws one `WARN` line saying what to set or what is wrong.
 
 ## Tasks, Changes, Conversations, Inbox, Teams, Meetings and Stats
 

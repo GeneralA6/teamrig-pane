@@ -11,7 +11,14 @@ const SETUP: ProjectSetup = { project: 'C:/w/app', teams: [] }
 const FOUND: FoundPlaces = {
   kind: 'found',
   dirs: { tasksDir: 'C:/Homes/a/.teamrig/teams/web/state', inboxDir: 'C:/Homes/a/.teamrig/teams/web/inbox' },
-  team: null,
+  team: {
+    team: 'web',
+    dir: 'C:/Homes/a/.teamrig/teams/web',
+    teamsDir: 'C:/Homes/a/.teamrig/teams',
+    config: 'C:/Homes/a/.teamrig/teams/web/config.json',
+    renames: 'C:/Homes/a/.teamrig/teams/web/state/renames.jsonl',
+    turnLog: null,
+  },
   settings: teamSettings(null, 'UTC'),
   goalsDoc: null,
 }

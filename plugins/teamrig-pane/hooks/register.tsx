@@ -665,8 +665,6 @@ export const register: Register = on => {
       read: path => $.fs.read(path),
     }
     const env: PlacesEnv = {
-      TEAMRIG_PANE_TASKS_DIR: await $.env.get('TEAMRIG_PANE_TASKS_DIR'),
-      TEAMRIG_PANE_INBOX_DIR: await $.env.get('TEAMRIG_PANE_INBOX_DIR'),
       TEAMRIG_PANE_GOALS_DOC: await $.env.get('TEAMRIG_PANE_GOALS_DOC'),
       TEAMRIG_PANE_SETTINGS: await $.env.get('TEAMRIG_PANE_SETTINGS'),
       TEAMRIG_HOME: await $.env.get('TEAMRIG_HOME'),

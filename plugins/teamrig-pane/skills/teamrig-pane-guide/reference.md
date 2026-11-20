@@ -16,24 +16,21 @@ By default the pane reads the register where teamrig keeps it for the session's 
 The team config is `<kit home>/teams/<team>/config.json`, read with teamrig's own reader. A relative
 `paths.state` or `paths.inbox` is taken from the team's folder.
 
-Any folder can be named instead, each on its own. A variable wins over the settings file, which wins over the
-team default:
+The register is always the team's: the folders cannot be named apart from the team config (the older
+variables and the settings `tasksDir` and `inboxDir` that named them are gone; move a register with the team
+config's `paths.state` and `paths.inbox`). The pane's own settings, a variable winning over
+the settings file:
 
 | Variable | Setting | What it names |
 | --- | --- | --- |
-| `TEAMRIG_PANE_TASKS_DIR` | `tasksDir` | the tasks folder |
-| `TEAMRIG_PANE_INBOX_DIR` | `inboxDir` | the inbox folder |
 | `TEAMRIG_PANE_GOALS_DOC` | `goalsDoc` | the goals document, a path from the workspace root; unset, no goal items are quoted |
 | `TEAMRIG_PANE_SETTINGS` | | the settings file, in place of `<kit home>/pane.json` |
 
-The settings file is one JSON object of those settings. A folder in it is absolute or starts with `~/`:
+The settings file is one JSON object of those settings:
 
 ```json
-{ "tasksDir": "~/notes/tasks", "inboxDir": "~/notes/board/inbox" }
+{ "goalsDoc": "docs/GOALS.md" }
 ```
-
-With both folders named, the team is still looked for, for the files that name its sessions and for its
-notes; when none is found, the pane goes without them.
 
 The variables come from the environment Claude Code runs in (its settings' `env` block works too), all read once
 when the session starts: after a change, restart or resume the session.
@@ -45,21 +42,20 @@ from the session's folder or a folder above it. Each quoted line is cut at 320 c
 ## WARN lines and their fixes
 
 The pane draws a problem as one `WARN` line above the tasks, keeps the last good tasks drawn, and reads again on
-the next poll. A project teamrig is not set up for (no team, no folder named) is no problem: the pane shows
+the next poll. A project teamrig is not set up for (no team) is no problem: the pane shows
 the setup step alone, and a problem a later look finds is a `WARN` line over it.
 
 | WARN line | Fix |
 | --- | --- |
-| `no register found: set TEAMRIG_PANE_TASKS_DIR and TEAMRIG_PANE_INBOX_DIR, write them in <kit home>/pane.json, or start the session in a teamrig team's project (.teamrig.json)` | One folder is named alone, or the session has no folder: name both folders, or drop the one named and start Claude Code in the team's project folder. |
-| `... or set TEAMRIG_HOME for teamrig's register` | No home folder is known: set `$TEAMRIG_HOME`. |
+| `no register found: start the session in a teamrig team's project (.teamrig.json) or set TEAMRIG_TEAM` | The session has no folder: start Claude Code in the team's project folder, or set `$TEAMRIG_TEAM`. |
+| `no register found: set TEAMRIG_HOME for teamrig's register` | No home folder is known: set `$TEAMRIG_HOME`. |
 | `<path> is not JSON; expected {"team": "<id>"}` | Fix the `.teamrig.json` pointer. |
 | `<path> has no "team" text; expected {"team": "<id>"}` | Add the team id to the pointer. |
 | `<from>: "<team>" is not a team id (a lowercase letter, then lowercase letters, digits or -, at most 32)` | Fix `$TEAMRIG_TEAM` or the pointer. |
 | `<kit home>/teams/<team>/config.json: <problem>` | Run `teamrig config validate` and fix what it lists. |
 | `<path> (TEAMRIG_PANE_SETTINGS) is not there` | Point the variable at an existing file, or unset it. |
-| `<path> is not a JSON object; expected {"tasksDir": "...", ...}` | Fix the settings file. |
-| `<path>: unknown key "<key>" (known: tasksDir, inboxDir, goalsDoc)` | Remove or rename the key. |
-| `<path>: "<key>" must be an absolute folder or start with ~/` | Write the folder as an absolute path or from `~/`. |
+| `<path> is not a JSON object; expected {"goalsDoc": "..."}` | Fix the settings file. |
+| `<path>: unknown key "<key>" (known: goalsDoc)` | Remove or rename the key; a `tasksDir` or `inboxDir` left from an older pane goes (the register is the team's). |
 | `<path> cannot be read (<error>)` | Check the file's permissions; the pane reads again on the next poll. |
 | `events.jsonl: 1 unreadable line(s), 0 line(s) from a newer teamrig, 0 event(s) naming no task` | The same lines teamrig skips: run `teamrig doctor`, and update teamrig-pane if teamrig is newer. |
 | `events.jsonl is 4.12 MiB, over the 4 MiB a pane can read at once: it needs rotating` | The register outgrew one read; the last good tasks stay drawn. Report it to the team's lead. |

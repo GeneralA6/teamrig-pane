@@ -84,8 +84,8 @@ Not pinned (team shop): web is not a session on this team (sessions: lead (shop-
 ```
 
 The session is looked up as teamrig's own commands look one up, in the team config and its rename log, read again
-at each command, so a name given since the pane started counts. With no team config to read (the folders named by
-variables or the settings file), the word is taken as the session id, and a word that cannot be one answers
+at each command, so a name given since the pane started counts. With no team config to read (a team whose
+folder holds no `config.json`), the word is taken as the session id, and a word that cannot be one answers
 `usage: /teamrig-pane [mine | all | auto | <session>]`. The argument is read in lower case, and `mine`, `all` and
 `auto` are always the forms above.
 
@@ -182,8 +182,7 @@ draws no title.
 
 ## The Tasks view
 
-In a project teamrig is not set up for (no `.teamrig.json` up from the session's folder, no `$TEAMRIG_TEAM`, no
-folder named), the pane shows how to set it up and nothing else, in every view: no Tasks / Changes / Conversations switch, no
+In a project teamrig is not set up for (no `.teamrig.json` up from the session's folder, no `$TEAMRIG_TEAM`), the pane shows how to set it up and nothing else, in every view: no Tasks / Changes / Conversations switch, no
 Find row, no mine / all / done (the minimized strip keeps its switch, and a press opens the setup):
 
 ```text
@@ -197,9 +196,9 @@ With no team under the kit home, the step opens with installing teamrig: `Instal
 marketplace add GeneralA6/teamrig, then claude plugin install teamrig@teamrig), then set up a team: …`. The pane
 looks again every 3 s and shows the team's tasks, with the switch, Find and the mode buttons, once it finds one, with
 no restart. To help the user, ask what the team is for and run the team-setup skill only if they want a team. The pane
-no longer lists two other ways, which still work when the user asks: join a team already made by writing
-`{"team": "<id>"}` to `<project>/.teamrig.json`, or keep tasks outside teamrig by naming `tasksDir` and `inboxDir`
-in `<kit home>/pane.json`.
+no longer lists one other way, which still works when the user asks: join a team already made by writing
+`{"team": "<id>"}` to `<project>/.teamrig.json`. A register kept outside a team is no longer read: the folders
+cannot be named in `<kit home>/pane.json` or by a variable, as a team config is the one setup.
 
 The area is the teamrig session the pane shows as "mine". It comes from a pin (`/teamrig-pane <session>`), else from
 the newest `teamrig inbox read --session <id>` run in this Claude Code session (teamrig records which Claude

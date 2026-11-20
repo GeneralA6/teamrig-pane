@@ -1,4 +1,4 @@
-// A project teamrig is not set up for (places.ts: no team, no folder named) shows how to set it up in place of
+// A project teamrig is not set up for (places.ts: no team) shows how to set it up in place of
 // tasks (setup-rows.ts), and the pane looks for its register again every POLL_MS: a team made in the project, or a
 // pointer file written there, starts the register (register.tsx bind) with no restart. A look that finds a problem,
 // such as a pointer file that names no team, shows it over the step and looks again; the look that finds the
