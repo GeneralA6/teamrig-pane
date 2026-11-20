@@ -11,9 +11,10 @@ import { HOUR, NOW, S1, S2, bigRegister, createLine, iso, markLine, statusLine, 
 import { hire, retire } from './team-fixtures'
 
 const HOME = '\\Homes\\tester'
-const EVENTS = '/Homes/tester/team-notes/tasks/events.jsonl'
-const MARKS = '/Homes/tester/team-notes/tasks/inbox-marks.jsonl'
-const INBOX = '/Homes/tester/team-notes/board/inbox/po.md'
+/** The register of team `web`, where teamrig keeps it under the kit home. */
+const EVENTS = '/Homes/tester/.teamrig/teams/web/state/events.jsonl'
+const MARKS = '/Homes/tester/.teamrig/teams/web/state/inbox-marks.jsonl'
+const INBOX = '/Homes/tester/.teamrig/teams/web/state/inbox/po.md'
 
 /**
  * The engine resolves each $.fs path the host’s way before a hook sees it: Windows puts the drive on
@@ -182,11 +183,10 @@ function fakeGit(on: On, repos: FakeRepos) {
 /** The Claude Code the tests run the pane on: new enough for it. */
 const NEW_ENOUGH: Answer<SessionVersion> = { value: { version: '2.1.300', base: '2.1.300', builtAt: '2026-10-01T10:00:00Z' } }
 
-/** The environment that names the register's folders (backslashed, as a Windows host passes them) and its goals document. */
+/** The environment that names the home folder (backslashed, as a Windows host passes it), the session's team and its goals document. */
 const REGISTER_ENV: Readonly<Record<string, string>> = {
   USERPROFILE: HOME,
-  TEAMRIG_PANE_TASKS_DIR: `${HOME}\\team-notes\\tasks`,
-  TEAMRIG_PANE_INBOX_DIR: `${HOME}\\team-notes\\board\\inbox`,
+  TEAMRIG_TEAM: 'web',
   TEAMRIG_PANE_GOALS_DOC: 'docs/ROADMAP.md',
 }
 
@@ -812,18 +812,16 @@ test('a title and note of CJK and emoji sequences wrap by display cells, no line
   expect(card.split('\n').length).toBeGreaterThan(4)
 })
 
-test('with one folder named, no settings file and no teamrig project, it says what to set and reads nothing', async ($, on) => {
-  const tasksOnly = Object.fromEntries(Object.entries(REGISTER_ENV).filter(([key]) => key !== 'TEAMRIG_PANE_INBOX_DIR'))
-  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, tasksOnly)
+test('a settings file still naming the folders is a problem naming the key, and no task is read', async ($, on) => {
+  const { disk } = await start(on)
+  disk.write('/Homes/tester/.teamrig/pane.json', [JSON.stringify({ tasksDir: '~/team-notes/tasks' })])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  const problem = await pane.find({ type: 'Text', text: /^WARN no register found/ })
-  expect(problem?.text.split(/\s+/).join(' ')).toBe(
-    "WARN no register found: set TEAMRIG_PANE_TASKS_DIR and TEAMRIG_PANE_INBOX_DIR, write them in /Homes/tester/.teamrig/pane.json, or start the session in a teamrig team's project (.teamrig.json)",
-  )
+  const problem = await pane.find({ type: 'Text', text: /^WARN / })
+  expect(problem?.text.split(/\s+/).join(' ')).toBe('WARN /Homes/tester/.teamrig/pane.json: unknown key "tasksDir" (known: goalsDoc)')
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
-  expect(disk.reads).toEqual([])
+  expect(disk.reads).toEqual(['/Homes/tester/.teamrig/pane.json'])
 })
 
 /** A drawn text's words, one space between each, as a wrapped line reads unwrapped. */
@@ -939,6 +937,8 @@ test("a tab tied to no session lists its team's sessions; a press on one ties th
   disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
   disk.write(`${team}/config.json`, [JSON.stringify({ sessions: ['lead', 'api'] })])
   disk.write(`${team}/state/events.jsonl`, [createLine('T7', { owner: 'api', by: 'lead', at: NOW - HOUR, title: 'Ship the api' })])
+  // No inbox read names this conversation, so nothing ties the tab.
+  disk.remove(MARKS)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
@@ -980,18 +980,6 @@ test('a title line leads the docked tasks, Changes and Log views: the session as
   const inline = await pane.drawn()
   expect(childrenOf(keyedNode(inline, 'controls'))[0]).toBe(keyedNode(inline, 'switch'))
   expect(await pane.find({ text: /\[web\]/ })).toBeUndefined()
-})
-
-test('the settings file in the kit home names the folders, ~/ under the home folder', async ($, on) => {
-  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
-  disk.write('/Homes/tester/.teamrig/pane.json', [
-    JSON.stringify({ tasksDir: '~/team-notes/tasks', inboxDir: '~/team-notes/board/inbox' }),
-  ])
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-
-  expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
-  expect(await pane.find({ text: /WARN/ })).toBeUndefined()
 })
 
 test('draws each collapsed task as one Text: no Box beyond the frame, the controls, the find row and the two packed button rows', async ($, on) => {
@@ -1044,10 +1032,10 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
   const screen = screenOf(drawn)
   expect(screen).toContain(` ${cardLine('Reference', 'inbox/po.md')}`)
   expect(screen).toContain(` ${CARD_UNDER}docs/ROADMAP.md`)
-  // The card sits under the task's button, the two in a column of their own, each reference line a row in it: three
-  // Boxes more than collapsed.
-  expect(buttonKeys(keyedNode(drawn, 'next:T1-open')).map(key => key.split(':').slice(0, 2).join(':'))).toEqual(['next:T1', 'goto:file', 'goto:file'])
-  expect(countType(drawn, 'Box')).toBe(boxes + 3)
+  // The card sits under the task's button, the two in a column of their own, each reference line a row in it, the owner acts
+  // another: four Boxes more than collapsed.
+  expect(buttonKeys(keyedNode(drawn, 'next:T1-open')).map(key => key.split(':').slice(0, 2).join(':'))).toEqual(['next:T1', 'goto:file', 'goto:file', 'act:note', 'act:next'])
+  expect(countType(drawn, 'Box')).toBe(boxes + 4)
 
   await pane.press({ key: 'next:T1' })
   expect(await pane.find({ text: /│ Status|ship the pane with details/ })).toBeUndefined()
@@ -1101,10 +1089,10 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   await pane.press({ key: 'po:T1' })
   expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {7}waiting since 14:00 UTC by security\n {4}│ Note {9}needs owner paste\n/ })).toBeDefined()
   expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeUndefined()
-  // Each open card is a column Box, its reference file's line a row Box in it; the frame is four Boxes (the root, the
-  // header, the body's row, its window); the switch and the mode buttons are packed in code (pack.ts), each a column
-  // Box of one row Box here.
-  expect(countType(await pane.drawn(), 'Box')).toBe(14)
+  // Each open card is a column Box, its reference file's line a row Box in it and, with a team to run them through,
+  // its owner acts another; the frame is four Boxes (the root, the header, the body's row, its window); the switch and
+  // the mode buttons are packed in code (pack.ts), each a column Box of one row Box here.
+  expect(countType(await pane.drawn(), 'Box')).toBe(16)
   const closeCards = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'close cards')
   expect(closeCards?.props).toMatchObject({ hotkey: 'c' })
 
@@ -1400,7 +1388,7 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   await pane.press({ key: 'tasks' })
   const title = childrenOf(keyedNode(await pane.drawn(), 'controls'))[0]
   expect(typeOf(title)).toBe('Text')
-  expect(screenOf(title)).toEqual(['po'])
+  expect(screenOf(title)).toEqual(['[web] po'])
   expect(buttonKeys(await pane.drawn())).not.toContain(BANNER_KEY)
   expect(await bannerText(band)).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
 })
@@ -2031,15 +2019,6 @@ test("the Log view titles a conversation by the task its session worked while it
   expect(await drawnLines(pane)).toContain('Ship the log view')
 })
 
-test('the Log view says so when the session has no team', async ($, on) => {
-  await start(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-
-  await pane.press({ key: 'log' })
-  expect(await pane.find({ text: /^No team found: the Conversations view shows/ })).toBeDefined()
-})
-
 test('the Log view says so when the team has no config file, reading no turn log: teamrig writes it none', async ($, on) => {
   const { disk } = await startWithLogs(on, false)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
@@ -2237,15 +2216,6 @@ test('the Teams tab reads no team folder while another view shows, and reads wha
   await pane.press({ key: 'team' })
   expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
   expect(await drawsLine(pane, /● tools-dev \[Wake\] \[Stats\]$/)).toBe(true)
-})
-
-test('the Teams tab says so when the session has no team', async ($, on) => {
-  await start(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-
-  await pane.press({ key: 'team' })
-  expect(await pane.find({ text: /^No team found: the Teams tab shows the tree of teams/ })).toBeDefined()
 })
 
 /**
@@ -2447,6 +2417,8 @@ test("a task id in an open card opens that task's page: its title and card alone
     gotoKey(drawn, 'T58'),
     gotoKey(drawn, 'T52'),
     fileKey(drawn),
+    'act:note:T50',
+    'act:next:T50',
   ])
   expect(keyedProps(drawn, 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
   // Nowhere to go draws the step as dim words, no press.
@@ -2454,7 +2426,7 @@ test("a task id in an open card opens that task's page: its title and card alone
 
   await pane.press({ key: gotoKey(drawn, 'T58') })
   expect(screenOf(await pane.drawn())).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find',
@@ -2476,6 +2448,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     ' Origin       Asked by owner, added by lead Sat',
     '              10-10',
     ' Reference    docs/x.md',
+    ' [Note] [Next]',
   ])
 })
 
@@ -2532,6 +2505,8 @@ test('back, forward and the trail step through the places; the list keeps the he
     'next:T52',
     gotoKey(drawn, 'T50'),
     fileKey(drawn),
+    'act:note:T52',
+    'act:next:T52',
   ])
   expect(await pane.find({ type: 'Text', text: '‹ back' })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › T50 › T58'])
@@ -2590,7 +2565,7 @@ test("a reference file in an open card opens as a page: its name, where it was r
 
   await pane.press({ key: toFile })
   expect(screenOf(await pane.drawn())).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find',
@@ -2756,7 +2731,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   // The count, then the active matches in plan order, each a press with a dim line of whose it is; the Find field draws
   // no words.
   expect(screenOf(drawn)).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find  clear',
@@ -2989,7 +2964,7 @@ test('done (h) opens the Done page at the week of now; prev (p) and next (l) ste
   expect(buttonKeys(drawn)).not.toContain('next')
   expect(await pane.find({ type: 'Text', text: /^next ›$/ })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(drawn)).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find',
@@ -3075,7 +3050,7 @@ test('keys (k) opens the Keys page, every key the pane answers in a grid at the 
 
   await pane.press({ key: 'keys' })
   expect(screenOf(await pane.drawn())).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find',
@@ -3504,11 +3479,3 @@ test("an open card ends in the owner's Note and Next: Note sends the typed text 
   expect(await actKeys(pane)).toEqual([])
 })
 
-test('an open card draws no owner act with no team to run it through', async ($, on) => {
-  await start(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-  await pane.press({ key: 'next:T1' })
-  expect(await pane.find({ text: /│ Status/ })).toBeDefined()
-  expect(await actKeys(pane)).toEqual([])
-})
