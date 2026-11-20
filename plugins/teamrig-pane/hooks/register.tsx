@@ -37,13 +37,10 @@ import { atom, read, update } from 'claude-code'
 import type { Components, Context, ProcessResult, Register, ToolResult } from 'claude-code'
 import type {
   BarStatus,
-  ExpandedTasks,
   LogRead,
   PaneState,
   PaneView,
-  Place,
   RefFile,
-  RefFileRead,
   Snapshot,
   TaskDetail,
   TaskRow,
@@ -74,7 +71,8 @@ import { screenOf } from './screen'
 import { clearSearch, focusFind, go, openConversation, scrollTo, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
-import { inboxFile, TaskDetails, type RefPlaces } from './details'
+import { TaskDetails, type RefPlaces } from './details'
+import { openFile as pressFile, openInbox as pressInbox, openPage as pressPage, toggleCard, type ReadsFile } from './presses'
 import { RefFileReader } from './ref-file'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { TreeGoals } from './tree-goals'
@@ -142,10 +140,8 @@ import {
   fromList,
   isPage,
   KEYS_PAGE,
-  leavingList,
   placeLabel,
   pushed,
-  reset,
   searched,
   trail,
   wentTo,
@@ -154,7 +150,6 @@ import { heldWeeks, weekClockOf, weekSteps } from './done'
 import { weekWords } from './done-rows'
 import { treeOf } from './meta'
 import { clockOf, machineZoneOf, zoneNamed } from './zone'
-import { unreadLine } from './file-page'
 import { KEYS_HOTKEY, KEYS_LABEL } from './keys-page'
 import { matchCount, searchTasks, topResult } from './task-search'
 import { SEARCH_VIEW } from './search-rows'
@@ -351,11 +346,6 @@ function atomStore($: Context): PaneStore {
   }
 }
 
-/** The open cards less one. */
-function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
-  return Object.fromEntries(Object.entries(current).filter(([key]) => key !== id))
-}
-
 /** Moves the pane's focus ring onto the element keyed `key`; refused while the pane does not hold the keys, which leaves it where it was. */
 async function focusOn($: Context, key: string): Promise<void> {
   await $.ui.focus({ requestId: PANE, key }).catch(() => undefined)
@@ -510,6 +500,8 @@ export const register: Register = on => {
     const unquoted: TaskDetail = { ref: task.ref, quotes: [], goals: [] }
     return details === null ? unquoted : details.load(task).catch(() => unquoted)
   }
+  /** A reference file as its page reads it (ref-file.ts). With no reader yet it says there was no folder to look in. */
+  const readFile: ReadsFile = file => (refFiles === null ? Promise.resolve({ kind: 'missing', tried: [] }) : refFiles.read(file))
   /** The readers a view switch refreshes, as the session's start last set them: read at the press. */
   const livesNow = (): ViewLives => ({ sizer, tracked, logging, teaming, scheduling, tallying })
 
@@ -1021,16 +1013,7 @@ export const register: Register = on => {
     } = screen
 
     // Opening a card reads what the task's refs and goals point at, once (detailOf).
-    const toggle = async (id: string) => {
-      if (open[id] !== undefined) {
-        await update($, expanded, current => collapse(current, id))
-        return
-      }
-      const task = snap.tasks.find(t => t.id === id)
-      if (task === undefined) return
-      const detail = await detailOf(task)
-      await update($, expanded, current => ({ ...current, [id]: detail }))
-    }
+    const toggle = (id: string) => toggleCard(store, snap.tasks, id, detailOf)
     const switchTo = (target: PaneView) => switchView(store, target, livesNow())
     // A press on the Stats tab's scope or range row picks it, and one on a Health count shows its tasks from their top;
     // either folds the registers at once. A Teams row's [Stats] shows the tab on that row's scope, its numbers from their
@@ -1069,45 +1052,10 @@ export const register: Register = on => {
       await switchTo('team')
       if (row !== null) await scrollTo(store, { kind: 'row', key: row }).catch(() => undefined)
     }
-    // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Teams tab session's
-    // card, or another area's inbox count on it) shows the Tasks view at it, over its list: back shows the list, never the Team
-    // tab's search; from the Tasks view's list, the list remembers `from`, the element the press was in, to scroll back to.
-    const openPlace = async (place: Place, from: string) => {
-      const shown = await read($, view)
-      if (shown !== 'tasks') await update($, view, () => 'tasks')
-      await go(store, current => pushed(shown === 'tasks' ? leavingList(current, from) : reset(current, true), place))
-    }
-    // A press on a task id opens its page, read as a card's is.
-    const openPage = async (id: string, from: string) => {
-      const task = snap.tasks.find(t => t.id === id)
-      if (task === undefined) return
-      const detail = await detailOf(task)
-      await update($, pages, current => ({ ...current, [id]: detail }))
-      await openPlace({ kind: 'task', id }, from)
-    }
-    // A file's page is read once as it opens (ref-file.ts). With no reader yet it says there was no folder to look in.
-    const readFilePage = async (file: string): Promise<RefFileRead> => {
-      const found: RefFileRead = refFiles === null ? { kind: 'missing', tried: [] } : await refFiles.read(file)
-      await update($, filePages, current => ({ ...current, [file]: found }))
-      return found
-    }
-    // A press on a reference file opens its page.
-    const openFile = async (file: RefFile, from: string) => {
-      await readFilePage(file.file)
-      await openPlace({ kind: 'file', file: file.file, line: file.line }, from)
-    }
-    // A press on a Teams tab card's inbox count opens that inbox: the session's own in the Inbox view, another area's as
-    // a file's page, landing on its first unread line (unreadLine). Reading it marks nothing read:
-    // the pane writes no inbox, the session's `teamrig inbox read` does.
-    const openInbox = async (press: InboxPress, from: string) => {
-      if (press.area === snap.area) {
-        await switchTo('inbox')
-        return
-      }
-      const file = inboxFile(press.area)
-      const found = await readFilePage(file)
-      await openPlace({ kind: 'file', file, line: unreadLine(found, press.unread) }, from)
-    }
+    // The presses that open a page (presses.ts), on the tasks this drawing shows and the session's own area.
+    const openPage = (id: string, from: string) => pressPage(store, snap.tasks, id, from, detailOf)
+    const openFile = (file: RefFile, from: string) => pressFile(store, file, from, readFile)
+    const openInbox = (press: InboxPress, from: string) => pressInbox(store, press, from, snap.area, readFile, livesNow())
     // Back from a conversation's page shows the list, read again, from its top, or the search the page was opened from:
     // the page drew no Find field, so it comes back a fresh round holding the search's words (fieldAnew).
     const openLog = (conversation: LogRead) => openConversation(store, conversation, logging)
