@@ -69,9 +69,8 @@ under `tools/` or `plugins/teamrig-pane/` is loaded by no test, or a file, or ei
 falls below the floors in `tools/ci/coverage.json`. That file names, each with its reason, the code
 it does not measure: `hooks/core/` (vendored; teamrig measures it), the files no node test can load
 yet, and the plugin tests only the engine can run. Never lower a floor or add an entry to pass a
-change: add the test. Once the repository is public, CI also runs `npm test` and the plugin
-tests on Linux, Windows and macOS under node 22 and 24, with a pinned Claude Code release
-(`.github/workflows/ci.yml`); until then, the local gate runs them on your machine.
+change: add the test. CI also runs `npm test` and the plugin tests on Linux, Windows and macOS,
+with a pinned Claude Code release (`.github/workflows/ci.yml`), on every pull request.
 
 `hooks/core/` is a copy of teamrig's read modules at the commit `scripts/teamrig-pin.json` names, made
 by `scripts/sync-core.ts`; never edit it by hand. The `hooks/core matches the teamrig pin` check (a CI job
@@ -86,30 +85,31 @@ until a sync brings the pane the reader for it. After each sync, rerun `scripts/
 how).
 
 ## The local gate
-CI (`.github/workflows/ci.yml`) runs on each pull request and each push to `main`, but every job skips while the
-repository is private, where GitHub Actions minutes bill, so it checks only once the repository is public. Its
-`every check passed` job passes only when every other job did: the one check `main` requires (see
-[Pull requests](#pull-requests)). Whether CI runs or not, the `pre-push` hook that `npm ci` sets runs every check CI
-runs (`tools/ci/local.ts`; the list is `tools/ci/local-checks.ts`) on the commit being pushed. Run it by hand with
-`node tools/ci/local.ts`.
+CI (`.github/workflows/ci.yml`) runs on each pull request and each push to `main` (every job would skip were the
+repository made private, where GitHub Actions minutes bill). Its `every check passed` job passes only when every
+other job did: the one check `main` requires (see [Pull requests](#pull-requests)). The `pre-push` hook that `npm ci`
+sets runs the light checks (`tools/ci/local.ts --pre-push`) on the commit being pushed: every check of
+`tools/ci/local-checks.ts` but the coverage gate, whose whole test suite CI runs on every OS before the pull request
+merges. A light pass is recorded apart from a full one, so it never stands in for it. Run the light checks by hand
+with `node tools/ci/local.ts --light`, and every check with `node tools/ci/local.ts`.
 - It refuses a push to `main`, before any check: every change lands through a pull request. On GitHub,
   `.github/workflows/main-push-alert.yml` opens an issue when main changes outside a pull request anyway (from a
   clone without the hooks), so the owner hears of it; a commit made in GitHub's web editor raises none.
 - It proves a committed tree: it refuses uncommitted changes, and a pushed commit that is not checked out.
 - It stops at the first failing check and prints its output.
-- A pass is recorded in the clone's git folder (`local-ci/<tree>.json`, shared by its worktrees), so a tree is
-  checked once; a new commit is checked again.
+- A pass is recorded in the clone's git folder (`local-ci/<tree>.json`, a light one in `local-ci/light/`, shared by
+  its worktrees), so a tree is checked once; a new commit is checked again. A full pass proves a light one too.
 - The core-sync check reads a teamrig git checkout: `--teamrig <dir>`, else the clone's
   `git config teamrig.checkout <dir>`, else a `teamrig` folder beside this repository.
 - The plugin tests run in the Claude Code on your PATH, with an empty home folder as on a CI runner.
 - It cannot be skipped: never push with `--no-verify`.
 
-It runs on one machine, one Node and the Claude Code installed there, so a failure that only another OS,
-Node version or the pinned Claude Code release shows goes unseen until the repository is public.
+It runs on one machine, one Node and the Claude Code installed there; a failure that only another OS, Node version
+or the pinned Claude Code release shows is CI's to catch, on the pull request.
 
 ## Branches and releases
 - Every change is its own branch off `main` and lands through a pull request once every check
-  passes on its head (the local gate until the repository is public); it is rebase-merged and the branch is deleted.
+  passes on its head (CI's `every check passed`); it is rebase-merged and the branch is deleted.
 - Each commit is one logical change. The `size rule` (`tools/ci/size-rule-cli.ts`, run by the local gate, CI
   and `npm run check`) fails a commit over 400 changed non-test lines or 15 non-test files whose message has
   no `Large-commit: <reason>` line: teamrig's push guard rule at its defaults, so a pull request meets it too.

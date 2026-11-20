@@ -17,11 +17,12 @@ description: Land a finished teamrig-pane change through small signed commits, n
    the commit subjects since the last release, and a spec fails a raise by hand.
 4. `npm run check` (that git runs the repo hooks, typecheck, the coverage gate, the plugin test gate, scrub, the doc
    pictures, the size rule and the commit subjects), then `npm run pane-test`: the plugin tests in Claude Code's runner.
-5. `git push -u origin <branch>`: the pre-push hook runs the local gate (`tools/ci/local.ts`, its checks listed in
-   `tools/ci/local-checks.ts`) on the committed tree, and refuses a push to `main`. Never `--no-verify`.
+5. `git push -u origin <branch>`: the pre-push hook runs the light checks (`tools/ci/local.ts --pre-push`: every
+   check in `tools/ci/local-checks.ts` but the coverage gate) on the committed tree, and refuses a push to `main`.
+   Never `--no-verify`.
 6. Open the pull request and fill in the template (`.github/pull_request_template.md`). It is rebase-merged once
-   every check passes on its head (the local gate until the repository is public, then CI's `every check passed`
-   too), and the branch is deleted.
+   every check passes on its head (CI's `every check passed`, which runs the whole suite on every OS), and the
+   branch is deleted.
 
 ## Traps
 
