@@ -6,7 +6,19 @@ import { rowOf } from '../hooks/log'
 import { AT_LIST, searched } from '../hooks/nav'
 import { INITIAL_STATE } from '../hooks/pane-state'
 import { MemoryStore } from '../hooks/pane-store'
-import { openFile, openInbox, openPage, openPlace, readFilePage, toggleCard, type ReadsDetail, type ReadsFile } from '../hooks/presses'
+import {
+  closeStatsFrom,
+  closeStatsList,
+  openFile,
+  openInbox,
+  openPage,
+  openPlace,
+  pickStats,
+  readFilePage,
+  toggleCard,
+  type ReadsDetail,
+  type ReadsFile,
+} from '../hooks/presses'
 import type { ViewLives } from '../hooks/steps'
 import { HOUR, NOW, createLine } from './fixtures'
 
@@ -185,5 +197,100 @@ describe('openInbox', () => {
     await openInbox(store, { area: 'po', unread: 1 }, 'team:po', null, readFile, NO_READERS)
     expect(asked).toEqual(['inbox/po.md'])
     expect(store.state.view).toBe('tasks')
+  })
+})
+
+/** Readers whose Stats fold counts its refreshes. */
+function folding(): { readonly lives: ViewLives; readonly folds: { count: number } } {
+  const folds = { count: 0 }
+  return {
+    folds,
+    lives: {
+      ...NO_READERS,
+      tallying: {
+        refresh: () => {
+          folds.count += 1
+          return Promise.resolve()
+        },
+      },
+    },
+  }
+}
+
+const SCROLLED: PaneState['bodyScroll'] = { seq: 4, to: { kind: 'offset', offset: 12 } }
+const AT_TOP_NEXT: PaneState['bodyScroll'] = { seq: 5, to: { kind: 'offset', offset: 0 } }
+
+describe('pickStats', () => {
+  test('a scope pick folds the registers at once, the window left where it is', async () => {
+    const store = from({ view: 'stats', bodyScroll: SCROLLED })
+    const { lives, folds } = folding()
+    await pickStats(store, { kind: 'scope', scope: { kind: 'team', team: 'acme' } }, lives)
+    expect(store.state.statsScope).toEqual({ kind: 'team', team: 'acme' })
+    expect(store.state.bodyScroll).toBe(SCROLLED)
+    expect(folds.count).toBe(1)
+  })
+
+  test('a range pick folds the registers at once', async () => {
+    const store = from({ view: 'stats' })
+    const { lives, folds } = folding()
+    await pickStats(store, { kind: 'range', range: '90d' }, lives)
+    expect(store.state.statsRange).toBe('90d')
+    expect(folds.count).toBe(1)
+  })
+
+  test("a Health count shows its tasks from their top, folded at once", async () => {
+    const store = from({ view: 'stats', bodyScroll: SCROLLED })
+    const { lives, folds } = folding()
+    await pickStats(store, { kind: 'list', list: 'opened' }, lives)
+    expect(store.state.statsList).toBe('opened')
+    expect(store.state.bodyScroll).toEqual(AT_TOP_NEXT)
+    expect(folds.count).toBe(1)
+  })
+
+  test("a Teams row's Stats opens the tab on its scope, its numbers shown, and keeps the row for back", async () => {
+    const store = from({ view: 'team', statsList: 'opened', statsFrom: 'team:old' })
+    const { lives, folds } = folding()
+    await pickStats(store, { kind: 'open', scope: { kind: 'session', team: 'acme', session: 'po' }, row: 'team:acme/po' }, lives)
+    expect(store.state.view).toBe('stats')
+    expect(store.state.statsScope).toEqual({ kind: 'session', team: 'acme', session: 'po' })
+    expect(store.state.statsList).toBeNull()
+    expect(store.state.statsFrom).toBe('team:acme/po')
+    expect(store.state.bodyScroll.to).toEqual({ kind: 'offset', offset: 0 })
+    // The switch's own fold, no second one.
+    expect(folds.count).toBe(1)
+  })
+
+  test('a pick with no Stats reader yet still lands', async () => {
+    const store = from({ view: 'stats' })
+    await pickStats(store, { kind: 'range', range: 'all' }, NO_READERS)
+    expect(store.state.statsRange).toBe('all')
+  })
+})
+
+describe('closeStatsList', () => {
+  test("back from a Health count's tasks shows the numbers from their top, folded anew", async () => {
+    const store = from({ view: 'stats', statsList: 'opened', bodyScroll: SCROLLED })
+    const { lives, folds } = folding()
+    await closeStatsList(store, lives)
+    expect(store.state.statsList).toBeNull()
+    expect(store.state.bodyScroll).toEqual(AT_TOP_NEXT)
+    expect(folds.count).toBe(1)
+  })
+})
+
+describe('closeStatsFrom', () => {
+  test('back shows the Teams tab at the row the Stats tab was opened from, which the switch drops', async () => {
+    const store = from({ view: 'stats', statsFrom: 'team:acme/po' })
+    await closeStatsFrom(store, NO_READERS)
+    expect(store.state.view).toBe('team')
+    expect(store.state.statsFrom).toBeNull()
+    expect(store.state.bodyScroll.to).toEqual({ kind: 'reveal', key: 'team:acme/po', block: 'center' })
+  })
+
+  test('with no row kept, the Teams tab shows from where its window is', async () => {
+    const store = from({ view: 'stats' })
+    await closeStatsFrom(store, NO_READERS)
+    expect(store.state.view).toBe('team')
+    expect(store.state.bodyScroll.to).not.toEqual({ kind: 'reveal', key: 'team:acme/po', block: 'center' })
   })
 })
