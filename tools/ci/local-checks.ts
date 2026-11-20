@@ -53,7 +53,20 @@ export function localChecks(base: string, teamrig: string): readonly LocalCheck[
     },
     { name: 'typecheck', argv: ['node', TSC, '-p', 'tsconfig.json'] },
     { name: 'typecheck: pane', argv: ['node', TSC, '-p', 'tsconfig.pane.json'] },
-    { name: 'coverage gate', argv: ['node', 'tools/ci/coverage-cli.ts'] },
+    COVERAGE_GATE,
     { name: 'plugin tests', argv: ['claude', 'plugin', 'test', 'plugins/teamrig-pane'], isolatedHome: true },
   ];
+}
+
+/** The whole test suite with its coverage floors: the slowest check, and one GitHub's required CI runs on every OS. */
+const COVERAGE_GATE: LocalCheck = { name: 'coverage gate', argv: ['node', 'tools/ci/coverage-cli.ts'] };
+
+/**
+ * The light checks (T4363, as teamrig's T4344): the pre-push hook's proof of a branch, which merges only through a
+ * pull request on GitHub's required checks. It is every local check in the same order but the coverage gate, whose
+ * whole suite CI runs on every OS before the pull request merges; the plugin's own tests stay, as the lead's plan
+ * keeps them. The hook runs `teamrig secrets pushed` before them.
+ */
+export function prePushChecks(base: string, teamrig: string): readonly LocalCheck[] {
+  return localChecks(base, teamrig).filter((check) => check !== COVERAGE_GATE);
 }

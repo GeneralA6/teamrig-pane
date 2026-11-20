@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FakeGit } from '../lib/fake-git.ts';
 import { isRecord } from '../lib/guards.ts';
-import { DEFAULT_BASE, localChecks, TEAMRIG_CONFIG_KEY, teamrigCheckout } from './local-checks.ts';
+import { DEFAULT_BASE, localChecks, prePushChecks, TEAMRIG_CONFIG_KEY, teamrigCheckout } from './local-checks.ts';
 
 const read = (path: string): string => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
 const CI = read('.github/workflows/ci.yml');
@@ -77,6 +77,23 @@ describe('localChecks', () => {
     assert.deepEqual(localChecks('upstream/main', TEAMRIG).find((check) => check.name === 'commit subjects')?.argv, ['node', 'tools/ci/commit-subjects-cli.ts', '--base', 'upstream/main']);
     assert.equal(new Set(checks.map((check) => check.name)).size, checks.length);
     assert.ok(checks.every((check) => !check.argv.includes('--github')));
+  });
+});
+
+describe('prePushChecks (T4363)', () => {
+  it('is every local check in the same order but the coverage gate, whose whole suite CI runs', () => {
+    const full = localChecks(DEFAULT_BASE, TEAMRIG);
+    assert.deepEqual(
+      prePushChecks(DEFAULT_BASE, TEAMRIG),
+      full.filter((check) => check.name !== 'coverage gate'),
+    );
+    assert.ok(full.some((check) => check.name === 'coverage gate'), 'the full list still runs the whole suite');
+  });
+
+  it("keeps the plugin's own tests and the commit checks since the given base", () => {
+    const light = prePushChecks('upstream/main', TEAMRIG);
+    assert.ok(light.some((check) => check.name === 'plugin tests' && check.isolatedHome === true));
+    assert.deepEqual(light.find((check) => check.name === 'DCO')?.argv, ['node', 'tools/dco/cli.ts', '--range', 'upstream/main..HEAD']);
   });
 });
 

@@ -51,22 +51,34 @@ describe('local (the local gate CLI)', () => {
     assert.match(result.stdout, /^local checks: REFUSED the checkout has uncommitted changes \(\?\? b\.txt\)/);
   });
 
-  it('as the pre-push hook, proves each pushed commit and ignores the remote git names', () => {
+  /** The line a light proof starts with, naming what it leaves to CI. */
+  const LIGHT = 'pre-push checks: every local check but the coverage gate; required CI runs the whole suite on every OS on the pull request\n';
+
+  it('as the pre-push hook, proves each pushed commit with the light checks and ignores the remote git names (T4363)', () => {
     const { head, tree } = commit();
     recordPass(tree, head);
     const args = ['--pre-push', 'origin', 'https://example.invalid/repo.git'];
     const pushed = repo.run(CLI, args, {}, `refs/heads/topic ${head} refs/heads/topic ${'0'.repeat(40)}\n`);
     assert.equal(pushed.status, 0, pushed.stderr);
-    assert.match(pushed.stdout, /^local checks: refs\/heads\/topic \(tree [0-9a-f]{7}\) passed earlier/);
+    assert.equal(pushed.stdout.slice(0, LIGHT.length), LIGHT);
+    assert.match(pushed.stdout, /^pre-push checks: refs\/heads\/topic \(tree [0-9a-f]{7}\) passed earlier/m, 'a full pass proves a light one');
 
     const toMain = repo.run(CLI, args, {}, `refs/heads/topic ${head} refs/heads/main ${'0'.repeat(40)}\n`);
-    assert.deepEqual([toMain.status, toMain.stdout], [1, 'local checks: REFUSED refs/heads/main changes only through a pull request: push a branch of your own and open a pull request from it\n']);
+    assert.deepEqual([toMain.status, toMain.stdout], [1, `${LIGHT}pre-push checks: REFUSED refs/heads/main changes only through a pull request: push a branch of your own and open a pull request from it\n`]);
 
     const empty = repo.run(CLI, args);
-    assert.deepEqual([empty.status, empty.stdout], [0, 'local checks: nothing to push\n']);
+    assert.deepEqual([empty.status, empty.stdout], [0, `${LIGHT}pre-push checks: nothing to push\n`]);
 
     const garbled = repo.run(CLI, args, {}, 'refs/heads/main\n');
     assert.deepEqual([garbled.status, garbled.stderr], [2, 'local: pre-push: unexpected line from git: refs/heads/main\n']);
+  });
+
+  it('--light proves the checkout with the light checks, by hand', () => {
+    commit();
+    const result = repo.run(CLI, ['--light']);
+    assert.equal(result.status, 1, result.stderr);
+    assert.equal(result.stdout.slice(0, LIGHT.length), LIGHT);
+    assert.match(result.stdout, /^pre-push checks: REFUSED scrub: tree failed on tree [0-9a-f]{7}$/m);
   });
 
   it('exits 2 without a teamrig checkout and on an unknown option', () => {
