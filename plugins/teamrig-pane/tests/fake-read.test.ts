@@ -88,6 +88,36 @@ describe('the fake teamrig read', () => {
     ])
   })
 
+  test("serves a source as the owner's, a session's or the tracker's, and an issue ref with its item, as teamrig's GitHub connector does", async () => {
+    const { files, disk } = teamDisk()
+    files.write(
+      PATHS.events,
+      [
+        ...EVENTS,
+        createLine('T3', { at: NOW - 2 * HOUR, by: 'github', owner: 'api', source: 'github', ref: 'gh:acme/app#12' }),
+        createLine('T4', { at: NOW - HOUR, by: 'lead', owner: 'api', source: 'gone', ref: 'gh:acme/app#7; docs/x.md:3' }),
+      ].join('\n'),
+    )
+    const run = await fakeRead(disk, () => NOW)(words('tasks', '--conversation', S1))
+    const served = documentOf(run, 'tasks').fields['tasks']
+    expect(served).toMatchObject([
+      { source: { kind: 'owner', id: 'owner', name: 'owner' } },
+      { source: { kind: 'session', id: 'po', name: 'web-po' }, ref: null },
+      {
+        source: { kind: 'connector', id: 'github', name: 'GitHub' },
+        ref: { text: 'gh:acme/app#12', connector: { id: 'github', name: 'GitHub' }, id: 'acme/app#12', label: { text: 'acme/app#12', source: 'outside' }, url: 'https://github.com/acme/app/issues/12' },
+      },
+      { source: { kind: 'session', id: 'gone', name: 'gone' }, ref: { text: 'gh:acme/app#7; docs/x.md:3', connector: null, id: null, label: null, url: null } },
+    ])
+    const rows = readOf(run, 'tasks', tasksOf)
+    expect(rows.map(row => [row.id, row.isImported, row.item])).toEqual([
+      ['T1', false, null],
+      ['T2', false, null],
+      ['T3', true, { tracker: 'GitHub', id: 'acme/app#12', url: 'https://github.com/acme/app/issues/12' }],
+      ['T4', false, null],
+    ])
+  })
+
   test('takes the whole argv of a run, the node and main words too', async () => {
     const { disk } = teamDisk()
     const run = await fakeRead(disk, () => NOW)(['node', 'K/teamrig/dist/cli/main.js', ...words('tasks')])

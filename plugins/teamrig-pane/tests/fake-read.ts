@@ -46,15 +46,35 @@ async function foldOf(disk: FakeDisk, team: Team, pinned: string | null, convers
   return snapshot
 }
 
+/** The fake's one tracker, named as teamrig's GitHub connector names itself (teamrig's src/github/connector.ts). */
+const GITHUB = { id: 'github', name: 'GitHub' }
+/** A ref that connector knows as an issue: `gh:<owner>/<repo>#<number>`. */
+const GITHUB_REF = /^gh:([\w.-]+\/[\w.-]+)#([1-9]\d*)$/
+
+/** A ref as the `tasks` document serves it: its text, and the issue's connector, id, label and page when it names one. */
+function servedRef(ref: string): JsonRecord {
+  const [, repo, number] = GITHUB_REF.exec(ref) ?? []
+  if (repo === undefined || number === undefined) return { text: ref, connector: null, id: null, label: null, url: null }
+  const id = `${repo}#${number}`
+  return { text: ref, connector: GITHUB, id, label: { text: id, source: 'outside' }, url: `https://github.com/${repo}/issues/${number}` }
+}
+
+/** A source as the `tasks` document serves it: the owner's marker first, then the tracker, any other a session's. */
+function servedSource(source: string, team: Team): JsonRecord {
+  if (source === team.settings.ownerSource) return { kind: 'owner', id: source, name: source }
+  if (source === GITHUB.id) return { kind: 'connector', ...GITHUB }
+  return { kind: 'session', id: source, name: team.roster.nameOf(source) ?? source }
+}
+
 /** A task as the `tasks` document serves it: the fold's row, its texts marked as the team's, its source and ref as data. */
-function servedTask(row: TaskRow, roster: Roster): JsonRecord {
-  const { descriptionCut: _notServed, item: _readFromRef, isImported: _readFromSource, title, description, source, ref, ...served } = row
+function servedTask(row: TaskRow, team: Team): JsonRecord {
+  const { descriptionCut: _notServed, item: _servedInRef, isImported: _servedInSource, title, description, source, ref, ...served } = row
   return {
     ...served,
     title: { text: title, source: 'team' },
     description: description === null ? null : { text: description, source: 'team' },
-    source: { kind: 'session', id: source, name: roster.nameOf(source) ?? null },
-    ref: ref === null ? null : { text: ref },
+    source: servedSource(source, team),
+    ref: ref === null ? null : servedRef(ref),
   }
 }
 
@@ -147,7 +167,7 @@ async function teamBody(name: DocumentName, disk: FakeDisk, team: Team, asked: A
   switch (name) {
     case 'tasks': {
       const fold = await foldOf(disk, team, null, asked.conversation, now)
-      return { tasks: fold.tasks.map(row => servedTask(row, team.roster)) }
+      return { tasks: fold.tasks.map(row => servedTask(row, team)) }
     }
     case 'sessions': {
       const area = asked.conversation === null ? null : (await foldOf(disk, team, null, asked.conversation, now)).area
