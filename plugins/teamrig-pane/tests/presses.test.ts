@@ -1,6 +1,7 @@
 // The pane's presses on a store kept in memory: no engine, as a front end other than the Claude Code dock runs them.
 import { describe, expect, test } from 'claude-code/testing'
 import type { ChangesSnapshot, LogConversation, LogList, LogRead, PaneState, RefFileRead, RepoChanges, Snapshot, TaskDetail, TaskRow, TeamView } from '../types'
+import { currentRowKey, lookShowing, type Current, type ListLook } from '../hooks/banner'
 import { changesResultKey, searchChanges } from '../hooks/changes-search'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
@@ -25,7 +26,10 @@ import {
   submitLog,
   submitTasks,
   submitTeam,
+  openTask,
+  toggleBanner,
   toggleCard,
+  togglePrevious,
   toggleTeamKey,
   type ReadsDetail,
   type ReadsFile,
@@ -377,6 +381,52 @@ describe('filterBar', () => {
     expect(store.state.filter).toBe('working')
     await filterBar(store, 'working')
     expect(store.state.filter).toBeNull()
+  })
+})
+
+describe('toggleBanner and togglePrevious', () => {
+  test('each press flips its own block above the prompt, the other left as it is', async () => {
+    const store = from()
+    await toggleBanner(store)
+    expect(store.state).toEqual({ ...INITIAL_STATE, banner: true })
+    await togglePrevious(store)
+    expect(store.state).toEqual({ ...INITIAL_STATE, banner: true, previousOpen: true })
+    await toggleBanner(store)
+    await togglePrevious(store)
+    expect(store.state).toEqual(INITIAL_STATE)
+  })
+})
+
+describe('openTask', () => {
+  const [first] = TASKS
+  if (first === undefined) throw new Error('no task')
+  const NEXT: Current = { kind: 'next', task: first }
+
+  test("from another view, the Tasks view shows the task's page over the list at its row", async () => {
+    const store = from({ view: 'team', nav: searched(AT_LIST, 'api') })
+    const { detailOf, asked } = details()
+    await openTask(store, NEXT, detailOf)
+    expect(asked).toEqual(['T50'])
+    expect(store.state.pages).toEqual({ T50: DETAIL_T50 })
+    expect(store.state.view).toBe('tasks')
+    expect(store.state.nav).toEqual({ places: [{ kind: 'list', row: currentRowKey(NEXT, 'mine') }, { kind: 'task', id: 'T50' }], at: 1 })
+  })
+
+  test("a filter to another status and a fold over the row give way, as the look that shows the row says", async () => {
+    const hiding: ListLook = { filter: 'waiting', folded: ['next', 'waiting'] }
+    const showing = lookShowing(NEXT, 'mine', hiding)
+    expect(showing).not.toEqual(hiding)
+    const store = from({ filter: hiding.filter, tasksFolded: [...hiding.folded] })
+    await openTask(store, NEXT, details().detailOf)
+    expect(store.state.filter).toBe(showing.filter)
+    expect(store.state.tasksFolded).toEqual(showing.folded)
+  })
+
+  test("on every owner's list the row is its owner's, and the filter is kept for the area's list", async () => {
+    const store = from({ mode: 'all', filter: 'waiting' })
+    await openTask(store, NEXT, details().detailOf)
+    expect(store.state.filter).toBe('waiting')
+    expect(store.state.nav.places[0]).toEqual({ kind: 'list', row: currentRowKey(NEXT, 'all') })
   })
 })
 
