@@ -56,21 +56,20 @@ const ACME_READ: TeamRead = {
   hires: [API_HIRE],
   week: null,
   tasks: TASKS,
-  unread: null,
   ownerCards: OWNER_CARDS,
   taskCounts: TASK_COUNTS,
 }
-const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], week: null, tasks: null, unread: null, ownerCards: null, taskCounts: null }
+const TOOLS_READ: TeamRead = { team: 'tools', config: configOf(TOOLS_CONFIG), renames: [], hires: [], week: null, tasks: null, ownerCards: null, taskCounts: null }
 /** acme's week as teamrig's budget hooks write it. */
 const ACME_WEEK = weekFile(35.28, 51.91)
 /** A week file's text: its format, then the summary's fields. */
 const weekText = (format: number) => JSON.stringify({ v: format, ...ACME_WEEK })
-/** What the pane reads of acme beside its folder, with no inboxes found. */
-const OWN: OwnReads = { tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS, inboxes: null }
+/** What the pane reads of acme beside its folder. */
+const OWN: OwnReads = { tasks: TASKS, ownerCards: OWNER_CARDS, taskCounts: TASK_COUNTS }
 /** The own register later: api took T4 too, and its card on the owner was answered. */
 const GROWN_REGISTER = [...REGISTER, createLine('T4', { at: NOW - HOUR, by: 'lead', owner: 'api', title: 'Test the route' })]
 const GROWN_PARTS: Pick<Snapshot, 'tasks' | 'ownerCards' | 'taskCounts'> = { tasks: tasksOf(...GROWN_REGISTER), ownerCards: {}, taskCounts: countsOf(...GROWN_REGISTER) }
-const GROWN: OwnReads = { ...GROWN_PARTS, inboxes: null }
+const GROWN: OwnReads = GROWN_PARTS
 const BUSY = 'EBUSY: resource busy or locked'
 
 /** The message `run` rejects with. */

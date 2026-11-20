@@ -20,11 +20,6 @@ export type TeamRead = {
   /** The team's register tasks, for each session's current tasks; null when the pane does not read that register. */
   readonly tasks: readonly TaskRow[] | null
   /**
-   * Each session's unread inbox lines, by id, for those that ever marked their inbox read; null when the pane does
-   * not read the team's inbox (a peer team's).
-   */
-  readonly unread: ReadonlyMap<string, number> | null
-  /**
    * Each session's cards on the owner, by id (Snapshot.ownerCards), a session with none absent; null when the pane
    * does not read the team's register (a peer team's).
    */

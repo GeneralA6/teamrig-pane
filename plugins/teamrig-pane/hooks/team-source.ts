@@ -23,17 +23,16 @@ import { teamStateDir } from './places'
 import type { SessionsRead } from './sessions-document'
 import { WatchedFile, type Files } from './source'
 import { teamTree, type TeamRead, type TeamRegister } from './team'
-import type { TeamInboxes } from './team-inboxes'
 
 /**
  * What the pane reads of its own team beside its folder: the register's tasks, each session's cards on the owner and
- * its tasks counted, and its inboxes when it found them.
+ * its tasks counted. No inbox is among them: a session's unread lines are teamrig's to serve (the `sessions`
+ * document), never counted here from the inbox files.
  */
 export type OwnReads = {
   readonly tasks: readonly TaskRow[]
   readonly ownerCards: Readonly<Record<string, SessionOwnerCards>>
   readonly taskCounts: TaskCounts
-  readonly inboxes: TeamInboxes | null
 }
 
 /** A team's register parts: the own team's from `own`, a peer's (null `own`) none. */
@@ -67,11 +66,11 @@ export class TeamFolder {
   }
 
   /**
-   * The team's files as read now, with `own` for the pane's own team (null for a peer's): its tasks, its sessions'
-   * cards on the owner and task counts, and the unread inbox lines of the sessions on its config. Null when it has no
-   * config file or teamrig refuses the one there. A config that moves its state folder reads the logs and the week file
-   * from the new one. A failed read throws, keeping the stamps of the files read before it, so the next read tries the
-   * rest again, and keeps the last read that worked (lastRead).
+   * The team's files as read now, with `own` for the pane's own team (null for a peer's): its tasks and its sessions'
+   * cards on the owner and task counts. Null when it has no config file or teamrig refuses the one there. A config
+   * that moves its state folder reads the logs and the week file from the new one. A failed read throws, keeping the
+   * stamps of the files read before it, so the next read tries the rest again, and keeps the last read that worked
+   * (lastRead).
    */
   async read(own: OwnReads | null): Promise<TeamRead | null> {
     await this.config.refresh()
@@ -86,7 +85,6 @@ export class TeamFolder {
     await files.renames.refresh()
     await files.hires.refresh()
     await files.week.refresh()
-    const unread = own === null || own.inboxes === null ? null : await own.inboxes.unread(config.config.sessions)
     const read: TeamRead = {
       team: this.team,
       config: config.config,
@@ -94,7 +92,6 @@ export class TeamFolder {
       hires: files.hires.current,
       week: files.week.current,
       ...ownParts(own),
-      unread,
     }
     this.last = read
     return read
