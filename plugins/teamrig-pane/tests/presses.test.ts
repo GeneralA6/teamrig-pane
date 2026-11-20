@@ -1,12 +1,15 @@
 // The pane's presses on a store kept in memory: no engine, as a front end other than the Claude Code dock runs them.
 import { describe, expect, test } from 'claude-code/testing'
-import type { PaneState, RefFileRead, TaskDetail, TaskRow } from '../types'
+import type { ChangesSnapshot, LogConversation, LogList, LogRead, PaneState, RefFileRead, RepoChanges, Snapshot, TaskDetail, TaskRow, TeamView } from '../types'
+import { changesResultKey, searchChanges } from '../hooks/changes-search'
 import { readRegister } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
+import { logResultKey } from '../hooks/log-search'
 import { AT_LIST, searched } from '../hooks/nav'
 import { INITIAL_STATE } from '../hooks/pane-state'
 import { MemoryStore } from '../hooks/pane-store'
 import {
+  closeLog,
   closeStatsFrom,
   closeStatsList,
   openFile,
@@ -15,12 +18,19 @@ import {
   openPlace,
   pickStats,
   readFilePage,
+  submitChanges,
+  submitLog,
+  submitTasks,
+  submitTeam,
   toggleCard,
   type ReadsDetail,
   type ReadsFile,
 } from '../hooks/presses'
-import type { ViewLives } from '../hooks/steps'
-import { HOUR, NOW, createLine } from './fixtures'
+import type { MoveFocus, ViewLives } from '../hooks/steps'
+import { cardKey } from '../hooks/team-rows'
+import { searchTeam } from '../hooks/team-search'
+import { HOUR, NOW, NO_TEAM, SNAPSHOT_SETTINGS, createLine } from './fixtures'
+import { ACME, treeOf } from './team-fixtures'
 
 /** A store that starts as a pane does, but for `changed`. */
 const from = (changed: Partial<PaneState> = {}) => new MemoryStore({ ...INITIAL_STATE, ...changed })
@@ -292,5 +302,257 @@ describe('closeStatsFrom', () => {
     await closeStatsFrom(store, NO_READERS)
     expect(store.state.view).toBe('team')
     expect(store.state.bodyScroll.to).not.toEqual({ kind: 'reveal', key: 'team:acme/po', block: 'center' })
+  })
+})
+
+/** A focus ring that keeps the keys it was moved onto. */
+function ring(): { readonly focus: MoveFocus; readonly keys: string[] } {
+  const keys: string[] = []
+  return {
+    keys,
+    focus: key => {
+      keys.push(key)
+      return Promise.resolve()
+    },
+  }
+}
+
+/** The register read, as the Tasks search and the Log view's titles take it. */
+const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: 'pinned', unreadInbox: null, inbox: [], problem: null, ...NO_TEAM, ...SNAPSHOT_SETTINGS, now: NOW }
+
+describe('closeLog', () => {
+  test("back from a conversation's page closes it and shows the list from its top, the Find field a new round's", async () => {
+    const store = from({ findField: { round: 2, text: 'old' }, nav: searched(AT_LIST, 'ship') })
+    let closed = 0
+    await closeLog(store, {
+      close: () => {
+        closed += 1
+        return Promise.resolve()
+      },
+    })
+    expect(closed).toBe(1)
+    expect(store.state.findField).toEqual({ round: 3, text: 'ship' })
+    expect(store.state.bodyScroll.to).toEqual({ kind: 'offset', offset: 0 })
+    expect(store.state.bodyScroll.seq).toBe(INITIAL_STATE.bodyScroll.seq + 1)
+  })
+
+  test('with no reader yet, the field and the window still move', async () => {
+    const store = from({ findField: { round: 0, text: 'old' } })
+    await closeLog(store, null)
+    expect(store.state.findField).toEqual({ round: 1, text: '' })
+    expect(store.state.bodyScroll.to).toEqual({ kind: 'offset', offset: 0 })
+  })
+})
+
+describe('submitTasks', () => {
+  test('with more than one match, the ring moves onto the first result and no page opens', async () => {
+    const store = from({ nav: searched(AT_LIST, 'the') })
+    const { focus, keys } = ring()
+    const { detailOf, asked } = details()
+    await submitTasks(store, SNAP, 'the', focus, detailOf)
+    expect(keys).toEqual(['search:T50'])
+    expect(asked).toEqual([])
+    expect(store.state.nav).toEqual(searched(AT_LIST, 'the'))
+  })
+
+  test("with one match, its page opens and the ring moves onto the page's back step", async () => {
+    const store = from({ nav: searched(AT_LIST, 'chart') })
+    const { focus, keys } = ring()
+    const { detailOf } = details()
+    await submitTasks(store, SNAP, 'chart', focus, detailOf)
+    expect(store.state.pages).toEqual({ T51: DETAIL_T51 })
+    expect(store.state.nav.places[store.state.nav.at]).toEqual({ kind: 'task', id: 'T51' })
+    expect(keys).toEqual(['back'])
+  })
+
+  test('with no match, nothing moves', async () => {
+    const store = from()
+    const { focus, keys } = ring()
+    const { detailOf, asked } = details()
+    await submitTasks(store, SNAP, 'zebra', focus, detailOf)
+    expect(store.state).toEqual(INITIAL_STATE)
+    expect(keys).toEqual([])
+    expect(asked).toEqual([])
+  })
+})
+
+describe('submitTeam', () => {
+  const teamTree: TeamView = { kind: 'tree', root: treeOf([ACME], 'acme'), failures: [] }
+
+  test("with one match, that session's card opens and the ring moves onto it", async () => {
+    const hits = searchTeam(teamTree.root, 'api')
+    expect(hits.length).toBe(1)
+    const key = hits[0]?.row.key ?? ''
+    const store = from({ teamTree, teamToggled: ['acme'] })
+    const { focus, keys } = ring()
+    await submitTeam(store, 'api', focus)
+    expect(store.state.teamToggled).toEqual(['acme', cardKey(key)])
+    expect(keys).toEqual([`team-search:${key}`])
+  })
+
+  test('a card already open stays open', async () => {
+    const key = searchTeam(teamTree.root, 'api')[0]?.row.key ?? ''
+    const store = from({ teamTree, teamToggled: [cardKey(key)] })
+    await submitTeam(store, 'api', ring().focus)
+    expect(store.state.teamToggled).toEqual([cardKey(key)])
+  })
+
+  test('with more than one match, the ring moves onto the first and no card opens', async () => {
+    const hits = searchTeam(teamTree.root, 'acme')
+    expect(hits.length).toBeGreaterThan(1)
+    const store = from({ teamTree })
+    const { focus, keys } = ring()
+    await submitTeam(store, 'acme', focus)
+    expect(store.state.teamToggled).toEqual(INITIAL_STATE.teamToggled)
+    expect(keys).toEqual([`team-search:${hits[0]?.row.key ?? ''}`])
+  })
+
+  test('with no match, or no tree read yet, nothing moves', async () => {
+    const { focus, keys } = ring()
+    const read = from({ teamTree })
+    await submitTeam(read, 'zebra', focus)
+    const reading = from()
+    await submitTeam(reading, 'api', focus)
+    expect(keys).toEqual([])
+    expect(read.state.teamToggled).toEqual(INITIAL_STATE.teamToggled)
+    expect(reading.state).toEqual(INITIAL_STATE)
+  })
+})
+
+describe('submitLog', () => {
+  const conversation = (session: string, claude: string): LogConversation => ({
+    session,
+    claude,
+    firstAt: NOW - 2 * HOUR,
+    lastAt: NOW - HOUR,
+    nextAt: null,
+    lines: 4,
+    opening: null,
+  })
+  const listOf = (...conversations: LogConversation[]): LogList => ({ kind: 'conversations', hours: 24, conversations })
+  /** A Log reader that keeps the conversations it was asked to open. */
+  function opener(): { readonly logging: { open(read: LogRead): Promise<void> }; readonly opened: LogRead[] } {
+    const opened: LogRead[] = []
+    return {
+      opened,
+      logging: {
+        open: read => {
+          opened.push(read)
+          return Promise.resolve()
+        },
+      },
+    }
+  }
+
+  test("with one match, its page opens at its end and the ring moves onto the page's back step", async () => {
+    const store = from({ logList: listOf(conversation('po', 'c-1'), conversation('api', 'c-2')) })
+    const { focus, keys } = ring()
+    const { logging, opened } = opener()
+    await submitLog(store, SNAP, 'api', focus, logging)
+    expect(opened).toEqual([{ session: 'api', claude: 'c-2' }])
+    expect(store.state.bodyScroll.to).toEqual({ kind: 'end' })
+    expect(keys).toEqual(['back'])
+  })
+
+  test('with more than one match, the ring moves onto the first and no page opens', async () => {
+    const store = from({ logList: listOf(conversation('po', 'c-1'), conversation('po', 'c-2')) })
+    const { focus, keys } = ring()
+    const { logging, opened } = opener()
+    await submitLog(store, SNAP, 'po', focus, logging)
+    expect(opened).toEqual([])
+    expect(keys).toEqual([logResultKey({ session: 'po', claude: 'c-1' })])
+    expect(store.state.bodyScroll).toEqual(INITIAL_STATE.bodyScroll)
+  })
+
+  test('with no match, or no list read yet, nothing moves', async () => {
+    const { focus, keys } = ring()
+    const { logging, opened } = opener()
+    await submitLog(from({ logList: listOf(conversation('po', 'c-1')) }), SNAP, 'zebra', focus, logging)
+    await submitLog(from(), SNAP, 'po', focus, logging)
+    expect(opened).toEqual([])
+    expect(keys).toEqual([])
+  })
+})
+
+describe('submitChanges', () => {
+  const PLAN = 'C:/kit/notes/plan.md'
+  const MAP = 'C:/kit/notes/map.md'
+  const outside = (...files: string[]): ChangesSnapshot => ({ repos: [], outside: files, isRead: true })
+  /** Diffs that keep the keys toggled. */
+  function diffs(): { readonly diffing: { toggle(key: string): Promise<void> }; readonly toggled: string[] } {
+    const toggled: string[] = []
+    return {
+      toggled,
+      diffing: {
+        toggle: key => {
+          toggled.push(key)
+          return Promise.resolve()
+        },
+      },
+    }
+  }
+  /** The ring's key of the first file `query` names. */
+  function resultOf(changes: ChangesSnapshot, query: string): string {
+    const hit = searchChanges(changes, query)[0]
+    if (hit === undefined) throw new Error(`no hit for ${query}`)
+    return changesResultKey(hit.row)
+  }
+
+  test("with one match, that file's diff opens and the ring moves onto it", async () => {
+    const changes = outside(PLAN, MAP)
+    const { focus, keys } = ring()
+    const { diffing, toggled } = diffs()
+    await submitChanges(from({ changes }), 'plan', focus, diffing)
+    expect(toggled.length).toBe(1)
+    expect(toggled[0]?.endsWith(PLAN)).toBe(true)
+    expect(keys).toEqual([resultOf(changes, 'plan')])
+  })
+
+  test('a diff already open stays open', async () => {
+    const changes = outside(PLAN, MAP)
+    const first = diffs()
+    await submitChanges(from({ changes }), 'plan', ring().focus, first.diffing)
+    const key = first.toggled[0] ?? ''
+    const { focus, keys } = ring()
+    const { diffing, toggled } = diffs()
+    await submitChanges(from({ changes, diffs: { [key]: { kind: 'reading' } } }), 'plan', focus, diffing)
+    expect(toggled).toEqual([])
+    expect(keys).toEqual([resultOf(changes, 'plan')])
+  })
+
+  test('with more than one match, the ring moves onto the first and no diff opens', async () => {
+    const changes = outside(PLAN, MAP)
+    expect(searchChanges(changes, 'notes').length).toBe(2)
+    const { focus, keys } = ring()
+    const { diffing, toggled } = diffs()
+    await submitChanges(from({ changes }), 'notes', focus, diffing)
+    expect(toggled).toEqual([])
+    expect(keys).toEqual([resultOf(changes, 'notes')])
+  })
+
+  test('with no diffs to open yet, the ring still moves onto the one match', async () => {
+    const changes = outside(PLAN)
+    const { focus, keys } = ring()
+    await submitChanges(from({ changes }), 'plan', focus, null)
+    expect(keys).toEqual([resultOf(changes, 'plan')])
+  })
+
+  test('an untracked folder has no diff to move onto, and no match moves nothing', async () => {
+    const repo: RepoChanges = {
+      root: 'C:/kit',
+      branch: 'main',
+      files: { items: [{ code: '??', path: 'drafts/', from: null, lines: null }], more: 0 },
+      isPartial: false,
+      isUnborn: false,
+      problem: null,
+    }
+    const changes: ChangesSnapshot = { repos: [repo], outside: [], isRead: true }
+    expect(searchChanges(changes, 'drafts').length).toBe(1)
+    const { focus, keys } = ring()
+    const { diffing, toggled } = diffs()
+    await submitChanges(from({ changes }), 'drafts', focus, diffing)
+    await submitChanges(from({ changes }), 'zebra', focus, diffing)
+    expect(toggled).toEqual([])
+    expect(keys).toEqual([])
   })
 })
