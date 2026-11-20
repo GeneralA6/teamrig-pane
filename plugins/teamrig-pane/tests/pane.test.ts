@@ -307,6 +307,17 @@ test("with no team config, the session's TZ is the team's zone: every time print
   expect(await pane.find({ text: /p1 · waiting since 17:00 IDT: needs owner paste/ })).toBeDefined()
 })
 
+test("a span's tone draws in the engine's theme key for it: the session's own owner group, an accent, in the theme's claude color", async ($, on) => {
+  const { disk } = await start(on)
+  disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' })])
+  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
+
+  await pane.press({ key: 'all' })
+  const owners = await pane.findAll({ type: 'Text', text: /^po$/ })
+  expect(owners.map(found => found.props['color'])).toContain('claude')
+})
+
 test("the area's Tasks view leads with a bar of its tasks by status and their counts, what it asked of others waiting; the all and Changes views draw none", async ($, on) => {
   const { disk } = await start(on)
   disk.write(EVENTS, [

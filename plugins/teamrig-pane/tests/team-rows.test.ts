@@ -272,7 +272,7 @@ describe('teamBlocks', () => {
   test("a row's roles each in its role's colour, a leader not the lead a sub-lead; an area owner's row shows no role", () => {
     const blocks = teamBlocks(TREE, [], UTC)
     const spansOf = (key: string) => blockOf(blocks, key).rows[0]?.spans ?? []
-    expect(spansOf('session:acme/lead').slice(-6, -4)).toEqual([SEPARATOR, { text: 'lead', color: 'claude' }])
+    expect(spansOf('session:acme/lead').slice(-6, -4)).toEqual([SEPARATOR, { text: 'lead', color: 'accent' }])
     expect(spansOf('session:acme/web').slice(-8, -6)).toEqual([SEPARATOR, { text: 'sub-lead', color: 'warning' }])
     expect(spansOf('session:acme/ops').slice(-6, -4)).toEqual([SEPARATOR, { text: 'security reviewer', color: 'error' }])
     expect(spansOf('session:acme/ui').some(span => span.color !== undefined)).toBe(false)

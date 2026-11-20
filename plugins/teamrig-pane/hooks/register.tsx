@@ -141,6 +141,7 @@ import { meetingsBlocks } from './meetings-rows'
 import { listTitle, statsBlocks } from './stats-rows'
 import { LiveStats } from './stats-source'
 import { findTeamrigCli } from './teamrig-cli'
+import { themeOf } from './theme'
 import {
   AT_LIST,
   back,
@@ -436,7 +437,7 @@ const isPlain = (span: Span) =>
 /** One span as a Text in its own style. */
 function styledSpan({ Text }: SpanComponents, span: Span, key?: string) {
   return (
-    <Text key={key} color={span.color} bold={span.bold} dimColor={span.dim} underline={span.underline}>
+    <Text key={key} color={themeOf(span.color)} bold={span.bold} dimColor={span.dim} underline={span.underline}>
       {span.text}
     </Text>
   )
@@ -460,7 +461,7 @@ function drawSpans(components: SpanComponents, spans: readonly Span[], wrap: Dra
   const [first, ...rest] = spans
   if (first !== undefined && rest.length === 0 && first.href === undefined)
     return (
-      <Text key={key} wrap={wrap} color={first.color} bold={first.bold} dimColor={first.dim} underline={first.underline}>
+      <Text key={key} wrap={wrap} color={themeOf(first.color)} bold={first.bold} dimColor={first.dim} underline={first.underline}>
         {first.text}
       </Text>
     )
@@ -1380,7 +1381,7 @@ export const register: Register = on => {
     const drawText = (spans: readonly Span[], wrap: Drawn['wrap'], key?: string) => drawSpans(spanComponents, spans, wrap, key)
     /** A press in a card (a task id, a reference file): its text underlined, in its span's style. */
     const drawPress = (span: Span, key: string) => (
-      <Text key={key} underline color={span.color} bold={span.bold} dimColor={span.dim}>
+      <Text key={key} underline color={themeOf(span.color)} bold={span.bold} dimColor={span.dim}>
         {span.text}
       </Text>
     )
