@@ -72,7 +72,6 @@ import {
   NO_MEETING_ANSWER,
   NO_MEETING_ASKED,
   NO_PREVIOUS,
-  NO_STATS_FROM,
   NO_STATS_LIST,
   NO_TEAM_LOG,
   NO_TEAM_MEETINGS,
@@ -82,6 +81,7 @@ import {
   TEAM_READING,
 } from './pane-state'
 import type { PaneKey, PaneStore } from './pane-store'
+import { clearSearch, focusFind, go, openConversation, scrollTo, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
 import { inboxFile, TaskDetails, type RefPlaces } from './details'
@@ -157,34 +157,29 @@ import {
   canGoForward,
   currentPlace,
   doneAt,
-  filesKept,
   forward,
   fromList,
   isPage,
   KEYS_PAGE,
-  landing,
   leavingList,
-  leftSearch,
-  pagesKept,
   placeLabel,
   pushed,
   reset,
   searched,
   trail,
-  type Landing,
   wentTo,
 } from './nav'
 import { heldWeeks, weekClockOf, weekSteps } from './done'
 import { doneBlocks, weekWords } from './done-rows'
 import { treeOf } from './meta'
 import { clockOf, machineZoneOf, zoneNamed } from './zone'
-import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
+import { filePageBlocks, unreadLine } from './file-page'
 import { KEYS_HOTKEY, KEYS_LABEL, keysBlocks } from './keys-page'
 import { pageBlocks } from './page'
 import { matchCount, NO_RESULTS, searchTasks, topResult, type SearchResults } from './task-search'
 import { SEARCH_VIEW, searchBlocks } from './search-rows'
 import { resultKey } from './search-view'
-import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldAnew, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
+import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAnew, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -383,67 +378,17 @@ function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
   return Object.fromEntries(Object.entries(current).filter(([key]) => key !== id))
 }
 
-/** Who moves the tasks view: the person typing in the Find field, or any other step. */
-type StepOrigin = 'typing' | 'step'
-
-/**
- * Moves the tasks view by `step` (nav.ts), keeping only the details of the pages, and the reads of the files, a place
- * still names. A step other than typing that changes what the Find field should hold starts a new round of it
- * (find-field.ts). A page opens at its top, a file's page at its ref's line, and a step from a page back to the list
- * brings the element the page was opened from to the middle of the window; a failed move leaves the window where it is.
- */
-async function go($: Context, step: (current: Nav) => Nav, origin: StepOrigin = 'step'): Promise<void> {
-  // The step runs on the places as last written, so a step written while this one runs is never lost.
-  const seen: { before: Nav | null } = { before: null }
-  const next = await update($, nav, current => {
-    seen.before = current
-    return step(current)
-  })
-  const before = seen.before
-  if (before === null || next === before) return
-  if (origin === 'step') await update($, findField, field => fieldAfter(field, before, next))
-  await update($, pages, current => pagesKept(current, next))
-  await update($, filePages, current => filesKept(current, next))
-  const to = landing(before, next)
-  if (to !== null) await scrollTo($, to).catch(() => undefined)
-}
-
-/**
- * Moves the docked body's window (body-scroll.ts) to the top, brings the element a landing names to its middle, or a
- * file page's line to the window's top by the paragraph that holds it (file-page.ts), the page's top when none does.
- * Inline the pane cuts its rows to fit (INLINE_MAX_ROWS) and has no window to move.
- */
-async function scrollTo($: Context, to: Landing): Promise<void> {
-  const key = to.kind === 'top' ? null : to.kind === 'row' ? to.key : lineBlockKey(to, (await read($, filePages))[to.file])
-  await update($, bodyScroll, current =>
-    scrolledTo(current, key === null ? { kind: 'offset', offset: 0 } : { kind: 'reveal', key, block: to.kind === 'line' ? 'start' : 'center' }),
-  )
-}
-
 /** Moves the pane's focus ring onto the element keyed `key`; refused while the pane does not hold the keys, which leaves it where it was. */
 async function focusOn($: Context, key: string): Promise<void> {
   await $.ui.focus({ requestId: PANE, key }).catch(() => undefined)
 }
 
-/** Moves the pane's focus ring into the Find field, as its round draws it now. */
-async function focusFind($: Context): Promise<void> {
-  await focusOn($, fieldKey(await read($, findField)))
-}
-
 /**
- * Closes the search from its clear button and moves the ring back into the field, a new round's: the button is
- * hidden as the search closes, and the ring left at its index would sit on the next element, so the next keys would
- * press the pane's hotkeys rather than type a new search.
+ * The dock's focus ring as the pane's steps move it (steps.ts). A top-level function, as the engine wants every
+ * function `$` is passed to.
  */
-async function clearSearch($: Context): Promise<void> {
-  await go($, leftSearch)
-  await focusFind($)
-}
-
-/** The mine or all view, the list shown alone: the rows a page left from belong to the other list. */
-async function showMode($: Context, shown: ViewMode): Promise<void> {
-  await atomStore($).update('mode', () => shown)
-  await go($, current => reset(current, false))
+function ringOf($: Context): MoveFocus {
+  return key => focusOn($, key)
 }
 
 /** The components spans draw with: each render hook passes those its surface resolved. */
@@ -541,50 +486,6 @@ function drawKeysLine({ Text }: FindComponents, keys: KeysAt, text: string) {
       {text}
     </Text>
   )
-}
-
-/** The readers a view switch refreshes, each null until the session starts or with nothing to read. */
-type ViewLives = {
-  readonly sizer: PaneSizer | null
-  readonly tracked: LiveChanges | null
-  readonly logging: LiveLog | null
-  readonly teaming: LiveTeam | null
-  readonly scheduling: LiveMeetings | null
-  readonly tallying: LiveStats | null
-}
-
-/**
- * A press on the switch's buttons. The Tasks button shows the list, from a page too, scrolled back to where the page
- * was opened from; the Log button shows the sessions, from a session's page too; the Teams button reads the team tree
- * at once; the Meetings button reads the meetings at once, leaving the last start's answer behind; the Stats button
- * folds the registers at once. Every button closes a search, which the views share: one typed in one view is never
- * found shown in another, and drops a Teams row's back, as the Stats tab then shows from the switch. It is a top-level
- * function, the readers passed in, because the engine loads a hooks module only when each function `$` is passed to
- * is declared at the top of the file or imported; the band's buttons take the same step.
- */
-async function switchView($: Context, target: PaneView, lives: ViewLives): Promise<void> {
-  await update($, statsFrom, () => NO_STATS_FROM)
-  await update($, view, () => target)
-  await lives.sizer?.set('open')
-  await go($, current => reset(current, true))
-  if (target === 'changes') await lives.tracked?.refresh()
-  if (target === 'log') await lives.logging?.close()
-  if (target === 'team') {
-    await update($, sessionAnswer, () => NO_ANSWER)
-    await lives.teaming?.refresh()
-  }
-  if (target === 'meetings') {
-    await update($, meetingAnswer, () => NO_MEETING_ANSWER)
-    await update($, meetingAsked, () => NO_MEETING_ASKED)
-    await lives.scheduling?.refresh()
-  }
-  if (target === 'stats') await lives.tallying?.refresh()
-}
-
-/** A press on a conversation in the Log view's list opens its page, read now, at its end: the newest lines are last. */
-async function openConversation($: Context, conversation: LogRead, logging: LiveLog | null): Promise<void> {
-  await logging?.open(conversation)
-  await update($, bodyScroll, current => scrolledTo(current, { kind: 'end' }))
 }
 
 export const register: Register = on => {
@@ -1000,7 +901,7 @@ export const register: Register = on => {
       if (!found.ok) return { text: found.problem }
       await live?.pin(found.id)
     }
-    if (command.kind === 'mode') await showMode($, command.mode)
+    if (command.kind === 'mode') await showMode(atomStore($), command.mode)
     if (command.kind === 'auto') await live?.pin(null)
     await sizer?.set('open')
     await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
@@ -1098,6 +999,9 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const components = $.ui.resolve(e)
     const { Box, Text, Button, Link } = components
+    /** The dock's state and its focus ring, as the pane's steps take them (steps.ts). */
+    const store = atomStore($)
+    const moveFocus = ringOf($)
     const inline = e.props.placement === 'inline'
     // A read or a layout that throws draws one error line under the buttons: unguarded, the engine
     // would skip this hook and draw the pane with no tasks and no word of why.
@@ -1251,7 +1155,7 @@ export const register: Register = on => {
       const detail = await detailOf(task)
       await update($, expanded, current => ({ ...current, [id]: detail }))
     }
-    const switchTo = (target: PaneView) => switchView($, target, livesNow())
+    const switchTo = (target: PaneView) => switchView(store, target, livesNow())
     // A press on the Stats tab's scope or range row picks it, and one on a Health count shows its tasks from their top;
     // either folds the registers at once. A Teams row's [Stats] shows the tab on that row's scope, its numbers from their
     // top, and keeps the row for back; the switch has folded the registers by then.
@@ -1287,7 +1191,7 @@ export const register: Register = on => {
     const closeStatsFrom = async () => {
       const row = await read($, statsFrom)
       await switchTo('team')
-      if (row !== null) await scrollTo($, { kind: 'row', key: row }).catch(() => undefined)
+      if (row !== null) await scrollTo(store, { kind: 'row', key: row }).catch(() => undefined)
     }
     // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Teams tab session's
     // card, or another area's inbox count on it) shows the Tasks view at it, over its list: back shows the list, never the Team
@@ -1295,7 +1199,7 @@ export const register: Register = on => {
     const openPlace = async (place: Place, from: string) => {
       const shown = await read($, view)
       if (shown !== 'tasks') await update($, view, () => 'tasks')
-      await go($, current => pushed(shown === 'tasks' ? leavingList(current, from) : reset(current, true), place))
+      await go(store, current => pushed(shown === 'tasks' ? leavingList(current, from) : reset(current, true), place))
     }
     // A press on a task id opens its page, read as a card's is.
     const openPage = async (id: string, from: string) => {
@@ -1330,7 +1234,7 @@ export const register: Register = on => {
     }
     // Back from a conversation's page shows the list, read again, from its top, or the search the page was opened from:
     // the page drew no Find field, so it comes back a fresh round holding the search's words (fieldAnew).
-    const openLog = (conversation: LogRead) => openConversation($, conversation, logging)
+    const openLog = (conversation: LogRead) => openConversation(store, conversation, logging)
     const closeLog = async () => {
       await logging?.close()
       const shown = await read($, nav)
@@ -1775,12 +1679,12 @@ export const register: Register = on => {
     // The mode row in groups, a dim `·` between them (drawGrouped): the modes the list switches between, the pages
     // a press opens, what acts on the cards open, then the Keys page.
     const modeButtons = [
-      pressed(<Button label="mine" hotkey="m" variant={shown === 'mine' ? 'primary' : 'secondary'} onPress={() => void showMode($, 'mine')} />, {
+      pressed(<Button label="mine" hotkey="m" variant={shown === 'mine' ? 'primary' : 'secondary'} onPress={() => void showMode(store, 'mine')} />, {
         label: 'mine',
         plain: false,
         hotkey: 'm',
       }),
-      pressed(<Button label="all" hotkey="a" variant={shown === 'all' ? 'primary' : 'secondary'} onPress={() => void showMode($, 'all')} />, {
+      pressed(<Button label="all" hotkey="a" variant={shown === 'all' ? 'primary' : 'secondary'} onPress={() => void showMode(store, 'all')} />, {
         label: 'all',
         plain: false,
         hotkey: 'a',
@@ -1799,7 +1703,7 @@ export const register: Register = on => {
               label={DONE_LABEL}
               hotkey="h"
               variant={place.kind === 'done' ? 'primary' : 'secondary'}
-              onPress={() => void go($, current => doneAt(current, heldWeeks(weekClockOf(snap)).newest))}
+              onPress={() => void go(store, current => doneAt(current, heldWeeks(weekClockOf(snap)).newest))}
             />,
             { label: DONE_LABEL, plain: false, hotkey: 'h' },
           ),
@@ -1819,7 +1723,7 @@ export const register: Register = on => {
     const keysButtons = inline
       ? []
       : [
-          pressed(<Button key="keys" label={KEYS_LABEL} plain hotkey={KEYS_HOTKEY} onPress={() => void go($, current => pushed(current, KEYS_PAGE))} />, {
+          pressed(<Button key="keys" label={KEYS_LABEL} plain hotkey={KEYS_HOTKEY} onPress={() => void go(store, current => pushed(current, KEYS_PAGE))} />, {
             label: KEYS_LABEL,
             plain: true,
             hotkey: KEYS_HOTKEY,
@@ -1865,10 +1769,10 @@ export const register: Register = on => {
             placeholder: find.placeholder,
             text: field.text,
             submitLabel: enterWords ?? 'search',
-            onFind: () => void focusFind($),
-            onInput: value => void go($, current => searched(current, value), 'typing'),
+            onFind: () => void focusFind(store, moveFocus),
+            onInput: value => void go(store, current => searched(current, value), 'typing'),
             onSubmit: value => void find.submit?.(value),
-            onClear: place.kind === 'search' ? () => void clearSearch($) : null,
+            onClear: place.kind === 'search' ? () => void clearSearch(store, moveFocus) : null,
           })
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
     // hotkeys or to Claude's prompt, and the key or the click that moves them, wrapped in a narrow dock.
@@ -1974,12 +1878,12 @@ export const register: Register = on => {
       </Text>
     )
     const backStep = canGoBack(at) ? (
-      <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void go($, back)} />
+      <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void go(store, back)} />
     ) : (
       nowhere('back', BACK_LABEL)
     )
     const forwardStep = canGoForward(at) ? (
-      <Button key="forward" label={FORWARD_LABEL} hotkey="f" variant="secondary" onPress={() => void go($, forward)} />
+      <Button key="forward" label={FORWARD_LABEL} hotkey="f" variant="secondary" onPress={() => void go(store, forward)} />
     ) : (
       nowhere('forward', FORWARD_LABEL)
     )
@@ -2001,7 +1905,7 @@ export const register: Register = on => {
             label,
           )
         : pressed(
-            <Button key={`crumb:${crumb.index}`} plain onPress={() => void go($, current => wentTo(current, crumb.index))}>
+            <Button key={`crumb:${crumb.index}`} plain onPress={() => void go(store, current => wentTo(current, crumb.index))}>
               <Text underline dimColor={crumb.isAhead}>
                 {label}
               </Text>
@@ -2017,7 +1921,7 @@ export const register: Register = on => {
     ]
     // The Done page's week between its steps to the week before and after (p, l), each dim where the pane holds no
     // older or newer week. A step changes the page's week in place, so back returns to where the page was opened from.
-    const stepTo = (week: string) => () => void go($, current => doneAt(current, week))
+    const stepTo = (week: string) => () => void go(store, current => doneAt(current, week))
     const steps = place.kind === 'done' ? weekSteps(place.week, weekClockOf(snap)) : null
     const weekText = steps === null ? '' : `week of ${weekWords(steps.week)}`
     const weekRow =
@@ -2149,7 +2053,7 @@ export const register: Register = on => {
       await update($, barFilter, () => look.filter)
       await update($, tasksFolded, () => look.folded)
       const row = currentRowKey(shown, listMode)
-      await go($, () => fromList(row, { kind: 'task', id: shown.task.id }))
+      await go(atomStore($), () => fromList(row, { kind: 'task', id: shown.task.id }))
     }
     // The banner's Box takes the columns the banner leaves free, so the button ends the row, beside the engine's [-].
     const bannerRow =
@@ -2172,9 +2076,9 @@ export const register: Register = on => {
     if (line === undefined) return bannerRow
     // Opens the pane as /teamrig-pane does on the list of conversations, and with `conversation` at its page.
     const openConversations = async (conversation: LogRead | null) => {
-      await switchView($, 'log', livesNow())
+      await switchView(atomStore($), 'log', livesNow())
       await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
-      if (conversation !== null) await openConversation($, conversation, logging)
+      if (conversation !== null) await openConversation(atomStore($), conversation, logging)
     }
     const shown: LogRead = { session: previous.session, claude: previous.claude }
     return (
