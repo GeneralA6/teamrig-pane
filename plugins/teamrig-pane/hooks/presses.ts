@@ -1,16 +1,27 @@
 // What a press in the pane's body does to its state: a task's card opened or closed, a task's page, a reference
-// file's page, an inbox, a pick on the Stats tab. Each reads and writes through the store port (pane-store.ts) and takes the steps of
-// steps.ts, with the readers it needs handed in, so the Claude Code dock and a front end with no engine answer a
-// press the same way; the tests run them on a store kept in memory.
-import type { ExpandedTasks, Place, RefFile, RefFileRead, TaskDetail, TaskRow } from '../types'
+// file's page, an inbox, a pick on the Stats tab, Enter in a view's Find field, back from a conversation's page. Each
+// reads and writes through the store port (pane-store.ts) and takes the steps of steps.ts, with the readers it needs
+// handed in, so the Claude Code dock and a front end with no engine answer a press the same way; the tests run them on
+// a store kept in memory.
+import type { ExpandedTasks, LogRead, Place, RefFile, RefFileRead, TaskDetail, TaskRow } from '../types'
 import { scrolledTo } from './body-scroll'
+import { changesResultKey, diffKeyOf, searchChanges } from './changes-search'
 import { inboxFile } from './details'
 import { unreadLine } from './file-page'
+import { fieldAnew, fieldKey } from './find-field'
+import { logResultKey, searchLog } from './log-search'
+import type { Worked } from './log-title'
+import { treeOf, type TreeSource } from './meta'
 import { leavingList, pushed, reset } from './nav'
 import { NO_STATS_LIST } from './pane-state'
 import type { PaneStore } from './pane-store'
 import type { InboxPress, StatsPress } from './rows'
-import { go, scrollTo, switchView, type ViewLives } from './steps'
+import { SEARCH_VIEW } from './search-rows'
+import { resultKey } from './search-view'
+import { go, openConversation, scrollTo, switchView, type MoveFocus, type ViewLives } from './steps'
+import { matchCount, searchTasks, topResult } from './task-search'
+import { cardKey, openedWith } from './team-rows'
+import { searchTeam, TEAM_SEARCH_VIEW } from './team-search'
 
 /** Reads what a task's refs and goals point at, for its card or its page; a failed read still resolves, unquoted. */
 export type ReadsDetail = (task: TaskRow) => Promise<TaskDetail>
@@ -94,7 +105,7 @@ export async function openInbox(
   await openPlace(store, { kind: 'file', file, line: unreadLine(found, press.unread) }, from)
 }
 
-/** The body's window back at its top, as a Stats pick that changes what the tab lists leaves it. */
+/** The body's window back at its top, as a step that changes what the body lists leaves it. */
 async function toTop(store: PaneStore): Promise<void> {
   await store.update('bodyScroll', current => scrolledTo(current, { kind: 'offset', offset: 0 }))
 }
@@ -140,4 +151,89 @@ export async function closeStatsFrom(store: PaneStore, lives: ViewLives): Promis
   const row = await store.read('statsFrom')
   await switchView(store, 'team', lives)
   if (row !== null) await scrollTo(store, { kind: 'row', key: row }).catch(() => undefined)
+}
+
+/** The Log view's reader, as back from a conversation's page uses it. */
+export type ClosesLog = { close(): Promise<void> }
+
+/** The Log view's reader, as a press that opens a conversation's page uses it. */
+export type OpensLog = { open(read: LogRead): Promise<void> }
+
+/** The Changes view's diffs, as a press uses them: `toggle` closes the diff keyed `key` when open, else opens it. */
+export type TogglesDiff = { toggle(key: string): Promise<void> }
+
+/**
+ * Back from a conversation's page shows the list, read again, from its top, or the search the page was opened from:
+ * the page drew no Find field, so it comes back a fresh round holding the search's words (fieldAnew).
+ */
+export async function closeLog(store: PaneStore, logging: ClosesLog | null): Promise<void> {
+  await logging?.close()
+  const shown = await store.read('nav')
+  await store.update('findField', field => fieldAnew(field, shown))
+  await toTop(store)
+}
+
+/**
+ * Enter in the Find field, on its words as typed (a redraw may lag behind them): with more than one match it moves
+ * the ring onto the first result drawn (task-search.ts topResult), where Enter opens it and the arrows move on; with
+ * one it opens that page and moves the ring onto the page's back step: left in the field, a new round's and empty,
+ * it would type the next keys into a new search, so b, f and s would never answer.
+ */
+export async function submitTasks(store: PaneStore, snap: TreeSource, query: string, focus: MoveFocus, detailOf: ReadsDetail): Promise<void> {
+  const results = searchTasks(snap.tasks, query, treeOf(snap))
+  const top = topResult(results)
+  if (top === null) return
+  if (matchCount(results) > 1) {
+    await focus(resultKey(SEARCH_VIEW, top.id))
+    return
+  }
+  await openPage(store, snap.tasks, top.id, fieldKey(await store.read('findField')), detailOf)
+  await focus('back')
+}
+
+/**
+ * Enter in the Find field on the Teams tab: with one match it opens that session's card too (openedWith, never
+ * closing it), and either way moves the ring onto the first match drawn, where Enter opens or closes its card.
+ */
+export async function submitTeam(store: PaneStore, query: string, focus: MoveFocus): Promise<void> {
+  const tree = await store.read('teamTree')
+  const top = tree.kind === 'tree' ? searchTeam(tree.root, query) : []
+  const first = top[0]
+  if (first === undefined) return
+  if (top.length === 1) await store.update('teamToggled', toggled => openedWith(toggled, cardKey(first.row.key)))
+  await focus(resultKey(TEAM_SEARCH_VIEW, first.row.key))
+}
+
+/**
+ * Enter in the Find field on the Log view's list, its titles read from `worked`: with more than one match it moves
+ * the ring onto the first drawn; with one it opens that conversation's page and moves the ring onto the page's back
+ * step, as submitTasks does. Back from the page shows the search again: its place is still the search.
+ */
+export async function submitLog(store: PaneStore, worked: Worked, query: string, focus: MoveFocus, logging: OpensLog | null): Promise<void> {
+  const top = searchLog(await store.read('logList'), worked, query)
+  const first = top[0]
+  if (first === undefined) return
+  if (top.length > 1) {
+    await focus(logResultKey(first.row.conversation))
+    return
+  }
+  const { session, claude } = first.row.conversation
+  await openConversation(store, { session, claude }, logging)
+  await focus('back')
+}
+
+/**
+ * Enter in the Find field on the Changes view: with one match it opens that file's diff too (never closing it), and
+ * either way moves the ring onto the first match with a diff, where Enter opens or closes it; an untracked folder
+ * has none to open.
+ */
+export async function submitChanges(store: PaneStore, query: string, focus: MoveFocus, diffing: TogglesDiff | null): Promise<void> {
+  const hits = searchChanges(await store.read('changes'), query)
+  const first = hits.flatMap(hit => {
+    const key = diffKeyOf(hit.row)
+    return key === null ? [] : [{ hit, key }]
+  })[0]
+  if (first === undefined) return
+  if (hits.length === 1 && (await store.read('diffs'))[first.key] === undefined) await diffing?.toggle(first.key)
+  await focus(changesResultKey(first.hit.row))
 }
