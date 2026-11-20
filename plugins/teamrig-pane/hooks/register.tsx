@@ -37,24 +37,17 @@ import { atom, read, update } from 'claude-code'
 import type { Components, Context, ProcessResult, Register, ToolResult } from 'claude-code'
 import type {
   BarStatus,
-  BodyScroll,
   ExpandedTasks,
-  FilePages,
-  FindField,
   LogRead,
-  Nav,
   PaneState,
   PaneView,
   Place,
   RefFile,
   RefFileRead,
-  RingLandings,
-  SetupView,
   Snapshot,
   TaskDetail,
   TaskRow,
   TeamSettings,
-  ViewMode,
 } from '../types'
 import { claudeCodeCheck, claudeCodeOldLine } from './claude-code-version'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
@@ -62,13 +55,10 @@ import { bounded } from './bounded-run'
 import { LiveRegister, pinKey } from './live'
 import {
   AT_LOG_LIST,
-  EMPTY_SNAPSHOT,
   INITIAL_STATE,
-  LOG_READING,
   NO_ACT,
   NO_ANSWER,
   NO_CONFIG_LOG,
-  NO_FILES,
   NO_MEETING_ANSWER,
   NO_MEETING_ASKED,
   NO_PREVIOUS,
@@ -78,9 +68,9 @@ import {
   NO_TEAM_STATS,
   NO_TEAM_TREE,
   NOT_SETTING_UP,
-  TEAM_READING,
 } from './pane-state'
 import type { PaneKey, PaneStore } from './pane-store'
+import { screenOf } from './screen'
 import { clearSearch, focusFind, go, openConversation, scrollTo, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { findSession, type TeamLookup } from './sessions'
@@ -90,12 +80,12 @@ import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type Regi
 import { TreeGoals } from './tree-goals'
 import { TreeRegisters } from './tree-registers'
 import { NO_ELSEWHERE } from './elsewhere'
-import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
+import { WrapCache, dockLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { diffKey, noteKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
 import { buttonCells, packGroups, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
 import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, type FrameSlot, type Placed, type View } from './frame'
-import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
+import { scrolledTo, settle, type Settled } from './body-scroll'
 import {
   BANNER_FILL_KEY,
   BANNER_KEY,
@@ -119,39 +109,30 @@ import {
   type Current,
 } from './banner'
 import { sessionName, titleSpans } from './session-title'
-import { NOTHING_EXPANDED, paneBlocks, type Block, type InboxPress, type Span, type StatsPress } from './rows'
-import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
+import { NOTHING_EXPANDED, type InboxPress, type Span, type StatsPress } from './rows'
+import type { BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
-import { gitCheck, isGitMissing, requirementBlocks, requirementProblems } from './requirements'
+import { gitCheck, requirementProblems } from './requirements'
 import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges } from './changes'
-import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
-import { changesResultKey, diffKeyOf, searchChanges, type ChangeHit } from './changes-search'
+import { changesLabel, paneTitle } from './changes-rows'
+import { changesResultKey, diffKeyOf, searchChanges } from './changes-search'
 import { LiveDiffs } from './diff'
 import { LiveCopies } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { LivePrevious } from './previous-conversation'
-import { logListBlocks, logPageBlocks, logPageTitle } from './log-rows'
-import { logResultKey, searchLog, type LogHit } from './log-search'
-import { inboxBlocks } from './inbox-rows'
-import { searchInbox, type InboxHit } from './inbox-search'
+import { logResultKey, searchLog } from './log-search'
 import { LiveTeam } from './team-source'
-import { sessionKey } from './team'
-import { cardKey, openedWith, teamBlocks, toggledWith } from './team-rows'
-import { searchTeam, TEAM_SEARCH_VIEW, type SessionHit } from './team-search'
+import { cardKey, openedWith, toggledWith } from './team-rows'
+import { searchTeam, TEAM_SEARCH_VIEW } from './team-search'
 import { SetupWatch } from './setup'
-import { setupBlocks } from './setup-rows'
 import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
-import type { CardActs } from './act-rows'
 import { NoteHold } from './note-hold'
 import { SessionActs } from './session-acts'
-import { meetingsBlocks } from './meetings-rows'
-import { listTitle, statsBlocks } from './stats-rows'
 import { LiveStats } from './stats-source'
 import { findTeamrigCli } from './teamrig-cli'
 import { themeOf } from './theme'
 import {
-  AT_LIST,
   back,
   canGoBack,
   canGoForward,
@@ -170,16 +151,15 @@ import {
   wentTo,
 } from './nav'
 import { heldWeeks, weekClockOf, weekSteps } from './done'
-import { doneBlocks, weekWords } from './done-rows'
+import { weekWords } from './done-rows'
 import { treeOf } from './meta'
 import { clockOf, machineZoneOf, zoneNamed } from './zone'
-import { filePageBlocks, unreadLine } from './file-page'
-import { KEYS_HOTKEY, KEYS_LABEL, keysBlocks } from './keys-page'
-import { pageBlocks } from './page'
-import { matchCount, NO_RESULTS, searchTasks, topResult, type SearchResults } from './task-search'
-import { SEARCH_VIEW, searchBlocks } from './search-rows'
+import { unreadLine } from './file-page'
+import { KEYS_HOTKEY, KEYS_LABEL } from './keys-page'
+import { matchCount, searchTasks, topResult } from './task-search'
+import { SEARCH_VIEW } from './search-rows'
 import { resultKey } from './search-view'
-import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAnew, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
+import { FIRST_MEMO, fieldAnew, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -191,8 +171,6 @@ const PAD_COLUMNS = 1
  * (a dock too narrow for its buttons) would leave the body too few rows, so the pane then scrolls as one.
  */
 const HEADER_MAX_SHARE = 0.5
-/** Most rows an inline pane (above the prompt) shows, its last one saying what it left out. */
-const INLINE_MAX_ROWS = 6
 /** Between two crumbs of a page's trail. */
 const TRAIL_SEPARATOR = ' › '
 /** The Conversations view's switch button (the view keyed 'log'), and the first crumb of a conversation page's trail. */
@@ -1003,146 +981,44 @@ export const register: Register = on => {
     const store = atomStore($)
     const moveFocus = ringOf($)
     const inline = e.props.placement === 'inline'
-    // A read or a layout that throws draws one error line under the buttons: unguarded, the engine
-    // would skip this hook and draw the pane with no tasks and no word of why.
-    let isMinimized = false
-    let current: PaneView = 'tasks'
-    let changed = EMPTY_CHANGES
-    let snap = EMPTY_SNAPSHOT
-    /** Where the owner's act stands, which an open card's act rows draw from (act-rows.ts); null inline or with no team. */
-    let acts: CardActs | null = null
-    let shown: ViewMode = 'mine'
-    let open: ExpandedTasks = NOTHING_EXPANDED
-    /** Where the tasks view is, or the Inbox, Team, Log or Changes view's search; the list inline, where a page never shows. */
-    let at: Nav = AT_LIST
-    /** What the file pages the places name read, drawn with the tasks view docked. */
-    let files: FilePages = NO_FILES
-    /** The Find field's round (find-field.ts), drawn docked in every view, the Log view's over its list. */
-    let field: FindField = FIRST_FIELD
-    let landings: RingLandings = NO_LANDINGS
-    /** Where the docked body's window is to stand, the last step that moved it; at the top inline. */
-    let scroll: BodyScroll = AT_TOP
-    /** The tasks the search shown matched, read once for its body, the Find field's Enter and the line under it; none off a search. */
-    let found: SearchResults = NO_RESULTS
-    /** The sessions the Teams tab's search shown names (team-search.ts), read once for its body, Enter and the line under the field; none off it. */
-    let teamFound: readonly SessionHit[] = []
-    /** The inbox lines the Inbox view's search shown matches (inbox-search.ts), read once for its body and the line under the field; none off it. */
-    let inboxFound: readonly InboxHit[] = []
-    /** The conversations the Log view's search shown names (log-search.ts), read once for its body and the line under the field; none off it. */
-    let logFound: readonly LogHit[] = []
-    /** The files the Changes view's search shown names (changes-search.ts), read once for its body and the line under the field; none off it. */
-    let changesFound: readonly ChangeHit[] = []
-    /** The title of the conversation whose Log page shows (log-rows.ts logPageTitle); null for the list or another view. */
-    let logTitle: Span[] | null = null
-    /** The title of the Health count whose tasks the Stats tab shows (stats-rows.ts listTitle); null for its numbers or another view. */
-    let statsTitle: string | null = null
-    /** Whether the Stats tab shows from a Teams row's [Stats], so its head leads back to that row; never for another view. */
-    let statsBack = false
-    /** What a project teamrig is not set up for shows (setup.ts), alone, in every view; null once a register is found. */
-    let setupShown: SetupView | null = NOT_SETTING_UP
-    let body: Drawn[] = []
-    /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
-    let barLines: BarPiece[][] = []
     const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
-    try {
-      landings = await read($, ring)
-      keysMemo = drawnWith(keysMemo, e.props.isFocused, landings)
-      isMinimized = (await read($, size)) === 'minimized'
-      current = await read($, view)
-      changed = await read($, changes)
-      // An open card ends in the owner's acts, docked only (inline draws none) and with a team to run them through.
-      acts = inline || acting === null ? null : { act: await read($, ownerAct) }
-      // Minimized too: the strip's Inbox button counts the unread lines. While the Note field is open, the snapshot of
-      // its opening: the engine keeps the ring at an index, and a task added above the card would move it off the field.
-      snap = noteHold.drawn(await read($, snapshot), acts?.act ?? null)
-      if (!isMinimized) {
-        shown = await read($, mode)
-        open = await read($, expanded)
-        const missing = await read($, requirements)
-        if (!inline) scroll = await read($, bodyScroll)
-        // Every view draws the Find field docked (the Log view over its list), and their searches are one place: the
-        // switch between them closes it (switchTo).
-        if (!inline) {
-          at = await read($, nav)
-          field = await read($, findField)
-          if (current === 'tasks') files = await read($, filePages)
-        }
-        const place = currentPlace(at)
-        const team = current === 'team' ? await read($, teamTree) : TEAM_READING
-        const logs = current === 'log' ? await read($, logList) : LOG_READING
-        if (place.kind === 'search' && current === 'tasks') found = searchTasks(snap.tasks, place.query, treeOf(snap))
-        if (place.kind === 'search' && team.kind === 'tree') teamFound = searchTeam(team.root, place.query)
-        if (place.kind === 'search' && current === 'inbox') inboxFound = searchInbox(snap.inbox, snap.now, place.query)
-        if (place.kind === 'search' && current === 'log') logFound = searchLog(logs, snap, place.query)
-        if (place.kind === 'search' && current === 'changes') changesFound = searchChanges(changed, place.query)
-        // A project teamrig is not set up for has no tasks, changes or log to show: its setup takes every view,
-        // whatever place it is at.
-        setupShown = await read($, setup)
-        // A page has no status bar: the bar counts the list, and a press on it filters the list.
-        const bar =
-          current === 'tasks' && setupShown === null && shown === 'mine' && place.kind === 'list'
-            ? statusBar(snap, await read($, barFilter), columns)
-            : null
-        // With no bar there is nothing to filter by, and the list shows every task.
-        const tasksBlocks = async (): Promise<Block[]> =>
-          place.kind === 'task'
-            ? pageBlocks(snap, place.id, await read($, pages), acts)
-            : place.kind === 'search'
-              ? searchBlocks(snap, place.query, found)
-              : place.kind === 'done'
-                ? doneBlocks(snap, shown, place.week, await read($, doneToggled))
-                : place.kind === 'file'
-                  ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
-                  : place.kind === 'keys'
-                    ? keysBlocks(columns)
-                    : paneBlocks(snap, shown, open, bar?.filter ?? null, await read($, tasksFolded), acts)
-        // Inline, the Log view shows its list alone: a page opens in the dock.
-        const logShown = setupShown === null && current === 'log' && !inline ? await read($, logPage) : null
-        logTitle = logShown === null ? null : logPageTitle(logShown, logs, snap)
-        const statsShown = setupShown === null && current === 'stats' ? await read($, stats) : null
-        statsTitle = statsShown?.kind === 'stats' && statsShown.list !== null ? listTitle(statsShown.list) : null
-        statsBack = statsShown !== null && (await read($, statsFrom)) !== null
-        const viewBlocks =
-          setupShown !== null
-            ? setupBlocks(setupShown)
-            : current === 'tasks'
-              ? await tasksBlocks()
-              : current === 'changes'
-                ? changesBlocks(changed, isGitMissing(missing), await read($, diffs), place.kind === 'search' ? { query: place.query, hits: changesFound } : null)
-                : current === 'team'
-                  ? teamBlocks(team, await read($, teamToggled), clockOf(snap).zone, {
-                      search: place.kind === 'search' ? { query: place.query, hits: teamFound } : null,
-                      answer: await read($, sessionAnswer),
-                      own: snap.team === null || snap.area === null ? null : sessionKey(snap.team, snap.area),
-                    })
-                  : current === 'meetings'
-                  ? meetingsBlocks(
-                      await read($, meetings),
-                      { open: await read($, meetingsOpen), answer: await read($, meetingAnswer), asked: await read($, meetingAsked) },
-                      snap.tasks,
-                      clockOf(snap),
-                    )
-                  : statsShown !== null
-                  ? statsBlocks(statsShown, await read($, statsToggled), columns, {
-                      team: snap.team,
-                      held: new Set(snap.tasks.map(task => task.id)),
-                      clock: clockOf(snap),
-                    })
-                  : current === 'inbox'
-                  ? inboxBlocks(snap, place.kind === 'search' ? { query: place.query, hits: inboxFound } : null)
-                  : logShown === null
-                  ? logListBlocks(logs, clockOf(snap), snap, place.kind === 'search' ? { query: place.query, hits: logFound } : null)
-                  : logPageBlocks(logShown, clockOf(snap), logs, snap)
-        const blocks = [...requirementBlocks(missing, claudeCodeOldLine), ...viewBlocks]
-        // Inline, the bar's lines count in the capped rows.
-        const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
-        barLines = bar === null ? [] : inline ? bar.lines.slice(0, inlineBarRows(bar, cap)) : bar.lines
-        body = inline ? inlineLayout(blocks, cap - barLines.length) : dockLayout(blocks, columns, wraps)
-      }
-    } catch (error) {
-      barLines = []
-      body = failedDrawing(error)
-    }
+    // What this drawing shows, read as every front end reads it (screen.ts): a read or a layout that throws comes
+    // back as one error line for a body, never a throw the engine would answer by skipping this hook.
+    const screen = await screenOf(store, {
+      inline,
+      columns,
+      bodyRows: e.props.scroll.bodyRows,
+      canAct: acting !== null,
+      isHeld: e.props.isFocused,
+      memo: keysMemo,
+      noteHold,
+      wraps,
+      hostOld: claudeCodeOldLine,
+    })
+    keysMemo = screen.memo
+    const {
+      isMinimized,
+      current,
+      changed,
+      snap,
+      shown,
+      open,
+      at,
+      field,
+      landings,
+      scroll,
+      found,
+      teamFound,
+      inboxFound,
+      logFound,
+      changesFound,
+      logTitle,
+      statsTitle,
+      statsBack,
+      setupShown,
+      body,
+      barLines,
+    } = screen
 
     // Opening a card reads what the task's refs and goals point at, once (detailOf).
     const toggle = async (id: string) => {
@@ -1571,7 +1447,7 @@ export const register: Register = on => {
 
     // The session's title (session-title.ts) leads every docked view on one line cut at the pane's width; a Text, so it
     // holds no place in the focus ring. It stays above the body with the rest of the header. Inline the pane draws
-    // none, as it sits by the band above the prompt, which names the session too, in rows INLINE_MAX_ROWS caps and the
+    // none, as it sits by the band above the prompt, which names the session too, in rows screen.ts's INLINE_MAX_ROWS caps and the
     // engine redraws on every keystroke.
     const sessionTitle = inline ? null : titleSpans(snap)
     const titleRow: HeaderPart | null = sessionTitle === null ? null : { node: drawText(sessionTitle, 'truncate-end', 'title'), rows: 1 }
