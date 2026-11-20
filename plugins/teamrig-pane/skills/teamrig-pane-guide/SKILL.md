@@ -83,8 +83,10 @@ sessions as `id (name)`:
 Not pinned (team shop): web is not a session on this team (sessions: lead (shop-lead), api (shop-api)).
 ```
 
-The session is looked up as teamrig's own commands look one up, in the team config and its rename log, read again
-at each command, so a name given since the pane started counts. With no team config to read (a team whose
+The session is looked up as teamrig's own commands look one up, among the team's sessions as teamrig serves them
+(`teamrig read`, read again when a file of the team moved and at least once a minute), so a name given since the pane
+started counts within the minute; before the first read the answer is `Not pinned: team <team>'s sessions are not
+read yet.` With no team config to read (a team whose
 folder holds no `config.json`), the word is taken as the session id, and a word that cannot be one answers
 `usage: /teamrig-pane [mine | all | auto | <session>]`. The argument is read in lower case, and `mine`, `all` and
 `auto` are always the forms above.
@@ -362,10 +364,10 @@ value:
 | `After` | The tasks planned before it (`--after`), each with its status |
 | `Needed by` | Each active task of another owner that needs it (planned after it, or waiting on it), with its owner and due, the one due first |
 | `Goal` | The roadmap item of each of its `--goals` from the goals document (see [reference.md](reference.md#where-the-register-is)), else the bare id |
-| `Origin` | Who asked, then who wrote it and when: `Asked by owner, added by lead Tue 10-13`; `Asked and added by lead 13:00 IDT` when one session did both; `GitHub issue #12, added by ...` for a task teamrig opened from one |
+| `Origin` | Who asked, then who wrote it and when: `Asked by owner, added by lead Tue 10-13`; `Asked and added by lead 13:00 IDT` when one session did both; the tracker and the item it came from, `GitHub acme/app#12, added by ...`, for a task a tracker brought in |
 | `Reference` | Where its ask is written: each file by its folder and name (`inbox/po.md`), a click away from its page, other words as written |
 | `Evidence` | Its evidence |
-| `Links` | Up to 5 links: the GitHub issue a task teamrig opened from one came from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its description, ref, newest note, proof and evidence, once each |
+| `Links` | Up to 5 links: the page of the tracker item its ref names, as teamrig serves it (a whole `https://` address only), then each web address written in its description, ref, newest note, proof and evidence, once each |
 
 There is no row for a parent, sub-tasks or history: the register keeps none of them for a task. A link never
 splits; one wider than its line is shortened with `…` and still opens its whole address. Each task id the pane
@@ -682,7 +684,7 @@ page), Tasks (how many it finished of all it owns but the dropped and how many w
 verifying`; dim `older ones archived` once a compaction moved the old ones out of the register, dim `no tasks` for
 none), Decisions (its cards waiting on the owner now), Later (those the owner put off, soonest back first, with when
 each comes back), each id opening its page, and Inbox (unread lines, opening its inbox, the pane's own in the Inbox
-view); a retired session's card gives its id and its retire: day, by whom, why, Heir and Handover (a press opens it). Now, Tasks,
+view); a retired session's card gives its id and its retire: day, by whom, why and Heir. Now, Tasks,
 Decisions, Later, Inbox and the counts of cards on the owner show for the pane's own team only. A page a card opens shows in the Tasks view; back shows the tasks list.
 
 The Find field (`s`) searches the tree: each word matches the start of a word in a session's id, name,
@@ -690,10 +692,10 @@ roles or hire scope, retired ones too. The body counts the matches and draws eac
 opens or closes its card, and Enter with one match opens it. Switching to Tasks closes the search, as Teams does a Tasks
 search. Cleared, the tree draws as before: a match under a closed row stays hidden there.
 
-It reads each team folder's config, rename log, hire log and the week file teamrig's budget hooks write
-(`usage/team.week.json` in its state folder) under `~/.teamrig/teams/<team>`, with teamrig's own readers.
-While the view shows, it reads a file again on a 3 second poll only when its size or time moved; on another view, or
-minimized, it reads nothing.
+Its teams and sessions are the ones teamrig serves (`teamrig read`'s `sessions` document, read again when a file of
+the pane's own team moved and at least once a minute, so another team's change shows up to a minute late). From files
+it reads only the week file teamrig's budget hooks write (`usage/team.week.json` in each team's state folder), again
+on a 3 second poll only when its size or time moved, and only while the view shows.
 
 ## The Meetings view
 

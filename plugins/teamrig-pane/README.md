@@ -115,13 +115,13 @@ the value column, and shows only when it has a value:
   (`T7 (beta, due Thu 10-22)`), the one due first;
 - **Goal:** the roadmap item of each of its goals (`--goals G10.1g`, `S4`), else the bare id;
 - **Origin:** who asked, then who wrote it and when (`Asked by owner, added by lead Tue 10-13`;
-  `Asked and added by lead 13:00 IDT` when one session did both; `GitHub issue #12, added by ...` for a
-  task teamrig opened from one);
+  `Asked and added by lead 13:00 IDT` when one session did both; the tracker and the item it came from,
+  `GitHub acme/app#12, added by ...`, for a task a tracker brought in);
 - **Reference:** where its ask is written: each file by its folder and name (`inbox/po.md`), a click
   away from its page (below), other words as written;
 - **Evidence:** its evidence;
-- **Links:** up to 5 addresses, each a link: the GitHub issue a task teamrig opened from one came
-  from (its ref `gh:<owner>/<repo>#<number>`), then each web address written in its description, its ref,
+- **Links:** up to 5 addresses, each a link: the page of the tracker item its ref names, as teamrig
+  serves it (a whole `https://` address only), then each web address written in its description, its ref,
   its newest note, its proof and its evidence, once each. A link never splits; one wider than its line is shortened with
   `…` and still opens its whole address. Each task id the pane holds is underlined and opens that
   task's page (below); one inside a web address stays part of it.
@@ -508,8 +508,7 @@ ones archived` once a compaction moved the old ones out of the register, so the 
 for none), Decisions (its cards waiting on the owner now) and Later (those the owner put off, soonest back first, each
 with when it comes back), each id a press that opens the task's page, and Inbox (its unread lines, a press that opens
 its inbox at the first of them, the pane's own area's in the Inbox view). A retired session's card is its id and its retire
-instead: the day and who retired it, why, the session its tasks went to (Heir), and its Handover, a press that opens the
-file, or why it left none. Now, Tasks, Decisions, Later, Inbox and the counts of cards on the owner show only for the
+instead: the day and who retired it, why, and the session its tasks went to (Heir). Now, Tasks, Decisions, Later, Inbox and the counts of cards on the owner show only for the
 pane's own team, whose register and inboxes it reads; a session that never marked its
 inbox read has no Inbox count. A page a
 card opens shows in the Tasks view, and back from it shows the tasks list.
@@ -522,10 +521,11 @@ its card too. The Tasks view and the Teams tab share the search, so a switch bet
 tree draws as it stood: a session found under a closed row stays hidden there, though a card the search opened stays
 open.
 
-It reads each team's config and, in the state folder that config names, its rename log, hire log and week file, and
-for the pane's own team its register and inbox read marks and each marked session's inbox, with teamrig's own readers.
-It reads files only (`[Meet]` and `[Wake]` aside), and only while it shows: on each 3 s poll a file is read again only when its size
-or time moved.
+Its teams and sessions are the ones teamrig serves (the `sessions` document of `teamrig read`, the one the pane
+already holds: read again when a file of its own team moved and at least once a minute, so another team's change
+shows up to a minute late, and the tab says it is reading until the first one). From files it reads only each
+team's week file, in the state folder that team's config names, and only while it shows: on each 3 s poll a file is
+read again only when its size or time moved. It only reads (`[Meet]` and `[Wake]` aside).
 No model calls,
 no tokens.
 
@@ -655,8 +655,18 @@ the pane's own register unread, the tab says why. There is no Find field.
 
 ## Reading the register
 
-The pane parses and folds the register, reads the inbox marks and reads the team config with teamrig's
-own modules, so every event type and status teamrig writes reads here too, and a line the pane cannot
+Every word the Tasks view, the Inbox view and the Teams tab draw of a team comes from teamrig itself: the
+pane runs the installed teamrig's `read` command (`node <teamrig>/dist/cli/main.js read`, no shell) for its
+`tasks`, `inbox`, `sessions` and `config` documents, one run for all of them, when a file of its own team
+moved and at least once a minute. Each run hands back the revision it holds of each document, so teamrig
+builds only what changed. A run that fails, or a document the pane cannot read, keeps what was last drawn
+under a `WARN` line naming why (`teamrig read did not finish: …`, `teamrig read printed no tasks document`);
+the pane never falls back to reading the team's files for it. A document of another major interface version
+is not read, and the line says which side to update. One run takes about half a second.
+
+The team's files still feed what no document serves yet, ids and numbers only (the work marks, the goals'
+ranks, spend, the task counts, whose cards wait on the owner): for these the pane parses and folds the
+register with teamrig's own modules, so every event type and status teamrig writes reads here too, and a line the pane cannot
 read is one teamrig cannot read either. The lines teamrig's reader skips (unreadable, from a newer
 teamrig, or an event naming no task) are counted on one `WARN` line worded as teamrig's own
 (`events.jsonl: 1 unreadable line(s), ...`), above the tasks. `scripts/sync-core.ts` copies teamrig's read entry (`src/read/index.ts`) and every module it
