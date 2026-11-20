@@ -12,13 +12,13 @@
 // and who retired it, why, the session its tasks went to (Heir), and its Handover, a press that opens the file, or why
 // it left none. Each line starts with the guide its row hands it. Days print on the team's clock (meta.ts dayWords).
 // Pure.
-import type { ThemeKey } from 'claude-code'
 import { describeLaunch, type TimeZone } from './core/read/index'
 import { joined, labelled, textLines, type Lines } from './card'
 import { fileLabel } from './details'
 import { dayWords, storedDayWords } from './meta'
 import type { Row, Span } from './rows'
 import type { Role, SessionFacts } from './team'
+import type { Tone } from './tone'
 
 /** A fact a session's card shows on its labelled row, named as its row's key ends. */
 export type TeamCardField = 'id' | 'role' | 'led-by' | 'launch' | 'hire' | 'scope' | 'reason' | 'now' | 'tasks' | 'decisions' | 'later' | 'inbox' | 'retired' | 'heir' | 'handover'
@@ -30,7 +30,7 @@ export type TabRole = Role | 'subLead'
 const ROLE_WORDS: Readonly<Record<TabRole, string>> = { lead: 'lead', subLead: 'sub-lead', deliveryOwner: 'delivery owner', securityReviewer: 'security reviewer' }
 
 /** Each role's colour on the tab, a different one each, so the eye finds a role without reading it (T1245). */
-export const ROLE_COLORS: Readonly<Record<TabRole, ThemeKey>> = { lead: 'claude', subLead: 'warning', deliveryOwner: 'success', securityReviewer: 'error' }
+export const ROLE_COLORS: Readonly<Record<TabRole, Tone>> = { lead: 'accent', subLead: 'warning', deliveryOwner: 'success', securityReviewer: 'error' }
 
 /** A card names no task by its words: its tasks are the Now row's, each a span of its own. */
 const NO_IDS = (): boolean => false

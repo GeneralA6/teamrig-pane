@@ -69,7 +69,7 @@ describe('meetingsBlocks', () => {
     expect(header?.rule).toBe(true)
     expect(header?.spans.at(-1)).toEqual({ text: '1 missed', color: 'error' })
     expect(blocks.slice(1).map(block => block.folds)).toEqual(['meeting:M1', 'meeting:M2', 'meeting:M3', 'meeting:M4'])
-    expect(blockOf(blocks, 'meeting:M3').rows[0]?.spans[0]).toEqual({ text: MEETING_MARK.next, color: 'claude' })
+    expect(blockOf(blocks, 'meeting:M3').rows[0]?.spans[0]).toEqual({ text: MEETING_MARK.next, color: 'accent' })
     expect(blockOf(blocks, 'meeting:M2').rows[0]?.spans.at(-1)).toEqual({ text: 'missed', color: 'error' })
   })
 
@@ -99,9 +99,9 @@ describe('meetingsBlocks', () => {
     expect(spans.filter(span => span.task !== undefined).map(span => span.task)).toEqual(['T7'])
     expect(spans.filter(span => span.file !== undefined).map(span => span.file)).toEqual([{ file: 'briefs/M3.md', line: null }])
     expect(spans.filter(span => span.meets !== undefined)).toEqual([
-      { text: PRESS_TEXT.start, color: 'claude', meets: { kind: 'run', id: 'M3', run: { verb: 'start' } } },
-      { text: PRESS_TEXT.move, color: 'claude', meets: { kind: 'ask', id: 'M3', ask: 'move' } },
-      { text: PRESS_TEXT.drop, color: 'claude', meets: { kind: 'ask', id: 'M3', ask: 'drop' } },
+      { text: PRESS_TEXT.start, color: 'accent', meets: { kind: 'run', id: 'M3', run: { verb: 'start' } } },
+      { text: PRESS_TEXT.move, color: 'accent', meets: { kind: 'ask', id: 'M3', ask: 'move' } },
+      { text: PRESS_TEXT.drop, color: 'accent', meets: { kind: 'ask', id: 'M3', ask: 'drop' } },
     ])
   })
 
@@ -174,7 +174,7 @@ describe('meetingsBlocks', () => {
     const start = { kind: 'run', id: 'M3', run: { verb: 'start' } } as const
     const meets = pieces.filter(piece => piece.kind === 'meeting')
     expect(meets.length).toBe(3)
-    expect(meets[0]).toEqual({ kind: 'meeting', span: { text: PRESS_TEXT.start, color: 'claude', meets: start }, meets: start })
+    expect(meets[0]).toEqual({ kind: 'meeting', span: { text: PRESS_TEXT.start, color: 'accent', meets: start }, meets: start })
   })
 
   test("what the last run press answered leads the list, under the header: running, done with teamrig's lines, or why it refused", () => {

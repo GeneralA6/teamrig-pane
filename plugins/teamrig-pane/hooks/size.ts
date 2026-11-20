@@ -3,8 +3,13 @@
 // register.tsx and minimizes the pane instead, so a stray click never loses it. The size is drawn
 // from $.state (it outlives a hot reload) and kept in $.store under one key for the whole plugin, so
 // the next session, after a restart too, opens at the size the person left it.
-import type { PaneCloseOrigin } from 'claude-code'
 import type { PaneSize } from '../types'
+
+/**
+ * Who asked to close the pane: the person, the plugin itself, or the surface unloading it. The pane's own type, so
+ * no surface's is read here: a surface's close origin of these kinds passes as one.
+ */
+export type CloseOrigin = { readonly kind: 'person' | 'plugin' | 'unload' }
 
 /** The $.store key: one for the plugin, not per session, so a new session opens as the last one was left. */
 export const SIZE_KEY = 'paneSize'
@@ -41,7 +46,7 @@ export class PaneSizer {
    * Whether the pane's close is refused, minimizing it instead: the person's is (the ✕, ctrl+x x);
    * the plugin's own and the engine's unload go through.
    */
-  async refusesClose(origin: PaneCloseOrigin): Promise<boolean> {
+  async refusesClose(origin: CloseOrigin): Promise<boolean> {
     if (origin.kind !== 'person') return false
     await this.set('minimized')
     return true

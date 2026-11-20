@@ -37,56 +37,73 @@ import { atom, read, update } from 'claude-code'
 import type { Components, Context, ProcessResult, Register, ToolResult } from 'claude-code'
 import type {
   BarStatus,
-  BodyScroll,
-  ExpandedTasks,
-  FilePages,
-  FindField,
-  LogConversation,
-  LogList,
-  LogPage,
   LogRead,
-  MeetingAnswer,
-  MeetingAsked,
-  MeetingsView,
-  Nav,
-  OwnerAct,
-  PageDetails,
+  PaneState,
   PaneView,
-  Place,
   RefFile,
-  RefFileRead,
-  RequirementProblem,
-  RingLandings,
-  SessionAnswer,
-  SetupView,
   Snapshot,
-  StatsChoice,
-  StatsListPick,
-  StatsView,
   TaskDetail,
   TaskRow,
   TeamSettings,
-  TeamView,
-  ViewMode,
 } from '../types'
+import { claudeCodeCheck, claudeCodeOldLine } from './claude-code-version'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs } from './command'
 import { bounded } from './bounded-run'
 import { DocumentSource } from './document-source'
 import { LiveRegister, pinKey, type LivePorts } from './live'
+import {
+  AT_LOG_LIST,
+  INITIAL_STATE,
+  NO_ACT,
+  NO_ANSWER,
+  NO_CONFIG_LOG,
+  NO_MEETING_ANSWER,
+  NO_MEETING_ASKED,
+  NO_PREVIOUS,
+  NO_TEAM_LOG,
+  NO_TEAM_MEETINGS,
+  NO_TEAM_STATS,
+  NO_TEAM_TREE,
+  NOT_SETTING_UP,
+} from './pane-state'
+import type { PaneKey, PaneStore } from './pane-store'
+import { screenOf } from './screen'
+import { clearSearch, focusFind, go, openConversation, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
 import { findPlaces, type Places, type PlacesEnv } from './places'
 import { lookupSession, type SessionFound } from './session-roster'
-import { inboxFile, TaskDetails, type RefPlaces } from './details'
+import { TaskDetails, type RefPlaces } from './details'
+import {
+  closeCards,
+  closeLog as leaveLog,
+  closeStatsFrom as leaveStatsFrom,
+  closeStatsList as leaveStatsList,
+  filterBar,
+  fold as pressFold,
+  openFile as pressFile,
+  openInbox as pressInbox,
+  openPage as pressPage,
+  pickStats as pressStats,
+  submitChanges as enterChanges,
+  submitLog as enterLog,
+  submitTasks as enterTasks,
+  submitTeam as enterTeam,
+  openTask,
+  toggleBanner,
+  toggleCard,
+  togglePrevious,
+  toggleTeamKey,
+  type ReadsFile,
+} from './presses'
 import { RefFileReader } from './ref-file'
-import { DEFAULT_FOCUS, DEFAULT_REGISTER, TimeZone, type StatsRange } from './core/read/index'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
-import { NO_GOAL_RANKS, TreeGoals } from './tree-goals'
+import { TreeGoals } from './tree-goals'
 import { TreeRegisters } from './tree-registers'
-import { WrapCache, dockLayout, failedDrawing, inlineLayout, wrapRow, type CardPart, type Drawn } from './layout'
+import { WrapCache, dockLayout, wrapRow, type CardPart, type Drawn } from './layout'
 import { diffKey, noteKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
 import { buttonCells, packGroups, packRows, type ButtonLook } from './pack'
 import { cells } from './width'
 import { barSpans, blankSpans, frameOf, placesOf, revealed, scrolledBy, viewOf, type FrameSlot, type Placed, type View } from './frame'
-import { AT_TOP, scrolledTo, settle, type Settled } from './body-scroll'
+import { scrolledTo, settle, type Settled } from './body-scroll'
 import {
   BANNER_FILL_KEY,
   BANNER_KEY,
@@ -103,80 +120,52 @@ import {
   PREVIOUS_OPEN_KEY,
   PREVIOUS_PRESS_KEY,
   bannerBlock,
-  currentRowKey,
   currentTask,
-  lookShowing,
   previousBlock,
   type Current,
 } from './banner'
 import { sessionName, titleSpans } from './session-title'
-import { NOTHING_EXPANDED, NOTHING_FOLDED, paneBlocks, type Block, type InboxPress, type Span, type StatsPress } from './rows'
-import { inlineBarRows, statusBar, type BarPiece } from './status-bar'
+import type { InboxPress, Span, StatsPress } from './rows'
+import type { BarPiece } from './status-bar'
 import { PaneSizer, SIZE_KEY } from './size'
-import { isGitMissing, requirementBlocks, requirementProblems } from './requirements'
-import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges, NOTHING_KNOWN } from './changes'
-import { changesBlocks, changesLabel, paneTitle } from './changes-rows'
-import { changesResultKey, diffKeyOf, searchChanges, type ChangeHit } from './changes-search'
-import { LiveDiffs, NO_DIFFS } from './diff'
-import { LiveCopies, NO_COPIES } from './outside-copies'
+import { gitCheck, requirementProblems } from './requirements'
+import { EMPTY_CHANGES, knownOf, knownSeed, LiveChanges } from './changes'
+import { changesLabel, paneTitle } from './changes-rows'
+import { LiveDiffs } from './diff'
+import { LiveCopies } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { LivePrevious } from './previous-conversation'
-import { logListBlocks, logPageBlocks, logPageTitle } from './log-rows'
-import { logResultKey, searchLog, type LogHit } from './log-search'
-import { inboxBlocks } from './inbox-rows'
-import { searchInbox, type InboxHit } from './inbox-search'
 import { LiveTeam } from './team-source'
-import { sessionKey } from './team'
-import { cardKey, openedWith, teamBlocks, toggledWith } from './team-rows'
-import { searchTeam, TEAM_SEARCH_VIEW, type SessionHit } from './team-search'
 import { SetupWatch } from './setup'
-import { setupBlocks } from './setup-rows'
-import { NO_TASK_COUNTS } from './task-counts'
 import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
-import type { CardActs } from './act-rows'
 import { NoteHold } from './note-hold'
 import { SessionActs } from './session-acts'
-import { meetingsBlocks } from './meetings-rows'
-import { listTitle, statsBlocks } from './stats-rows'
 import { LiveStats } from './stats-source'
 import { findTeamrigCli } from './teamrig-cli'
+import { themeOf } from './theme'
 import {
-  AT_LIST,
   back,
   canGoBack,
   canGoForward,
   currentPlace,
   doneAt,
-  filesKept,
   forward,
-  fromList,
   isPage,
   KEYS_PAGE,
-  landing,
-  leavingList,
-  leftSearch,
-  pagesKept,
   placeLabel,
   pushed,
-  reset,
   searched,
   trail,
-  type Landing,
   wentTo,
 } from './nav'
 import { heldWeeks, weekClockOf, weekSteps } from './done'
-import { doneBlocks, weekWords } from './done-rows'
+import { weekWords } from './done-rows'
 import { treeOf } from './meta'
-import { NO_SPEND } from './ranking'
 import { clockOf, machineZoneOf, zoneNamed } from './zone'
-import { filePageBlocks, lineBlockKey, unreadLine } from './file-page'
-import { KEYS_HOTKEY, KEYS_LABEL, keysBlocks } from './keys-page'
-import { pageBlocks } from './page'
-import { matchCount, NO_RESULTS, searchTasks, topResult, type SearchResults } from './task-search'
-import { SEARCH_VIEW, searchBlocks } from './search-rows'
-import { resultKey } from './search-view'
-import { FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldAnew, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
+import { KEYS_HOTKEY, KEYS_LABEL } from './keys-page'
+import { matchCount } from './task-search'
+import { FIRST_MEMO, fieldKey, keysAt, keysHint, landedOn, submitWords, type KeysAt } from './find-field'
 
 const PANE = 'teamrig-pane'
 /** The dock width it asks for: an id, priority, due and a 40-column title line, inside the padding. */
@@ -188,8 +177,6 @@ const PAD_COLUMNS = 1
  * (a dock too narrow for its buttons) would leave the body too few rows, so the pane then scrolls as one.
  */
 const HEADER_MAX_SHARE = 0.5
-/** Most rows an inline pane (above the prompt) shows, its last one saying what it left out. */
-const INLINE_MAX_ROWS = 6
 /** Between two crumbs of a page's trail. */
 const TRAIL_SEPARATOR = ' › '
 /** The Conversations view's switch button (the view keyed 'log'), and the first crumb of a conversation page's trail. */
@@ -210,29 +197,8 @@ const MINIMIZED = `minimized to its strip: a press on it, or /${COMMAND}, opens 
 /** How long one git run may take before it is killed and the repo shows the failure. */
 const GIT_TIMEOUT_MS = 10_000
 
-// The pane's $.state (declared in ../types); the engine's scan wants atoms written in the module that uses them.
-const EMPTY_SNAPSHOT: Snapshot = {
-  tasks: [],
-  area: null,
-  areaSource: null,
-  team: null,
-  areaName: null,
-  leads: null,
-  work: [],
-  unreadInbox: null,
-  inbox: [],
-  problem: null,
-  notPickedUpAfterHours: DEFAULT_REGISTER.check.notPickedUpAfterHours,
-  timeZone: TimeZone.UTC.name,
-  ownerSource: DEFAULT_REGISTER.ownerSource,
-  focus: DEFAULT_FOCUS,
-  goals: NO_GOAL_RANKS,
-  spend: NO_SPEND,
-  ownerCards: {},
-  taskCounts: NO_TASK_COUNTS,
-  elsewhere: [],
-  now: 0,
-}
+// The pane's $.state (declared in ../types), each key starting from what pane-state.ts INITIAL_STATE gives it; the
+// engine's scan wants atoms written in the module that uses them.
 /**
  * The tag the snapshot is kept under. $.state outlives a hot reload, so without it a new pane would
  * draw the snapshot the old code wrote, rows missing the fields it now reads; under another tag that
@@ -240,165 +206,155 @@ const EMPTY_SNAPSHOT: Snapshot = {
  * Snapshot or TaskRow type in ../types changes shape.
  */
 const SNAPSHOT_SHAPE = 'register-v17'
-const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, EMPTY_SNAPSHOT, { shape: SNAPSHOT_SHAPE })
-const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, 'mine')
+const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, INITIAL_STATE.snapshot, { shape: SNAPSHOT_SHAPE })
+const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, INITIAL_STATE.mode)
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */
 const CARDS_SHAPE = 'cards-v1'
-const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, NOTHING_EXPANDED, { shape: CARDS_SHAPE })
+const expanded = atom({ plugin: 'teamrig-pane', key: 'expanded' } as const, INITIAL_STATE.expanded, { shape: CARDS_SHAPE })
 /** The Tasks view's headings whose tasks are folded away (rows.ts paneBlocks), by block key: a press on one flips it. */
-const tasksFolded = atom({ plugin: 'teamrig-pane', key: 'tasksFolded' } as const, NOTHING_FOLDED)
-const size = atom({ plugin: 'teamrig-pane', key: 'size' } as const, 'open')
-const view = atom({ plugin: 'teamrig-pane', key: 'view' } as const, 'tasks')
+const tasksFolded = atom({ plugin: 'teamrig-pane', key: 'tasksFolded' } as const, INITIAL_STATE.tasksFolded)
+const size = atom({ plugin: 'teamrig-pane', key: 'size' } as const, INITIAL_STATE.size)
+const view = atom({ plugin: 'teamrig-pane', key: 'view' } as const, INITIAL_STATE.view)
 /** The changes are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when ChangesSnapshot changes shape. */
 const CHANGES_SHAPE = 'changes-v3'
-const changes = atom({ plugin: 'teamrig-pane', key: 'changes' } as const, EMPTY_CHANGES, { shape: CHANGES_SHAPE })
+const changes = atom({ plugin: 'teamrig-pane', key: 'changes' } as const, INITIAL_STATE.changes, { shape: CHANGES_SHAPE })
 /**
  * The repo roots and outside files found, kept apart from the drawn changes: a version that bumps
  * CHANGES_SHAPE reads the drawn ones as absent after a hot reload, and would forget every repo the
  * session found. Bump KNOWN_SHAPE only when KnownChanges itself changes.
  */
 const KNOWN_SHAPE = 'known-v1'
-const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, NOTHING_KNOWN, { shape: KNOWN_SHAPE })
+const known = atom({ plugin: 'teamrig-pane', key: 'known' } as const, INITIAL_STATE.known, { shape: KNOWN_SHAPE })
 /** The open diffs are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when FileDiff or DiffLine changes shape. */
 const DIFFS_SHAPE = 'diffs-v1'
-const diffs = atom({ plugin: 'teamrig-pane', key: 'diffs' } as const, NO_DIFFS, { shape: DIFFS_SHAPE })
+const diffs = atom({ plugin: 'teamrig-pane', key: 'diffs' } as const, INITIAL_STATE.diffs, { shape: DIFFS_SHAPE })
 /** The outside files' copies are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when OutsideCopy changes shape. */
 const COPIES_SHAPE = 'copies-v1'
-const copies = atom({ plugin: 'teamrig-pane', key: 'copies' } as const, NO_COPIES, { shape: COPIES_SHAPE })
+const copies = atom({ plugin: 'teamrig-pane', key: 'copies' } as const, INITIAL_STATE.copies, { shape: COPIES_SHAPE })
 /** The Log view's list and page are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when LogList, LogPage or TurnEntry changes shape. */
 const LOG_SHAPE = 'log-v3'
-const LOG_READING: LogList = { kind: 'reading' }
-const NO_TEAM_LOG: LogList = { kind: 'no-team' }
-const NO_CONFIG_LOG: LogList = { kind: 'no-config' }
-const logList = atom({ plugin: 'teamrig-pane', key: 'logList' } as const, LOG_READING, { shape: LOG_SHAPE })
-const AT_LOG_LIST: LogPage | null = null
-const logPage = atom({ plugin: 'teamrig-pane', key: 'logPage' } as const, AT_LOG_LIST, { shape: LOG_SHAPE })
+const logList = atom({ plugin: 'teamrig-pane', key: 'logList' } as const, INITIAL_STATE.logList, { shape: LOG_SHAPE })
+const logPage = atom({ plugin: 'teamrig-pane', key: 'logPage' } as const, INITIAL_STATE.logPage, { shape: LOG_SHAPE })
 /** The area's conversation before the one of now, for the band (previous-conversation.ts); null for none. */
-const NO_PREVIOUS: LogConversation | null = null
-const previousConversation = atom({ plugin: 'teamrig-pane', key: 'previousConversation' } as const, NO_PREVIOUS, {
+const previousConversation = atom({ plugin: 'teamrig-pane', key: 'previousConversation' } as const, INITIAL_STATE.previousConversation, {
   shape: LOG_SHAPE,
 })
-const NOTHING_MISSING: RequirementProblem[] = []
 /** What the pane lacks (requirements.ts); each session start checks again and writes it anew, a hot reload's too. */
-const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, NOTHING_MISSING)
+const requirements = atom({ plugin: 'teamrig-pane', key: 'requirements' } as const, INITIAL_STATE.requirements)
 /** The setup kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when SetupView or ProjectSetup changes shape. */
 const SETUP_SHAPE = 'setup-v1'
-const NOT_SETTING_UP: SetupView | null = null
 /** What the pane shows alone in a project teamrig is not set up for (setup.ts), whatever the view; null once a register is found. */
-const setup = atom({ plugin: 'teamrig-pane', key: 'setup' } as const, NOT_SETTING_UP, { shape: SETUP_SHAPE })
+const setup = atom({ plugin: 'teamrig-pane', key: 'setup' } as const, INITIAL_STATE.setup, { shape: SETUP_SHAPE })
 /** The status the status bar filters the mine view to (status-bar.ts), null for all: per pane, cleared at each session start. */
-const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, null)
+const barFilter = atom({ plugin: 'teamrig-pane', key: 'filter' } as const, INITIAL_STATE.filter)
 /** The places are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when Place or Nav changes shape. */
 const NAV_SHAPE = 'nav-v4'
-const nav = atom({ plugin: 'teamrig-pane', key: 'nav' } as const, AT_LIST, { shape: NAV_SHAPE })
-const NO_PAGES: PageDetails = {}
+const nav = atom({ plugin: 'teamrig-pane', key: 'nav' } as const, INITIAL_STATE.nav, { shape: NAV_SHAPE })
 /** The pages' details, kept under CARDS_SHAPE as the open cards are: both hold TaskDetail. */
-const pages = atom({ plugin: 'teamrig-pane', key: 'pages' } as const, NO_PAGES, { shape: CARDS_SHAPE })
+const pages = atom({ plugin: 'teamrig-pane', key: 'pages' } as const, INITIAL_STATE.pages, { shape: CARDS_SHAPE })
 /** The file pages' reads are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when RefFileRead changes shape. */
 const FILES_SHAPE = 'files-v1'
-const NO_FILES: FilePages = {}
-const filePages = atom({ plugin: 'teamrig-pane', key: 'filePages' } as const, NO_FILES, { shape: FILES_SHAPE })
+const filePages = atom({ plugin: 'teamrig-pane', key: 'filePages' } as const, INITIAL_STATE.filePages, { shape: FILES_SHAPE })
 /** The Find field's round (find-field.ts): the key it is drawn under and the text it starts with. */
-const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, FIRST_FIELD)
+const findField = atom({ plugin: 'teamrig-pane', key: 'findField' } as const, INITIAL_STATE.findField)
 /** The focus ring's landings in the pane (find-field.ts), counted by the ui.focus hook, kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when RingLandings changes shape. */
 const RING_SHAPE = 'ring-v1'
-const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, NO_LANDINGS, { shape: RING_SHAPE })
+const ring = atom({ plugin: 'teamrig-pane', key: 'ring' } as const, INITIAL_STATE.ring, { shape: RING_SHAPE })
 /** Whether the banner (banner.ts) in the band above the prompt shows its task's card: a press on it opens and closes it. */
-const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, false)
+const bannerOpen = atom({ plugin: 'teamrig-pane', key: 'banner' } as const, INITIAL_STATE.banner)
 /** Whether the band's previous conversation (banner.ts previousBlock) shows its whole titles and facts: a press on its title opens and closes it. */
-const previousOpen = atom({ plugin: 'teamrig-pane', key: 'previousOpen' } as const, false)
+const previousOpen = atom({ plugin: 'teamrig-pane', key: 'previousOpen' } as const, INITIAL_STATE.previousOpen)
 /** Where the docked body's window is to stand (body-scroll.ts), kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when BodyScroll or ScrollTarget changes shape. */
 const SCROLL_SHAPE = 'scroll-v1'
-const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, AT_TOP, { shape: SCROLL_SHAPE })
+const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, INITIAL_STATE.bodyScroll, { shape: SCROLL_SHAPE })
 /** The Teams tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
 const TEAM_SHAPE = 'team-v7'
-const TEAM_READING: TeamView = { kind: 'reading' }
-const NO_TEAM_TREE: TeamView = { kind: 'no-team' }
-const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, TEAM_READING, { shape: TEAM_SHAPE })
-const NOTHING_TOGGLED: readonly string[] = []
+const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, INITIAL_STATE.teamTree, { shape: TEAM_SHAPE })
 /** The Teams tab's nodes the person opened or closed against their default (team.ts teamRows), by key: a press flips one. */
-const teamToggled = atom({ plugin: 'teamrig-pane', key: 'teamToggled' } as const, NOTHING_TOGGLED)
+const teamToggled = atom({ plugin: 'teamrig-pane', key: 'teamToggled' } as const, INITIAL_STATE.teamToggled)
 /** The Meetings view's list (meetings.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when MeetingsView or Meeting changes shape. */
 const MEETINGS_SHAPE = 'meetings-v1'
-const MEETINGS_READING: MeetingsView = { kind: 'reading' }
-const NO_TEAM_MEETINGS: MeetingsView = { kind: 'no-team' }
-const meetings = atom({ plugin: 'teamrig-pane', key: 'meetings' } as const, MEETINGS_READING, { shape: MEETINGS_SHAPE })
+const meetings = atom({ plugin: 'teamrig-pane', key: 'meetings' } as const, INITIAL_STATE.meetings, { shape: MEETINGS_SHAPE })
 /** The Meetings view's meetings whose cards are open (meetings-rows.ts meetingKey), by key: a press on a row flips one. */
-const meetingsOpen = atom({ plugin: 'teamrig-pane', key: 'meetingsOpen' } as const, NOTHING_TOGGLED)
-const NO_MEETING_ANSWER: MeetingAnswer | null = null
-const NO_MEETING_ASKED: MeetingAsked | null = null
+const meetingsOpen = atom({ plugin: 'teamrig-pane', key: 'meetingsOpen' } as const, INITIAL_STATE.meetingsOpen)
 /** What the last run press on a meeting answered (meetings.ts): cleared at each session start and each switch to the view. */
-const meetingAnswer = atom({ plugin: 'teamrig-pane', key: 'meetingAnswer' } as const, NO_MEETING_ANSWER)
+const meetingAnswer = atom({ plugin: 'teamrig-pane', key: 'meetingAnswer' } as const, INITIAL_STATE.meetingAnswer)
 /** The second line a meeting's card shows (Move, Postpone, Drop or End asked, meetings-rows.ts): cleared with the answer. */
-const meetingAsked = atom({ plugin: 'teamrig-pane', key: 'meetingAsked' } as const, NO_MEETING_ASKED)
+const meetingAsked = atom({ plugin: 'teamrig-pane', key: 'meetingAsked' } as const, INITIAL_STATE.meetingAsked)
 /** The Stats tab's numbers (stats-source.ts) are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when StatsView or the core's RegisterStats or RegisterHealth changes shape. */
 const STATS_SHAPE = 'stats-v2'
-const STATS_READING: StatsView = { kind: 'reading' }
-const NO_TEAM_STATS: StatsView = { kind: 'no-team' }
-const stats = atom({ plugin: 'teamrig-pane', key: 'stats' } as const, STATS_READING, { shape: STATS_SHAPE })
-const TREE_SCOPE: StatsChoice = { kind: 'tree' }
+const stats = atom({ plugin: 'teamrig-pane', key: 'stats' } as const, INITIAL_STATE.stats, { shape: STATS_SHAPE })
 /** What the Stats tab folds (stats-source.ts): the whole tree until a press on its scope row picks a team or a session. */
-const statsScope = atom({ plugin: 'teamrig-pane', key: 'statsScope' } as const, TREE_SCOPE)
-const FIRST_RANGE: StatsRange = '7d'
+const statsScope = atom({ plugin: 'teamrig-pane', key: 'statsScope' } as const, INITIAL_STATE.statsScope)
 /** The days the Stats tab folds: the last 7 until a press on its range row picks others. */
-const statsRange = atom({ plugin: 'teamrig-pane', key: 'statsRange' } as const, FIRST_RANGE)
-const NO_STATS_LIST: StatsListPick | null = null
+const statsRange = atom({ plugin: 'teamrig-pane', key: 'statsRange' } as const, INITIAL_STATE.statsRange)
 /** The Health count whose tasks the Stats tab lists in place of its numbers: none until a tile's press picks one, back clears it. */
-const statsList = atom({ plugin: 'teamrig-pane', key: 'statsList' } as const, NO_STATS_LIST)
-const NO_STATS_FROM: string | null = null
+const statsList = atom({ plugin: 'teamrig-pane', key: 'statsList' } as const, INITIAL_STATE.statsList)
 /** The Teams tab row whose [Stats] opened the Stats tab, back's landing: none until such a press, and any view switch drops it. */
-const statsFrom = atom({ plugin: 'teamrig-pane', key: 'statsFrom' } as const, NO_STATS_FROM)
+const statsFrom = atom({ plugin: 'teamrig-pane', key: 'statsFrom' } as const, INITIAL_STATE.statsFrom)
 /** The Stats tab's sections the person opened or closed against their default (stats-rows.ts isSectionOpen), by key: a press on a header flips one. */
-const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as const, NOTHING_TOGGLED)
+const statsToggled = atom({ plugin: 'teamrig-pane', key: 'statsToggled' } as const, INITIAL_STATE.statsToggled)
 /** The Done page's days, groups and `n more` rows the person flipped against their default (done-rows.ts), by key. */
-const doneToggled = atom({ plugin: 'teamrig-pane', key: 'doneToggled' } as const, NOTHING_TOGGLED)
-const NO_ANSWER: SessionAnswer | null = null
+const doneToggled = atom({ plugin: 'teamrig-pane', key: 'doneToggled' } as const, INITIAL_STATE.doneToggled)
 /** What the last press on a Teams tab session row ([Meet], [Wake]) answered (session-acts.ts): cleared at each session start and each switch to the tab. */
-const sessionAnswer = atom({ plugin: 'teamrig-pane', key: 'sessionAnswer' } as const, NO_ANSWER)
-const NO_ACT: OwnerAct | null = null
+const sessionAnswer = atom({ plugin: 'teamrig-pane', key: 'sessionAnswer' } as const, INITIAL_STATE.sessionAnswer)
 /** Where the owner's Note or Next on a task's card stands (owner-acts.ts): cleared at each session start. */
-const ownerAct = atom({ plugin: 'teamrig-pane', key: 'ownerAct' } as const, NO_ACT)
+const ownerAct = atom({ plugin: 'teamrig-pane', key: 'ownerAct' } as const, INITIAL_STATE.ownerAct)
 
-/** The open cards less one. */
-function collapse(current: ExpandedTasks, id: string): ExpandedTasks {
-  return Object.fromEntries(Object.entries(current).filter(([key]) => key !== id))
-}
-
-/** Who moves the tasks view: the person typing in the Find field, or any other step. */
-type StepOrigin = 'typing' | 'step'
+/** One key of the pane's state as the engine keeps it. */
+type Cell<T> = { readonly read: () => Promise<T>; readonly update: (change: (current: T) => T) => Promise<T> }
 
 /**
- * Moves the tasks view by `step` (nav.ts), keeping only the details of the pages, and the reads of the files, a place
- * still names. A step other than typing that changes what the Find field should hold starts a new round of it
- * (find-field.ts). A page opens at its top, a file's page at its ref's line, and a step from a page back to the list
- * brings the element the page was opened from to the middle of the window; a failed move leaves the window where it is.
+ * The pane's state as the engine keeps it, behind the store port (pane-store.ts) the pane's steps take. Each key names
+ * its atom in its own read and update: the engine's scan reads a state call only when its atom is written there, never
+ * one picked from a map or passed in. A top-level function, as the engine wants every function `$` is passed to.
  */
-async function go($: Context, step: (current: Nav) => Nav, origin: StepOrigin = 'step'): Promise<void> {
-  // The step runs on the places as last written, so a step written while this one runs is never lost.
-  const seen: { before: Nav | null } = { before: null }
-  const next = await update($, nav, current => {
-    seen.before = current
-    return step(current)
-  })
-  const before = seen.before
-  if (before === null || next === before) return
-  if (origin === 'step') await update($, findField, field => fieldAfter(field, before, next))
-  await update($, pages, current => pagesKept(current, next))
-  await update($, filePages, current => filesKept(current, next))
-  const to = landing(before, next)
-  if (to !== null) await scrollTo($, to).catch(() => undefined)
-}
-
-/**
- * Moves the docked body's window (body-scroll.ts) to the top, brings the element a landing names to its middle, or a
- * file page's line to the window's top by the paragraph that holds it (file-page.ts), the page's top when none does.
- * Inline the pane cuts its rows to fit (INLINE_MAX_ROWS) and has no window to move.
- */
-async function scrollTo($: Context, to: Landing): Promise<void> {
-  const key = to.kind === 'top' ? null : to.kind === 'row' ? to.key : lineBlockKey(to, (await read($, filePages))[to.file])
-  await update($, bodyScroll, current =>
-    scrolledTo(current, key === null ? { kind: 'offset', offset: 0 } : { kind: 'reveal', key, block: to.kind === 'line' ? 'start' : 'center' }),
-  )
+function atomStore($: Context): PaneStore {
+  const cells: { readonly [K in PaneKey]: Cell<PaneState[K]> } = {
+    snapshot: { read: () => read($, snapshot), update: change => update($, snapshot, change) },
+    mode: { read: () => read($, mode), update: change => update($, mode, change) },
+    expanded: { read: () => read($, expanded), update: change => update($, expanded, change) },
+    tasksFolded: { read: () => read($, tasksFolded), update: change => update($, tasksFolded, change) },
+    size: { read: () => read($, size), update: change => update($, size, change) },
+    view: { read: () => read($, view), update: change => update($, view, change) },
+    changes: { read: () => read($, changes), update: change => update($, changes, change) },
+    known: { read: () => read($, known), update: change => update($, known, change) },
+    diffs: { read: () => read($, diffs), update: change => update($, diffs, change) },
+    copies: { read: () => read($, copies), update: change => update($, copies, change) },
+    logList: { read: () => read($, logList), update: change => update($, logList, change) },
+    logPage: { read: () => read($, logPage), update: change => update($, logPage, change) },
+    previousConversation: { read: () => read($, previousConversation), update: change => update($, previousConversation, change) },
+    requirements: { read: () => read($, requirements), update: change => update($, requirements, change) },
+    filter: { read: () => read($, barFilter), update: change => update($, barFilter, change) },
+    nav: { read: () => read($, nav), update: change => update($, nav, change) },
+    pages: { read: () => read($, pages), update: change => update($, pages, change) },
+    filePages: { read: () => read($, filePages), update: change => update($, filePages, change) },
+    findField: { read: () => read($, findField), update: change => update($, findField, change) },
+    ring: { read: () => read($, ring), update: change => update($, ring, change) },
+    banner: { read: () => read($, bannerOpen), update: change => update($, bannerOpen, change) },
+    previousOpen: { read: () => read($, previousOpen), update: change => update($, previousOpen, change) },
+    setup: { read: () => read($, setup), update: change => update($, setup, change) },
+    bodyScroll: { read: () => read($, bodyScroll), update: change => update($, bodyScroll, change) },
+    teamTree: { read: () => read($, teamTree), update: change => update($, teamTree, change) },
+    teamToggled: { read: () => read($, teamToggled), update: change => update($, teamToggled, change) },
+    meetings: { read: () => read($, meetings), update: change => update($, meetings, change) },
+    meetingsOpen: { read: () => read($, meetingsOpen), update: change => update($, meetingsOpen, change) },
+    meetingAnswer: { read: () => read($, meetingAnswer), update: change => update($, meetingAnswer, change) },
+    meetingAsked: { read: () => read($, meetingAsked), update: change => update($, meetingAsked, change) },
+    sessionAnswer: { read: () => read($, sessionAnswer), update: change => update($, sessionAnswer, change) },
+    ownerAct: { read: () => read($, ownerAct), update: change => update($, ownerAct, change) },
+    stats: { read: () => read($, stats), update: change => update($, stats, change) },
+    statsScope: { read: () => read($, statsScope), update: change => update($, statsScope, change) },
+    statsRange: { read: () => read($, statsRange), update: change => update($, statsRange, change) },
+    statsList: { read: () => read($, statsList), update: change => update($, statsList, change) },
+    statsFrom: { read: () => read($, statsFrom), update: change => update($, statsFrom, change) },
+    statsToggled: { read: () => read($, statsToggled), update: change => update($, statsToggled, change) },
+    doneToggled: { read: () => read($, doneToggled), update: change => update($, doneToggled, change) },
+  }
+  return {
+    read: key => cells[key].read(),
+    update: (key, change) => cells[key].update(change),
+  }
 }
 
 /** Moves the pane's focus ring onto the element keyed `key`; refused while the pane does not hold the keys, which leaves it where it was. */
@@ -406,25 +362,12 @@ async function focusOn($: Context, key: string): Promise<void> {
   await $.ui.focus({ requestId: PANE, key }).catch(() => undefined)
 }
 
-/** Moves the pane's focus ring into the Find field, as its round draws it now. */
-async function focusFind($: Context): Promise<void> {
-  await focusOn($, fieldKey(await read($, findField)))
-}
-
 /**
- * Closes the search from its clear button and moves the ring back into the field, a new round's: the button is
- * hidden as the search closes, and the ring left at its index would sit on the next element, so the next keys would
- * press the pane's hotkeys rather than type a new search.
+ * The dock's focus ring as the pane's steps move it (steps.ts). A top-level function, as the engine wants every
+ * function `$` is passed to.
  */
-async function clearSearch($: Context): Promise<void> {
-  await go($, leftSearch)
-  await focusFind($)
-}
-
-/** The mine or all view, the list shown alone: the rows a page left from belong to the other list. */
-async function showMode($: Context, shown: ViewMode): Promise<void> {
-  await update($, mode, () => shown)
-  await go($, current => reset(current, false))
+function ringOf($: Context): MoveFocus {
+  return key => focusOn($, key)
 }
 
 /** The components spans draw with: each render hook passes those its surface resolved. */
@@ -436,7 +379,7 @@ const isPlain = (span: Span) =>
 /** One span as a Text in its own style. */
 function styledSpan({ Text }: SpanComponents, span: Span, key?: string) {
   return (
-    <Text key={key} color={span.color} bold={span.bold} dimColor={span.dim} underline={span.underline}>
+    <Text key={key} color={themeOf(span.color)} bold={span.bold} dimColor={span.dim} underline={span.underline}>
       {span.text}
     </Text>
   )
@@ -460,7 +403,7 @@ function drawSpans(components: SpanComponents, spans: readonly Span[], wrap: Dra
   const [first, ...rest] = spans
   if (first !== undefined && rest.length === 0 && first.href === undefined)
     return (
-      <Text key={key} wrap={wrap} color={first.color} bold={first.bold} dimColor={first.dim} underline={first.underline}>
+      <Text key={key} wrap={wrap} color={themeOf(first.color)} bold={first.bold} dimColor={first.dim} underline={first.underline}>
         {first.text}
       </Text>
     )
@@ -524,50 +467,6 @@ function drawKeysLine({ Text }: FindComponents, keys: KeysAt, text: string) {
   )
 }
 
-/** The readers a view switch refreshes, each null until the session starts or with nothing to read. */
-type ViewLives = {
-  readonly sizer: PaneSizer | null
-  readonly tracked: LiveChanges | null
-  readonly logging: LiveLog | null
-  readonly teaming: LiveTeam | null
-  readonly scheduling: LiveMeetings | null
-  readonly tallying: LiveStats | null
-}
-
-/**
- * A press on the switch's buttons. The Tasks button shows the list, from a page too, scrolled back to where the page
- * was opened from; the Log button shows the sessions, from a session's page too; the Teams button reads the team tree
- * at once; the Meetings button reads the meetings at once, leaving the last start's answer behind; the Stats button
- * folds the registers at once. Every button closes a search, which the views share: one typed in one view is never
- * found shown in another, and drops a Teams row's back, as the Stats tab then shows from the switch. It is a top-level
- * function, the readers passed in, because the engine loads a hooks module only when each function `$` is passed to
- * is declared at the top of the file or imported; the band's buttons take the same step.
- */
-async function switchView($: Context, target: PaneView, lives: ViewLives): Promise<void> {
-  await update($, statsFrom, () => NO_STATS_FROM)
-  await update($, view, () => target)
-  await lives.sizer?.set('open')
-  await go($, current => reset(current, true))
-  if (target === 'changes') await lives.tracked?.refresh()
-  if (target === 'log') await lives.logging?.close()
-  if (target === 'team') {
-    await update($, sessionAnswer, () => NO_ANSWER)
-    await lives.teaming?.refresh()
-  }
-  if (target === 'meetings') {
-    await update($, meetingAnswer, () => NO_MEETING_ANSWER)
-    await update($, meetingAsked, () => NO_MEETING_ASKED)
-    await lives.scheduling?.refresh()
-  }
-  if (target === 'stats') await lives.tallying?.refresh()
-}
-
-/** A press on a conversation in the Log view's list opens its page, read now, at its end: the newest lines are last. */
-async function openConversation($: Context, conversation: LogRead, logging: LiveLog | null): Promise<void> {
-  await logging?.open(conversation)
-  await update($, bodyScroll, current => scrolledTo(current, { kind: 'end' }))
-}
-
 /** With no team a word of `/teamrig-pane <session>` is the session's id itself. */
 const NO_TEAM_LOOKUP = (word: string): SessionFound => lookupSession(word, null, null)
 
@@ -618,6 +517,8 @@ export const register: Register = on => {
     const unquoted: TaskDetail = { ref: task.ref, quotes: [], goals: [] }
     return details === null ? unquoted : details.load(task).catch(() => unquoted)
   }
+  /** A reference file as its page reads it (ref-file.ts). With no reader yet it says there was no folder to look in. */
+  const readFile: ReadsFile = file => (refFiles === null ? Promise.resolve({ kind: 'missing', tried: [] }) : refFiles.read(file))
   /** The readers a view switch refreshes, as the session's start last set them: read at the press. */
   const livesNow = (): ViewLives => ({ sizer, tracked, logging, teaming, scheduling, tallying })
 
@@ -976,10 +877,7 @@ export const register: Register = on => {
     void $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
     // Once per start: git --version and the engine's version, never on a poll. The check never rejects; a
     // failed write only leaves the lines out.
-    void requirementProblems({
-      version: () => $.session.version(),
-      gitVersion: () => run(['git', '--version'], { timeoutMs: GIT_TIMEOUT_MS }),
-    })
+    void requirementProblems([claudeCodeCheck(() => $.session.version()), gitCheck(() => run(['git', '--version'], { timeoutMs: GIT_TIMEOUT_MS }))])
       .then(found => update($, requirements, () => found))
       .catch(() => undefined)
     void changesLive.addFolder(e.cwd).then(() => changesLive.refresh())
@@ -994,7 +892,7 @@ export const register: Register = on => {
       if (!found.ok) return { text: found.problem }
       await live?.pin(found.id)
     }
-    if (command.kind === 'mode') await showMode($, command.mode)
+    if (command.kind === 'mode') await showMode(atomStore($), command.mode)
     if (command.kind === 'auto') await live?.pin(null)
     await sizer?.set('open')
     await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
@@ -1092,305 +990,77 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const components = $.ui.resolve(e)
     const { Box, Text, Button, Link } = components
+    /** The dock's state and its focus ring, as the pane's steps take them (steps.ts). */
+    const store = atomStore($)
+    const moveFocus = ringOf($)
     const inline = e.props.placement === 'inline'
-    // A read or a layout that throws draws one error line under the buttons: unguarded, the engine
-    // would skip this hook and draw the pane with no tasks and no word of why.
-    let isMinimized = false
-    let current: PaneView = 'tasks'
-    let changed = EMPTY_CHANGES
-    let snap = EMPTY_SNAPSHOT
-    /** Where the owner's act stands, which an open card's act rows draw from (act-rows.ts); null inline or with no team. */
-    let acts: CardActs | null = null
-    let shown: ViewMode = 'mine'
-    let open: ExpandedTasks = NOTHING_EXPANDED
-    /** Where the tasks view is, or the Inbox, Team, Log or Changes view's search; the list inline, where a page never shows. */
-    let at: Nav = AT_LIST
-    /** What the file pages the places name read, drawn with the tasks view docked. */
-    let files: FilePages = NO_FILES
-    /** The Find field's round (find-field.ts), drawn docked in every view, the Log view's over its list. */
-    let field: FindField = FIRST_FIELD
-    let landings: RingLandings = NO_LANDINGS
-    /** Where the docked body's window is to stand, the last step that moved it; at the top inline. */
-    let scroll: BodyScroll = AT_TOP
-    /** The tasks the search shown matched, read once for its body, the Find field's Enter and the line under it; none off a search. */
-    let found: SearchResults = NO_RESULTS
-    /** The sessions the Teams tab's search shown names (team-search.ts), read once for its body, Enter and the line under the field; none off it. */
-    let teamFound: readonly SessionHit[] = []
-    /** The inbox lines the Inbox view's search shown matches (inbox-search.ts), read once for its body and the line under the field; none off it. */
-    let inboxFound: readonly InboxHit[] = []
-    /** The conversations the Log view's search shown names (log-search.ts), read once for its body and the line under the field; none off it. */
-    let logFound: readonly LogHit[] = []
-    /** The files the Changes view's search shown names (changes-search.ts), read once for its body and the line under the field; none off it. */
-    let changesFound: readonly ChangeHit[] = []
-    /** The title of the conversation whose Log page shows (log-rows.ts logPageTitle); null for the list or another view. */
-    let logTitle: Span[] | null = null
-    /** The title of the Health count whose tasks the Stats tab shows (stats-rows.ts listTitle); null for its numbers or another view. */
-    let statsTitle: string | null = null
-    /** Whether the Stats tab shows from a Teams row's [Stats], so its head leads back to that row; never for another view. */
-    let statsBack = false
-    /** What a project teamrig is not set up for shows (setup.ts), alone, in every view; null once a register is found. */
-    let setupShown: SetupView | null = NOT_SETTING_UP
-    let body: Drawn[] = []
-    /** The status bar's lines over the area's tasks (status-bar.ts); none outside the mine tasks view. */
-    let barLines: BarPiece[][] = []
     const columns = e.props.bodyColumns - 2 * PAD_COLUMNS
-    try {
-      landings = await read($, ring)
-      keysMemo = drawnWith(keysMemo, e.props.isFocused, landings)
-      isMinimized = (await read($, size)) === 'minimized'
-      current = await read($, view)
-      changed = await read($, changes)
-      // An open card ends in the owner's acts, docked only (inline draws none) and with a team to run them through.
-      acts = inline || acting === null ? null : { act: await read($, ownerAct) }
-      // Minimized too: the strip's Inbox button counts the unread lines. While the Note field is open, the snapshot of
-      // its opening: the engine keeps the ring at an index, and a task added above the card would move it off the field.
-      snap = noteHold.drawn(await read($, snapshot), acts?.act ?? null)
-      if (!isMinimized) {
-        shown = await read($, mode)
-        open = await read($, expanded)
-        const missing = await read($, requirements)
-        if (!inline) scroll = await read($, bodyScroll)
-        // Every view draws the Find field docked (the Log view over its list), and their searches are one place: the
-        // switch between them closes it (switchTo).
-        if (!inline) {
-          at = await read($, nav)
-          field = await read($, findField)
-          if (current === 'tasks') files = await read($, filePages)
-        }
-        const place = currentPlace(at)
-        const team = current === 'team' ? await read($, teamTree) : TEAM_READING
-        const logs = current === 'log' ? await read($, logList) : LOG_READING
-        if (place.kind === 'search' && current === 'tasks') found = searchTasks(snap.tasks, place.query, treeOf(snap))
-        if (place.kind === 'search' && team.kind === 'tree') teamFound = searchTeam(team.root, place.query)
-        if (place.kind === 'search' && current === 'inbox') inboxFound = searchInbox(snap.inbox, snap.now, place.query)
-        if (place.kind === 'search' && current === 'log') logFound = searchLog(logs, snap, place.query)
-        if (place.kind === 'search' && current === 'changes') changesFound = searchChanges(changed, place.query)
-        // A project teamrig is not set up for has no tasks, changes or log to show: its setup takes every view,
-        // whatever place it is at.
-        setupShown = await read($, setup)
-        // A page has no status bar: the bar counts the list, and a press on it filters the list.
-        const bar =
-          current === 'tasks' && setupShown === null && shown === 'mine' && place.kind === 'list'
-            ? statusBar(snap, await read($, barFilter), columns)
-            : null
-        // With no bar there is nothing to filter by, and the list shows every task.
-        const tasksBlocks = async (): Promise<Block[]> =>
-          place.kind === 'task'
-            ? pageBlocks(snap, place.id, await read($, pages), acts)
-            : place.kind === 'search'
-              ? searchBlocks(snap, place.query, found)
-              : place.kind === 'done'
-                ? doneBlocks(snap, shown, place.week, await read($, doneToggled))
-                : place.kind === 'file'
-                  ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
-                  : place.kind === 'keys'
-                    ? keysBlocks(columns)
-                    : paneBlocks(snap, shown, open, bar?.filter ?? null, await read($, tasksFolded), acts)
-        // Inline, the Log view shows its list alone: a page opens in the dock.
-        const logShown = setupShown === null && current === 'log' && !inline ? await read($, logPage) : null
-        logTitle = logShown === null ? null : logPageTitle(logShown, logs, snap)
-        const statsShown = setupShown === null && current === 'stats' ? await read($, stats) : null
-        statsTitle = statsShown?.kind === 'stats' && statsShown.list !== null ? listTitle(statsShown.list) : null
-        statsBack = statsShown !== null && (await read($, statsFrom)) !== null
-        const viewBlocks =
-          setupShown !== null
-            ? setupBlocks(setupShown)
-            : current === 'tasks'
-              ? await tasksBlocks()
-              : current === 'changes'
-                ? changesBlocks(changed, isGitMissing(missing), await read($, diffs), place.kind === 'search' ? { query: place.query, hits: changesFound } : null)
-                : current === 'team'
-                  ? teamBlocks(team, await read($, teamToggled), clockOf(snap).zone, {
-                      search: place.kind === 'search' ? { query: place.query, hits: teamFound } : null,
-                      answer: await read($, sessionAnswer),
-                      own: snap.team === null || snap.area === null ? null : sessionKey(snap.team, snap.area),
-                    })
-                  : current === 'meetings'
-                  ? meetingsBlocks(
-                      await read($, meetings),
-                      { open: await read($, meetingsOpen), answer: await read($, meetingAnswer), asked: await read($, meetingAsked) },
-                      snap.tasks,
-                      clockOf(snap),
-                    )
-                  : statsShown !== null
-                  ? statsBlocks(statsShown, await read($, statsToggled), columns, {
-                      team: snap.team,
-                      held: new Set(snap.tasks.map(task => task.id)),
-                      clock: clockOf(snap),
-                    })
-                  : current === 'inbox'
-                  ? inboxBlocks(snap, place.kind === 'search' ? { query: place.query, hits: inboxFound } : null)
-                  : logShown === null
-                  ? logListBlocks(logs, clockOf(snap), snap, place.kind === 'search' ? { query: place.query, hits: logFound } : null)
-                  : logPageBlocks(logShown, clockOf(snap), logs, snap)
-        const blocks = [...requirementBlocks(missing), ...viewBlocks]
-        // Inline, the bar's lines count in the capped rows.
-        const cap = Math.min(INLINE_MAX_ROWS, e.props.scroll.bodyRows)
-        barLines = bar === null ? [] : inline ? bar.lines.slice(0, inlineBarRows(bar, cap)) : bar.lines
-        body = inline ? inlineLayout(blocks, cap - barLines.length) : dockLayout(blocks, columns, wraps)
-      }
-    } catch (error) {
-      barLines = []
-      body = failedDrawing(error)
-    }
+    // What this drawing shows, read as every front end reads it (screen.ts): a read or a layout that throws comes
+    // back as one error line for a body, never a throw the engine would answer by skipping this hook.
+    const screen = await screenOf(store, {
+      inline,
+      columns,
+      bodyRows: e.props.scroll.bodyRows,
+      canAct: acting !== null,
+      isHeld: e.props.isFocused,
+      memo: keysMemo,
+      noteHold,
+      wraps,
+      hostOld: claudeCodeOldLine,
+    })
+    keysMemo = screen.memo
+    const {
+      isMinimized,
+      current,
+      changed,
+      snap,
+      shown,
+      open,
+      at,
+      field,
+      landings,
+      scroll,
+      found,
+      teamFound,
+      inboxFound,
+      logFound,
+      changesFound,
+      logTitle,
+      statsTitle,
+      statsBack,
+      setupShown,
+      body,
+      barLines,
+    } = screen
 
     // Opening a card reads what the task's refs and goals point at, once (detailOf).
-    const toggle = async (id: string) => {
-      if (open[id] !== undefined) {
-        await update($, expanded, current => collapse(current, id))
-        return
-      }
-      const task = snap.tasks.find(t => t.id === id)
-      if (task === undefined) return
-      const detail = await detailOf(task)
-      await update($, expanded, current => ({ ...current, [id]: detail }))
-    }
-    const switchTo = (target: PaneView) => switchView($, target, livesNow())
-    // A press on the Stats tab's scope or range row picks it, and one on a Health count shows its tasks from their top;
-    // either folds the registers at once. A Teams row's [Stats] shows the tab on that row's scope, its numbers from their
-    // top, and keeps the row for back; the switch has folded the registers by then.
-    const pickStats = async (press: StatsPress) => {
-      switch (press.kind) {
-        case 'open':
-          await update($, statsScope, () => press.scope)
-          await update($, statsList, () => NO_STATS_LIST)
-          await switchTo('stats')
-          await update($, statsFrom, () => press.row)
-          await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
-          return
-        case 'scope':
-          await update($, statsScope, () => press.scope)
-          break
-        case 'range':
-          await update($, statsRange, () => press.range)
-          break
-        case 'list':
-          await update($, statsList, () => press.list)
-          await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
-          break
-      }
-      await tallying?.refresh()
-    }
-    // Back from a Health count's tasks shows the tab's numbers again, from their top.
-    const closeStatsList = async () => {
-      await update($, statsList, () => NO_STATS_LIST)
-      await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
-      await tallying?.refresh()
-    }
-    // Back from a Stats tab a Teams row opened shows the Teams tab at that row. Read first: the switch drops it.
-    const closeStatsFrom = async () => {
-      const row = await read($, statsFrom)
-      await switchTo('team')
-      if (row !== null) await scrollTo($, { kind: 'row', key: row }).catch(() => undefined)
-    }
-    // A page draws in the Tasks view (tasksBlocks), so a press that opens one from another view (a Teams tab session's
-    // card, or another area's inbox count on it) shows the Tasks view at it, over its list: back shows the list, never the Team
-    // tab's search; from the Tasks view's list, the list remembers `from`, the element the press was in, to scroll back to.
-    const openPlace = async (place: Place, from: string) => {
-      const shown = await read($, view)
-      if (shown !== 'tasks') await update($, view, () => 'tasks')
-      await go($, current => pushed(shown === 'tasks' ? leavingList(current, from) : reset(current, true), place))
-    }
-    // A press on a task id opens its page, read as a card's is.
-    const openPage = async (id: string, from: string) => {
-      const task = snap.tasks.find(t => t.id === id)
-      if (task === undefined) return
-      const detail = await detailOf(task)
-      await update($, pages, current => ({ ...current, [id]: detail }))
-      await openPlace({ kind: 'task', id }, from)
-    }
-    // A file's page is read once as it opens (ref-file.ts). With no reader yet it says there was no folder to look in.
-    const readFilePage = async (file: string): Promise<RefFileRead> => {
-      const found: RefFileRead = refFiles === null ? { kind: 'missing', tried: [] } : await refFiles.read(file)
-      await update($, filePages, current => ({ ...current, [file]: found }))
-      return found
-    }
-    // A press on a reference file opens its page.
-    const openFile = async (file: RefFile, from: string) => {
-      await readFilePage(file.file)
-      await openPlace({ kind: 'file', file: file.file, line: file.line }, from)
-    }
-    // A press on a Teams tab card's inbox count opens that inbox: the session's own in the Inbox view, another area's as
-    // a file's page, landing on its first unread line (unreadLine). Reading it marks nothing read:
-    // the pane writes no inbox, the session's `teamrig inbox read` does.
-    const openInbox = async (press: InboxPress, from: string) => {
-      if (press.area === snap.area) {
-        await switchTo('inbox')
-        return
-      }
-      const file = inboxFile(press.area)
-      const found = await readFilePage(file)
-      await openPlace({ kind: 'file', file, line: unreadLine(found, press.unread) }, from)
-    }
+    const toggle = (id: string) => toggleCard(store, snap.tasks, id, detailOf)
+    const switchTo = (target: PaneView) => switchView(store, target, livesNow())
+    // The Stats tab's presses (presses.ts): a pick, back from a Health count's tasks, back to the Teams row it opened from.
+    const pickStats = (press: StatsPress) => pressStats(store, press, livesNow())
+    const closeStatsList = () => leaveStatsList(store, livesNow())
+    const closeStatsFrom = () => leaveStatsFrom(store, livesNow())
+    // The presses that open a page (presses.ts), on the tasks this drawing shows and the session's own area.
+    const openPage = (id: string, from: string) => pressPage(store, snap.tasks, id, from, detailOf)
+    const openFile = (file: RefFile, from: string) => pressFile(store, file, from, readFile)
+    const openInbox = (press: InboxPress, from: string) => pressInbox(store, press, from, snap.area, readFile, livesNow())
     // Back from a conversation's page shows the list, read again, from its top, or the search the page was opened from:
     // the page drew no Find field, so it comes back a fresh round holding the search's words (fieldAnew).
-    const openLog = (conversation: LogRead) => openConversation($, conversation, logging)
-    const closeLog = async () => {
-      await logging?.close()
-      const shown = await read($, nav)
-      await update($, findField, field => fieldAnew(field, shown))
-      await update($, bodyScroll, current => scrolledTo(current, { kind: 'offset', offset: 0 }))
-    }
-    // Enter in the Find field, on its words as typed (a redraw may lag behind them): with more than one match it moves
-    // the ring onto the first result drawn (task-search.ts topResult), where Enter opens it and the arrows move on; with
-    // one it opens that page and moves the ring onto the page's back step: left in the field, a new round's and empty,
-    // it would type the next keys into a new search, so b, f and s would never answer.
-    const submit = async (query: string) => {
-      const results = searchTasks(snap.tasks, query, treeOf(snap))
-      const top = topResult(results)
-      if (top === null) return
-      if (matchCount(results) > 1) {
-        await focusOn($, resultKey(SEARCH_VIEW, top.id))
-        return
-      }
-      await openPage(top.id, fieldKey(field))
-      await focusOn($, 'back')
-    }
-    // Enter in the Find field on the Teams tab: with one match it opens that session's card too (openedWith, never
-    // closing it), and either way moves the ring onto the first match drawn, where Enter opens or closes its card.
-    const submitTeam = async (query: string) => {
-      const tree = await read($, teamTree)
-      const top = tree.kind === 'tree' ? searchTeam(tree.root, query) : []
-      const first = top[0]
-      if (first === undefined) return
-      if (top.length === 1) await update($, teamToggled, toggled => openedWith(toggled, cardKey(first.row.key)))
-      await focusOn($, resultKey(TEAM_SEARCH_VIEW, first.row.key))
-    }
-    // Enter in the Find field on the Log view's list: with more than one match it moves the ring onto the first drawn;
-    // with one it opens that conversation's page and moves the ring onto the page's back step, as submit does. Back
-    // from the page shows the search again: its place is still the search.
-    const submitLog = async (query: string) => {
-      const top = searchLog(await read($, logList), snap, query)
-      const first = top[0]
-      if (first === undefined) return
-      if (top.length > 1) {
-        await focusOn($, logResultKey(first.row.conversation))
-        return
-      }
-      const { session, claude } = first.row.conversation
-      await openLog({ session, claude })
-      await focusOn($, 'back')
-    }
-    // Enter in the Find field on the Changes view: with one match it opens that file's diff too (never closing it), and
-    // either way moves the ring onto the first match with a diff, where Enter opens or closes it; an untracked folder
-    // has none to open.
-    const submitChanges = async (query: string) => {
-      const hits = searchChanges(await read($, changes), query)
-      const first = hits.flatMap(hit => {
-        const key = diffKeyOf(hit.row)
-        return key === null ? [] : [{ hit, key }]
-      })[0]
-      if (first === undefined) return
-      if (hits.length === 1 && (await read($, diffs))[first.key] === undefined) await diffing?.toggle(first.key)
-      await focusOn($, changesResultKey(first.hit.row))
-    }
+    const openLog = (conversation: LogRead) => openConversation(store, conversation, logging)
+    const closeLog = () => leaveLog(store, logging)
+    // Enter in each view's Find field (presses.ts), on its words as typed (a redraw may lag behind them) and on the
+    // tasks this drawing shows.
+    const submit = (query: string) => enterTasks(store, snap, query, moveFocus, detailOf)
+    const submitTeam = (query: string) => enterTeam(store, query, moveFocus)
+    const submitLog = (query: string) => enterLog(store, snap, query, moveFocus, logging)
+    const submitChanges = (query: string) => enterChanges(store, query, moveFocus, diffing)
 
     const spanComponents = { Text, Link }
     const styled = (span: Span, key?: string) => styledSpan(spanComponents, span, key)
     const drawText = (spans: readonly Span[], wrap: Drawn['wrap'], key?: string) => drawSpans(spanComponents, spans, wrap, key)
     /** A press in a card (a task id, a reference file): its text underlined, in its span's style. */
     const drawPress = (span: Span, key: string) => (
-      <Text key={key} underline color={span.color} bold={span.bold} dimColor={span.dim}>
+      <Text key={key} underline color={themeOf(span.color)} bold={span.bold} dimColor={span.dim}>
         {span.text}
       </Text>
     )
@@ -1455,7 +1125,7 @@ export const register: Register = on => {
               case 'toggle': {
                 const key = piece.toggles
                 return (
-                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void update($, teamToggled, toggled => toggledWith(toggled, key))}>
+                  <Button key={pieceKey(piece, from, part.key, i)} plain onPress={() => void toggleTeamKey(atomStore($), key)}>
                     {styled(piece.span)}
                   </Button>
                 )
@@ -1507,16 +1177,7 @@ export const register: Register = on => {
     }
     // A Teams tab key, a meeting's card in the Meetings view, a Stats tab section, a Done page's day or group, or a
     // Tasks view heading's tasks, opened or closed.
-    const fold = (key: string) =>
-      current === 'meetings'
-        ? update($, meetingsOpen, opened => toggledWith(opened, key))
-        : current === 'stats'
-        ? update($, statsToggled, toggled => toggledWith(toggled, key))
-        : current === 'tasks'
-          ? currentPlace(at).kind === 'done'
-            ? update($, doneToggled, toggled => toggledWith(toggled, key))
-            : update($, tasksFolded, folded => toggledWith(folded, key))
-          : update($, teamToggled, toggled => toggledWith(toggled, key))
+    const fold = (key: string) => pressFold(atomStore($), key, current, currentPlace(at))
     // A block's first Text: a press that opens its task's card (`toggle`) or page (`opens`, a search result), a
     // conversation's Log page (`reads`), opens or closes a Teams tab key or a meeting's card (`folds`), or a Changes
     // file's diff (`expands`: inline a file's row, docked a Changes search result), else words alone.
@@ -1661,7 +1322,7 @@ export const register: Register = on => {
 
     // The session's title (session-title.ts) leads every docked view on one line cut at the pane's width; a Text, so it
     // holds no place in the focus ring. It stays above the body with the rest of the header. Inline the pane draws
-    // none, as it sits by the band above the prompt, which names the session too, in rows INLINE_MAX_ROWS caps and the
+    // none, as it sits by the band above the prompt, which names the session too, in rows screen.ts's INLINE_MAX_ROWS caps and the
     // engine redraws on every keystroke.
     const sessionTitle = inline ? null : titleSpans(snap)
     const titleRow: HeaderPart | null = sessionTitle === null ? null : { node: drawText(sessionTitle, 'truncate-end', 'title'), rows: 1 }
@@ -1769,12 +1430,12 @@ export const register: Register = on => {
     // The mode row in groups, a dim `·` between them (drawGrouped): the modes the list switches between, the pages
     // a press opens, what acts on the cards open, then the Keys page.
     const modeButtons = [
-      pressed(<Button label="mine" hotkey="m" variant={shown === 'mine' ? 'primary' : 'secondary'} onPress={() => void showMode($, 'mine')} />, {
+      pressed(<Button label="mine" hotkey="m" variant={shown === 'mine' ? 'primary' : 'secondary'} onPress={() => void showMode(store, 'mine')} />, {
         label: 'mine',
         plain: false,
         hotkey: 'm',
       }),
-      pressed(<Button label="all" hotkey="a" variant={shown === 'all' ? 'primary' : 'secondary'} onPress={() => void showMode($, 'all')} />, {
+      pressed(<Button label="all" hotkey="a" variant={shown === 'all' ? 'primary' : 'secondary'} onPress={() => void showMode(store, 'all')} />, {
         label: 'all',
         plain: false,
         hotkey: 'a',
@@ -1793,7 +1454,7 @@ export const register: Register = on => {
               label={DONE_LABEL}
               hotkey="h"
               variant={place.kind === 'done' ? 'primary' : 'secondary'}
-              onPress={() => void go($, current => doneAt(current, heldWeeks(weekClockOf(snap)).newest))}
+              onPress={() => void go(store, current => doneAt(current, heldWeeks(weekClockOf(snap)).newest))}
             />,
             { label: DONE_LABEL, plain: false, hotkey: 'h' },
           ),
@@ -1803,7 +1464,7 @@ export const register: Register = on => {
       Object.keys(open).length > 0 && place.kind === 'list'
         ? [
             pressed(
-              <Button key="close-cards" label="close cards" hotkey="c" variant="secondary" onPress={() => void update($, expanded, () => NOTHING_EXPANDED)} />,
+              <Button key="close-cards" label="close cards" hotkey="c" variant="secondary" onPress={() => void closeCards(atomStore($))} />,
               { label: 'close cards', plain: false, hotkey: 'c' },
             ),
           ]
@@ -1813,7 +1474,7 @@ export const register: Register = on => {
     const keysButtons = inline
       ? []
       : [
-          pressed(<Button key="keys" label={KEYS_LABEL} plain hotkey={KEYS_HOTKEY} onPress={() => void go($, current => pushed(current, KEYS_PAGE))} />, {
+          pressed(<Button key="keys" label={KEYS_LABEL} plain hotkey={KEYS_HOTKEY} onPress={() => void go(store, current => pushed(current, KEYS_PAGE))} />, {
             label: KEYS_LABEL,
             plain: true,
             hotkey: KEYS_HOTKEY,
@@ -1859,10 +1520,10 @@ export const register: Register = on => {
             placeholder: find.placeholder,
             text: field.text,
             submitLabel: enterWords ?? 'search',
-            onFind: () => void focusFind($),
-            onInput: value => void go($, current => searched(current, value), 'typing'),
+            onFind: () => void focusFind(store, moveFocus),
+            onInput: value => void go(store, current => searched(current, value), 'typing'),
             onSubmit: value => void find.submit?.(value),
-            onClear: place.kind === 'search' ? () => void clearSearch($) : null,
+            onClear: place.kind === 'search' ? () => void clearSearch(store, moveFocus) : null,
           })
     // Under the field, where the person's keys go now (find-field.ts): typed into the field, to a result, to the pane's
     // hotkeys or to Claude's prompt, and the key or the click that moves them, wrapped in a narrow dock.
@@ -1920,7 +1581,7 @@ export const register: Register = on => {
     // press on the same one clears it, and one on another switches to it.
     // A count's Button draws its key before it (`o: `), then its glyph in the color its rows wear it in, which the bar
     // counts in its widths (status-bar.ts drawnText): one Text holding both, as a plain Button holds only strings and Text.
-    const filterTo = (status: BarStatus) => void update($, barFilter, current => (current === status ? null : status))
+    const filterTo = (status: BarStatus) => void filterBar(atomStore($), status)
     const drawPiece = (piece: BarPiece) => {
       const status = piece.status
       if (status === null) return styled(piece, piece.key)
@@ -1968,12 +1629,12 @@ export const register: Register = on => {
       </Text>
     )
     const backStep = canGoBack(at) ? (
-      <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void go($, back)} />
+      <Button key="back" label={BACK_LABEL} hotkey="b" variant="secondary" onPress={() => void go(store, back)} />
     ) : (
       nowhere('back', BACK_LABEL)
     )
     const forwardStep = canGoForward(at) ? (
-      <Button key="forward" label={FORWARD_LABEL} hotkey="f" variant="secondary" onPress={() => void go($, forward)} />
+      <Button key="forward" label={FORWARD_LABEL} hotkey="f" variant="secondary" onPress={() => void go(store, forward)} />
     ) : (
       nowhere('forward', FORWARD_LABEL)
     )
@@ -1995,7 +1656,7 @@ export const register: Register = on => {
             label,
           )
         : pressed(
-            <Button key={`crumb:${crumb.index}`} plain onPress={() => void go($, current => wentTo(current, crumb.index))}>
+            <Button key={`crumb:${crumb.index}`} plain onPress={() => void go(store, current => wentTo(current, crumb.index))}>
               <Text underline dimColor={crumb.isAhead}>
                 {label}
               </Text>
@@ -2011,7 +1672,7 @@ export const register: Register = on => {
     ]
     // The Done page's week between its steps to the week before and after (p, l), each dim where the pane holds no
     // older or newer week. A step changes the page's week in place, so back returns to where the page was opened from.
-    const stepTo = (week: string) => () => void go($, current => doneAt(current, week))
+    const stepTo = (week: string) => () => void go(store, current => doneAt(current, week))
     const steps = place.kind === 'done' ? weekSteps(place.week, weekClockOf(snap)) : null
     const weekText = steps === null ? '' : `week of ${weekWords(steps.week)}`
     const weekRow =
@@ -2125,25 +1786,16 @@ export const register: Register = on => {
     const [banner] = dockLayout([bannerBlock(current, isOpen, tree, name)], e.props.bodyColumns - openCells, bannerWraps)
     if (banner === undefined) return next(e)
     const press = (
-      <Button key={BANNER_KEY} plain onPress={() => void update($, bannerOpen, wasOpen => !wasOpen)}>
+      <Button key={BANNER_KEY} plain onPress={() => void toggleBanner(atomStore($))}>
         {drawSpans({ Text, Link }, banner.spans, banner.wrap)}
       </Button>
     )
-    // Opens the pane as /teamrig-pane does, minimized or never opened too, at the task's page (read as its card's is)
-    // over the list at the task's row (nav.ts fromList): back shows the list scrolled to it. A status-bar filter or a
-    // fold that hides the row gives way first (banner.ts lookShowing), else back would have no row to land on.
+    // Opens the pane as /teamrig-pane does, minimized or never opened too, at the task's page over the list at the
+    // task's row (presses.ts openTask): back shows the list scrolled to it.
     const openInPane = async (shown: Current) => {
       await sizer?.set('open')
       await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
-      const detail = await detailOf(shown.task)
-      await update($, pages, kept => ({ ...kept, [shown.task.id]: detail }))
-      await update($, view, () => 'tasks')
-      const listMode = await read($, mode)
-      const look = lookShowing(shown, listMode, { filter: await read($, barFilter), folded: await read($, tasksFolded) })
-      await update($, barFilter, () => look.filter)
-      await update($, tasksFolded, () => look.folded)
-      const row = currentRowKey(shown, listMode)
-      await go($, () => fromList(row, { kind: 'task', id: shown.task.id }))
+      await openTask(atomStore($), shown, detailOf)
     }
     // The banner's Box takes the columns the banner leaves free, so the button ends the row, beside the engine's [-].
     const bannerRow =
@@ -2166,9 +1818,9 @@ export const register: Register = on => {
     if (line === undefined) return bannerRow
     // Opens the pane as /teamrig-pane does on the list of conversations, and with `conversation` at its page.
     const openConversations = async (conversation: LogRead | null) => {
-      await switchView($, 'log', livesNow())
+      await switchView(atomStore($), 'log', livesNow())
       await $.ui.open({ id: PANE, title, columns: DOCK_COLUMNS })
-      if (conversation !== null) await openConversation($, conversation, logging)
+      if (conversation !== null) await openConversation(atomStore($), conversation, logging)
     }
     const shown: LogRead = { session: previous.session, claude: previous.claude }
     return (
@@ -2182,7 +1834,7 @@ export const register: Register = on => {
             <Button key={PREVIOUS_ALL_KEY} label={PREVIOUS_ALL_LABEL} variant="secondary" onPress={() => void openConversations(null)} />
           </Box>
           <Box key={PREVIOUS_KEY}>
-            <Button key={PREVIOUS_PRESS_KEY} plain onPress={() => void update($, previousOpen, wasOpen => !wasOpen)}>
+            <Button key={PREVIOUS_PRESS_KEY} plain onPress={() => void togglePrevious(atomStore($))}>
               {drawSpans({ Text, Link }, line.spans, line.wrap)}
             </Button>
           </Box>

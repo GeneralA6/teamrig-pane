@@ -13,7 +13,6 @@
 // out of them, as only the tree's are whole before it. After Flow the Bottlenecks, New work, Speed, Delays, Waits, Bugs
 // and People sections (stats-sections.ts, T1859, T1866), then the Goals section (stats-goals.ts, T1420), each closed by default. A team
 // folder the last read could not read is a WARN line. Pure.
-import type { ThemeKey } from 'claude-code'
 import type { StatsAreaPick, StatsChoice, StatsList, StatsListKind, StatsListRow, StatsNumbers, StatsView } from '../types'
 import {
   AREA_MEASURE_LABELS,
@@ -35,6 +34,7 @@ import { daysText, HANG, INDENT, rangeLabel, sectionBlock, signed, VIEW } from '
 import { sectionBlocks } from './stats-sections'
 import type { TeamWeek } from './team'
 import { failureBlock, weekPct } from './team-rows'
+import type { Tone } from './tone'
 import { cells } from './width'
 import type { Clock } from './zone'
 
@@ -47,7 +47,7 @@ export const DAY_ROWS = 14
 /** Each Health tile's dot, in its level's colour (LEVEL_COLOR). */
 export const HEALTH_DOT = '●'
 /** A Health level's colour. */
-export const LEVEL_COLOR: Readonly<Record<HealthLevel, ThemeKey>> = { good: 'success', warn: 'warning', bad: 'error' }
+export const LEVEL_COLOR: Readonly<Record<HealthLevel, Tone>> = { good: 'success', warn: 'warning', bad: 'error' }
 /** Marks a day the week sat at its usage limit, so a quiet day there is not read as slack. */
 export const LIMIT_MARK = '$'
 
@@ -88,9 +88,9 @@ const LIST_WORDS: Readonly<Record<StatsListKind, { readonly lead: string; readon
 /** How a chart's series draws. */
 type Look = Omit<Span, 'text'>
 
-const LINE_LOOK: Readonly<Record<LineSeries, Look>> = { active: { color: 'claude' } }
+const LINE_LOOK: Readonly<Record<LineSeries, Look>> = { active: { color: 'accent' } }
 const BURN_LOOK: Readonly<Record<BurnSeries, Look>> = { created: { color: 'warning' }, closed: { color: 'success' }, both: {} }
-const FLOW_LOOK: Readonly<Record<ActiveStatus, Look>> = { verifying: { color: 'success' }, 'in-progress': { color: 'claude' }, waiting: { color: 'warning' }, open: {} }
+const FLOW_LOOK: Readonly<Record<ActiveStatus, Look>> = { verifying: { color: 'success' }, 'in-progress': { color: 'accent' }, waiting: { color: 'warning' }, open: {} }
 /** The flow legend's order: top band first, as the chart stacks them. */
 const FLOW_LEGEND: readonly ActiveStatus[] = ['open', 'waiting', 'in-progress', 'verifying']
 const STATUS_WORDS: Readonly<Record<ActiveStatus, string>> = { open: 'open', waiting: 'waiting', 'in-progress': 'in progress', verifying: 'verifying' }
@@ -115,7 +115,7 @@ function spansCells(spans: readonly Span[]): number {
 
 /** A pick row's choice: the picked one in brackets, no press; another a press that picks it, in plain text (a dim one reads as no press). */
 function choiceSpan(label: string, picked: boolean, press: StatsPress): Span {
-  return picked ? { text: `[${label}]`, color: 'claude', bold: true } : { text: label, stats: press }
+  return picked ? { text: `[${label}]`, color: 'accent', bold: true } : { text: label, stats: press }
 }
 
 /** `label` in bold and its choices, PICK_GAP apart, a wrapped line starting under the first choice. */
@@ -129,7 +129,7 @@ function scopeRow(scope: StatsChoice, teams: readonly string[]): Row {
     choiceSpan('tree', scope.kind === 'tree', { kind: 'scope', scope: { kind: 'tree' } }),
     ...teams.map(team => choiceSpan(team, scope.kind === 'team' && scope.team === team, { kind: 'scope', scope: { kind: 'team', team } })),
   ]
-  if (scope.kind === 'session') choices.push({ text: `[${scope.session} ×]`, color: 'claude', bold: true, stats: { kind: 'scope', scope: { kind: 'team', team: scope.team } } })
+  if (scope.kind === 'session') choices.push({ text: `[${scope.session} ×]`, color: 'accent', bold: true, stats: { kind: 'scope', scope: { kind: 'team', team: scope.team } } })
   return pickRow(`${VIEW}:scope`, 'Scope', choices)
 }
 

@@ -75,7 +75,7 @@ function standingSpan(standing: Standing, meeting: Meeting, now: number): Span |
     case 'missed':
       return { text: 'missed', color: 'error' }
     case 'next':
-      return { text: meeting.at <= now ? 'now' : 'next', color: 'claude' }
+      return { text: meeting.at <= now ? 'now' : 'next', color: 'accent' }
     case 'done':
     case 'dropped':
       return { text: standing, dim: true }
@@ -92,7 +92,7 @@ function markSpan(standing: Standing): Span {
     case 'missed':
       return { text: MEETING_MARK.missed, color: 'error' }
     case 'next':
-      return { text: MEETING_MARK.next, color: 'claude' }
+      return { text: MEETING_MARK.next, color: 'accent' }
     case 'done':
     case 'dropped':
     case 'scheduled':
@@ -137,7 +137,7 @@ function taskLines(meeting: Meeting, tasks: ReadonlyMap<string, TaskRow>): Lines
 
 /** A press on meeting `id`'s card, drawn as `text`. */
 function pressSpan(text: string, meets: MeetingPress): Span {
-  return { text, color: 'claude', meets }
+  return { text, color: 'accent', meets }
 }
 
 /** Presses side by side, after the card's guide and `lead` words. */

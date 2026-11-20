@@ -132,7 +132,7 @@ function voiceSpan(voice: Voice): Span {
     case 'owner':
       return { text: 'owner', bold: true, color: 'suggestion' }
     case 'claude':
-      return { text: 'Claude', bold: true, color: 'claude' }
+      return { text: 'Claude', bold: true, color: 'accent' }
     case 'session':
       return { text: `message from ${voice.name}`, bold: true, color: 'warning' }
     case 'subagent':

@@ -150,7 +150,7 @@ describe('the pane guide states the limits the code holds', () => {
     ['Polls', [constant('live.ts', 'POLL_MS') / 1000, constant('live.ts', 'TICK_MS') / 1000]],
     ['`Waiting`, asked of others', [constant('view.ts', 'MAX_ASKED')]],
     ['`Done today`', [constant('view.ts', 'MAX_FINISHED')]],
-    ['Above the prompt', [constant('register.tsx', 'INLINE_MAX_ROWS'), constant('status-bar.ts', 'INLINE_LIST_ROWS')]],
+    ['Above the prompt', [constant('screen.ts', 'INLINE_MAX_ROWS'), constant('status-bar.ts', 'INLINE_LIST_ROWS')]],
     ['Dock', [constant('register.tsx', 'DOCK_COLUMNS'), constant('command.ts', 'DOCK_MIN_COLUMNS')]],
     ['Changes, per repo', [constant('changes.ts', 'CHANGES_KEPT')]],
     ['Changes, outside any repo', [constant('changes.ts', 'OUTSIDE_KEPT')]],

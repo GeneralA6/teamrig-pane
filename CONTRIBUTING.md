@@ -59,6 +59,11 @@ Every change ships tests, so the next change cannot break it unnoticed:
 - No skipped, focused or todo tests: a test that does not run catches nothing. The plugin test gate
   (`npm run plugin-tests`) fails on one in a plugin test, and on a file that imports
   `claude-code/testing` without a `*.test.ts` or `*.test.tsx` name, which the runner never runs.
+- The hooks are a view model any front end can draw, so only the Claude Code dock's own files import
+  the engine's module, `claude-code`. `tools/ci/engine-boundary.ts` lists them and
+  `tools/ci/engine-boundary.test.ts` (in `npm test`) fails on any other hooks file that does: give
+  it one of the pane's own types (`plugins/teamrig-pane/types/index.d.ts`), or keep the engine's part
+  in a file on the list.
 
 `npm run check` checks that git runs the repo hooks, then runs the gates CI runs on the tree: typecheck (`tools/` under `tsconfig.json`, the plugin's
 hooks, tests and scripts under `tsconfig.pane.json`), coverage, the plugin test gate and

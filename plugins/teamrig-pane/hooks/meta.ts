@@ -7,12 +7,12 @@
 // (`11:55 IDT`), and every day is the zone's, as teamrig prints them (zone.ts); "today" is the zone's day of the
 // snapshot's clock. Pure: the words change with the clock and the other tasks' statuses, so view.ts's sameView compares
 // them to know when a poll must redraw.
-import type { ThemeKey } from 'claude-code'
 import type { GoalRanks, RankFocus, TaskElsewhere, TaskRow, TaskSpend, TaskStatus, TeamLeads } from '../types'
 import { ACTIVE_STATUSES, dueTime, priorityText, TaskTree, TimeZone, unfinishedAfter, waitText, type EffectiveDue, type TreeRanking, type WaitContext } from './core/read/index'
 import type { TasksElsewhere } from './elsewhere'
 import { rankingOf } from './ranking'
 import type { Span } from './rows'
+import type { Tone } from './tone'
 import { dayOf, zoneNamed, type Clock } from './zone'
 
 const HOUR_MS = 3_600_000
@@ -298,7 +298,7 @@ export function metaParts(task: TaskRow, tree: PaneTree, viewer: string | null):
   if (SAYS_SINCE.has(task.status)) {
     // Why a waiting task waits, what proves a verifying one; an in-progress note is the card's.
     const why = task.status === 'waiting' ? waitingWords(task, context) : task.status === 'verifying' ? task.note : null
-    const color: ThemeKey | undefined = task.status === 'waiting' ? 'error' : undefined
+    const color: Tone | undefined = task.status === 'waiting' ? 'error' : undefined
     parts.push({ text: `${STATUS_WORDS[task.status]} since ${whenWords(task.statusAt, context)}${why === null ? '' : `: ${why}`}`, color })
   }
   // A plan dependency holds a task only until it starts, and only while one of its tasks is unfinished.
