@@ -9,9 +9,12 @@ import { AT_LIST, searched } from '../hooks/nav'
 import { INITIAL_STATE } from '../hooks/pane-state'
 import { MemoryStore } from '../hooks/pane-store'
 import {
+  closeCards,
   closeLog,
   closeStatsFrom,
   closeStatsList,
+  filterBar,
+  fold,
   openFile,
   openInbox,
   openPage,
@@ -23,6 +26,7 @@ import {
   submitTasks,
   submitTeam,
   toggleCard,
+  toggleTeamKey,
   type ReadsDetail,
   type ReadsFile,
 } from '../hooks/presses'
@@ -302,6 +306,77 @@ describe('closeStatsFrom', () => {
     await closeStatsFrom(store, NO_READERS)
     expect(store.state.view).toBe('team')
     expect(store.state.bodyScroll.to).not.toEqual({ kind: 'reveal', key: 'team:acme/po', block: 'center' })
+  })
+})
+
+describe('fold', () => {
+  const LIST = { kind: 'list', row: null } as const
+  const DONE = { kind: 'done', week: '2026-W47' } as const
+
+  test("in the Meetings view, a meeting's card opens, and closes on a second press", async () => {
+    const store = from({ view: 'meetings' })
+    await fold(store, 'meet:1', 'meetings', LIST)
+    expect(store.state.meetingsOpen).toEqual(['meet:1'])
+    await fold(store, 'meet:1', 'meetings', LIST)
+    expect(store.state.meetingsOpen).toEqual([])
+  })
+
+  test('on the Stats tab, a section is toggled and no other list', async () => {
+    const store = from({ view: 'stats' })
+    await fold(store, 'stats:health', 'stats', LIST)
+    expect(store.state).toEqual({ ...INITIAL_STATE, view: 'stats', statsToggled: ['stats:health'] })
+  })
+
+  test("in the Tasks view's list, a heading's tasks fold away beside the headings folded before", async () => {
+    const store = from({ tasksFolded: ['owner:po'] })
+    await fold(store, 'owner:etl', 'tasks', LIST)
+    expect(store.state.tasksFolded).toEqual(['owner:po', 'owner:etl'])
+    expect(store.state.doneToggled).toEqual(INITIAL_STATE.doneToggled)
+  })
+
+  test('on the Done page, a day or group is toggled, the list headings left as they are', async () => {
+    const store = from({ tasksFolded: ['owner:po'] })
+    await fold(store, 'done:day', 'tasks', DONE)
+    expect(store.state.doneToggled).toEqual(['done:day'])
+    expect(store.state.tasksFolded).toEqual(['owner:po'])
+  })
+
+  test('in any other view, a Teams tab key is toggled', async () => {
+    const store = from({ view: 'team', teamToggled: ['acme'] })
+    await fold(store, 'acme', 'team', LIST)
+    expect(store.state.teamToggled).toEqual([])
+    expect(store.state.meetingsOpen).toEqual(INITIAL_STATE.meetingsOpen)
+  })
+})
+
+describe('toggleTeamKey', () => {
+  test('a press opens a closed key and closes an open one', async () => {
+    const store = from({ teamToggled: ['acme'] })
+    await toggleTeamKey(store, 'card:po')
+    expect(store.state.teamToggled).toEqual(['acme', 'card:po'])
+    await toggleTeamKey(store, 'acme')
+    expect(store.state.teamToggled).toEqual(['card:po'])
+  })
+})
+
+describe('closeCards', () => {
+  test("every task's card closes at once, their pages kept", async () => {
+    const store = from({ expanded: { T50: DETAIL_T50, T51: DETAIL_T51 }, pages: { T50: DETAIL_T50 } })
+    await closeCards(store)
+    expect(store.state.expanded).toEqual({})
+    expect(store.state.pages).toEqual({ T50: DETAIL_T50 })
+  })
+})
+
+describe('filterBar', () => {
+  test('a press lists that status alone, another status replaces it, a second press lists every task', async () => {
+    const store = from()
+    await filterBar(store, 'waiting')
+    expect(store.state.filter).toBe('waiting')
+    await filterBar(store, 'working')
+    expect(store.state.filter).toBe('working')
+    await filterBar(store, 'working')
+    expect(store.state.filter).toBeNull()
   })
 })
 
