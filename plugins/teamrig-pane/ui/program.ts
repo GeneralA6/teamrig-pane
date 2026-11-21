@@ -1,7 +1,8 @@
 // The dedicated UI as a program: it takes a process's streams as the terminal, runs the loop on it (app.ts) and
 // answers the exit code. The process itself stays outside (main.ts hands its streams in), so all of this runs in a
 // spec on fake streams. However it ends, the person's quit, a throw or a signal, the terminal is given back first:
-// a program that leaves the alternate screen or the mouse reporting on has broken the person's shell.
+// a program that leaves the alternate screen or the mouse reporting on has broken the person's shell. Its holder is
+// told of the end next (`ending`), to stop what the program left running.
 import type { Snapshot } from '../types'
 import { WrapCache } from '../hooks/layout'
 import { NoteHold } from '../hooks/note-hold'
@@ -37,6 +38,21 @@ export type ProgramDeps = {
    * screen is the person's again: said earlier, it is wiped with the frame.
    */
   readonly errors: { write(text: string): unknown }
+  /**
+   * Called once however the program ends, after the terminal is given back: where its holder stops what the program
+   * left under way (the commands it ran), so no child outlives the UI. A throw from it is said and exits 1.
+   */
+  readonly ending: () => void
+}
+
+/** Tells the holder the program ended; answers what that threw, or null. */
+function ended(deps: ProgramDeps): string | null {
+  try {
+    deps.ending()
+    return null
+  } catch (error) {
+    return said(error)
+  }
 }
 
 /** Says why the program failed. */
@@ -66,6 +82,8 @@ export function runProgram(deps: ProgramDeps): Promise<number> {
   const opened = taken(deps)
   if ('failed' in opened) {
     complain(deps, opened.failed)
+    const unstopped = ended(deps)
+    if (unstopped !== null) complain(deps, unstopped)
     return Promise.resolve(FAILED_CODE)
   }
   const { terminal } = opened
@@ -77,8 +95,10 @@ export function runProgram(deps: ProgramDeps): Promise<number> {
       isOver = true
       for (const { signal, stop } of stops) deps.signals.off(signal, stop)
       terminal.close()
+      const unstopped = ended(deps)
       if (reason !== null) complain(deps, reason)
-      resolve(code)
+      if (unstopped !== null) complain(deps, unstopped)
+      resolve(unstopped === null ? code : FAILED_CODE)
     }
     for (const { signal, stop } of stops) deps.signals.on(signal, stop)
     // A zero timer, not `setImmediate`: the plugin specs also run under the engine's runner, which has no such global.

@@ -14,4 +14,6 @@ process.exitCode = await runProgram({
   front: () => NO_TEAM_FRONT,
   look: ownLook(),
   errors: process.stderr,
+  // Nothing is run yet, so nothing is left to stop.
+  ending: () => undefined,
 })
