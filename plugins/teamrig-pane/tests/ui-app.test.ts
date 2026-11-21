@@ -60,7 +60,7 @@ type Rig = {
   idle(): Promise<void>
 }
 
-const tick = () => new Promise<void>(resolve => setImmediate(resolve))
+const tick = () => new Promise<void>(resolve => setTimeout(resolve, 0))
 
 function rig(size: Size, options: RigOptions = {}): Rig {
   const store = options.store ?? new MemoryStore(STATE)

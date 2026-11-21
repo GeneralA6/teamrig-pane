@@ -106,7 +106,7 @@ function rig(options: RigOptions = {}): Rig {
   }
 }
 
-const tick = () => new Promise<void>(resolve => setImmediate(resolve))
+const tick = () => new Promise<void>(resolve => setTimeout(resolve, 0))
 
 /** Long enough for a key to be answered and the drawing after it to run. */
 async function settled(): Promise<void> {
