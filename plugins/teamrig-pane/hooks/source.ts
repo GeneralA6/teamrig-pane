@@ -147,7 +147,7 @@ export function skippedText(paths: RegisterPaths, register: RegisterSnapshot, ma
 }
 
 /** A snapshot's problem from each part's: those it has, joined as skippedText joins its own; null when none has one. */
-function joinedProblems(parts: readonly (string | null)[]): string | null {
+export function joinedProblems(parts: readonly (string | null)[]): string | null {
   const named = parts.flatMap(part => (part === null ? [] : [part]))
   return named.length > 0 ? named.join('; ') : null
 }
@@ -286,6 +286,17 @@ export class LayoutRegister {
 /** force: build a snapshot even when no file moved (after a failed poll or a new pin). */
 export type PollInput = { claudeSession: string; pinned: string | null; now: number; force?: boolean }
 
+/** What a poll of the files found. */
+export type FilePoll = {
+  readonly snapshot: Snapshot
+  /**
+   * True when a file teamrig builds a served document from moved (the register, the config or the rename log, the
+   * area's inbox, the read marks) or the area changed. False for a move of the numbers alone (spend, which the
+   * budget hooks write on every session's turn, the goals' ranks, the other teams' registers) and for a bare `force`.
+   */
+  readonly isServedMoved: boolean
+}
+
 export class TaskRegisterSource {
   private readonly register: LayoutRegister
   private readonly marks: WatchedFile<MarkLogRead>
@@ -349,7 +360,12 @@ export class TaskRegisterSource {
   }
 
   /** A new snapshot when anything it draws from changed since the last poll (or `force`), else null. */
-  async poll({ claudeSession, pinned, now, force = false }: PollInput): Promise<Snapshot | null> {
+  async poll(input: PollInput): Promise<Snapshot | null> {
+    return (await this.pollFiles(input))?.snapshot ?? null
+  }
+
+  /** As `poll`, saying also whether what moved feeds a document teamrig serves. */
+  async pollFiles({ claudeSession, pinned, now, force = false }: PollInput): Promise<FilePoll | null> {
     const registerChanged = await this.register.refresh()
     if (registerChanged) {
       this.tasks = [...this.register.current.state.tasks.values()]
@@ -386,7 +402,8 @@ export class TaskRegisterSource {
     const mark = area === null ? undefined : byArea.get(area)
     const lines = this.inbox?.current ?? []
     const unread = area !== null && mark !== undefined ? unreadOf(area, lines, mark, lineHash) : null
-    return {
+    const isServedMoved = registerChanged || marksChanged || areaChanged || inboxChanged || namesChanged
+    const snapshot: Snapshot = {
       tasks: this.tasks,
       area,
       areaSource,
@@ -405,6 +422,7 @@ export class TaskRegisterSource {
       elsewhere: this.needed,
       now,
     }
+    return { snapshot, isServedMoved }
   }
 
   /**

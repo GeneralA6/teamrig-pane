@@ -325,12 +325,14 @@ describe('card', () => {
     expect(textOf(rowNamed(cardRows('waiting', unread, UNREAD, treeAt(tasks, NOW)), 'planned'))).toBe(labelled('Planned', 'week of soon'))
   })
 
-  test('a task a GitHub issue opened says so in Origin and links to its issue first, each link on its own line; its ref is no Reference', async () => {
-    const tasks = rowsOf([
+  test('a task a tracker brought in names the tracker and its item in Origin and links to the item first, each link on its own line; its ref is no Reference', async () => {
+    const folded = rowsOf([
       createLine('T1', { owner: 'po', by: 'github', at: NOW - HOUR, source: 'github', ref: 'gh:acme/app#12', goals: [] }),
       statusLine('T1', 'po', NOW, 'in-progress', 'review https://example.com/pr/7', 'https://ci.example/run/9'),
     ])
-    const card = cardOf(tasks, 'T1')
+    // What only teamrig's tasks document says of the task (tasks-document.ts).
+    const item = { tracker: 'GitHub', id: 'acme/app#12', url: 'https://github.com/acme/app/issues/12' }
+    const card = cardOf([{ ...taskOf(folded, 'T1'), isImported: true, item }], 'T1')
     const links = card.filter(row => row.key.includes(':links'))
     expect(links.map(textOf)).toEqual([
       labelled('Links', 'https://github.com/acme/app/issues/12'),
@@ -338,8 +340,28 @@ describe('card', () => {
       `${UNDER}https://ci.example/run/9`,
     ])
     expect(links.map(row => row.spans.at(-1)?.href)).toEqual(['https://github.com/acme/app/issues/12', 'https://example.com/pr/7', 'https://ci.example/run/9'])
-    expect(textOf(rowNamed(card, 'origin'))).toBe(labelled('Origin', 'GitHub issue #12, added by github 13:00 UTC'))
+    expect(textOf(rowNamed(card, 'origin'))).toBe(labelled('Origin', 'GitHub acme/app#12, added by github 13:00 UTC'))
     expect(card.some(row => row.key.includes(':reference'))).toBe(false)
+  })
+
+  test("a session's task whose ref names a tracker item links to it, and Origin still says who asked; with no page its ref stays the Reference", async () => {
+    const folded = rowsOf([createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, source: 'owner', ref: 'gh:acme/app#12', goals: [] })])
+    const cardWith = (url: string | null) => cardOf([{ ...taskOf(folded, 'T1'), item: { tracker: 'GitHub', id: 'acme/app#12', url } }], 'T1')
+    const linked = cardWith('https://github.com/acme/app/issues/12')
+    expect(linked.filter(row => row.key.includes(':links')).map(textOf)).toEqual([labelled('Links', 'https://github.com/acme/app/issues/12')])
+    expect(textOf(rowNamed(linked, 'origin'))).toBe(labelled('Origin', 'Asked by owner, added by lead 13:00 UTC'))
+    expect(linked.some(row => row.key.includes(':reference'))).toBe(false)
+    const bare = cardWith(null)
+    expect(bare.some(row => row.key.includes(':links'))).toBe(false)
+    expect(textOf(rowNamed(bare, 'reference'))).toBe(labelled('Reference', 'gh:acme/app#12'))
+  })
+
+  test('the ref a tracker would know links nowhere and words no Origin until teamrig serves its item', async () => {
+    const tasks = rowsOf([createLine('T1', { owner: 'po', by: 'github', at: NOW - HOUR, source: 'github', ref: 'gh:acme/app#12', goals: [] })])
+    const card = cardOf([{ ...taskOf(tasks, 'T1'), isImported: true }], 'T1')
+    expect(card.some(row => row.key.includes(':links'))).toBe(false)
+    expect(textOf(rowNamed(card, 'origin'))).toBe(labelled('Origin', 'Asked and added by github 13:00 UTC'))
+    expect(textOf(rowNamed(card, 'reference'))).toBe(labelled('Reference', 'gh:acme/app#12'))
   })
 
   test('each id the snapshot holds, in a reason, a note, the After row or the ask, is a span marked with its task; others stay words', async () => {

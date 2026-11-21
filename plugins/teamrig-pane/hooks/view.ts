@@ -137,6 +137,8 @@ const TASK_FIELDS: { readonly [K in keyof TaskRow]-?: K } = {
   statusAt: 'statusAt',
   source: 'source',
   ref: 'ref',
+  item: 'item',
+  isImported: 'isImported',
   goals: 'goals',
   week: 'week',
   size: 'size',

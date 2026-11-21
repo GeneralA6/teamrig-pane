@@ -10,9 +10,9 @@
 // verifying; a date taken from a task that needs it names that task; late in red) and Planned (its week plan against
 // the team's week: this week, next week, the week of a day, or none), each on its own row. After: the tasks planned first, with their
 // status. Needed by: each active task of another owner that needs it, with its owner and due, the earliest due first.
-// Goal: each goal's roadmap item. Origin: who asked (or the GitHub issue it came from), who wrote it and when, as a
+// Goal: each goal's roadmap item. Origin: who asked (or the tracker item it came in from), who wrote it and when, as a
 // tracker's Created row. Reference: where the ask is written, each file by its
-// folder and name (ref-file.ts), other words as written (an issue ref is the first link instead). Evidence. Links
+// folder and name (ref-file.ts), other words as written (a tracker item's page is the first link instead). Evidence. Links
 // (links.ts). The register's fold keeps no parent, sub-tasks or history, so the card has no row for them. In the list
 // each line starts with a guide under the task's title; on a task's page (page.ts) the card has the body to itself
 // and starts at its edge. Pure: rows of spans that layout.ts wraps, each value's lines under the value column, and
@@ -23,7 +23,7 @@ import { TimeZone, type TaskTree, type WaitContext } from './core/read/index'
 import { fileLabel, refParts } from './details'
 import { idSpans } from './ids'
 import { leadOf } from './leads'
-import { issueOf, taskLinks } from './links'
+import { taskLinks } from './links'
 import { dueWords, lateWords, neededByLines, rankWords, STATUS_WORDS, storedDayWords, typeWords, waitingWords, whenWords, type PaneTree } from './meta'
 import { refSegments } from './ref-file'
 import type { Row, Span } from './rows'
@@ -144,23 +144,22 @@ function goalLines(task: TaskRow, detail: TaskDetail): Lines {
 
 /**
  * `Asked by owner, added by lead Tue 10-13`: who asked, then who wrote the task and when, at the clock in its zone;
- * `Asked and added by lead ...` when one session did both, `GitHub issue #12, added by ...` for a task teamrig opened
- * from that issue.
+ * `Asked and added by lead ...` when one session did both, `GitHub acme/app#12, added by ...` for a task a tracker
+ * brought in from that item: the tracker's name and the item as its own people write it, both as teamrig served them.
  */
 function originLines(task: TaskRow, clock: Clock): Lines {
   const added = `added by ${task.createdBy} ${whenWords(task.createdAt, clock)}`
-  const issue = issueOf(task)
-  if (issue !== null) return [[{ text: `GitHub issue #${issue.number}, ${added}` }]]
+  if (task.isImported && task.item !== null) return [[{ text: `${task.item.tracker} ${task.item.id}, ${added}` }]]
   return [[{ text: task.source === task.createdBy ? `Asked and ${added}` : `Asked by ${task.source}, ${added}` }]]
 }
 
 /**
  * Where the ask is written, a line per ref part: each file by its folder and name, a press that opens its page, other
- * words as written; a part that reads as one already listed (the same file at another line) once. None for an
- * issue's ref, a link already.
+ * words as written; a part that reads as one already listed (the same file at another line) once. None for a ref
+ * that names a tracker item with a page, the first link already.
  */
 function referenceLines(task: TaskRow): Lines {
-  const parts = issueOf(task) === null ? refParts(task.ref) : []
+  const parts = (task.item?.url ?? null) === null ? refParts(task.ref) : []
   const lines = parts.map(part =>
     refSegments(part).map((segment): Span => (segment.kind === 'words' ? { text: segment.text } : { text: fileLabel(segment.file.file), file: segment.file })),
   )

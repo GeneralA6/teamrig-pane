@@ -4,8 +4,12 @@ import type { TaskCounts, TaskRow } from '../types'
 import { parseConfigText, readRegister, type HireRecord, type KitConfig, type Rename, type RetireRecord, type TeamWeekSummary } from '../hooks/core/read/index'
 import { rowOf } from '../hooks/log'
 import { taskCountsOf } from '../hooks/task-counts'
-import { teamTree, type TeamRead, type TeamTreeNode } from '../hooks/team'
+import { parseDocument } from '../hooks/read-document'
+import { sessionsOf, type SessionsRead } from '../hooks/sessions-document'
+import { teamTree, type TeamRead, type TeamRegister, type TeamTreeNode, type TreeInput } from '../hooks/team'
 import { HOUR, NOW, createLine, iso, statusLine } from './fixtures'
+import { sessionsDocument } from './served-documents'
+import { servedSessions } from './served-sessions'
 
 /** The config teamrig's parser reads from `json`, failing the test on any issue it finds. */
 export function configOf(json: object): KitConfig {
@@ -66,13 +70,19 @@ const ACME_REGISTER = [
 export const ACME_COUNTS = countsOf(...ACME_REGISTER)
 
 /**
+ * A team's files as the pane's folder reader hands them over, and, as teamrig alone knows them, its sessions' unread
+ * inbox lines by id (those that ever marked their inbox read; none when left out).
+ */
+export type TeamFixture = TeamRead & { readonly unread?: ReadonlyMap<string, number> }
+
+/**
  * Team acme: lead over web and ops, web a sub-lead over api and ui; ops the security reviewer. ui was hired, and
  * launches on its own model and effort; qa was hired, renamed and retired; ops was hired, retired and hired again. api
  * was renamed acme-backend. api owns 4 tasks, web 1 and a dropped one (ACME_REGISTER). api has 2 unread inbox lines,
  * lead none, ui never marked its inbox read. api has a card due on the owner, web one put off; qa's card stays from
  * before its retire.
  */
-export const ACME: TeamRead = {
+export const ACME: TeamFixture = {
   team: 'acme',
   config: configOf({
     team: { id: 'acme' },
@@ -113,7 +123,6 @@ export const TOOLS: TeamRead = {
   hires: [],
   week: null,
   tasks: null,
-  unread: null,
   ownerCards: null,
   taskCounts: null,
 }
@@ -126,14 +135,34 @@ export const OTHER: TeamRead = {
   hires: [],
   week: null,
   tasks: null,
-  unread: null,
   ownerCards: null,
   taskCounts: null,
 }
 
+/** The `sessions` document teamrig serves an asker of team `own` over `reads`, read as the pane reads it. */
+export function sessionsReadOf(reads: readonly TeamFixture[], own: string): SessionsRead {
+  const teams = reads.map(read => ({ ...read, unread: read.unread ?? null }))
+  const parsed = parseDocument(sessionsDocument('r1', servedSessions(teams, own, null)))
+  if (parsed.kind !== 'document') throw new Error(`no sessions document: ${JSON.stringify(parsed)}`)
+  const read = sessionsOf(parsed.document)
+  if (read.kind !== 'read' || read.problems.length > 0) throw new Error(`the sessions document does not read whole: ${JSON.stringify(read)}`)
+  return read.value
+}
+
+/** What the tree of `own` is built from at `now`: the served sessions, each read's register when it holds one, and its week. */
+export function treeInput(reads: readonly TeamFixture[], own: string, now = NOW): TreeInput {
+  const registers = new Map<string, TeamRegister>()
+  const weeks = new Map<string, TeamWeekSummary>()
+  for (const { team, tasks, ownerCards, taskCounts, week } of reads) {
+    if (tasks !== null && ownerCards !== null && taskCounts !== null) registers.set(team, { tasks, ownerCards, taskCounts })
+    if (week !== null) weeks.set(team, week)
+  }
+  return { read: sessionsReadOf(reads, own), own, registers, weeks, now }
+}
+
 /** The tree that holds `own` at `now`, failing the test when there is none. */
-export function treeOf(reads: readonly TeamRead[], own: string, now = NOW): TeamTreeNode {
-  const tree = teamTree(reads, own, now)
+export function treeOf(reads: readonly TeamFixture[], own: string, now = NOW): TeamTreeNode {
+  const tree = teamTree(treeInput(reads, own, now))
   if (tree === null) throw new Error(`no tree for ${own}`)
   return tree
 }

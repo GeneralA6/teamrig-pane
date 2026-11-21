@@ -46,7 +46,8 @@ import type {
 import { claudeCodeCheck, claudeCodeOldLine } from './claude-code-version'
 import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs, TIE_HINT } from './command'
 import { bounded } from './bounded-run'
-import { LiveRegister, pinKey } from './live'
+import { DocumentSource } from './document-source'
+import { LiveRegister, pinKey, type LivePorts } from './live'
 import {
   AT_LOG_LIST,
   INITIAL_STATE,
@@ -66,7 +67,8 @@ import type { PaneKey, PaneStore } from './pane-store'
 import { screenOf } from './screen'
 import { openConversation, showMode, switchView, type MoveFocus, type ViewLives } from './steps'
 import { findPlaces, type Places, type PlacesEnv } from './places'
-import { findSession, type TeamLookup } from './sessions'
+import { lookupSession, type SessionFound } from './session-roster'
+import type { SessionsRead } from './sessions-document'
 import { TaskDetails, type RefPlaces } from './details'
 import { openTask, toggleBanner, togglePrevious, type ReadsFile } from './presses'
 import { pressOfDrawn, pressOfPart, pressOfPiece, runPress, submitFind, typeFind, type Press, type PressDeps } from './press'
@@ -75,7 +77,6 @@ import { RefFileReader } from './ref-file'
 import { TaskRegisterSource, registerPaths, unlessMissing, type Files, type RegisterPaths } from './source'
 import { TreeGoals } from './tree-goals'
 import { TreeRegisters } from './tree-registers'
-import { NO_ELSEWHERE } from './elsewhere'
 import { WrapCache, dockLayout, type CardPart, type Drawn } from './layout'
 import { diffKey, noteKey, pieceKey, placeOf, pressesFrom, standInsOf } from './press-keys'
 import { buttonCells } from './pack'
@@ -113,6 +114,7 @@ import { LiveCopies } from './outside-copies'
 import { LiveLog, TurnLogReader, type LogFiles } from './turn-log'
 import { LivePrevious } from './previous-conversation'
 import { LiveTeam } from './team-source'
+import { TeamWeeks } from './team-weeks'
 import { SetupWatch } from './setup'
 import { LiveMeetings } from './meetings'
 import { OwnerActs } from './owner-acts'
@@ -149,7 +151,7 @@ const GIT_TIMEOUT_MS = 10_000
  * value reads as absent (the empty snapshot, until the reload's first poll). Bump it whenever the
  * Snapshot or TaskRow type in ../types changes shape.
  */
-const SNAPSHOT_SHAPE = 'register-v17'
+const SNAPSHOT_SHAPE = 'register-v18'
 const snapshot = atom({ plugin: 'teamrig-pane', key: 'snapshot' } as const, INITIAL_STATE.snapshot, { shape: SNAPSHOT_SHAPE })
 const mode = atom({ plugin: 'teamrig-pane', key: 'mode' } as const, INITIAL_STATE.mode)
 /** The open cards are kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TaskDetail changes shape. */
@@ -212,7 +214,7 @@ const previousOpen = atom({ plugin: 'teamrig-pane', key: 'previousOpen' } as con
 const SCROLL_SHAPE = 'scroll-v1'
 const bodyScroll = atom({ plugin: 'teamrig-pane', key: 'bodyScroll' } as const, INITIAL_STATE.bodyScroll, { shape: SCROLL_SHAPE })
 /** The Teams tab's tree (team-source.ts) is kept under a shape tag too (see SNAPSHOT_SHAPE): bump it when TeamView or team.ts's TeamTreeNode changes shape. */
-const TEAM_SHAPE = 'team-v7'
+const TEAM_SHAPE = 'team-v8'
 const teamTree = atom({ plugin: 'teamrig-pane', key: 'teamTree' } as const, INITIAL_STATE.teamTree, { shape: TEAM_SHAPE })
 /** The Teams tab's nodes the person opened or closed against their default (team.ts teamRows), by key: a press flips one. */
 const teamToggled = atom({ plugin: 'teamrig-pane', key: 'teamToggled' } as const, INITIAL_STATE.teamToggled)
@@ -408,10 +410,16 @@ function drawKeysLine({ Text }: FindComponents, keys: KeysAt, text: string) {
   )
 }
 
+/** With no team a word of `/teamrig-pane <session>` is the session's id itself. */
+const NO_TEAM_LOOKUP = (word: string): SessionFound => lookupSession(word, null, null)
+
 export const register: Register = on => {
   let live: LiveRegister | null = null
-  /** The team `/teamrig-pane <session>` looks its word up in; set when the session starts, null with no team. */
-  let team: TeamLookup | null = null
+  /**
+   * The session `/teamrig-pane <session>` names with its word, looked up in the team's sessions document as last read
+   * (session-roster.ts); set when the session starts, the word itself with no team.
+   */
+  let lookUp: (word: string) => SessionFound = NO_TEAM_LOOKUP
   /** Reads what an open card's refs and goals point at; set when the session starts. */
   let details: TaskDetails | null = null
   /** Reads the file a card's Reference row names for its page; set when the session starts. */
@@ -507,8 +515,6 @@ export const register: Register = on => {
       read: path => $.fs.read(path),
     }
     const env: PlacesEnv = {
-      TEAMRIG_PANE_TASKS_DIR: await $.env.get('TEAMRIG_PANE_TASKS_DIR'),
-      TEAMRIG_PANE_INBOX_DIR: await $.env.get('TEAMRIG_PANE_INBOX_DIR'),
       TEAMRIG_PANE_GOALS_DOC: await $.env.get('TEAMRIG_PANE_GOALS_DOC'),
       TEAMRIG_PANE_SETTINGS: await $.env.get('TEAMRIG_PANE_SETTINGS'),
       TEAMRIG_HOME: await $.env.get('TEAMRIG_HOME'),
@@ -540,28 +546,36 @@ export const register: Register = on => {
       const registerAt: { paths: RegisterPaths; settings: TeamSettings } | { missing: string } =
         places.kind === 'found' ? { paths: registerPaths(places.dirs), settings: places.settings } : { missing: places.problem }
       const teamFiles = places.kind === 'found' ? places.team : null
-      team = teamFiles === null ? null : { files, paths: teamFiles }
+      // The tasks, inbox, sessions and settings come from `teamrig read` (document-source.ts); the fold of the
+      // register's files beneath it feeds only what the documents do not serve yet.
+      let source: LivePorts['source']
+      let sessionsRead: () => SessionsRead | null = () => null
+      if (places.kind === 'found') {
+        const paths = registerPaths(places.dirs)
+        const { team } = places
+        const documents = new DocumentSource(
+          new TaskRegisterSource(files, paths, places.settings, team, new TreeGoals(files, paths.goals, team), new TreeRegisters(files, team, folders)),
+          cli,
+          { run: (argv, timeoutMs) => run(argv, { cwd: e.cwd, timeoutMs }) },
+        )
+        source = documents
+        sessionsRead = () => documents.sessionsRead
+        lookUp =word => lookupSession(word, team.team, documents.sessionsRead)
+      } else {
+        source = { missing: places.problem }
+        lookUp = NO_TEAM_LOOKUP
+      }
       const refPlaces: RefPlaces = {
         inboxDir: 'missing' in registerAt ? null : registerAt.paths.inboxDir,
         home: home ?? null,
         cwd: e.cwd,
-        teamDir: places.kind === 'found' && places.team !== null ? places.team.dir : null,
+        teamDir: teamFiles === null ? null : teamFiles.dir,
         goalsDoc: places.goalsDoc,
       }
       details = new TaskDetails(files, refPlaces)
       refFiles = new RefFileReader(files, refPlaces)
       const started = new LiveRegister({
-        source:
-          'missing' in registerAt
-            ? registerAt
-            : new TaskRegisterSource(
-                files,
-                registerAt.paths,
-                registerAt.settings,
-                teamFiles,
-                new TreeGoals(files, registerAt.paths.goals, teamFiles),
-                teamFiles === null ? NO_ELSEWHERE : new TreeRegisters(files, teamFiles, folders),
-              ),
+        source,
         sessionId: () => $.session.id(),
         now: () => $.clock.now(),
         publish: async change => {
@@ -572,7 +586,7 @@ export const register: Register = on => {
           area === null ? $.store.delete(pinKey(claudeSession)) : $.store.set(pinKey(claudeSession), area),
       })
       live = started
-      const turnLog = team === null ? null : team.paths.turnLog
+      const turnLog = teamFiles === null ? null : teamFiles.turnLog
       const logLive =
         turnLog === null
           ? null
@@ -607,35 +621,32 @@ export const register: Register = on => {
       recalling = previousLive
       if (logLive === null) {
         // No team, or one with no config file, which teamrig refuses and writes no turn log for: nothing to poll.
-        await update($, logList, () => (team === null ? NO_TEAM_LOG : NO_CONFIG_LOG))
+        await update($, logList, () => (teamFiles === null ? NO_TEAM_LOG : NO_CONFIG_LOG))
         await update($, logPage, () => AT_LOG_LIST)
         await update($, previousConversation, () => NO_PREVIOUS)
       }
+      const teamWeeks = teamFiles === null ? null : new TeamWeeks(files, teamFiles.teamsDir, folders)
       const teamLive =
-        team === null
+        teamFiles === null || teamWeeks === null
           ? null
-          : new LiveTeam(
-              files,
-              team.paths,
-              {
-                folders,
-                register: async () => {
-                  const { tasks, ownerCards, taskCounts } = await read($, snapshot)
-                  return { tasks, ownerCards, taskCounts }
-                },
-                isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
-                publish: async tree => {
-                  await update($, teamTree, () => tree)
-                },
-                now: () => $.clock.now(),
+          : new LiveTeam(teamFiles.team, {
+              sessions: sessionsRead,
+              weeks: teams => teamWeeks.read(teams),
+              register: async () => {
+                const { tasks, ownerCards, taskCounts } = await read($, snapshot)
+                return { tasks, ownerCards, taskCounts }
               },
-              'missing' in registerAt ? null : registerAt.paths,
-            )
+              isShown: async () => (await read($, view)) === 'team' && (await read($, size)) !== 'minimized',
+              publish: async tree => {
+                await update($, teamTree, () => tree)
+              },
+              now: () => $.clock.now(),
+            })
       teaming = teamLive
       if (teamLive === null) await update($, teamTree, () => NO_TEAM_TREE)
       // The CLI runs as the tab's session: its TEAMRIG_SESSION, else the area the pane shows.
       const meetingsLive =
-        team === null
+        teamFiles === null
           ? null
           : new LiveMeetings(cli, {
               run: (argv, timeoutMs) => run(argv, { cwd: e.cwd, timeoutMs }),
@@ -656,11 +667,11 @@ export const register: Register = on => {
       if (meetingsLive === null) await update($, meetings, () => NO_TEAM_MEETINGS)
       // The own team's register, zone and owner's marker: the day and the owner's waits of every team the fold takes in.
       const statsLive =
-        team === null || 'missing' in registerAt
+        teamFiles === null || 'missing' in registerAt
           ? null
           : new LiveStats(
               files,
-              team.paths,
+              teamFiles,
               { events: registerAt.paths.events, goals: registerAt.paths.goals, zone: zoneNamed(registerAt.settings.timeZone), ownerMarker: registerAt.settings.ownerSource },
               {
                 folders,
@@ -676,7 +687,7 @@ export const register: Register = on => {
       if (statsLive === null) await update($, stats, () => NO_TEAM_STATS)
       // `teamrig meet` finds the team from the tab's folder, the team whose register the pane reads.
       pressing =
-        team === null
+        teamFiles === null
           ? null
           : new SessionActs(cli, {
               run: (argv, timeoutMs) => run(argv, { cwd: e.cwd, timeoutMs }),
@@ -687,7 +698,7 @@ export const register: Register = on => {
             })
       // `teamrig owner note` and `next` find the team from the tab's folder too.
       acting =
-        team === null
+        teamFiles === null
           ? null
           : new OwnerActs(cli, {
               run: (argv, timeoutMs) => run(argv, { cwd: e.cwd, timeoutMs }),
@@ -770,7 +781,7 @@ export const register: Register = on => {
       // Nothing to read until a team or a register is named here: the tasks view shows how to set the project up,
       // and the watch looks again at each poll and binds the register it finds.
       live = null
-      team = null
+      lookUp = NO_TEAM_LOOKUP
       details = null
       refFiles = null
       logging = null
@@ -819,7 +830,7 @@ export const register: Register = on => {
     const command = parsePaneArgs(e.args)
     if (command.kind === 'pin') {
       // A word that names no session is answered, and neither pins nor opens the pane.
-      const found = await findSession(command.word, team)
+      const found = lookUp(command.word)
       if (!found.ok) return { text: found.problem }
       await live?.pin(found.id)
     }

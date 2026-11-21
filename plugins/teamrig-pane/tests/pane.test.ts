@@ -3,17 +3,26 @@ import type { AbovePromptProps, Answer, FsEntry, FsStat, On, SessionVersion, UiF
 import { expect, mock, test, type Mounted, type TestEngine } from 'claude-code/testing'
 import { BANNER_FILL_KEY, BANNER_KEY, BANNER_OPEN_KEY, BANNER_OPEN_LABEL, NOTHING_CURRENT, PREVIOUS_ALL_KEY, PREVIOUS_ALL_LABEL, PREVIOUS_FRAME_KEY, PREVIOUS_HEAD_KEY, PREVIOUS_KEY, PREVIOUS_LABEL, PREVIOUS_OPEN_KEY, PREVIOUS_PRESS_KEY } from '../hooks/banner'
 import { LABEL_CELLS } from '../hooks/card'
+import { READ_EVERY_MS } from '../hooks/document-source'
 import { barKeys, KEY_GROUPS } from '../hooks/keys-page'
 import { POLL_MS } from '../hooks/live'
+import type { Files } from '../hooks/source'
+import type { CliRun } from '../hooks/teamrig-cli'
 import { cells } from '../hooks/width'
+import { machineZoneOf } from '../hooks/zone'
 import { EVENT_VERSION, type HireRecord, type RetireRecord } from '../hooks/core/read/index'
+import { fakeRead, type FakeDisk } from './fake-read'
 import { HOUR, NOW, S1, S2, bigRegister, createLine, iso, markLine, statusLine, updateLine, verifyingLine, waitingLine } from './fixtures'
 import { hire, retire } from './team-fixtures'
 
 const HOME = '\\Homes\\tester'
-const EVENTS = '/Homes/tester/team-notes/tasks/events.jsonl'
-const MARKS = '/Homes/tester/team-notes/tasks/inbox-marks.jsonl'
-const INBOX = '/Homes/tester/team-notes/board/inbox/po.md'
+/** Team `web`'s config: the sessions the tests' tasks and inbox lines name, `lead` leading them. */
+const WEB_CONFIG = '/Homes/tester/.teamrig/teams/web/config.json'
+const WEB_TEAM = { team: { id: 'web' }, sessions: ['lead', 'po', 'security'], roles: { lead: 'lead' } }
+/** The register of team `web`, where teamrig keeps it under the kit home. */
+const EVENTS = '/Homes/tester/.teamrig/teams/web/state/events.jsonl'
+const MARKS = '/Homes/tester/.teamrig/teams/web/state/inbox-marks.jsonl'
+const INBOX = '/Homes/tester/.teamrig/teams/web/state/inbox/po.md'
 
 /**
  * The engine resolves each $.fs path the host’s way before a hook sees it: Windows puts the drive on
@@ -78,8 +87,31 @@ function fakeDisk(on: On) {
     const file = files.get(keyOf(e.path))
     return file ? { value: file.text } : { deny: `ENOENT: ${e.path}` }
   })
+  /** The disk as a teamrig run beside the pane reads it (fake-read.ts): no `$.fs`, so no lock and no entry in `reads`. */
+  const beside: Files = {
+    stamp: async path => {
+      const file = files.get(keyOf(path))
+      return file === undefined ? null : { mtimeMs: file.mtimeMs, size: file.text.length }
+    },
+    read: async path => {
+      const file = files.get(keyOf(path))
+      if (file === undefined) throw new Error(`ENOENT: ${path}`)
+      return file.text
+    },
+  }
+  /** The folders right under a folder, for the same run. */
+  const folders = async (dir: string): Promise<string[]> => {
+    const prefix = `${keyOf(dir)}/`
+    const names = [...files.keys()].flatMap(path => {
+      const [name = '', ...deeper] = path.startsWith(prefix) ? path.slice(prefix.length).split('/') : []
+      return deeper.length > 0 ? [name] : []
+    })
+    return [...new Set(names)]
+  }
   return {
     reads,
+    beside,
+    folders,
     write: (path: string, lines: string[]) => void files.set(keyOf(path), { text: lines.join('\n'), mtimeMs: tick++ }),
     lock: (path: string, lock: Lock) => void locks.set(keyOf(path), lock),
     unlock: (path: string) => void locks.delete(keyOf(path)),
@@ -144,19 +176,34 @@ type FakeRepos = {
   patches?: Record<string, string>
   /** No git to start: every run rejects as a spawn of a missing program does. */
   isMissing?: boolean
-  /** What the teamrig CLI (`node <main.js> <args>`) prints for its args; unset, a run of it fails as a missing script does. */
+  /**
+   * What the teamrig CLI (`node <main.js> <args>`) prints for its args, `read` apart (the disk answers that one);
+   * unset, a run of it fails as a missing script does.
+   */
   teamrig?: (args: readonly string[]) => string
+  /** No teamrig installed: `start` writes no plugin list, so the pane finds no CLI and no `read` is answered. */
+  isTeamrigMissing?: boolean
 }
 
+/** A `teamrig read` run in `cwd`, answered from the disk (fake-read.ts). */
+type ReadRun = (cwd: string | null, args: readonly string[]) => Promise<CliRun>
+
 /**
- * Answers $.process.run as git over `repos`, a folder it does not know being outside any repo, and as the teamrig CLI
- * by `repos.teamrig`; `runs` lists each as `<command> <cwd>`, `git --version` as `--version `, a CLI run as
- * `teamrig <args>`.
+ * Answers $.process.run as git over `repos`, a folder it does not know being outside any repo, and as the teamrig CLI:
+ * `read` by `read` (null: none is installed), each other word by `repos.teamrig`; `runs` lists each as
+ * `<command> <cwd>`, `git --version` as `--version `, a CLI run as `teamrig <args>`, and `readRuns` the `read` runs'
+ * words, which no test of another command's runs has to tell apart.
  */
-function fakeGit(on: On, repos: FakeRepos) {
+function fakeGit(on: On, repos: FakeRepos, read: ReadRun | null) {
   const runs: string[] = []
+  const readRuns: string[] = []
   const answer = (stdout: string, exitCode = 0, stderr = '') => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
   on('process.run', async ($, e) => {
+    if (e.argv[0] === 'node' && e.argv[2] === 'read' && read !== null) {
+      const args = e.argv.slice(2)
+      readRuns.push(args.join(' '))
+      return { value: { ...(await read(e.init?.cwd ?? null, args)), isStderrTruncated: false } }
+    }
     if (e.argv[0] === 'node') {
       const args = e.argv.slice(2)
       runs.push(`teamrig ${args.join(' ')}`)
@@ -176,17 +223,22 @@ function fakeGit(on: On, repos: FakeRepos) {
     if (command === 'grep') return repos.greps?.[cwd] === undefined ? answer('', 1) : answer(repos.greps[cwd])
     return answer(repos.statuses[cwd] ?? '## main\0')
   })
-  return runs
+  return { runs, readRuns }
 }
+
+/** Where the fake Claude Code keeps its config, and the teamrig install its plugin list names. */
+const CLAUDE_DIR = '/Homes/tester/.claude'
+const TEAMRIG_INSTALL = `${CLAUDE_DIR}/plugins/cache/teamrig/teamrig/0.227.0`
+/** Claude Code's list of installed plugins, which the pane reads to find the teamrig CLI, with a team or none. */
+const PLUGIN_LIST = `${CLAUDE_DIR}/plugins/installed_plugins.json`
 
 /** The Claude Code the tests run the pane on: new enough for it. */
 const NEW_ENOUGH: Answer<SessionVersion> = { value: { version: '2.1.300', base: '2.1.300', builtAt: '2026-10-01T10:00:00Z' } }
 
-/** The environment that names the register's folders (backslashed, as a Windows host passes them) and its goals document. */
+/** The environment that names the home folder (backslashed, as a Windows host passes it), the session's team and its goals document. */
 const REGISTER_ENV: Readonly<Record<string, string>> = {
   USERPROFILE: HOME,
-  TEAMRIG_PANE_TASKS_DIR: `${HOME}\\team-notes\\tasks`,
-  TEAMRIG_PANE_INBOX_DIR: `${HOME}\\team-notes\\board\\inbox`,
+  TEAMRIG_TEAM: 'web',
   TEAMRIG_PANE_GOALS_DOC: 'docs/ROADMAP.md',
 }
 
@@ -203,10 +255,27 @@ async function start(
   env: Readonly<Record<string, string>> = REGISTER_ENV,
   version: Answer<SessionVersion> = NEW_ENOUGH,
 ) {
-  mock.env(on, { TZ: 'UTC', ...env })
+  const shownEnv: Readonly<Record<string, string>> = { TZ: 'UTC', ...env }
+  mock.env(on, shownEnv)
   const store = fakeStore(on, kept)
-  const runs = fakeGit(on, repos)
   const clock = mock.clock(on, { now: NOW })
+  const disk = fakeDisk(on)
+  // The teamrig beside the pane finds the team as the pane does: by the same environment, home and folder.
+  const besideIn = (cwd: string | null): FakeDisk => ({
+    env: {
+      TEAMRIG_PANE_GOALS_DOC: shownEnv['TEAMRIG_PANE_GOALS_DOC'],
+      TEAMRIG_PANE_SETTINGS: shownEnv['TEAMRIG_PANE_SETTINGS'],
+      TEAMRIG_HOME: shownEnv['TEAMRIG_HOME'],
+      TEAMRIG_TEAM: shownEnv['TEAMRIG_TEAM'],
+    },
+    files: disk.beside,
+    folders: disk.folders,
+    home: shownEnv['USERPROFILE'] ?? shownEnv['HOME'] ?? null,
+    cwd,
+    machineZone: machineZoneOf(shownEnv['TZ'], 'UTC'),
+  })
+  const isInstalled = repos.isTeamrigMissing !== true
+  const { runs, readRuns } = fakeGit(on, repos, isInstalled ? (cwd, args) => fakeRead(besideIn(cwd), () => clock.now())(args) : null)
   on('session.id', async () => ({ value: S1 }))
   on('session.version', async () => version)
   on('session.start', async ($, e) => ({ cwd: e.cwd }))
@@ -222,7 +291,11 @@ async function start(
     titles.push(e.title ?? '')
     return { value: { isPlaced: true } }
   })
-  const disk = fakeDisk(on)
+  if (isInstalled) {
+    disk.write(PLUGIN_LIST,[JSON.stringify({ version: 2, plugins: { 'teamrig@teamrig': [{ installPath: TEAMRIG_INSTALL }] } })])
+    disk.write(`${TEAMRIG_INSTALL}/dist/cli/main.js`, [''])
+  }
+  disk.write(WEB_CONFIG, [JSON.stringify(WEB_TEAM)])
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, due: '2026-10-14', title: 'Ship the task pane' }),
     createLine('T2', { owner: 'security', by: 'lead', at: NOW - HOUR, priority: 1, title: 'Rotate the local URI' }),
@@ -234,7 +307,7 @@ async function start(
     disk.write(`${root}/.git`, ['gitdir'])
     disk.write(`${folder}/.keep`, [''])
   }
-  return { clock, disk, opened, registered, store, runs, titles }
+  return { clock, disk, opened, registered, store, runs, readRuns, titles }
 }
 
 test('docks the session area: its tasks, flags and unread inbox', async ($, on) => {
@@ -823,18 +896,16 @@ test('a title and note of CJK and emoji sequences wrap by display cells, no line
   expect(card.split('\n').length).toBeGreaterThan(4)
 })
 
-test('with one folder named, no settings file and no teamrig project, it says what to set and reads nothing', async ($, on) => {
-  const tasksOnly = Object.fromEntries(Object.entries(REGISTER_ENV).filter(([key]) => key !== 'TEAMRIG_PANE_INBOX_DIR'))
-  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, tasksOnly)
+test('a settings file still naming the folders is a problem naming the key, and no task is read', async ($, on) => {
+  const { disk } = await start(on)
+  disk.write('/Homes/tester/.teamrig/pane.json', [JSON.stringify({ tasksDir: '~/team-notes/tasks' })])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
 
-  const problem = await pane.find({ type: 'Text', text: /^WARN no register found/ })
-  expect(problem?.text.split(/\s+/).join(' ')).toBe(
-    "WARN no register found: set TEAMRIG_PANE_TASKS_DIR and TEAMRIG_PANE_INBOX_DIR, write them in /Homes/tester/.teamrig/pane.json, or start the session in a teamrig team's project (.teamrig.json)",
-  )
+  const problem = await pane.find({ type: 'Text', text: /^WARN / })
+  expect(problem?.text.split(/\s+/).join(' ')).toBe('WARN /Homes/tester/.teamrig/pane.json: unknown key "tasksDir" (known: goalsDoc)')
   expect(await pane.find({ text: /Ship the task pane/ })).toBeUndefined()
-  expect(disk.reads).toEqual([])
+  expect(disk.reads).toEqual([PLUGIN_LIST, '/Homes/tester/.teamrig/pane.json'])
 })
 
 /** A drawn text's words, one space between each, as a wrapped line reads unwrapped. */
@@ -859,7 +930,8 @@ test('in a project teamrig is not set up for, the pane shows how to set it up al
   expect(await pane.find({ text: /^Keys on the pane/ })).toBeUndefined()
   expect(await pane.find({ text: /^WARN / })).toBeUndefined()
   expect(await pane.find({ text: /not tied to a session/ })).toBeUndefined()
-  expect(disk.reads).toEqual([])
+  // No file of the team named nowhere is read: its config stays closed.
+  expect(disk.reads).toEqual([PLUGIN_LIST])
 })
 
 test('a pane left minimized in a project teamrig is not set up for keeps its switch, and a press on it opens the steps alone', async ($, on) => {
@@ -914,7 +986,7 @@ test('with no folder named, it reads the register teamrig keeps for the team its
 })
 
 test('/teamrig-pane <session> pins the session an id or a name names; a word naming none pins nothing and lists the sessions', async ($, on) => {
-  const { disk, opened, store } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
+  const { clock, disk, opened, store } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   const team = '/Homes/tester/.teamrig/teams/web'
   disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
   disk.write(`${team}/config.json`, [JSON.stringify({ sessions: ['lead', 'api'], names: { api: 'web-backend' } })])
@@ -929,8 +1001,10 @@ test('/teamrig-pane <session> pins the session an id or a name names; a word nam
   expect(store.get(`pin:${S1}`)).toBeUndefined()
   expect(opened.length).toBe(opens)
 
-  // The name the user renamed the session to since the pane started is read from the rename log at the command.
+  // The name the user renamed the session to since the pane started is known once the next poll sees the rename log
+  // move and reads the sessions again: the command looks its word up in the sessions as last read.
   disk.write(`${team}/state/renames.jsonl`, [JSON.stringify({ v: 1, id: 'api', from: 'web-backend', to: 'web-api', at: iso(NOW), by: 'api' })])
+  await clock.advance(POLL_MS)
   expect((await run('Web-API')).text).toBeUndefined()
   expect(store.get(`pin:${S1}`)).toBe('api')
   expect(await pane.find({ text: /^api \(pinned\) · 1 active/ })).toBeDefined()
@@ -948,8 +1022,11 @@ test("a tab tied to no session lists its team's sessions; a press on one ties th
   const { disk, store } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   const team = '/Homes/tester/.teamrig/teams/web'
   disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
-  disk.write(`${team}/config.json`, [JSON.stringify({ sessions: ['lead', 'api'] })])
+  // The sessions are listed from the lead down, so the config names its lead, as every team's does.
+  disk.write(`${team}/config.json`, [JSON.stringify({ sessions: ['lead', 'api'], roles: { lead: 'lead' } })])
   disk.write(`${team}/state/events.jsonl`, [createLine('T7', { owner: 'api', by: 'lead', at: NOW - HOUR, title: 'Ship the api' })])
+  // No inbox read names this conversation, so nothing ties the tab.
+  disk.remove(MARKS)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
 
@@ -993,18 +1070,6 @@ test('a title line leads the docked tasks, Changes and Log views: the session as
   expect(await pane.find({ text: /\[web\]/ })).toBeUndefined()
 })
 
-test('the settings file in the kit home names the folders, ~/ under the home folder', async ($, on) => {
-  const { disk } = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
-  disk.write('/Homes/tester/.teamrig/pane.json', [
-    JSON.stringify({ tasksDir: '~/team-notes/tasks', inboxDir: '~/team-notes/board/inbox' }),
-  ])
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
-
-  expect(await pane.find({ text: /Ship the task pane/ })).toBeDefined()
-  expect(await pane.find({ text: /WARN/ })).toBeUndefined()
-})
-
 test('draws each collapsed task as one Text: no Box beyond the frame, the controls, the find row and the two packed button rows', async ($, on) => {
   await start(on)
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
@@ -1043,6 +1108,7 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
     `${CARD_UNDER}G10.1g Fix the formula with analytics`,
     cardLine('Status', 'not started since 13:00 UTC by lead'),
     cardLine('Owner', 'po'),
+    cardLine('Lead', 'lead'),
     cardLine('Priority', '3'),
     cardLine('Class', 'Improvements'),
     cardLine('Score', '3.33'),
@@ -1055,10 +1121,10 @@ test('pressing a task opens its card in place of its meta line, the ask quoted f
   const screen = screenOf(drawn)
   expect(screen).toContain(` ${cardLine('Reference', 'inbox/po.md')}`)
   expect(screen).toContain(` ${CARD_UNDER}docs/ROADMAP.md`)
-  // The card sits under the task's button, the two in a column of their own, each reference line a row in it: three
-  // Boxes more than collapsed.
-  expect(buttonKeys(keyedNode(drawn, 'next:T1-open')).map(key => key.split(':').slice(0, 2).join(':'))).toEqual(['next:T1', 'goto:file', 'goto:file'])
-  expect(countType(drawn, 'Box')).toBe(boxes + 3)
+  // The card sits under the task's button, the two in a column of their own, each reference line a row in it, the owner acts
+  // another: four Boxes more than collapsed.
+  expect(buttonKeys(keyedNode(drawn, 'next:T1-open')).map(key => key.split(':').slice(0, 2).join(':'))).toEqual(['next:T1', 'goto:file', 'goto:file', 'act:note', 'act:next'])
+  expect(countType(drawn, 'Box')).toBe(boxes + 4)
 
   await pane.press({ key: 'next:T1' })
   expect(await pane.find({ text: /│ Status|ship the pane with details/ })).toBeUndefined()
@@ -1112,10 +1178,10 @@ test('an open waiting card says since when it waits, its note on a row of its ow
   await pane.press({ key: 'po:T1' })
   expect(await pane.find({ type: 'Text', text: /^ {4}│ Status {7}waiting since 14:00 UTC by security\n {4}│ Note {9}needs owner paste\n/ })).toBeDefined()
   expect(await pane.find({ text: /waiting since 14:00 UTC: needs owner paste/ })).toBeUndefined()
-  // Each open card is a column Box, its reference file's line a row Box in it; the frame is four Boxes (the root, the
-  // header, the body's row, its window); the switch and the mode buttons are packed in code (pack.ts), each a column
-  // Box of one row Box here.
-  expect(countType(await pane.drawn(), 'Box')).toBe(14)
+  // Each open card is a column Box, its reference file's line a row Box in it and, with a team to run them through,
+  // its owner acts another; the frame is four Boxes (the root, the header, the body's row, its window); the switch and
+  // the mode buttons are packed in code (pack.ts), each a column Box of one row Box here.
+  expect(countType(await pane.drawn(), 'Box')).toBe(16)
   const closeCards = (await pane.findAll({ type: 'Button' })).find(found => found.props['label'] === 'close cards')
   expect(closeCards?.props).toMatchObject({ hotkey: 'c' })
 
@@ -1380,14 +1446,14 @@ test('the band above the prompt names the task up next, follows a status change,
   const opens = keyedProps(await band.drawn(), BANNER_OPEN_KEY)
   expect(opens).toMatchObject({ label: BANNER_OPEN_LABEL, variant: 'secondary' })
   expect(opens !== null && 'hotkey' in opens).toBe(false)
-  expect(await banner()).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
+  expect(await banner()).toMatch(/^web-po · up next · ○ T1 {2}Ship the task pane/)
 
   disk.write(EVENTS, [
     createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, priority: 2, title: 'Ship the task pane' }),
     statusLine('T1', 'po', NOW, 'in-progress', 'halfway'),
   ])
   await clock.advance(3_000)
-  expect(await banner()).toMatch(/^po · working on · ◐ T1 {2}Ship the task pane/)
+  expect(await banner()).toMatch(/^web-po · working on · ◐ T1 {2}Ship the task pane/)
   expect(await banner()).not.toMatch(/Note/)
 
   await band.press({ key: BANNER_KEY })
@@ -1402,7 +1468,7 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   await start(on, { paneSize: 'minimized' })
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const band = await mountBand($)
-  expect(await bannerText(band)).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^web-po · up next · ○ T1 {2}Ship the task pane/)
 
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: PANE_PROPS })
   expect(buttonKeys(await pane.drawn())).toEqual(['tasks', 'changes', 'log', 'inbox', 'team', 'meetings', 'stats'])
@@ -1411,9 +1477,9 @@ test('the band shows the task whether the pane is minimized or never drawn, and 
   await pane.press({ key: 'tasks' })
   const title = childrenOf(keyedNode(await pane.drawn(), 'controls'))[0]
   expect(typeOf(title)).toBe('Text')
-  expect(screenOf(title)).toEqual(['po'])
+  expect(screenOf(title)).toEqual(['[web] po'])
   expect(buttonKeys(await pane.drawn())).not.toContain(BANNER_KEY)
-  expect(await bannerText(band)).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^web-po · up next · ○ T1 {2}Ship the task pane/)
 })
 
 test("the band's open button opens the pane, minimized or on another view, at the task's page; back shows the list at the task's row", async ($, on) => {
@@ -1552,7 +1618,7 @@ test('a survey takes the band: the plugin passes it to the engine, and draws the
   // With the survey gone the pane draws the banner again. Since 2.1.323 the kit counts the test as a plugin of its own,
   // drawing its part beside the pane's at each draw, so neither its text nor its calls tell whether the pane passed on.
   await band.redraw(BAND_PROPS)
-  expect(await bannerText(band)).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^web-po · up next · ○ T1 {2}Ship the task pane/)
 })
 
 test('the band draws nothing for a session with no area, then says its area has nothing current, then names its task up next', async ($, on) => {
@@ -1567,13 +1633,13 @@ test('the band draws nothing for a session with no area, then says its area has 
 
   disk.write(MARKS, [markLine('po', 1, S1, NOW, 'line one')])
   await clock.advance(3_000)
-  expect(await bannerText(band)).toBe(`po · ${NOTHING_CURRENT}`)
+  expect(await bannerText(band)).toBe(`web-po · ${NOTHING_CURRENT}`)
   // With nothing current there is no page to open: no open button.
   expect(buttonKeys(await band.drawn())).toEqual([BANNER_KEY])
 
   disk.write(EVENTS, [createLine('T1', { owner: 'po', by: 'lead', at: NOW - HOUR, title: 'Ship the task pane' })])
   await clock.advance(3_000)
-  expect(await bannerText(band)).toMatch(/^po · up next · ○ T1 {2}Ship the task pane/)
+  expect(await bannerText(band)).toMatch(/^web-po · up next · ○ T1 {2}Ship the task pane/)
 })
 
 test('the session registers /teamrig-pane alone: /teamrig stays free for the teamrig plugin', async ($, on) => {
@@ -1901,7 +1967,8 @@ async function drawnLines(pane: Mounted<'Pane'>): Promise<string[]> {
 async function startWithLogs(on: On, withConfig = true) {
   const started = await start(on, {}, { roots: {}, statuses: {} }, { USERPROFILE: HOME })
   started.disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
-  if (withConfig) started.disk.write('/Homes/tester/.teamrig/teams/web/config.json', [JSON.stringify({ turnLog: { keepHours: 2 } })])
+  if (withConfig) started.disk.write(WEB_CONFIG, [JSON.stringify({ turnLog: { keepHours: 2 } })])
+  else started.disk.remove(WEB_CONFIG)
   started.disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [
     createLine('T7', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the team register' }),
   ])
@@ -2040,15 +2107,6 @@ test("the Log view titles a conversation by the task its session worked while it
   expect(await drawnLines(pane)).toContain('T8 Plan the week ahead')
   expect(await drawnLines(pane)).not.toContain('Plan the week')
   expect(await drawnLines(pane)).toContain('Ship the log view')
-})
-
-test('the Log view says so when the session has no team', async ($, on) => {
-  await start(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-
-  await pane.press({ key: 'log' })
-  expect(await pane.find({ text: /^No team found: the Conversations view shows/ })).toBeDefined()
 })
 
 test('the Log view says so when the team has no config file, reading no turn log: teamrig writes it none', async ($, on) => {
@@ -2229,8 +2287,8 @@ test("the Teams tab and the Tasks view share one search: a switch between them c
   expect(await drawsLine(pane, /^▾ tools · 1 active · 0 retired \[Stats\]$/)).toBe(true)
 })
 
-test('the Teams tab reads no team folder while another view shows, and reads what moved when it shows again', async ($, on) => {
-  const { clock, disk } = await startWithTeam(on)
+test("the Teams tab reads nothing while another view shows and starts no read of teamrig when it shows again: what moved in another team is drawn from the documents' next read", async ($, on) => {
+  const { clock, disk, readRuns } = await startWithTeam(on)
   await $.session.start({ cwd: '/work/app', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
   const teamReads = () => disk.reads.filter(path => path.startsWith(`${TEAMS}/tools/`) || path.endsWith('/hires.jsonl'))
@@ -2238,25 +2296,27 @@ test('the Teams tab reads no team folder while another view shows, and reads wha
   await pane.press({ key: 'team' })
   await pane.press({ key: 'tasks' })
   disk.reads.length = 0
+  readRuns.length = 0
   disk.write(`${TEAMS}/tools/config.json`, [JSON.stringify({ ...TOOLS_CONFIG, sessions: ['boss', 'dev'] })])
   await clock.advance(POLL_MS)
   // The task list's read of the tree's other registers (tree-registers.ts) reads the changed config once on its own
   // poll, as its plan order needs them whatever view shows; a Teams tab read while hidden would read it a second time.
   expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
+  expect(readRuns).toEqual([])
 
+  // Shown again, the tab reads the changed config once more, for where that team's week file is (team-weeks.ts), and
+  // draws the tree from the sessions document the pane holds: it runs teamrig for none of its own.
   disk.reads.length = 0
   await pane.press({ key: 'team' })
   expect(teamReads()).toEqual([`${TEAMS}/tools/config.json`])
+  expect(readRuns).toEqual([])
+  expect(await drawsLine(pane, /● tools-dev \[Wake\] \[Stats\]$/)).toBe(false)
+
+  // The documents' next read (READ_EVERY_MS after the last) serves the new session, and the tab's next poll draws it.
+  await clock.advance(READ_EVERY_MS)
+  await clock.advance(POLL_MS)
+  expect(readRuns.length).toBeGreaterThan(0)
   expect(await drawsLine(pane, /● tools-dev \[Wake\] \[Stats\]$/)).toBe(true)
-})
-
-test('the Teams tab says so when the session has no team', async ($, on) => {
-  await start(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-
-  await pane.press({ key: 'team' })
-  expect(await pane.find({ text: /^No team found: the Teams tab shows the tree of teams/ })).toBeDefined()
 })
 
 /**
@@ -2458,6 +2518,8 @@ test("a task id in an open card opens that task's page: its title and card alone
     gotoKey(drawn, 'T58'),
     gotoKey(drawn, 'T52'),
     fileKey(drawn),
+    'act:note:T50',
+    'act:next:T50',
   ])
   expect(keyedProps(drawn, 'back')).toMatchObject({ label: '‹ back', hotkey: 'b', variant: 'secondary' })
   // Nowhere to go draws the step as dim words, no press.
@@ -2465,7 +2527,7 @@ test("a task id in an open card opens that task's page: its title and card alone
 
   await pane.press({ key: gotoKey(drawn, 'T58') })
   expect(screenOf(await pane.drawn())).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find',
@@ -2479,6 +2541,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     ' ○ T58  Read the source',
     ' Status       not started since Sat 10-10 by lead',
     ' Owner        etl',
+    ' Lead         lead',
     ' Priority     3',
     ' Class        Improvements',
     ' Score        5',
@@ -2487,6 +2550,7 @@ test("a task id in an open card opens that task's page: its title and card alone
     ' Origin       Asked by owner, added by lead Sat',
     '              10-10',
     ' Reference    docs/x.md',
+    ' [Note] [Next]',
   ])
 })
 
@@ -2543,6 +2607,8 @@ test('back, forward and the trail step through the places; the list keeps the he
     'next:T52',
     gotoKey(drawn, 'T50'),
     fileKey(drawn),
+    'act:note:T52',
+    'act:next:T52',
   ])
   expect(await pane.find({ type: 'Text', text: '‹ back' })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(keyedNode(drawn, 'trail'))).toEqual(['Tasks › T50 › T58'])
@@ -2601,7 +2667,7 @@ test("a reference file in an open card opens as a page: its name, where it was r
 
   await pane.press({ key: toFile })
   expect(screenOf(await pane.drawn())).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find',
@@ -2767,7 +2833,7 @@ test('the dock always draws the Find field, s moving the focus into it; each cha
   // The count, then the active matches in plan order, each a press with a dim line of whose it is; the Find field draws
   // no words.
   expect(screenOf(drawn)).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find  clear',
@@ -3000,7 +3066,7 @@ test('done (h) opens the Done page at the week of now; prev (p) and next (l) ste
   expect(buttonKeys(drawn)).not.toContain('next')
   expect(await pane.find({ type: 'Text', text: /^next ›$/ })).toMatchObject({ props: { dimColor: true } })
   expect(screenOf(drawn)).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find',
@@ -3086,7 +3152,7 @@ test('keys (k) opens the Keys page, every key the pane answers in a grid at the 
 
   await pane.press({ key: 'keys' })
   expect(screenOf(await pane.drawn())).toEqual([
-    ' po',
+    ' [web] po',
     ' Tasks Changes Conversations',
     ' Inbox (2) Teams Meetings Stats',
     ' Find',
@@ -3150,9 +3216,6 @@ test("the Keys page names every key a button of the pane answers, and each key i
   expect(named.filter(key => !seen.has(key))).toEqual([])
 })
 
-/** Where the fake Claude Code keeps its config, and the teamrig install its plugin list names. */
-const CLAUDE_DIR = '/Homes/tester/.claude'
-const TEAMRIG_INSTALL = `${CLAUDE_DIR}/plugins/cache/teamrig/teamrig/0.227.0`
 /** A scheduled meeting as `teamrig meeting list --all --json` prints it: an hour from now, with web, on T1. */
 const MEETING = {
   id: 'M3',
@@ -3189,7 +3252,7 @@ test("the switch's Meetings button lists the team's meetings through the teamrig
   disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
   disk.write('/Homes/tester/.teamrig/teams/web/config.json', ['{}'])
   disk.write('/Homes/tester/.teamrig/teams/web/state/events.jsonl', [createLine('T1', { owner: 'web', by: 'lead', at: NOW - HOUR, title: 'Ship the pricing page' })])
-  disk.write(`${CLAUDE_DIR}/plugins/installed_plugins.json`, [JSON.stringify({ version: 2, plugins: { 'teamrig@teamrig': [{ installPath: TEAMRIG_INSTALL }] } })])
+  disk.write(PLUGIN_LIST,[JSON.stringify({ version: 2, plugins: { 'teamrig@teamrig': [{ installPath: TEAMRIG_INSTALL }] } })])
   disk.write(`${TEAMRIG_INSTALL}/dist/cli/main.js`, [''])
   await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
@@ -3452,7 +3515,7 @@ async function startActing(on: On, lines: readonly string[]) {
   started.disk.write('/work/.teamrig.json', [JSON.stringify({ team: 'web' })])
   started.disk.write(`${TEAMS}/web/config.json`, ['{}'])
   started.disk.write(`${TEAMS}/web/state/events.jsonl`, [...lines])
-  started.disk.write(`${CLAUDE_DIR}/plugins/installed_plugins.json`, [JSON.stringify({ version: 2, plugins: { 'teamrig@teamrig': [{ installPath: TEAMRIG_INSTALL }] } })])
+  started.disk.write(PLUGIN_LIST,[JSON.stringify({ version: 2, plugins: { 'teamrig@teamrig': [{ installPath: TEAMRIG_INSTALL }] } })])
   started.disk.write(`${TEAMRIG_INSTALL}/dist/cli/main.js`, [''])
   return started
 }
@@ -3515,11 +3578,3 @@ test("an open card ends in the owner's Note and Next: Note sends the typed text 
   expect(await actKeys(pane)).toEqual([])
 })
 
-test('an open card draws no owner act with no team to run it through', async ($, on) => {
-  await start(on)
-  await $.session.start({ cwd: '/work', surface: 'terminal', isInteractive: true })
-  const pane = await $.ui.mount({ plugin: 'teamrig-pane', surface: 'terminal', component: 'Pane', requestId: 'teamrig-pane', props: WIDE })
-  await pane.press({ key: 'next:T1' })
-  expect(await pane.find({ text: /│ Status/ })).toBeDefined()
-  expect(await actKeys(pane)).toEqual([])
-})

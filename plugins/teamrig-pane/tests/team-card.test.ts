@@ -1,6 +1,6 @@
 // A session's card on the Teams tab (hooks/team-card.ts): its id, roles in their colours, leaders, launch, hire, tasks in progress and counted, and unread
-// inbox lines, or its retire, a labelled row a fact, each only when it has a value, its task ids, inbox count and
-// handover presses of their own.
+// inbox lines, or its retire, a labelled row a fact, each only when it has a value, its task ids and inbox count
+// presses of their own.
 import { describe, expect, test } from 'claude-code/testing'
 import { TimeZone } from '../hooks/core/read/index'
 import { LABEL_CELLS } from '../hooks/card'
@@ -8,7 +8,7 @@ import { SEPARATOR, type Row, type Span } from '../hooks/rows'
 import { sessionKey, teamRows, type SessionFacts } from '../hooks/team'
 import { ROLE_COLORS, roleSpans, roleWords, sessionCard } from '../hooks/team-card'
 import { HOUR, JERUSALEM, NOW } from './fixtures'
-import { ACME, TOOLS, retire, treeOf } from './team-fixtures'
+import { ACME, TOOLS, treeOf } from './team-fixtures'
 
 const UTC = TimeZone.UTC
 const GUIDE: Span = { text: '    │ ', dim: true }
@@ -138,15 +138,15 @@ describe('sessionCard', () => {
     expect(valueOf(sessionCard(sessionOf('acme', 'api'), GUIDE, UTC), 'team-card:acme/api:role')).toEqual([{ text: 'area owner' }])
   })
 
-  test("a retired session's card is its retire: the day and who retired it, why, its heir and its handover, a press", () => {
+  test("a retired session's card is its retire as served: the day and who retired it, why and its heir, each only when teamrig serves it", () => {
     const qa = sessionOf('acme', 'qa')
-    const card = sessionCard(qa, GUIDE, UTC)
-    expect(words(card)).toEqual([line('Id', 'qa'), line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done'), line('Heir', 'web'), line('Handover', 'handover/qa.md')])
-    expect(valueOf(card, 'team-card:acme/qa:handover')).toEqual([{ text: 'handover/qa.md', file: { file: 'handover/qa.md', line: null } }])
+    expect(words(sessionCard(qa, GUIDE, UTC))).toEqual([line('Id', 'qa'), line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done'), line('Heir', 'web')])
 
-    const none = { ...qa, retire: retire('qa', NOW - 60 * HOUR, { noHandover: 'its job left no state' }) }
-    expect(words(sessionCard(none, GUIDE, UTC))).toEqual([line('Id', 'qa'), line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done'), line('Handover', 'none: its job left no state')])
-    expect(words(sessionCard({ ...qa, retire: retire('qa', NOW - 60 * HOUR) }, GUIDE, UTC))).toEqual([line('Id', 'qa'), line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done')])
+    const alone = { ...qa, retire: { at: NOW - 60 * HOUR, by: 'lead', reason: 'its job is done', heir: null } }
+    expect(words(sessionCard(alone, GUIDE, UTC))).toEqual([line('Id', 'qa'), line('Retired', 'Sun 10-11 by lead'), line('Reason', 'its job is done')])
+    // A team beside or below the pane's own is served no reason.
+    const wordless = { ...qa, retire: { at: NOW - 60 * HOUR, by: 'lead', reason: null, heir: 'web' } }
+    expect(words(sessionCard(wordless, GUIDE, UTC))).toEqual([line('Id', 'qa'), line('Retired', 'Sun 10-11 by lead'), line('Heir', 'web')])
   })
 
   test('its id leads its card where its name differs, as its row draws only the name; a name that is the id draws no Id row', () => {
@@ -158,12 +158,15 @@ describe('sessionCard', () => {
     expect(sessionCard({ ...qa, name: 'qa' }, GUIDE, UTC).map(row => row.key)[0]).toBe('team-card:acme/qa:retired')
   })
 
-  test("a peer team's session shows no tasks or unread lines: the pane reads neither its register nor its inbox", () => {
-    expect(words(sessionCard(sessionOf('tools', 'dev'), GUIDE, UTC))).toEqual([line('Id', 'dev'), line('Role', 'area owner'), line('Led by', 'boss'), line('Launch', 'the default model and effort')])
+  test("a peer team's session shows no tasks or unread lines, as the pane does not read its register, and no launch, scope or reason, which teamrig serves only of the pane's own team and those above it", () => {
+    const dev = sessionOf('tools', 'dev')
+    expect(words(sessionCard(dev, GUIDE, UTC))).toEqual([line('Id', 'dev'), line('Role', 'area owner'), line('Led by', 'boss')])
+    const hired = { ...dev, hire: { at: NOW - 96 * HOUR, by: 'boss', scope: null, reason: null, reviewBy: '2026-10-25', approvedBy: null, burst: null } }
+    expect(words(sessionCard(hired, GUIDE, UTC))).toEqual([line('Id', 'dev'), line('Role', 'area owner'), line('Led by', 'boss'), line('Hired', 'Fri 10-09 by boss · review Sun 10-25')])
   })
 
   test("days print on the team's clock", () => {
-    const late = { ...sessionOf('acme', 'qa'), retire: retire('qa', Date.UTC(2026, 9, 11, 22, 30)) }
+    const late = { ...sessionOf('acme', 'qa'), retire: { at: Date.UTC(2026, 9, 11, 22, 30), by: 'lead', reason: 'its job is done', heir: null } }
     expect(words(sessionCard(late, GUIDE, UTC))[1]).toBe(line('Retired', 'Sun 10-11 by lead'))
     expect(words(sessionCard(late, GUIDE, JERUSALEM))[1]).toBe(line('Retired', 'Mon 10-12 by lead'))
   })
