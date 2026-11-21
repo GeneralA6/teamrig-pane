@@ -38,9 +38,38 @@ describe('release.yml', () => {
     assert.match(workflow, /^concurrency:\n {2}group: release\n {2}cancel-in-progress: false\n/m);
   });
 
-  it('has the release pull request job alone, stopping within 20 minutes', () => {
-    assert.deepEqual([...jobs.keys()], ['release-please']);
-    assert.match(job('release-please'), /^ {4}timeout-minutes: 20$/m);
+  it('has the release pull request job and the UI archive job, each stopping within 20 minutes', () => {
+    assert.deepEqual([...jobs.keys()], ['release-please', 'ui-archive']);
+    for (const id of jobs.keys()) assert.match(job(id), /^ {4}timeout-minutes: 20$/m, id);
+  });
+
+  it('builds the UI archive only after a run that published a release, from the released tag', () => {
+    assert.match(
+      job('release-please'),
+      /^ {4}outputs:\n {6}release_created: \$\{\{ steps\.release\.outputs\.release_created \}\}\n {6}tag_name: \$\{\{ steps\.release\.outputs\.tag_name \}\}$/m,
+    );
+    const text = job('ui-archive');
+    assert.match(text, /^ {4}needs: release-please\n {4}if: \$\{\{ needs\.release-please\.outputs\.release_created == 'true' \}\}$/m);
+    assert.match(text, /^ {10}ref: \$\{\{ needs\.release-please\.outputs\.tag_name \}\}$/m);
+    assert.match(text, /^ {6}- run: npm ci --ignore-scripts\n {6}- run: npm run ui:archive$/m);
+  });
+
+  it('hands the token that writes the release to the upload step alone, after the build', () => {
+    const text = job('ui-archive');
+    assert.deepEqual(permissionsOf(text), ['contents: write']);
+    assert.match(text, /^ {10}persist-credentials: false$/m);
+    assert.equal(text.match(/github\.token|GITHUB_TOKEN|GH_TOKEN/g)?.length, 2, 'the token is named once, in one env');
+    const upload = text.slice(text.indexOf('      - name: add the archive to the release'));
+    assert.match(upload, /^ {10}GH_TOKEN: \$\{\{ github\.token \}\}$/m);
+    assert.ok(text.indexOf('npm run ui:archive') < text.indexOf('GH_TOKEN'), 'the build runs before any step holds the token');
+  });
+
+  it('adds the archive to the release by its tag as a plain value, and never replaces one', () => {
+    const text = job('ui-archive');
+    assert.match(text, /^ {8}run: gh release upload "\$TAG" \.tmp\/ui-archive\/teamrig-ui\.json --repo "\$GITHUB_REPOSITORY"$/m);
+    assert.match(text, /^ {10}TAG: \$\{\{ needs\.release-please\.outputs\.tag_name \}\}$/m);
+    assert.doesNotMatch(text, /^ *(?:- )?run:.*\$\{\{/m);
+    assert.doesNotMatch(text, /^ *(?:- )?run:.*--clobber/m);
   });
 
   it('keeps the release pull request on main, with only the writes it needs', () => {
