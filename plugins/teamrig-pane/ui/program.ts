@@ -81,7 +81,11 @@ export function runProgram(deps: ProgramDeps): Promise<number> {
       resolve(code)
     }
     for (const { signal, stop } of stops) deps.signals.on(signal, stop)
-    runApp({ store: deps.store, terminal, front: deps.front, look: deps.look, defer: setImmediate }).then(
+    // A zero timer, not `setImmediate`: the plugin specs also run under the engine's runner, which has no such global.
+    const defer = (step: () => void): void => {
+      setTimeout(step, 0)
+    }
+    runApp({ store: deps.store, terminal, front: deps.front, look: deps.look, defer }).then(
       () => over(QUIT_CODE, null),
       (error: unknown) => over(FAILED_CODE, said(error)),
     )

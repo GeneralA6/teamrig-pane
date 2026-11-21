@@ -22,7 +22,7 @@ function bench() {
   const tick = (): void => {
     for (const step of steps.splice(0)) step()
   }
-  const settled = (): Promise<void> => new Promise(resolve => setImmediate(resolve))
+  const settled = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
   return { ask, tick, settled, ends, fails, failures, steps, runs: () => runs }
 }
 
