@@ -24,10 +24,26 @@ export interface UiArchive {
   readonly format: typeof ARCHIVE_FORMAT;
   /** The pane release the scripts were emitted from. */
   readonly version: string;
+  /**
+   * The version of teamrig's public interface the scripts were written against, as `<major>.<minor>`: teamrig reads it
+   * before it writes a file out, and starts no UI it does not serve.
+   */
+  readonly interface: string;
   /** The script `node` is started on, one of `files`. */
   readonly entry: string;
   /** In path order, by code unit. */
   readonly files: readonly ArchiveFile[];
+}
+
+/** What an archive says of itself, apart from its files. */
+export type ArchiveHead = Pick<UiArchive, 'version' | 'interface' | 'entry'>;
+
+/** `<major>.<minor>` in digits, with no sign, space or leading zero: one version has one spelling, as teamrig reads it. */
+const INTERFACE_TEXT = /^(0|[1-9][0-9]{0,5})\.(0|[1-9][0-9]{0,5})$/;
+
+/** Whether `text` names an interface version as teamrig spells one. */
+export function isInterfaceText(text: string): boolean {
+  return INTERFACE_TEXT.test(text);
 }
 
 /** One folder or file name: letters, digits, `_`, `-` and `.`, never starting with a dot, so never `.` or `..`. */
@@ -40,9 +56,12 @@ export function isArchivePath(path: string): boolean {
 
 /**
  * The archive of `files` (a path to its text). Throws, naming the path, when one could leave the folder it is
- * unpacked into, and when `entry` is not among them: such an archive is never written.
+ * unpacked into, when `entry` is not among them, and when the interface version is not spelled as teamrig reads one:
+ * such an archive is never written.
  */
-export function archiveOf(version: string, entry: string, files: ReadonlyMap<string, string>): UiArchive {
+export function archiveOf(head: ArchiveHead, files: ReadonlyMap<string, string>): UiArchive {
+  const { version, entry } = head;
+  if (!isInterfaceText(head.interface)) throw new Error(`not an interface version, <major>.<minor>: ${JSON.stringify(head.interface)}`);
   const paths = [...files.keys()].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const refused = paths.filter((path) => !isArchivePath(path));
   if (refused.length > 0) throw new Error(`not a path an archive may hold: ${refused.join(', ')}`);
@@ -50,6 +69,7 @@ export function archiveOf(version: string, entry: string, files: ReadonlyMap<str
   return {
     format: ARCHIVE_FORMAT,
     version,
+    interface: head.interface,
     entry,
     files: paths.map((path) => ({ path, text: files.get(path) ?? '' })),
   };

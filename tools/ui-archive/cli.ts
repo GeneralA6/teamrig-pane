@@ -6,6 +6,7 @@ import { EXIT_CLEAN, EXIT_FINDINGS } from '../lib/exit.ts';
 import { runMain } from '../lib/run-main.ts';
 import { ARCHIVE_NAME, archiveText, sha256Of } from './archive.ts';
 import { builtArchive, outOf, versionOf } from './build.ts';
+import { SPEAKS } from '../../plugins/teamrig-pane/hooks/interface.ts';
 
 /** Every file under `folder`, by its `/`-separated path from it. */
 function filesUnder(folder: string): Map<string, string> {
@@ -39,11 +40,11 @@ async function main(): Promise<number> {
       return EXIT_FINDINGS;
     }
     const manifest = readFileSync(join(root, 'plugins', 'teamrig-pane', '.claude-plugin', 'plugin.json'), 'utf8');
-    const { archive, completed } = builtArchive(versionOf(manifest), filesUnder(emit));
+    const { archive, completed } = builtArchive({ version: versionOf(manifest), interface: SPEAKS }, filesUnder(emit));
     const text = archiveText(archive);
     mkdirSync(out, { recursive: true });
     writeFileSync(join(out, ARCHIVE_NAME), text, 'utf8');
-    console.log(`ui archive: ${archive.files.length} file(s) of ${archive.version}, ${completed} import(s) completed, in ${join(out, ARCHIVE_NAME)}`);
+    console.log(`ui archive: ${archive.files.length} file(s) of ${archive.version} for interface ${archive.interface}, ${completed} import(s) completed, in ${join(out, ARCHIVE_NAME)}`);
     console.log(`sha256 ${sha256Of(text)}`);
     return EXIT_CLEAN;
   } finally {

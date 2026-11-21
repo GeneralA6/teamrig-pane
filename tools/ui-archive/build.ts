@@ -40,13 +40,16 @@ export interface Built {
   readonly completed: number;
 }
 
-/** The archive of `emitted` (a path from the emit's root to its text) for the pane release `version`. */
-export function builtArchive(version: string, emitted: ReadonlyMap<string, string>): Built {
+/** What the sources are: the pane release, and the interface version their view model is written against. */
+export type Release = Pick<UiArchive, 'version' | 'interface'>;
+
+/** The archive of `emitted` (a path from the emit's root to its text) for the pane release `release` names. */
+export function builtArchive(release: Release, emitted: ReadonlyMap<string, string>): Built {
   if (emitted.has(PACKAGE)) throw new Error(`the emit holds a ${PACKAGE} of its own, which the archive writes`);
   const { files, changed, missing } = completeImports(emitted);
   if (missing.length > 0) {
     const lines = missing.map(({ file, specifier }) => `${file}: ${specifier}`);
     throw new Error(`${missing.length} import(s) name no emitted file: ${lines.join('; ')}`);
   }
-  return { archive: archiveOf(version, ENTRY, new Map([...files, [PACKAGE, PACKAGE_TEXT]])), completed: changed };
+  return { archive: archiveOf({ ...release, entry: ENTRY }, new Map([...files, [PACKAGE, PACKAGE_TEXT]])), completed: changed };
 }

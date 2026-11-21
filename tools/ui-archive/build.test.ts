@@ -33,11 +33,14 @@ const EMITTED = new Map([
   ['hooks/screen.js', 'export const screen = 1;\n'],
 ]);
 
+const RELEASE = { version: '0.77.0', interface: '1.2' };
+
 describe('builtArchive', () => {
   it('holds the emit with its imports completed and the package file that makes it modules', () => {
-    const built = builtArchive('0.77.0', EMITTED);
+    const built = builtArchive(RELEASE,EMITTED);
     assert.equal(built.completed, 2);
     assert.equal(built.archive.version, '0.77.0');
+    assert.equal(built.archive.interface, '1.2');
     assert.equal(built.archive.entry, ENTRY);
     assert.deepEqual(built.archive.files, [
       { path: 'hooks/screen.js', text: 'export const screen = 1;\n' },
@@ -51,18 +54,18 @@ describe('builtArchive', () => {
   it('makes no archive from an emit with an import no file answers, naming each', () => {
     const emitted = new Map([...EMITTED, ['hooks/screen.js', "import './gone';\nimport '../lost/one';\n"]]);
     assert.throws(
-      () => builtArchive('0.77.0', emitted),
+      () => builtArchive(RELEASE,emitted),
       /^Error: 2 import\(s\) name no emitted file: hooks\/screen\.js: \.\/gone; hooks\/screen\.js: \.\.\/lost\/one$/,
     );
   });
 
   it('makes no archive from an emit without the entry', () => {
     const emitted = new Map([['ui/program.js', 'export const program = 1;\n']]);
-    assert.throws(() => builtArchive('0.77.0', emitted), /the entry ui\/main\.js is not among the archive's files/);
+    assert.throws(() => builtArchive(RELEASE,emitted), /the entry ui\/main\.js is not among the archive's files/);
   });
 
   it('refuses an emit that brings a package file of its own', () => {
     const emitted = new Map([...EMITTED, [PACKAGE, '{}']]);
-    assert.throws(() => builtArchive('0.77.0', emitted), /the emit holds a package\.json of its own/);
+    assert.throws(() => builtArchive(RELEASE,emitted), /the emit holds a package\.json of its own/);
   });
 });

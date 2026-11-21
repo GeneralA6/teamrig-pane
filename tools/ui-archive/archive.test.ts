@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ARCHIVE_FORMAT, archiveOf, archiveText, isArchivePath, sha256Of } from './archive.ts';
+import { ARCHIVE_FORMAT, archiveOf, archiveText, isArchivePath, isInterfaceText, sha256Of } from './archive.ts';
+
+const HEAD = { version: '1.2.3', interface: '1.0', entry: 'ui/main.js' };
 
 const FILES = new Map([
   ['ui/main.js', 'export {};\n'],
@@ -25,9 +27,10 @@ describe('isArchivePath', () => {
 
 describe('archiveOf', () => {
   it('holds the files in path order, whatever order they came in', () => {
-    const archive = archiveOf('1.2.3', 'ui/main.js', FILES);
+    const archive = archiveOf(HEAD,FILES);
     assert.equal(archive.format, ARCHIVE_FORMAT);
     assert.equal(archive.version, '1.2.3');
+    assert.equal(archive.interface, '1.0');
     assert.equal(archive.entry, 'ui/main.js');
     assert.deepEqual(archive.files, [
       { path: 'hooks/core/index.js', text: 'export const core = 1;\n' },
@@ -38,22 +41,42 @@ describe('archiveOf', () => {
 
   it('gives the same bytes for the same files in another order', () => {
     const reversed = new Map([...FILES].reverse());
-    assert.equal(archiveText(archiveOf('1.2.3', 'ui/main.js', reversed)), archiveText(archiveOf('1.2.3', 'ui/main.js', FILES)));
+    assert.equal(archiveText(archiveOf(HEAD,reversed)), archiveText(archiveOf(HEAD,FILES)));
   });
 
   it('refuses a path that could leave the folder, naming it', () => {
     const files = new Map([...FILES, ['../outside.js', 'x'], ['ui/ok.js', 'y'], ['/root.js', 'z']]);
-    assert.throws(() => archiveOf('1.2.3', 'ui/main.js', files), /not a path an archive may hold: \.\.\/outside\.js, \/root\.js$/);
+    assert.throws(() => archiveOf(HEAD,files), /not a path an archive may hold: \.\.\/outside\.js, \/root\.js$/);
   });
 
   it('refuses an entry that is not among the files', () => {
-    assert.throws(() => archiveOf('1.2.3', 'ui/absent.js', FILES), /the entry ui\/absent\.js is not among the archive's files/);
+    assert.throws(() => archiveOf({ ...HEAD, entry: 'ui/absent.js' }, FILES), /the entry ui\/absent\.js is not among the archive's files/);
+  });
+});
+
+describe('the interface version', () => {
+  it('is <major>.<minor> in digits, each with one spelling', () => {
+    for (const text of ['1.0', '0.1', '2.14', '10.0', '999999.999999']) {
+      assert.equal(isInterfaceText(text), true, text);
+    }
+    for (const text of ['', '1', '1.', '.0', '1.0.0', '01.0', '1.00', '1.x', 'v1.0', ' 1.0', '1.0\n', '-1.0', '1.-0', '1000000.0']) {
+      assert.equal(isInterfaceText(text), false, JSON.stringify(text));
+    }
+  });
+
+  it('is refused by archiveOf when it is not spelled so, and no archive is made', () => {
+    assert.throws(() => archiveOf({ ...HEAD, interface: '1' }, FILES), /^Error: not an interface version, <major>\.<minor>: "1"$/);
+    assert.throws(() => archiveOf({ ...HEAD, interface: '' }, FILES), /^Error: not an interface version, <major>\.<minor>: ""$/);
+  });
+
+  it('is part of the bytes: another version gives another hash', () => {
+    assert.notEqual(sha256Of(archiveText(archiveOf({ ...HEAD, interface: '1.1' }, FILES))), sha256Of(archiveText(archiveOf(HEAD, FILES))));
   });
 });
 
 describe('archiveText and sha256Of', () => {
   it('writes one JSON document that reads back as the archive, ended by a newline', () => {
-    const archive = archiveOf('1.2.3', 'ui/main.js', FILES);
+    const archive = archiveOf(HEAD,FILES);
     const text = archiveText(archive);
     assert.ok(text.endsWith('}\n'));
     assert.deepEqual(JSON.parse(text), archive);
@@ -68,8 +91,8 @@ describe('archiveText and sha256Of', () => {
   it('changes the hash when a file changes', () => {
     const changed = new Map([...FILES, ['ui/main.js', 'export { };\n']]);
     assert.notEqual(
-      sha256Of(archiveText(archiveOf('1.2.3', 'ui/main.js', changed))),
-      sha256Of(archiveText(archiveOf('1.2.3', 'ui/main.js', FILES))),
+      sha256Of(archiveText(archiveOf(HEAD,changed))),
+      sha256Of(archiveText(archiveOf(HEAD,FILES))),
     );
   });
 });
