@@ -16,7 +16,7 @@ const ESC = '\u001b'
 const FRAME = `${ESC}[H`
 
 type Rig = {
-  /** What happened outside the program, in order: `enter`, `frame`, `leave`, `pause`, `complain <text>`. */
+  /** What happened outside the program, in order: `enter`, `frame`, `leave`, `pause`, `ending`, `complain <text>`. */
   readonly log: string[]
   readonly store: MemoryStore
   readonly code: Promise<number>
@@ -32,6 +32,8 @@ type RigOptions = {
   /** What the input throws when the terminal is taken: an input that cannot be read raw. */
   readonly refused?: Error
   readonly front?: AppDeps['front']
+  /** What the holder throws when told of the end: a child it could not stop. */
+  readonly unstopped?: Error
 }
 
 function wrote(text: string): string {
@@ -91,6 +93,10 @@ function rig(options: RigOptions = {}): Rig {
         log.push(`complain ${text}`)
       },
     },
+    ending: () => {
+      log.push('ending')
+      if (options.unstopped !== undefined) throw options.unstopped
+    },
   })
   return {
     log,
@@ -143,8 +149,31 @@ describe('the program on a terminal', () => {
     const program = await started()
     program.send('q')
     expect(await ending(program)).toBe(QUIT_CODE)
-    expect(outside(program)).toEqual(['enter', 'leave', 'pause'])
+    expect(outside(program)).toEqual(['enter', 'leave', 'pause', 'ending'])
     expect(program.heard()).toEqual([])
+  })
+
+  test('its holder is told of the end once, and not while it runs', async () => {
+    const program = await started()
+    expect(program.log).not.toContain('ending')
+    program.signal('SIGTERM')
+    program.signal('SIGHUP')
+    program.send('q')
+    expect(await ending(program)).toBe(SIGNAL_CODES.SIGTERM)
+    expect(program.log.filter(entry => entry === 'ending')).toEqual(['ending'])
+  })
+
+  test('a holder that cannot stop what was left exits 1 and says why, after the screen is given back', async () => {
+    const program = await started({ unstopped: new Error('a child would not stop') })
+    program.send('q')
+    expect(await ending(program)).toBe(FAILED_CODE)
+    expect(outside(program)).toEqual(['enter', 'leave', 'pause', 'ending', 'complain teamrig ui: a child would not stop\n'])
+  })
+
+  test('a failure and a holder that cannot stop are both said, the failure first', async () => {
+    const program = await started({ gone: new Error('the screen went away'), unstopped: new Error('a child would not stop') })
+    expect(await ending(program)).toBe(FAILED_CODE)
+    expect(program.log.slice(-2)).toEqual(['complain teamrig ui: the screen went away\n', 'complain teamrig ui: a child would not stop\n'])
   })
 
   test('a signal gives the terminal back and exits with the code a shell expects of it', async () => {
@@ -152,7 +181,7 @@ describe('the program on a terminal', () => {
       const program = await started()
       program.signal(signal)
       expect(await ending(program)).toBe(SIGNAL_CODES[signal])
-      expect(outside(program)).toEqual(['enter', 'leave', 'pause'])
+      expect(outside(program)).toEqual(['enter', 'leave', 'pause', 'ending'])
       expect(program.heard()).toEqual([])
     }
     expect(SIGNAL_CODES).toEqual({ SIGHUP: 129, SIGTERM: 143 })
@@ -161,14 +190,14 @@ describe('the program on a terminal', () => {
   test('a drawing that throws exits 1, and says why only once the screen is given back', async () => {
     const program = await started({ gone: new Error('the screen went away') })
     expect(await ending(program)).toBe(FAILED_CODE)
-    expect(program.log).toEqual(['enter', 'leave', 'pause', 'complain teamrig ui: the screen went away\n'])
+    expect(program.log).toEqual(['enter', 'leave', 'pause', 'ending', 'complain teamrig ui: the screen went away\n'])
     expect(program.heard()).toEqual([])
   })
 
   test('a terminal that cannot be taken exits 1 and says why at once, with no screen taken and no signal heard', async () => {
     const program = await started({ refused: new Error('the input is no terminal to read raw') })
     expect(await ending(program)).toBe(FAILED_CODE)
-    expect(program.log).toEqual(['complain teamrig ui: the input is no terminal to read raw\n'])
+    expect(program.log).toEqual(['complain teamrig ui: the input is no terminal to read raw\n', 'ending'])
     expect(program.heard()).toEqual([])
   })
 
@@ -195,7 +224,7 @@ describe('the program on a terminal', () => {
     isBroken = true
     await program.store.update('bodyScroll', current => scrolledTo(current, { kind: 'offset', offset: 1 }))
     expect(await ending(program)).toBe(SIGNAL_CODES.SIGTERM)
-    expect(outside(program)).toEqual(['enter', 'leave', 'pause'])
+    expect(outside(program)).toEqual(['enter', 'leave', 'pause', 'ending'])
   })
 })
 
