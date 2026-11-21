@@ -66,6 +66,13 @@ Every change ships tests, so the next change cannot break it unnoticed:
   in a file on the list. The dedicated UI (`plugins/teamrig-pane/ui/`) is held from the other side by
   the same test: it runs in any terminal with no engine, so none of its files imports `claude-code`
   or one of the dock's files; what both front ends need goes in a hooks file off the list.
+- The dedicated UI leaves the repository as one file, `teamrig-ui.json`: `npm run ui:archive` emits
+  `ui/` and the hooks it imports with `tsc` (`tsconfig.ui.json`), gives each relative import the
+  extension plain Node needs, and writes the scripts by path into one JSON document under
+  `.tmp/ui-archive/`, printing its sha256. So a `ui/` file, and a hooks file it imports, keeps to what
+  `tsc` emits and Node runs with no loader: no `.tsx`, and no import of a file that is not emitted.
+  `tools/ui-archive/cli.test.ts` (in `npm test`) builds the archive of the tree and runs it under
+  plain `node`.
 
 `npm run check` checks that git runs the repo hooks, then runs the gates CI runs on the tree: typecheck (`tools/` under `tsconfig.json`, the plugin's
 hooks, tests and scripts under `tsconfig.pane.json`), coverage, the plugin test gate and
