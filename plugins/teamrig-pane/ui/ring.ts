@@ -1,9 +1,21 @@
 // The focus ring over a frame, read from what the painter drew: the order Tab walks, the stop a key, a cell or a
 // hotkey names, the way back Esc takes, and the Find row the head holds. Pure: the app keeps only the ring's key.
 import type { FindRow, Head, HeadPiece } from '../hooks/head'
+import type { Drawn } from '../hooks/layout'
 import type { Press } from '../hooks/press'
-import { pressesOf } from '../hooks/press-keys'
+import { noteKey, pressesOf } from '../hooks/press-keys'
+import type { NoteField } from '../hooks/rows'
 import type { Frame, Hit } from './paint'
+
+/** The Note field keyed `key` on a card the body draws, in the window or out of it; null when `key` names none. */
+export function noteFieldOf(body: readonly Drawn[], key: string): NoteField | null {
+  for (const drawn of body) {
+    for (const part of [...(drawn.card ?? []), ...(drawn.parts ?? [])]) {
+      if (part.kind === 'field' && noteKey(part.field.task, part.field.round) === key) return part.field
+    }
+  }
+  return null
+}
 
 /**
  * The keys Tab walks, in order: the head's stops as drawn, then every press of the body, those the window leaves out
