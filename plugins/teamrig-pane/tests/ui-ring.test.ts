@@ -5,7 +5,8 @@ import type { FindRow, Head, HeadPart } from '../hooks/head'
 import type { Drawn } from '../hooks/layout'
 import { paint, type Frame } from '../ui/paint'
 import { FIND_CLEAR_KEY, FIND_HOTKEY, FIND_KEY } from '../ui/paint-head'
-import { backHit, findRowOf, hitAt, hitOf, hotkeyHit, ringOrder, stepped } from '../ui/ring'
+import { noteKey } from '../hooks/press-keys'
+import { backHit, findRowOf, hitAt, hitOf, hotkeyHit, noteFieldOf, ringOrder, stepped } from '../ui/ring'
 
 const FIND: FindRow = { key: 'find:1', placeholder: 'words', text: '', submitLabel: 'search', submits: 'tasks', clears: false }
 const TITLE: HeadPart = { kind: 'item', item: { kind: 'words', key: 'title', text: 'teamrig', tone: 'bold', cut: false } }
@@ -107,6 +108,21 @@ describe('backHit', () => {
 
   test('null for a frame with none: a card’s press is no way back', () => {
     expect(backHit(frame(head(TITLE, FOUND), 20))).toBeNull()
+  })
+})
+
+describe('noteFieldOf', () => {
+  const field = { task: 'T1', round: 2 }
+  const carded: Drawn = { ...first, card: [{ kind: 'text', key: 'a:why', spans: [{ text: 'why' }] }, { kind: 'field', key: 'a:note', field }] }
+
+  test('the Note field of an open card, by the key the ring lands on', () => {
+    expect(noteFieldOf([plain, carded], noteKey('T1', 2))).toBe(field)
+  })
+
+  test('null for another round’s key, a press’s key, and a body with no field', () => {
+    expect(noteFieldOf([plain, carded], noteKey('T1', 1))).toBeNull()
+    expect(noteFieldOf([plain, carded], 'a')).toBeNull()
+    expect(noteFieldOf(body, noteKey('T1', 2))).toBeNull()
   })
 })
 
