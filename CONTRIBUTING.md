@@ -69,7 +69,10 @@ Every change ships tests, so the next change cannot break it unnoticed:
 - The dedicated UI leaves the repository as one file, `teamrig-ui.json`: `npm run ui:archive` emits
   `ui/` and the hooks it imports with `tsc` (`tsconfig.ui.json`), gives each relative import the
   extension plain Node needs, and writes the scripts by path into one JSON document under
-  `.tmp/ui-archive/`, printing its sha256. So a `ui/` file, and a hooks file it imports, keeps to what
+  `.tmp/ui-archive/`, printing its sha256. The document states the version of teamrig's interface the
+  view model is written against (`SPEAKS` in `hooks/interface.ts`), which teamrig holds to the one it
+  serves before it starts the UI: raise its minor in the change that first reads what the interface
+  added in it. So a `ui/` file, and a hooks file it imports, keeps to what
   `tsc` emits and Node runs with no loader: no `.tsx`, and no import of a file that is not emitted.
   `tools/ui-archive/cli.test.ts` (in `npm test`) builds the archive of the tree and runs it under
   plain `node`.
