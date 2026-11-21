@@ -38,8 +38,8 @@ describe('release.yml', () => {
     assert.match(workflow, /^concurrency:\n {2}group: release\n {2}cancel-in-progress: false\n/m);
   });
 
-  it('has the release pull request job and the UI archive job, each stopping within 20 minutes', () => {
-    assert.deepEqual([...jobs.keys()], ['release-please', 'ui-archive']);
+  it('has the release pull request job and the UI archive build and upload jobs, each stopping within 20 minutes', () => {
+    assert.deepEqual([...jobs.keys()], ['release-please', 'ui-archive-build', 'ui-archive-upload']);
     for (const id of jobs.keys()) assert.match(job(id), /^ {4}timeout-minutes: 20$/m, id);
   });
 
@@ -48,27 +48,52 @@ describe('release.yml', () => {
       job('release-please'),
       /^ {4}outputs:\n {6}release_created: \$\{\{ steps\.release\.outputs\.release_created \}\}\n {6}tag_name: \$\{\{ steps\.release\.outputs\.tag_name \}\}$/m,
     );
-    const text = job('ui-archive');
+    const text = job('ui-archive-build');
     assert.match(text, /^ {4}needs: release-please\n {4}if: \$\{\{ needs\.release-please\.outputs\.release_created == 'true' \}\}$/m);
     assert.match(text, /^ {10}ref: \$\{\{ needs\.release-please\.outputs\.tag_name \}\}$/m);
     assert.match(text, /^ {6}- run: npm ci --ignore-scripts\n {6}- run: npm run ui:archive$/m);
   });
 
-  it('hands the token that writes the release to the upload step alone, after the build', () => {
-    const text = job('ui-archive');
-    assert.deepEqual(permissionsOf(text), ['contents: write']);
+  it('builds with the read-only token, which it never names or keeps in the checkout', () => {
+    const text = job('ui-archive-build');
+    assert.deepEqual(permissionsOf(text), []);
     assert.match(text, /^ {10}persist-credentials: false$/m);
+    assert.doesNotMatch(text, /github\.token|GITHUB_TOKEN|GH_TOKEN/);
+  });
+
+  it("hands the build's archive and its sha256 to the upload job", () => {
+    const text = job('ui-archive-build');
+    assert.match(text, /^ {4}outputs:\n {6}sha256: \$\{\{ steps\.hash\.outputs\.sha256 \}\}$/m);
+    assert.match(text, /^ {6}- id: hash\n {8}run: echo "sha256=\$\(sha256sum \.tmp\/ui-archive\/teamrig-ui\.json \| cut -d' ' -f1\)" \| tee -a "\$GITHUB_OUTPUT"$/m);
+    assert.match(text, /^ {6}- uses: actions\/upload-artifact@[0-9a-f]{40} # v[\d.]+\n {8}with:\n {10}name: teamrig-ui\n {10}path: \.tmp\/ui-archive\/teamrig-ui\.json$/m);
+  });
+
+  it('gives the token that writes the release to a job that checks out nothing and runs no package code', () => {
+    const text = job('ui-archive-upload');
+    assert.match(text, /^ {4}needs: \[release-please, ui-archive-build\]\n {4}if: \$\{\{ needs\.release-please\.outputs\.release_created == 'true' \}\}$/m);
+    assert.deepEqual(permissionsOf(text), ['contents: write']);
+    assert.deepEqual([...text.matchAll(/uses: ([\w./-]+)@/g)].map((match) => match[1]), ['actions/download-artifact']);
+    assert.doesNotMatch(text, /checkout|setup-node|npm/);
+    assert.deepEqual(
+      [...text.matchAll(/^ *(?:- )?run: (.+)$/gm)].map((match) => match[1]),
+      ['echo "$SHA256  teamrig-ui.json" | sha256sum -c -', 'gh release upload "$TAG" teamrig-ui.json --repo "$GITHUB_REPOSITORY"'],
+    );
     assert.equal(text.match(/github\.token|GITHUB_TOKEN|GH_TOKEN/g)?.length, 2, 'the token is named once, in one env');
     const upload = text.slice(text.indexOf('      - name: add the archive to the release'));
     assert.match(upload, /^ {10}GH_TOKEN: \$\{\{ github\.token \}\}$/m);
-    assert.ok(text.indexOf('npm run ui:archive') < text.indexOf('GH_TOKEN'), 'the build runs before any step holds the token');
+  });
+
+  it("uploads only a file that holds the build's sha256", () => {
+    const text = job('ui-archive-upload');
+    assert.match(text, /^ {10}SHA256: \$\{\{ needs\.ui-archive-build\.outputs\.sha256 \}\}$/m);
+    assert.ok(text.indexOf('sha256sum -c') < text.indexOf('gh release upload'), 'the hash check runs before the upload');
   });
 
   it('adds the archive to the release by its tag as a plain value, and never replaces one', () => {
-    const text = job('ui-archive');
-    assert.match(text, /^ {8}run: gh release upload "\$TAG" \.tmp\/ui-archive\/teamrig-ui\.json --repo "\$GITHUB_REPOSITORY"$/m);
+    const text = job('ui-archive-upload');
+    assert.match(text, /^ {8}run: gh release upload "\$TAG" teamrig-ui\.json --repo "\$GITHUB_REPOSITORY"$/m);
     assert.match(text, /^ {10}TAG: \$\{\{ needs\.release-please\.outputs\.tag_name \}\}$/m);
-    assert.doesNotMatch(text, /^ *(?:- )?run:.*\$\{\{/m);
+    assert.doesNotMatch(workflow, /^ *(?:- )?run:.*\$\{\{/m);
     assert.doesNotMatch(text, /^ *(?:- )?run:.*--clobber/m);
   });
 
