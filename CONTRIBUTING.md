@@ -140,6 +140,9 @@ or the pinned Claude Code release shows is CI's to catch, on the pull request.
 - The `release` workflow (`.github/workflows/release.yml`, run on each push to `main`) keeps one release pull request
   open through release-please (`release-please-config.json`): it raises the version in
   `plugins/teamrig-pane/.claude-plugin/plugin.json` and writes the notes, and a person reviews and merges it.
+  The run that publishes a release then builds the dedicated UI from the released tag (`npm run ui:archive`) and
+  adds `teamrig-ui.json` to that release; its log prints the sha256 teamrig pins. A release's archive is never
+  replaced: a second upload fails.
 - Installs take the version in `plugins/teamrig-pane/.claude-plugin/plugin.json`, not the newest commit:
   `claude plugin update` moves an install only when that version rises. A pull request never raises it: the release
   pull request does, from the commit subjects since the last release. While it is 0.x, a `feat` or a breaking change
