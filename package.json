@@ -19,6 +19,7 @@
     "plugin-tests": "node tools/ci/plugin-tests-cli.ts",
     "check": "node tools/setup/cli.ts --check && npm run typecheck && npm run coverage && npm run plugin-tests && npm run scrub && node tools/docs/images-cli.ts --check && node tools/ci/size-rule-cli.ts && node tools/ci/commit-subjects-cli.ts",
     "docs:images": "node tools/docs/images-cli.ts",
+    "ui:archive": "node tools/ui-archive/cli.ts",
     "pane-test": "claude plugin test plugins/teamrig-pane"
   },
   "devDependencies": {

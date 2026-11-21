@@ -1,0 +1,14 @@
+{
+  "//": "The dedicated UI's emit (node tools/ui-archive/cli.ts): the ui folder and every view-model file it imports, as scripts plain Node runs once tools/ui-archive/imports.ts completed their relative imports. The plugin folder is the root, so a script sits where its source does. The archive tool names the output folder; the one here is only where a run by hand lands, and git ignores it.",
+  "extends": "./tsconfig.pane.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "plugins/teamrig-pane",
+    "outDir": ".tmp/ui-emit"
+  },
+  "include": [
+    "plugins/teamrig-pane/ui",
+    "plugins/teamrig-pane/typecheck"
+  ]
+}
