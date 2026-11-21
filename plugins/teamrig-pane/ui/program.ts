@@ -7,7 +7,7 @@ import { WrapCache } from '../hooks/layout'
 import { NoteHold } from '../hooks/note-hold'
 import type { PaneStore } from '../hooks/pane-store'
 import { runApp, type AppDeps, type Front, type FrontLook } from './app'
-import { openTerminal, type Input, type Output } from './terminal'
+import { openTerminal, type Input, type Output, type Terminal } from './terminal'
 
 /** The signals that end the program: the terminal's window closed (SIGHUP), the process asked to stop (SIGTERM). */
 export type Signal = 'SIGHUP' | 'SIGTERM'
@@ -32,8 +32,16 @@ export type ProgramDeps = {
   readonly store: PaneStore
   readonly front: AppDeps['front']
   readonly look: FrontLook
-  /** Told why the program failed, once the screen is the person's again: said earlier, it is wiped with the frame. */
-  readonly complain: (text: string) => void
+  /**
+   * Where the program says why it failed, a line of its own: a process's stderr is one. It is written only once the
+   * screen is the person's again: said earlier, it is wiped with the frame.
+   */
+  readonly errors: { write(text: string): unknown }
+}
+
+/** Says why the program failed. */
+function complain(deps: ProgramDeps, reason: string): void {
+  deps.errors.write(`teamrig ui: ${reason}\n`)
 }
 
 /** What a thrown value says. */
@@ -41,24 +49,41 @@ function said(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-/** Runs the UI on the streams until the person quits, the loop throws or a signal comes; resolves the exit code. */
-export async function runProgram(deps: ProgramDeps): Promise<number> {
-  const terminal = openTerminal(deps.input, deps.output)
+/** The terminal over the program's streams, or what taking it threw. */
+function taken(deps: ProgramDeps): { readonly terminal: Terminal } | { readonly failed: string } {
+  try {
+    return { terminal: openTerminal(deps.input, deps.output) }
+  } catch (error) {
+    return { failed: said(error) }
+  }
+}
+
+/**
+ * Runs the UI on the streams until the person quits, the loop throws or a signal comes; resolves the exit code and
+ * never rejects. A terminal that cannot be taken is a failure said at once: nothing was drawn over it.
+ */
+export function runProgram(deps: ProgramDeps): Promise<number> {
+  const opened = taken(deps)
+  if ('failed' in opened) {
+    complain(deps, opened.failed)
+    return Promise.resolve(FAILED_CODE)
+  }
+  const { terminal } = opened
   return new Promise<number>(resolve => {
     let isOver = false
     const stops = (['SIGHUP', 'SIGTERM'] as const).map(signal => ({ signal, stop: () => over(SIGNAL_CODES[signal], null) }))
-    const over = (code: number, complaint: string | null): void => {
+    const over = (code: number, reason: string | null): void => {
       if (isOver) return
       isOver = true
       for (const { signal, stop } of stops) deps.signals.off(signal, stop)
       terminal.close()
-      if (complaint !== null) deps.complain(complaint)
+      if (reason !== null) complain(deps, reason)
       resolve(code)
     }
     for (const { signal, stop } of stops) deps.signals.on(signal, stop)
     runApp({ store: deps.store, terminal, front: deps.front, look: deps.look, defer: setImmediate }).then(
       () => over(QUIT_CODE, null),
-      (error: unknown) => over(FAILED_CODE, `teamrig ui: ${said(error)}`),
+      (error: unknown) => over(FAILED_CODE, said(error)),
     )
   })
 }
