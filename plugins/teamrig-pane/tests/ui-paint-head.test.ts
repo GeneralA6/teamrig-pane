@@ -168,8 +168,8 @@ describe('the keys line, the rule and the status bar', () => {
   test('the keys line is bold while typing searches, else dim', () => {
     const searching = only(headRowsOf(headOf({ kind: 'keys', at: 'search', lines: ['typing searches'] }), null))
     expect(searching[0]?.runs).toMatchObject([{ text: 'typing searches', bold: true, dim: false }])
-    const held = only(headRowsOf(headOf({ kind: 'keys', at: 'claude', lines: ['keys go to Claude'] }), null))
-    expect(held[0]?.runs).toMatchObject([{ text: 'keys go to Claude', bold: false, dim: true }])
+    const held = only(headRowsOf(headOf({ kind: 'keys', at: 'away', lines: ['keys are elsewhere'] }), null))
+    expect(held[0]?.runs).toMatchObject([{ text: 'keys are elsewhere', bold: false, dim: true }])
   })
 
   test('a rule is dim, its cells the part’s, none when it has none', () => {

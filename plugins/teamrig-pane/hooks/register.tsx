@@ -44,7 +44,7 @@ import type {
   TeamSettings,
 } from '../types'
 import { claudeCodeCheck, claudeCodeOldLine } from './claude-code-version'
-import { ARGUMENT_HINT, COMMAND, inlineReason, parsePaneArgs, TIE_HINT } from './command'
+import { ARGUMENT_HINT, COMMAND, inlineReason, KEYS_WORDS, parsePaneArgs, TIE_HINT } from './command'
 import { bounded } from './bounded-run'
 import { LiveRegister, pinKey } from './live'
 import {
@@ -939,6 +939,7 @@ export const register: Register = on => {
       wraps,
       hostOld: claudeCodeOldLine,
       tieHint: TIE_HINT,
+      keys: KEYS_WORDS,
     })
     keysMemo = screen.memo
     const { current, snap, at, scroll, body } = screen
@@ -1138,7 +1139,7 @@ export const register: Register = on => {
     // press does are data, and the dock only draws them, each element under the key head.ts names. The rows that wrap
     // come packed (pack.ts), each a column Box under its key of one row Box a row, keyed `<key>:<row>`: the rows drawn
     // are the rows counted (headRows), so the body's window can take the rows the header leaves (T860).
-    const head = headOf(screen, { inline, columns, isHeld: e.props.isFocused })
+    const head = headOf(screen, { inline, columns, isHeld: e.props.isFocused, keys: KEYS_WORDS })
     /** Words that are no press: a Text, so they hold no place in the focus ring. */
     const drawWords = (item: HeadWords) => {
       const tone = item.tone === 'bold' ? { bold: true } : { dimColor: true }

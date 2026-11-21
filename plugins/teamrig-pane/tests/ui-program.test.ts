@@ -7,7 +7,8 @@ import { rowOf } from '../hooks/log'
 import { INITIAL_STATE } from '../hooks/pane-state'
 import { MemoryStore } from '../hooks/pane-store'
 import type { AppDeps } from '../ui/app'
-import { FAILED_CODE, NO_TEAM_FRONT, ownLook, QUIT_CODE, runProgram, SIGNAL_CODES, type Signal } from '../ui/program'
+import { keysHint } from '../hooks/find-field'
+import { FAILED_CODE, NO_TEAM_FRONT, OWN_KEYS, ownLook, QUIT_CODE, runProgram, SIGNAL_CODES, type Signal } from '../ui/program'
 import { ENTER, LEAVE, type Input, type Output } from '../ui/terminal'
 import { HOUR, NOW, createLine } from './fixtures'
 
@@ -238,10 +239,19 @@ describe('a program with no team behind it', () => {
     expect(NO_TEAM_FRONT.noting).toBeNull()
   })
 
+  test('its words on the keys name no other holder of them: Esc leaves a field, q quits', () => {
+    expect(keysHint('search', 'open', OWN_KEYS)).toBe('Typing searches · Enter: open · Esc: keys to the pane')
+    expect(keysHint('result', 'open', OWN_KEYS)).toBe('On a result · Enter: open · ↑↓: move · s: search · q: quit')
+    expect(keysHint('pane', null, OWN_KEYS)).toBe('Keys on the pane · s: search · q: quit')
+    expect(OWN_KEYS.page.map(each => `${each.keys}${each.words}`)).toEqual(['Esc: out of a field, else back', 'q, or ctrl+c: quit'])
+    expect(JSON.stringify(OWN_KEYS)).not.toContain('Claude')
+  })
+
   test('has no line for a host too old and no words for tying a tab, and a look of its own each time', () => {
     const look = ownLook()
     expect(look.hostOld({ major: 2, minor: 1, patch: 0 })).toBe('')
     expect(look.tieHint).toBeNull()
+    expect(look.keys).toBe(OWN_KEYS)
     expect(ownLook().wraps).not.toBe(look.wraps)
     expect(ownLook().noteHold).not.toBe(look.noteHold)
   })

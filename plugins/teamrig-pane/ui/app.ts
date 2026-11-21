@@ -38,7 +38,7 @@ export type Noting = { typed(text: string): void; send(task: string, text: strin
 export type Front = { readonly ports: Ports; readonly noting: Noting | null }
 
 /** What a drawing reads that the terminal does not say (screen.ts ScreenLook). */
-export type FrontLook = Pick<ScreenLook, 'noteHold' | 'wraps' | 'hostOld' | 'tieHint'>
+export type FrontLook = Pick<ScreenLook, 'noteHold' | 'wraps' | 'hostOld' | 'tieHint' | 'keys'>
 
 export type AppDeps = {
   readonly store: PaneStore
@@ -143,7 +143,7 @@ class App {
       memo: this.#memo,
     })
     this.#memo = screen.memo
-    const head = headOf(screen, { inline: false, columns, isHeld: true })
+    const head = headOf(screen, { inline: false, columns, isHeld: true, keys: look.keys })
     const field = this.#fieldOn(head, screen.body)
     this.#field = field
     const at = (offset: number): Frame => paint(head, screen.body, { size, offset, ring: this.#ring, typing: field })

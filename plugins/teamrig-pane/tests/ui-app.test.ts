@@ -2,6 +2,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { PaneState, Snapshot, TaskRow } from '../types'
 import { readRegister } from '../hooks/core/read/index'
+import type { KeysWords } from '../hooks/find-field'
 import { WHEEL_ROWS } from '../hooks/frame'
 import { WrapCache } from '../hooks/layout'
 import { rowOf } from '../hooks/log'
@@ -39,6 +40,9 @@ const PORTS: Ports = {
   pressing: null,
   acting: null,
 }
+
+/** The front end's own words on the keys, as a rig's look gives them. */
+const KEYS: KeysWords = { leave: { search: 'Esc: out', result: null, pane: 'x: quit' }, away: 'Keys are elsewhere', page: [{ name: 'quit', keys: 'x', words: ': quits' }] }
 
 type RigOptions = {
   readonly store?: MemoryStore
@@ -99,7 +103,7 @@ function rig(size: Size, options: RigOptions = {}): Rig {
     store,
     terminal,
     front: options.front?.(store) ?? (() => ({ ports: PORTS, noting: null })),
-    look: { noteHold: new NoteHold<Snapshot>(), wraps: new WrapCache(), hostOld: () => 'host too old', tieHint: null },
+    look: { noteHold: new NoteHold<Snapshot>(), wraps: new WrapCache(), hostOld: () => 'host too old', tieHint: null, keys: KEYS },
     defer: step => {
       pending.push(step)
     },
@@ -261,6 +265,17 @@ describe('the window', () => {
     const first = last(app)
     await app.keys(named('left'), named('right'), named('delete'), named('backspace'), named('enter'), named('escape'), char('z'))
     expect(last(app)).toEqual(first)
+  })
+})
+
+describe('the front end’s words on the keys', () => {
+  test('end the line under the Find field, by where the keys are, and the Keys page', async () => {
+    const app = await started({ columns: 80, rows: 40 })
+    expect(shown(app)).toContain('Keys on the pane · s: search · x: quit')
+    await app.keys(char('s'))
+    expect(shown(app)).toContain('· Esc: out')
+    await app.keys(named('escape'), char('k'))
+    expect(shown(app)).toContain('x: quits')
   })
 })
 

@@ -7,7 +7,7 @@ import { searchChanges } from '../hooks/changes-search'
 import { readRegister } from '../hooks/core/read/index'
 import { doneBlocks } from '../hooks/done-rows'
 import { filePageBlocks } from '../hooks/file-page'
-import { FIRST_MEMO, type KeysMemo } from '../hooks/find-field'
+import { FIRST_MEMO, type KeysMemo, type KeysWords } from '../hooks/find-field'
 import { inboxBlocks } from '../hooks/inbox-rows'
 import { searchInbox } from '../hooks/inbox-search'
 import { keysBlocks } from '../hooks/keys-page'
@@ -59,6 +59,9 @@ const SNAP: Snapshot = { tasks: TASKS, area: 'po', areaSource: 'pinned', unreadI
 /** A store that starts as a pane does with the register read, but for `changed`. */
 const from = (changed: Partial<PaneState> = {}) => new MemoryStore({ ...INITIAL_STATE, snapshot: SNAP, ...changed })
 
+/** A front end's own words on the keys. */
+const KEYS: KeysWords = { leave: { search: 'Esc: out', result: null, pane: 'x: quit' }, away: 'Keys are elsewhere', page: [{ name: 'quit', keys: 'x', words: ': quit' }] }
+
 /** A docked front end that holds the keys, but for `changed`. */
 const look = (changed: Partial<ScreenLook> = {}): ScreenLook => ({
   inline: false,
@@ -71,6 +74,7 @@ const look = (changed: Partial<ScreenLook> = {}): ScreenLook => ({
   wraps: new WrapCache(),
   hostOld: running => `host ${running.major}.${running.minor}.${running.patch} is too old`,
   tieHint: null,
+  keys: KEYS,
   ...changed,
 })
 
@@ -184,9 +188,10 @@ describe('the tasks view', () => {
     expect(screen.body).toEqual(docked(filePageBlocks({ file: 'docs/x.md', line: 2 }, read)))
   })
 
-  test('the keys page is laid out for the front end’s columns', async () => {
+  test('the keys page is laid out for the front end’s columns and ends in its own keys', async () => {
     const screen = await screenOf(from({ nav: pushed(AT_LIST, KEYS_PAGE) }), look())
-    expect(screen.body).toEqual(docked(keysBlocks(COLUMNS)))
+    expect(screen.body).toEqual(docked(keysBlocks(COLUMNS, KEYS.page)))
+    expect(screen.body).not.toEqual(docked(keysBlocks(COLUMNS, [])))
   })
 })
 

@@ -7,7 +7,7 @@
 import { changesLabel } from './changes-rows'
 import { heldWeeks, weekClockOf, weekSteps } from './done'
 import { weekWords } from './done-rows'
-import { fieldKey, keysAt, keysHint, submitWords, type KeysAt } from './find-field'
+import { fieldKey, keysAt, keysHint, submitWords, type KeysAt, type KeysWords } from './find-field'
 import { KEYS_HOTKEY, KEYS_LABEL } from './keys-page'
 import { wrapRow } from './layout'
 import { canGoBack, canGoForward, currentPlace, isPage, placeLabel, trail } from './nav'
@@ -46,6 +46,8 @@ export type HeadLook = {
   readonly columns: number
   /** Whether the pane holds the keys at this drawing. */
   readonly isHeld: boolean
+  /** This front end's words on where the keys go beside the pane, which the line under the Find field ends in. */
+  readonly keys: KeysWords
 }
 
 /** A press drawn as a button: framed (`primary` for the one that is on, else `secondary`) or plain words, its key before it. */
@@ -244,7 +246,7 @@ function findOf(screen: Screen, look: HeadLook): HeadPiece[] {
   const isSearching = currentPlace(screen.at).kind === 'search'
   const enter = search.submits === null ? null : submitWords(search.matches)
   const at = keysAt(look.isHeld, screen.landings, screen.memo, isSearching)
-  const lines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(at, enter) }] }, look.columns).map(line => line.map(span => span.text).join(''))
+  const lines = wrapRow({ key: 'keys-hint', spans: [{ text: keysHint(at, enter, look.keys) }] }, look.columns).map(line => line.map(span => span.text).join(''))
   const find: FindRow = {
     key: fieldKey(screen.field),
     placeholder: search.placeholder,

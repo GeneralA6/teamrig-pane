@@ -4,6 +4,7 @@
 // a program that leaves the alternate screen or the mouse reporting on has broken the person's shell. Its holder is
 // told of the end next (`ending`), to stop what the program left running.
 import type { Snapshot } from '../types'
+import type { KeysWords } from '../hooks/find-field'
 import { WrapCache } from '../hooks/layout'
 import { NoteHold } from '../hooks/note-hold'
 import type { PaneStore } from '../hooks/pane-store'
@@ -132,9 +133,23 @@ export const NO_TEAM_FRONT: Front = {
 }
 
 /**
+ * The words on the keys of a program in a terminal of its own (find-field.ts KeysWords): every key is the pane's, so
+ * Esc only leaves a field or goes back (app.ts) and `q` quits wherever it is not typed into a field. `away` is never
+ * drawn: nothing else takes the keys.
+ */
+export const OWN_KEYS: KeysWords = {
+  leave: { search: 'Esc: keys to the pane', result: 'q: quit', pane: 'q: quit' },
+  away: '',
+  page: [
+    { name: 'leave', keys: 'Esc', words: ': out of a field, else back' },
+    { name: 'quit', keys: 'q', words: ', or ctrl+c: quit' },
+  ],
+}
+
+/**
  * The look of a program in a terminal of its own: no engine hosts it, so the too-old-host line has nothing to say,
  * and it has no words of its own for tying a tab to a session.
  */
 export function ownLook(): FrontLook {
-  return { noteHold: new NoteHold<Snapshot>(), wraps: new WrapCache(), hostOld: () => '', tieHint: null }
+  return { noteHold: new NoteHold<Snapshot>(), wraps: new WrapCache(), hostOld: () => '', tieHint: null, keys: OWN_KEYS }
 }
