@@ -3,7 +3,7 @@
 // a block each (the views; the Tasks list's Find field, modes and pages; a page's steps), each entry `t  Tasks` in a
 // column as wide as the widest entry of any group and as many columns to a row as the body's width holds (pack.ts),
 // so the groups line up as one grid at any width; then the status bar's keys (status-bar.ts BAR_LOOK) on one line,
-// and how the keys come to the pane and go back to Claude. Pure.
+// and the front end's own keys, in its words: how the keys come to the pane and leave it. Pure.
 import { packRows } from './pack'
 import type { Block, Row, Span } from './rows'
 import { BAR_LOOK, BAR_STATUSES } from './status-bar'
@@ -88,23 +88,26 @@ function keyLine(key: string, keys: string, words: string): Row {
   return { key, spans: [{ text: keys, bold: true }, { text: words }] }
 }
 
-/** The Keys page's blocks for a body of `columns` cells. */
-export function keysBlocks(columns: number): Block[] {
+/**
+ * A key that is a front end's own, a line of the page's last block: `name` keys the line, `keys` is drawn bold and
+ * `words` after it as written (`Esc`, `: keys back to Claude`).
+ */
+export type FrontKey = { readonly name: string; readonly keys: string; readonly words: string }
+
+/**
+ * The Keys page's blocks for a body of `columns` cells, ending in the front end's own keys, `front` (how the keys
+ * come to the pane and leave it, how it is put away): with none, no such block.
+ */
+export function keysBlocks(columns: number, front: readonly FrontKey[]): Block[] {
   const width = Math.max(...KEY_GROUPS.flatMap(group => group.entries.map(entryCells)))
   const bar = barKeys()
+  const own: Block[] = front.length === 0 ? [] : [{ key: 'keys:focus', rows: front.map(each => keyLine(`keys:focus:${each.name}`, each.keys, each.words)) }]
   return [
     ...KEY_GROUPS.map((group): Block => ({ key: `keys:${group.name}`, rows: gridRows(group, width, columns) })),
     {
       key: 'keys:bar',
       rows: [{ ...keyLine('keys:bar', bar, `${KEY_GAP}only that status; again shows all`), hang: { text: ' '.repeat(cells(bar) + KEY_GAP.length) } }],
     },
-    {
-      key: 'keys:focus',
-      rows: [
-        keyLine('keys:focus:in', 'ctrl+x tab', ', or a click: keys to the pane'),
-        keyLine('keys:focus:out', 'Esc', ': keys back to Claude'),
-        keyLine('keys:focus:minimize', 'ctrl+x x', ', or ✕: minimize the pane'),
-      ],
-    },
+    ...own,
   ]
 }

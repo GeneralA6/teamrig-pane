@@ -3,6 +3,7 @@
 // reads the engine's `CommandPresentation`), so this file is on the dock's side of the engine boundary.
 import type { CommandPresentation } from 'claude-code'
 import type { ViewMode } from '../types'
+import type { KeysWords } from './find-field'
 
 /** The slash command the pane registers, kept apart from /teamrig, which the teamrig plugin itself uses. */
 export const COMMAND = 'teamrig-pane'
@@ -14,6 +15,23 @@ export const USAGE = `usage: /${COMMAND} ${ARGUMENT_HINT}`
 
 /** What the dock tells a tab tied to no session ties it to one (rows.ts noSessionBlock): the command with a session. */
 export const TIE_HINT = `/${COMMAND} <session>`
+
+/** Esc in the dock, wherever the pane's keys are: Claude Code gives them back to its prompt. */
+const TO_CLAUDE = 'Esc: to Claude'
+
+/**
+ * The dock's words on the keys (find-field.ts KeysWords): the pane shares them with Claude's prompt, which takes them
+ * on Esc and gives them back on a click or the engine's own chord.
+ */
+export const KEYS_WORDS: KeysWords = {
+  leave: { search: TO_CLAUDE, result: TO_CLAUDE, pane: TO_CLAUDE },
+  away: 'Keys go to Claude · click the field to search',
+  page: [
+    { name: 'in', keys: 'ctrl+x tab', words: ', or a click: keys to the pane' },
+    { name: 'out', keys: 'Esc', words: ': keys back to Claude' },
+    { name: 'minimize', keys: 'ctrl+x x', words: ', or ✕: minimize the pane' },
+  ],
+}
 
 /**
  * open: show the pane; mode: switch the view; auto: drop this session's pin and follow its

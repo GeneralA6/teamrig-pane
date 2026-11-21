@@ -6,7 +6,7 @@ import { changesLabel } from '../hooks/changes-rows'
 import { readRegister } from '../hooks/core/read/index'
 import { heldWeeks, weekClockOf, weekSteps } from '../hooks/done'
 import { weekWords } from '../hooks/done-rows'
-import { FIRST_MEMO, keysAt, keysHint, submitWords } from '../hooks/find-field'
+import { FIRST_MEMO, keysAt, keysHint, submitWords, type KeysWords } from '../hooks/find-field'
 import {
   BACK_LABEL,
   DONE_LABEL,
@@ -66,8 +66,11 @@ const PAGES: PaneState['pages'] = Object.fromEntries(TASKS.map(task => [task.id,
 const task = (id: string) => ({ kind: 'task', id }) as const
 const ON_T50 = fromList('row:T50', task('T50'))
 
+/** A front end's own words on the keys. */
+const KEYS: KeysWords = { leave: { search: 'Esc: out', result: null, pane: 'x: quit' }, away: 'Keys are elsewhere', page: [] }
+
 /** A docked front end that holds the keys, but for `changed`. */
-const lookOf = (changed: Partial<HeadLook> = {}): HeadLook => ({ inline: false, columns: COLUMNS, isHeld: true, ...changed })
+const lookOf = (changed: Partial<HeadLook> = {}): HeadLook => ({ inline: false, columns: COLUMNS, isHeld: true, keys: KEYS, ...changed })
 
 /** The screen of a pane that starts with the register read, but for `changed`, and its head, both to the same front end. */
 async function shown(changed: Partial<PaneState> = {}, at: Partial<HeadLook> = {}): Promise<{ readonly screen: Screen; readonly head: Head }> {
@@ -372,7 +375,8 @@ describe('the Find row', () => {
     expect(pieceOf(pieces, 'find').find).toEqual({ key: 'find', placeholder: 'id, title, owner, note…', text: '', submitLabel: enter, submits: 'tasks', clears: false })
     const keys = pieceOf(pieces, 'keys')
     expect(keys.at).toBe(keysAt(true, screen.landings, screen.memo, false))
-    expect(keys.lines).toEqual([keysHint(keys.at, enter)])
+    expect(keys.lines).toEqual([keysHint(keys.at, enter, KEYS)])
+    expect(keys.lines[0]).toContain(' · x: quit')
   })
 
   test('a search shown: the field holds its words in a new round, and clear is drawn', async () => {

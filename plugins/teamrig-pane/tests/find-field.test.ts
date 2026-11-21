@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { FindField, Nav, RingLandings } from '../types'
-import { FIND, FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldAnew, fieldKey, fieldText, isFieldKey, keysAt, keysHint, landedOn, submitWords } from '../hooks/find-field'
+import { FIND, FIRST_FIELD, FIRST_MEMO, NO_LANDINGS, drawnWith, fieldAfter, fieldAnew, fieldKey, fieldText, isFieldKey, keysAt, keysHint, landedOn, submitWords, type KeysWords } from '../hooks/find-field'
+import { KEYS_WORDS } from '../hooks/command'
 import { AT_LIST, pushed, searched } from '../hooks/nav'
 
 const page = (nav: Nav, id: string): Nav => pushed(nav, { kind: 'task', id })
@@ -81,11 +82,11 @@ describe('where the keys go', () => {
     expect(drawnWith(back, true, { count: 4, on: 'other' })).toBe(back)
   })
 
-  test("Claude's without the keys; the field's or a result's after a landing on it since they came; else the pane's", () => {
+  test("away without the keys; the field's or a result's after a landing on it since they came; else the pane's", () => {
     const memo = { wasHeld: true, lostAt: 2 }
     const onField: RingLandings = { count: 3, on: 'field' }
     const onResult: RingLandings = { count: 3, on: 'result' }
-    expect(keysAt(false, onField, memo, true)).toBe('claude')
+    expect(keysAt(false, onField, memo, true)).toBe('away')
     expect(keysAt(true, onField, memo, true)).toBe('search')
     expect(keysAt(true, onResult, memo, true)).toBe('result')
     // The search closed under the ring: what was a result is another element now.
@@ -100,16 +101,25 @@ describe('where the keys go', () => {
     expect([0, 1, 2, 30].map(submitWords)).toEqual(['open', 'open', 'to the results', 'to the results'])
   })
 
-  test('the line names where the keys go and the key or click that moves them', () => {
-    expect(keysHint('search', submitWords(1))).toBe('Typing searches · Enter: open · Esc: to Claude')
-    expect(keysHint('search', submitWords(2))).toBe('Typing searches · Enter: to the results · Esc: to Claude')
-    expect(keysHint('result', submitWords(2))).toBe('On a result · Enter: open · ↑↓: move · s: search · Esc: to Claude')
-    expect(keysHint('pane', submitWords(0))).toBe('Keys on the pane · s: search · Esc: to Claude')
-    expect(keysHint('claude', submitWords(0))).toBe('Keys go to Claude · click the field to search')
+  test('the line names where the keys go and the key or click that moves them, in the dock’s words', () => {
+    expect(keysHint('search', submitWords(1), KEYS_WORDS)).toBe('Typing searches · Enter: open · Esc: to Claude')
+    expect(keysHint('search', submitWords(2), KEYS_WORDS)).toBe('Typing searches · Enter: to the results · Esc: to Claude')
+    expect(keysHint('result', submitWords(2), KEYS_WORDS)).toBe('On a result · Enter: open · ↑↓: move · s: search · Esc: to Claude')
+    expect(keysHint('pane', submitWords(0), KEYS_WORDS)).toBe('Keys on the pane · s: search · Esc: to Claude')
+    expect(keysHint('away', submitWords(0), KEYS_WORDS)).toBe('Keys go to Claude · click the field to search')
   })
 
   test('a search whose results have nothing to open names no Enter step', () => {
-    expect(keysHint('search', null)).toBe('Typing searches · Esc: to Claude')
-    expect(keysHint('pane', null)).toBe('Keys on the pane · s: search · Esc: to Claude')
+    expect(keysHint('search', null, KEYS_WORDS)).toBe('Typing searches · Esc: to Claude')
+    expect(keysHint('pane', null, KEYS_WORDS)).toBe('Keys on the pane · s: search · Esc: to Claude')
+  })
+
+  test('the line ends in the front end’s own words for where the keys are, or in none', () => {
+    const words: KeysWords = { leave: { search: 'Esc: out', result: null, pane: 'x: quit' }, away: 'Keys are elsewhere', page: [] }
+    expect(keysHint('search', submitWords(1), words)).toBe('Typing searches · Enter: open · Esc: out')
+    expect(keysHint('search', null, words)).toBe('Typing searches · Esc: out')
+    expect(keysHint('result', submitWords(2), words)).toBe('On a result · Enter: open · ↑↓: move · s: search')
+    expect(keysHint('pane', null, words)).toBe('Keys on the pane · s: search · x: quit')
+    expect(keysHint('away', null, words)).toBe('Keys are elsewhere')
   })
 })

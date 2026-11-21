@@ -11,6 +11,7 @@
 import type { FindField, Nav, RingLandings, RingStop } from '../types'
 import { CHANGES_SEARCH_VIEW } from './changes-search'
 import { LOG_SEARCH_VIEW } from './log-search'
+import type { FrontKey } from './keys-page'
 import { currentPlace } from './nav'
 import { SEARCH_VIEW } from './search-rows'
 import { isResultOf } from './search-view'
@@ -88,17 +89,36 @@ export function drawnWith(memo: KeysMemo, isHeld: boolean, ring: RingLandings): 
   return memo.wasHeld ? { wasHeld: false, lostAt: ring.count } : memo
 }
 
-/** Where the person's keys go: into the Find field, to a result of the search, to the pane's own keys, or to Claude's prompt. */
-export type KeysAt = 'search' | 'result' | 'pane' | 'claude'
+/**
+ * Where the person's keys go: into the Find field, to a result of the search, to the pane's own keys, or away from
+ * the pane, to what its front end sits beside (the Claude Code dock's prompt).
+ */
+export type KeysAt = 'search' | 'result' | 'pane' | 'away'
 
 /**
- * Where the keys go: Claude's while the pane does not hold them; while it does and the ring last landed after the pane
+ * A front end's own words on the keys: only it knows what else takes them, and which key or click moves them there
+ * and back.
+ */
+export type KeysWords = {
+  /**
+   * What ends the line under the Find field while the pane holds the keys, by where they go: the key that moves them
+   * on (`Esc: to Claude`); null where the front end has nothing to add.
+   */
+  readonly leave: Readonly<Record<Exclude<KeysAt, 'away'>, string | null>>
+  /** That whole line while the pane does not hold the keys. */
+  readonly away: string
+  /** The Keys page's closing lines, on the keys that are the front end's own (keys-page.ts); none draws no block. */
+  readonly page: readonly FrontKey[]
+}
+
+/**
+ * Where the keys go: away while the pane does not hold them; while it does and the ring last landed after the pane
  * last let them go, the field's when it landed on the field, and a result's when it landed on one while `isSearching`
  * (once the search closed, the ring left where a result was sits on another element); else the pane's, where its
  * hotkeys answer.
  */
 export function keysAt(isHeld: boolean, ring: RingLandings, memo: KeysMemo, isSearching: boolean): KeysAt {
-  if (!isHeld) return 'claude'
+  if (!isHeld) return 'away'
   if (ring.count <= memo.lostAt) return 'pane'
   if (ring.on === 'field') return 'search'
   return ring.on === 'result' && isSearching ? 'result' : 'pane'
@@ -111,17 +131,24 @@ export function submitWords(matches: number): string {
 
 /**
  * The line under the Find field: where the keys go and how to move them, `enter` naming what Enter in the field does
- * (submitWords), null for a search whose results have nothing to open, where it does nothing.
+ * (submitWords), null for a search whose results have nothing to open, where it does nothing. What the front end
+ * sits beside is in its own `words`.
  */
-export function keysHint(at: KeysAt, enter: string | null): string {
+export function keysHint(at: KeysAt, enter: string | null, words: KeysWords): string {
+  if (at === 'away') return words.away
+  const leave = words.leave[at]
+  const held = heldHint(at, enter)
+  return leave === null ? held : `${held} · ${leave}`
+}
+
+/** The line's own part while the pane holds the keys, the same in every front end. */
+function heldHint(at: Exclude<KeysAt, 'away'>, enter: string | null): string {
   switch (at) {
     case 'search':
-      return enter === null ? 'Typing searches · Esc: to Claude' : `Typing searches · Enter: ${enter} · Esc: to Claude`
+      return enter === null ? 'Typing searches' : `Typing searches · Enter: ${enter}`
     case 'result':
-      return 'On a result · Enter: open · ↑↓: move · s: search · Esc: to Claude'
+      return 'On a result · Enter: open · ↑↓: move · s: search'
     case 'pane':
-      return 'Keys on the pane · s: search · Esc: to Claude'
-    case 'claude':
-      return 'Keys go to Claude · click the field to search'
+      return 'Keys on the pane · s: search'
   }
 }

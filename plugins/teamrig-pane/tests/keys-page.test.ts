@@ -1,6 +1,7 @@
 // The Keys page: each key the pane answers once, the groups as one grid at the body's width.
 import { describe, expect, test } from 'claude-code/testing'
 import { barKeys, KEY_GROUPS, KEYS_HOTKEY, KEYS_LABEL, keysBlocks } from '../hooks/keys-page'
+import { KEYS_WORDS } from '../hooks/command'
 import type { Block } from '../hooks/rows'
 
 /** Each block's rows as the words they draw. */
@@ -17,8 +18,8 @@ describe('keys page', () => {
     expect(barKeys()).toBe('o v w i n')
   })
 
-  test('at 52 columns each group is three columns of the widest entry (16 cells) with 2 between, then the bar and the focus keys', () => {
-    expect(wordsOf(keysBlocks(52))).toEqual([
+  test('at 52 columns each group is three columns of the widest entry (16 cells) with 2 between, then the bar and the dock’s own keys', () => {
+    expect(wordsOf(keysBlocks(52, KEYS_WORDS.page))).toEqual([
       [`${'t  Tasks'.padEnd(18)}${'d  Changes'.padEnd(18)}g  Conversations`, `${'u  Inbox'.padEnd(18)}${'e  Teams'.padEnd(18)}j  Meetings`, 'r  Stats'],
       [`${'s  Find'.padEnd(18)}${'m  mine'.padEnd(18)}a  all`, `${'h  done'.padEnd(18)}${'c  close cards'.padEnd(18)}k  keys`],
       [`${'b  back'.padEnd(18)}${'f  forward'.padEnd(18)}p  week before`, 'l  week after'],
@@ -27,13 +28,20 @@ describe('keys page', () => {
     ])
   })
 
+  test('the last block is the front end’s own keys, each line under its name, and a front end with none has no such block', () => {
+    const own = keysBlocks(52, [{ name: 'quit', keys: 'x', words: ': quit' }]).at(-1)
+    expect(own?.key).toBe('keys:focus')
+    expect(own?.rows).toEqual([{ key: 'keys:focus:quit', spans: [{ text: 'x', bold: true }, { text: ': quit' }] }])
+    expect(keysBlocks(52, []).map(block => block.key)).toEqual(['keys:views', 'keys:list', 'keys:pages', 'keys:bar'])
+  })
+
   test('a narrower body takes fewer columns, one at least, and no row ends in padding', () => {
-    expect(wordsOf(keysBlocks(48))[0]).toEqual([`${'t  Tasks'.padEnd(18)}d  Changes`, `${'g  Conversations'.padEnd(18)}u  Inbox`, `${'e  Teams'.padEnd(18)}j  Meetings`, 'r  Stats'])
-    expect(wordsOf(keysBlocks(10))[0]).toEqual(['t  Tasks', 'd  Changes', 'g  Conversations', 'u  Inbox', 'e  Teams', 'j  Meetings', 'r  Stats'])
+    expect(wordsOf(keysBlocks(48, []))[0]).toEqual([`${'t  Tasks'.padEnd(18)}d  Changes`, `${'g  Conversations'.padEnd(18)}u  Inbox`, `${'e  Teams'.padEnd(18)}j  Meetings`, 'r  Stats'])
+    expect(wordsOf(keysBlocks(10, []))[0]).toEqual(['t  Tasks', 'd  Changes', 'g  Conversations', 'u  Inbox', 'e  Teams', 'j  Meetings', 'r  Stats'])
   })
 
   test('a key is bold, its words plain; the bar line wraps under its words', () => {
-    const [views, , , bar] = keysBlocks(48)
+    const [views, , , bar] = keysBlocks(48, [])
     expect(views?.rows[0]?.spans.slice(0, 2)).toEqual([{ text: 't', bold: true }, { text: '  Tasks' }])
     expect(bar?.rows[0]?.spans[0]).toEqual({ text: 'o v w i n', bold: true })
     expect(bar?.rows[0]?.hang).toEqual({ text: ' '.repeat(11) })

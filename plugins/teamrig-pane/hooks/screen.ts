@@ -11,7 +11,7 @@ import { changesBlocks } from './changes-rows'
 import { searchChanges, type ChangeHit } from './changes-search'
 import { doneBlocks } from './done-rows'
 import { filePageBlocks } from './file-page'
-import { FIRST_FIELD, NO_LANDINGS, drawnWith, type KeysMemo } from './find-field'
+import { FIRST_FIELD, NO_LANDINGS, drawnWith, type KeysMemo, type KeysWords } from './find-field'
 import { inboxBlocks } from './inbox-rows'
 import { searchInbox, type InboxHit } from './inbox-search'
 import { keysBlocks } from './keys-page'
@@ -62,6 +62,8 @@ export type ScreenLook = {
   readonly hostOld: HostOldLine
   /** The words this front end ties a tab to a session with, which a tab tied to none shows; null when it has none. */
   readonly tieHint: TieHint
+  /** This front end's words on where the keys go beside the pane, which the Keys page ends in. */
+  readonly keys: KeysWords
 }
 
 /** One drawing of the pane. */
@@ -189,7 +191,7 @@ export async function screenOf(store: PaneStore, look: ScreenLook): Promise<Scre
               : place.kind === 'file'
                 ? filePageBlocks({ file: place.file, line: place.line }, files[place.file])
                 : place.kind === 'keys'
-                  ? keysBlocks(columns)
+                  ? keysBlocks(columns, look.keys.page)
                   : paneBlocks(snap, shown, open, bar?.filter ?? null, await store.read('tasksFolded'), acts, look.tieHint)
       // Inline, the Log view shows its list alone: a page opens docked.
       const logShown = setupShown === null && current === 'log' && !inline ? await store.read('logPage') : null
