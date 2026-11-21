@@ -29,6 +29,8 @@ type Rig = {
 type RigOptions = {
   /** What the output throws at each frame: a screen that went away. */
   readonly gone?: Error
+  /** What the input throws when the terminal is taken: an input that cannot be read raw. */
+  readonly refused?: Error
   readonly front?: AppDeps['front']
 }
 
@@ -44,6 +46,9 @@ function rig(options: RigOptions = {}): Rig {
   let onData: ((chunk: string) => void)[] = []
   let onSignal: { readonly signal: Signal; readonly listener: () => void }[] = []
   const input: Input = {
+    setRawMode: () => {
+      if (options.refused !== undefined) throw options.refused
+    },
     setEncoding: () => undefined,
     resume: () => undefined,
     pause: () => {
@@ -81,8 +86,10 @@ function rig(options: RigOptions = {}): Rig {
     store,
     front: options.front ?? (() => NO_TEAM_FRONT),
     look: ownLook(),
-    complain: text => {
-      log.push(`complain ${text}`)
+    errors: {
+      write: text => {
+        log.push(`complain ${text}`)
+      },
     },
   })
   return {
@@ -154,7 +161,14 @@ describe('the program on a terminal', () => {
   test('a drawing that throws exits 1, and says why only once the screen is given back', async () => {
     const program = await started({ gone: new Error('the screen went away') })
     expect(await ending(program)).toBe(FAILED_CODE)
-    expect(program.log).toEqual(['enter', 'leave', 'pause', 'complain teamrig ui: the screen went away'])
+    expect(program.log).toEqual(['enter', 'leave', 'pause', 'complain teamrig ui: the screen went away\n'])
+    expect(program.heard()).toEqual([])
+  })
+
+  test('a terminal that cannot be taken exits 1 and says why at once, with no screen taken and no signal heard', async () => {
+    const program = await started({ refused: new Error('the input is no terminal to read raw') })
+    expect(await ending(program)).toBe(FAILED_CODE)
+    expect(program.log).toEqual(['complain teamrig ui: the input is no terminal to read raw\n'])
     expect(program.heard()).toEqual([])
   })
 
@@ -166,7 +180,7 @@ describe('the program on a terminal', () => {
       },
     })
     expect(await ending(program)).toBe(FAILED_CODE)
-    expect(program.log.at(-1)).toBe('complain teamrig ui: no ports')
+    expect(program.log.at(-1)).toBe('complain teamrig ui: no ports\n')
   })
 
   test('a throw after the end says nothing: the exit code is the one the program ended with', async () => {
