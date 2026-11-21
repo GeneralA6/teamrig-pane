@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ENGINE_SURFACE, engineBoundaryFindings, HOOKS, type HookSource } from './engine-boundary.ts';
+import { ENGINE_SURFACE, engineBoundaryFindings, HOOKS, type PluginSource, UI, uiBoundaryFindings } from './engine-boundary.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
@@ -11,14 +11,18 @@ const DOCK = 'plugins/p/hooks/register.tsx';
 const OUTSIDE = "imports claude-code outside the dock's files: use one of the pane's own types, or move the engine's part to a file on the list";
 const STALE = "is listed as the dock's but imports no claude-code: take it off the list";
 
-/** Every TypeScript source under the plugin's hooks, as the repository holds it now. */
-function hookSources(): HookSource[] {
-  const folder = join(ROOT, ...HOOKS.split('/'));
+const UI_FILE = 'plugins/p/ui/app.ts';
+const UI_ENGINE = "imports claude-code in the dedicated UI: it runs with no engine, draw from the pane's own types";
+const uiDock = (file: string): string => `imports the dock's file ${file} in the dedicated UI: move what both front ends need to a hooks file off the list`;
+
+/** Every TypeScript source under one of the plugin's folders (`HOOKS`, `UI`), as the repository holds it now. */
+function sourcesUnder(root: string): PluginSource[] {
+  const folder = join(ROOT, ...root.split('/'));
   return readdirSync(folder, { recursive: true, encoding: 'utf8' })
     .map((name) => name.replaceAll('\\', '/'))
     .filter((name) => /\.tsx?$/.test(name))
     .sort()
-    .map((name) => ({ path: `${HOOKS}/${name}`, text: readFileSync(join(folder, ...name.split('/')), 'utf8') }));
+    .map((name) => ({ path: `${root}/${name}`, text: readFileSync(join(folder, ...name.split('/')), 'utf8') }));
 }
 
 describe('engine boundary', () => {
@@ -92,11 +96,87 @@ describe('engine boundary', () => {
   });
 
   it('holds over the hooks as they are: only the dock files import the engine, and each of them does', () => {
-    const sources = hookSources();
+    const sources = sourcesUnder(HOOKS);
     assert.ok(
       sources.some((source) => source.path.startsWith(`${HOOKS}/core/`)),
       'the read reaches hooks/core',
     );
     assert.deepEqual(engineBoundaryFindings(sources, ENGINE_SURFACE), []);
+  });
+});
+
+describe('dedicated UI boundary', () => {
+  const SURFACE = ['plugins/p/hooks/register.tsx', 'plugins/p/hooks/theme.ts'];
+
+  it('passes a UI file that imports the view model and its own files', () => {
+    const text = [
+      "import { screenOf } from '../hooks/screen'",
+      "import type { Tone } from '../hooks/tone'",
+      "import type { Row } from '../types'",
+      "import { paint } from './paint'",
+      "import { stdin } from 'node:process'",
+    ].join('\n');
+    assert.deepEqual(uiBoundaryFindings([{ path: UI_FILE, text }], SURFACE), []);
+  });
+
+  it('names each import of the engine by file and line, in every form', () => {
+    const text = [
+      "import type { ThemeKey } from 'claude-code'",
+      'import {',
+      '  atom,',
+      '} from "claude-code"',
+      "import 'claude-code'",
+      "export type { Context } from 'claude-code'",
+      "const engine = await import('claude-code')",
+      'const old = require( "claude-code" )',
+    ].join('\r\n');
+    assert.deepEqual(
+      uiBoundaryFindings([{ path: UI_FILE, text }], SURFACE),
+      [1, 4, 5, 6, 7, 8].map((line) => `${UI_FILE}:${line}: ${UI_ENGINE}`),
+    );
+  });
+
+  it("names each import of one of the dock's files, with an extension or none, from any depth", () => {
+    const text = [
+      "import { colorOf } from '../hooks/theme'",
+      "import { register } from '../hooks/register.tsx'",
+      "const theme = await import('../hooks/theme.js')",
+      "export { colorOf } from './../hooks/theme'",
+    ].join('\n');
+    assert.deepEqual(
+      uiBoundaryFindings(
+        [
+          { path: UI_FILE, text },
+          { path: 'plugins/p/ui/deep/row.ts', text: "import { colorOf } from '../../hooks/theme'\n" },
+        ],
+        SURFACE,
+      ),
+      [
+        `${UI_FILE}:1: ${uiDock('plugins/p/hooks/theme.ts')}`,
+        `${UI_FILE}:2: ${uiDock('plugins/p/hooks/register.tsx')}`,
+        `${UI_FILE}:3: ${uiDock('plugins/p/hooks/theme.ts')}`,
+        `${UI_FILE}:4: ${uiDock('plugins/p/hooks/theme.ts')}`,
+        `plugins/p/ui/deep/row.ts:1: ${uiDock('plugins/p/hooks/theme.ts')}`,
+      ],
+    );
+  });
+
+  it("leaves look-alikes alone: the UI's own file of a dock file's name, a longer name, a package, a value", () => {
+    const text = [
+      "import { colorOf } from './theme'",
+      "import { themed } from '../hooks/theme-names'",
+      "import { toneOf } from '../hooks/core/theme'",
+      "import { theme } from 'theme'",
+      "import { kit } from 'claude-code-kit'",
+      "export const HOST = 'claude-code'",
+      "export const FILE = '../hooks/theme'",
+    ].join('\n');
+    assert.deepEqual(uiBoundaryFindings([{ path: UI_FILE, text }], SURFACE), []);
+  });
+
+  it("holds over the UI as it is: no file imports the engine or one of the dock's files", () => {
+    const sources = sourcesUnder(UI);
+    assert.ok(sources.length > 0, 'the read reaches the ui folder');
+    assert.deepEqual(uiBoundaryFindings(sources, ENGINE_SURFACE), []);
   });
 });

@@ -63,7 +63,9 @@ Every change ships tests, so the next change cannot break it unnoticed:
   the engine's module, `claude-code`. `tools/ci/engine-boundary.ts` lists them and
   `tools/ci/engine-boundary.test.ts` (in `npm test`) fails on any other hooks file that does: give
   it one of the pane's own types (`plugins/teamrig-pane/types/index.d.ts`), or keep the engine's part
-  in a file on the list.
+  in a file on the list. The dedicated UI (`plugins/teamrig-pane/ui/`) is held from the other side by
+  the same test: it runs in any terminal with no engine, so none of its files imports `claude-code`
+  or one of the dock's files; what both front ends need goes in a hooks file off the list.
 
 `npm run check` checks that git runs the repo hooks, then runs the gates CI runs on the tree: typecheck (`tools/` under `tsconfig.json`, the plugin's
 hooks, tests and scripts under `tsconfig.pane.json`), coverage, the plugin test gate and
