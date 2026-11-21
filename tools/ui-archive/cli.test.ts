@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ARCHIVE_FORMAT, ARCHIVE_NAME, isArchivePath, sha256Of, type UiArchive } from './archive.ts';
 import { ENTRY } from './build.ts';
+import { SPEAKS } from '../../plugins/teamrig-pane/hooks/interface.ts';
 
 // The archive is proven as it is used: built from this tree by the tool, written out file by file as `teamrig ui`
 // will, and started with plain `node`, no kit and no loader, on piped streams.
@@ -31,6 +32,7 @@ function isUiArchive(value: unknown): value is UiArchive {
   if (typeof value !== 'object' || value === null) return false;
   if (!('format' in value) || value.format !== ARCHIVE_FORMAT) return false;
   if (!('version' in value) || typeof value.version !== 'string') return false;
+  if (!('interface' in value) || typeof value.interface !== 'string') return false;
   if (!('entry' in value) || typeof value.entry !== 'string') return false;
   if (!('files' in value) || !Array.isArray(value.files)) return false;
   return value.files.every(
@@ -100,7 +102,8 @@ describe('the ui archive tool', () => {
   it('builds the archive of this tree and prints the sha256 of its bytes', () => {
     assert.equal(status, 0, printed);
     const { text, archive } = archiveRead();
-    assert.match(printed, /^ui archive: \d+ file\(s\) of \d+\.\d+\.\d+, \d+ import\(s\) completed, in /);
+    assert.match(printed, /^ui archive: \d+ file\(s\) of \d+\.\d+\.\d+ for interface \d+\.\d+, \d+ import\(s\) completed, in /);
+    assert.equal(archive.interface, SPEAKS);
     assert.ok(printed.includes(`sha256 ${sha256Of(text)}\n`), printed);
     assert.equal(archive.entry, ENTRY);
     assert.ok(archive.files.some((file) => file.path === ENTRY));
