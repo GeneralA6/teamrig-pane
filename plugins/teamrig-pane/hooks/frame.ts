@@ -10,7 +10,7 @@ import type { CardPart, Drawn } from './layout'
 import type { Span } from './rows'
 
 /** Rows a wheel tick or a scroll arrow moves the window. */
-const WHEEL_ROWS = 3
+export const WHEEL_ROWS = 3
 const NEW_LINE: Span = { text: '\n' }
 /** A line left empty by a cut, drawn so it keeps its row. */
 const BLANK: Span = { text: ' ' }
